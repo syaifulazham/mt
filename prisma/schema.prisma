@@ -1,0 +1,670 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORGANIZER AUTH (Auth.js v5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model OrganizerUser {
+  id                  String        @id @default(cuid())
+  email               String        @unique
+  name                String
+  passwordHash        String
+  role                OrganizerRole @default(VIEWER)
+  totpSecretEnc       String?
+  totpEnabled         Boolean       @default(false)
+  forcePasswordChange Boolean       @default(true)
+  isActive            Boolean       @default(true)
+  inviteToken         String?       @unique
+  inviteExpiresAt     DateTime?
+  lastLoginAt         DateTime?
+  createdById         String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
+
+  sessions OrganizerSession[]
+  accounts OrganizerAccount[]
+
+  @@map("organizer_users")
+}
+
+model OrganizerSession {
+  id           String        @id @default(cuid())
+  sessionToken String        @unique
+  userId       String
+  expires      DateTime
+  user         OrganizerUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("organizer_sessions")
+}
+
+model OrganizerAccount {
+  id                String        @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  user              OrganizerUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("organizer_accounts")
+}
+
+enum OrganizerRole {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  PARTICIPANTS_MANAGER
+  JUDGE_COORDINATOR
+  VIEWER
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MANAGER AUTH (Clerk-managed, synced via webhook)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ManagerProfile {
+  id                  String          @id @default(cuid())
+  clerkUserId         String          @unique
+  email               String          @unique
+  name                String
+  phone               String?
+  idType              IdType?
+  idNumber            String?
+  nationality         String?
+  institutionType     InstitutionType?
+  schoolId            String?
+  higherInstitutionId String?
+  countryId           String?
+  profileComplete     Boolean         @default(false)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  deletedAt           DateTime?
+
+  school            School?            @relation(fields: [schoolId], references: [id])
+  higherInstitution HigherInstitution? @relation(fields: [higherInstitutionId], references: [id])
+  country           Country?           @relation(fields: [countryId], references: [id])
+  contingentManagers ContingentManager[]
+
+  @@map("manager_profiles")
+}
+
+enum IdType {
+  IC
+  PASSPORT
+}
+
+enum InstitutionType {
+  SCHOOL
+  HIGHER
+  INDEPENDENT
+  INTERNATIONAL
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFERENCE DATA — Geography
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Country {
+  id       String  @id @default(cuid())
+  name     String
+  codeIso2 String  @unique @db.Char(2)
+  codeIso3 String  @unique @db.Char(3)
+  isActive Boolean @default(true)
+
+  states     State[]
+  managers   ManagerProfile[]
+  contingents Contingent[]
+
+  @@map("countries")
+}
+
+model State {
+  id        String  @id @default(cuid())
+  name      String
+  code      String  @unique
+  countryId String
+
+  country           Country             @relation(fields: [countryId], references: [id])
+  zoneStates        ZoneState[]
+  schools           School[]
+  higherInstitutions HigherInstitution[]
+  contingents       Contingent[]
+  events            Event[]
+
+  @@map("states")
+}
+
+model Zone {
+  id   String @id @default(cuid())
+  name String
+
+  states      ZoneState[]
+  districts   District[]
+  schools     School[]
+  contingents Contingent[]
+  events      Event[]
+
+  @@map("zones")
+}
+
+model ZoneState {
+  zoneId  String
+  stateId String
+
+  zone  Zone  @relation(fields: [zoneId],  references: [id], onDelete: Cascade)
+  state State @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@id([zoneId, stateId])
+  @@map("zone_states")
+}
+
+model District {
+  id     String @id @default(cuid())
+  name   String
+  zoneId String
+
+  zone    Zone     @relation(fields: [zoneId], references: [id])
+  schools School[]
+
+  @@map("districts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFERENCE DATA — Institutions
+// ─────────────────────────────────────────────────────────────────────────────
+
+model School {
+  id         String         @id @default(cuid())
+  name       String
+  code       String         @unique
+  ppdCode    String?
+  stateId    String
+  zoneId     String?
+  districtId String?
+  level      SchoolLevel
+  category   SchoolCategory
+  isActive   Boolean        @default(true)
+
+  state      State     @relation(fields: [stateId], references: [id])
+  zone       Zone?     @relation(fields: [zoneId], references: [id])
+  district   District? @relation(fields: [districtId], references: [id])
+  contingents Contingent[]
+  managers   ManagerProfile[]
+
+  @@map("schools")
+}
+
+model HigherInstitution {
+  id         String  @id @default(cuid())
+  name       String
+  code       String? @unique
+  stateId    String?
+  isActive   Boolean @default(true)
+  heiType    String  @default("HQ")   // HQ or BRANCH
+  parentCode String?                   // for BRANCH: code of the parent HQ
+  sector     String?                   // PUBLIC, PRIVATE, FOREIGN_BRANCH
+
+  state       State?          @relation(fields: [stateId], references: [id])
+  contingents Contingent[]
+  managers    ManagerProfile[]
+
+  @@map("higher_institutions")
+}
+
+enum SchoolLevel {
+  PRIMARY
+  SECONDARY
+  SPECIAL
+}
+
+enum SchoolCategory {
+  KEBANGSAAN
+  KEBANGSAAN_CINA
+  KEBANGSAAN_TAMIL
+  AGAMA
+  TEKNIK
+  SPORT
+  PRIVATE
+  LAIN_LAIN
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTINGENTS (Phase 1 — structure only, full relations in Phase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Contingent {
+  id                  String           @id @default(cuid())
+  name                String
+  shortName           String?
+  logoUrl             String?
+  contingentType      ContingentType
+  schoolId            String?
+  higherInstitutionId String?
+  countryInvitationId String?
+  stateId             String?
+  zoneId              String?
+  countryId           String?
+  status              ContingentStatus @default(ACTIVE)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  school            School?            @relation(fields: [schoolId], references: [id])
+  higherInstitution HigherInstitution? @relation(fields: [higherInstitutionId], references: [id])
+  state             State?             @relation(fields: [stateId], references: [id])
+  zone              Zone?              @relation(fields: [zoneId], references: [id])
+  country           Country?           @relation(fields: [countryId], references: [id])
+  managers          ContingentManager[]
+  participants      Participant[]
+  teams             Team[]
+  trainers          Trainer[]
+
+  @@unique([schoolId])
+  @@map("contingents")
+}
+
+model ContingentManager {
+  id             String                  @id @default(cuid())
+  contingentId   String
+  managerId      String
+  role           ContingentManagerRole   @default(MANAGER)
+  status         ContingentManagerStatus @default(ACTIVE)
+  requestMessage String?
+  respondedAt    DateTime?
+  createdAt      DateTime                @default(now())
+
+  contingent Contingent     @relation(fields: [contingentId], references: [id], onDelete: Cascade)
+  manager    ManagerProfile @relation(fields: [managerId], references: [id])
+
+  @@unique([contingentId, managerId])
+  @@map("contingent_managers")
+}
+
+enum ContingentType {
+  SCHOOL
+  HIGHER
+  INDEPENDENT
+  INTERNATIONAL
+}
+
+enum ContingentStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ContingentManagerRole {
+  OWNER
+  MANAGER
+}
+
+enum ContingentManagerStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTESTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Participant {
+  id          String        @id @default(cuid())
+  name        String
+  ic          String?
+  email       String?
+  phoneNumber String?
+  gender      Gender
+  age         Int?
+  eduLevel    EduLevel
+  classGrade  String?
+  className   String?
+  status      String        @default("ACTIVE")
+  ppki        Boolean       @default(false)
+  contingentId String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  contingent  Contingent    @relation(fields: [contingentId], references: [id], onDelete: Cascade)
+  teamMembers TeamMember[]
+
+  @@index([contingentId])
+  @@map("contestants")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum EduLevel {
+  PRIMARY
+  SECONDARY
+  YOUTH
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TARGET GROUPS & THEMES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TargetGroup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  schoolLevel String
+  ageGroup    String
+  minAge      Int      @default(0)
+  maxAge      Int      @default(0)
+  classGrades String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  competitions CompetitionTargetGroup[]
+
+  @@map("target_groups")
+}
+
+model Theme {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String?
+  logoUrl     String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  competitions Competition[]
+
+  @@map("themes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTS & COMPETITIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Event {
+  id                String      @id @default(cuid())
+  name              String
+  slug              String      @unique
+  description       String?
+  scope             EventScope  @default(NATIONAL)
+  stateId           String?
+  zoneId            String?
+  venue             String?
+  address           String?
+  city              String?
+  latitude          Float?
+  longitude         Float?
+  startDate         DateTime?
+  endDate           DateTime?
+  registrationStart DateTime?
+  registrationEnd   DateTime?
+  status            EventStatus @default(DRAFT)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  state             State?             @relation(fields: [stateId], references: [id])
+  zone              Zone?              @relation(fields: [zoneId], references: [id])
+  eventCompetitions EventCompetition[]
+
+  @@map("events")
+}
+
+model Competition {
+  id                          String              @id @default(cuid())
+  code                        String              @unique
+  name                        String
+  description                 String?
+  themeId                     String?
+  participationType           ParticipationType   @default(INDIVIDUAL)
+  minTeamSize                 Int                 @default(1)
+  maxTeamSize                 Int                 @default(1)
+  maxParticipantsPerContingent Int                @default(0)
+  maxTotalParticipants        Int                 @default(0)
+  venue                       String?
+  address                     String?
+  startDate                   DateTime?
+  endDate                     DateTime?
+  registrationStart           DateTime?
+  registrationEnd             DateTime?
+  judgingType                 JudgingType         @default(PERCENTAGE)
+  eptimEduCourseId            String?
+  eptimEduCourseTitle         String?
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime            @updatedAt
+
+  theme             Theme?                     @relation(fields: [themeId], references: [id])
+  targetGroups      CompetitionTargetGroup[]
+  judgingCriteria   JudgingCriteria[]
+  eventCompetitions EventCompetition[]
+  teams             Team[]
+
+  @@map("competitions")
+}
+
+model EventCompetition {
+  id            String   @id @default(cuid())
+  eventId       String
+  competitionId String
+  picName       String?
+  picContact    String?
+  maxTeams      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  event       Event       @relation(fields: [eventId],       references: [id], onDelete: Cascade)
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, competitionId])
+  @@map("event_competitions")
+}
+
+model CompetitionTargetGroup {
+  competitionId String
+  targetGroupId String
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  targetGroup TargetGroup @relation(fields: [targetGroupId], references: [id], onDelete: Cascade)
+
+  @@id([competitionId, targetGroupId])
+  @@map("competition_target_groups")
+}
+
+model JudgingCriteria {
+  id            String   @id @default(cuid())
+  competitionId String
+  name          String
+  description   String?
+  value         Float
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@map("judging_criteria")
+}
+
+enum EventScope {
+  NATIONAL
+  STATE
+  ZONE
+  OPEN
+  ONLINE_NATIONAL
+  ONLINE_STATE
+  ONLINE_ZONE
+  ONLINE_OPEN
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ParticipationType {
+  INDIVIDUAL
+  TEAM
+}
+
+enum JudgingType {
+  PERCENTAGE
+  SCORE
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Team {
+  id            String   @id @default(cuid())
+  name          String
+  email              String?
+  lmsUserId          String?
+  lmsPassword        String?
+  lmsCourseEnrolled  Boolean  @default(false)
+  competitionId String
+  contingentId  String
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  competition Competition @relation(fields: [competitionId], references: [id])
+  contingent  Contingent  @relation(fields: [contingentId], references: [id])
+  members     TeamMember[]
+  trainers    TeamTrainer[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id            String   @id @default(cuid())
+  teamId        String
+  participantId String   @map("contestantId")
+  createdAt     DateTime @default(now())
+
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, participantId])
+  @@map("team_members")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAINERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Trainer {
+  id           String   @id @default(cuid())
+  name         String
+  ic           String?
+  email        String?
+  phoneNumber  String?
+  contingentId String
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  contingent Contingent   @relation(fields: [contingentId], references: [id], onDelete: Cascade)
+  teams      TeamTrainer[]
+
+  @@index([contingentId])
+  @@map("trainers")
+}
+
+model TeamTrainer {
+  id         String   @id @default(cuid())
+  teamId     String
+  trainerId  String
+  createdAt  DateTime @default(now())
+
+  team    Team    @relation(fields: [teamId],    references: [id], onDelete: Cascade)
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, trainerId])
+  @@map("team_trainers")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JUDGING TEMPLATES
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CriterionType {
+  NUMBER
+  TIME
+  SINGLE_OPTION
+  MULTIPLE_OPTION
+}
+
+model JudgingTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  criterions JudgingCriterion[]
+
+  @@map("judging_templates")
+}
+
+model JudgingCriterion {
+  id         String        @id @default(cuid())
+  templateId String
+  name       String
+  order      Int           @default(0)
+  type       CriterionType
+  maxScore   Float?
+  minScore   Float?
+  maxTime    Int?          // seconds, for TIME type
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  template JudgingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  options  JudgingOption[]
+
+  @@index([templateId])
+  @@map("judging_criterions")
+}
+
+model JudgingOption {
+  id          String   @id @default(cuid())
+  criterionId String
+  label       String
+  weight      Float    @default(0)
+  order       Int      @default(0)
+
+  criterion JudgingCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@index([criterionId])
+  @@map("judging_options")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KNOWLEDGE BASE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model KnowledgeBase {
+  id         String   @id @default(cuid())
+  path       String   @unique   // e.g. "events/zon-tengah"
+  title      String
+  content    String   @db.Text
+  entityType String?            // "event" | "competition" | null = custom
+  entityId   String?            // source entity id for auto-push
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([entityType, entityId])
+  @@map("knowledge_base")
+}

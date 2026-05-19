@@ -1,0 +1,86 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Write .env.production on the runner ──────────────────────────────────
+      - name: Generate .env.production
+        run: |
+          cat > .env.production << 'EOF'
+          NODE_ENV=production
+          DATABASE_URL=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.POSTGRES_DBNAME }}
+          AUTH_SECRET=${{ secrets.AUTH_SECRET }}
+          AUTH_TOTP_KEY=${{ secrets.AUTH_TOTP_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_WEBHOOK_SECRET=${{ secrets.CLERK_WEBHOOK_SECRET }}
+          NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          EPTIM_API_KEY=${{ secrets.EPTIM_API_KEY }}
+          EPTIM_URL=${{ secrets.EPTIM_URL }}
+          EPTIMEDU_API_KEY=${{ secrets.EPTIMEDU_API_KEY }}
+          EPTIMEDU_BASE_URL=${{ secrets.EPTIMEDU_BASE_URL }}
+          PORT=3000
+          EOF
+
+      # ── Copy .env.production to server ───────────────────────────────────────
+      - name: Copy env file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: .env.production
+          target: /opt/mt/
+
+      # ── SSH: pull, build, run ─────────────────────────────────────────────────
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            cd /opt/mt
+
+            echo "── Pulling latest code ──"
+            git pull origin main
+
+            echo "── Building Docker image ──"
+            docker build -t mt:latest .
+
+            echo "── Migrating database ──"
+            docker run --rm \
+              --network host \
+              --env-file .env.production \
+              mt:latest \
+              npx prisma migrate deploy
+
+            echo "── Restarting container ──"
+            docker stop mt 2>/dev/null || true
+            docker rm   mt 2>/dev/null || true
+            docker run -d \
+              --name mt \
+              --network host \
+              --env-file .env.production \
+              --restart unless-stopped \
+              mt:latest
+
+            echo "── Pruning old images ──"
+            docker image prune -f
+
+            echo "── Done ──"

@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+/* ── Design tokens (light mode only for Phase 1) ───────────────────────────── */
+:root {
+  --background:             #ffffff;
+  --foreground:             #09090b;
+
+  --card:                   #ffffff;
+  --card-foreground:        #09090b;
+
+  --popover:                #ffffff;
+  --popover-foreground:     #09090b;
+
+  --primary:                #18181b;
+  --primary-foreground:     #fafafa;
+
+  --secondary:              #f4f4f5;
+  --secondary-foreground:   #18181b;
+
+  --muted:                  #f4f4f5;
+  --muted-foreground:       #71717a;
+
+  --accent:                 #f4f4f5;
+  --accent-foreground:      #18181b;
+
+  --destructive:            #ef4444;
+  --destructive-foreground: #fafafa;
+
+  --border:                 #e4e4e7;
+  --input:                  #e4e4e7;
+  --ring:                   #18181b;
+
+  --radius:                 0.5rem;
+}
+
+/* ── Tailwind v4 theme mapping ─────────────────────────────────────────────── */
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-background:             var(--background);
+  --color-foreground:             var(--foreground);
+  --color-card:                   var(--card);
+  --color-card-foreground:        var(--card-foreground);
+  --color-popover:                var(--popover);
+  --color-popover-foreground:     var(--popover-foreground);
+  --color-primary:                var(--primary);
+  --color-primary-foreground:     var(--primary-foreground);
+  --color-secondary:              var(--secondary);
+  --color-secondary-foreground:   var(--secondary-foreground);
+  --color-muted:                  var(--muted);
+  --color-muted-foreground:       var(--muted-foreground);
+  --color-accent:                 var(--accent);
+  --color-accent-foreground:      var(--accent-foreground);
+  --color-destructive:            var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border:                 var(--border);
+  --color-input:                  var(--input);
+  --color-ring:                   var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ── Futuristic animation tokens ──────────────────────────────────────────── */
+@theme inline {
+  --animate-float:       float        7s  ease-in-out infinite;
+  --animate-float-slow:  float       12s  ease-in-out infinite;
+  --animate-pulse-orb:   pulse-orb    8s  ease-in-out infinite;
+  --animate-scan:        scan-line   10s  linear      infinite;
+  --animate-shimmer:     shimmer      2.8s linear     infinite;
+  --animate-fade-up:     fade-up      0.9s ease-out   forwards;
+  --animate-logo-glow:   logo-glow   10s  ease-in-out infinite;
+  --animate-border-glow: border-glow  3s  ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-22px); }
+}
+
+@keyframes pulse-orb {
+  0%, 100% { opacity: 0.20; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(1.12); }
+}
+
+@keyframes scan-line {
+  0%   { top: -4px;     opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100%;     opacity: 0; }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position:  200% 0; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes logo-glow {
+  0%, 100% { opacity: 0.04; }
+  50%       { opacity: 0.09; }
+}
+
+@keyframes flame-outer {
+  0%, 100% { transform: scaleX(1)   scaleY(1)    rotate(-1deg); opacity: 0.18; }
+  25%       { transform: scaleX(0.92) scaleY(1.08) rotate(1deg);  opacity: 0.28; }
+  50%       { transform: scaleX(1.06) scaleY(0.96) rotate(-2deg); opacity: 0.20; }
+  75%       { transform: scaleX(0.96) scaleY(1.04) rotate(1.5deg);opacity: 0.25; }
+}
+
+@keyframes flame-mid {
+  0%, 100% { transform: scaleX(1)    scaleY(1)    translateY(0);   opacity: 0.45; }
+  20%       { transform: scaleX(0.93) scaleY(1.10) translateY(-3px);opacity: 0.55; }
+  45%       { transform: scaleX(1.07) scaleY(0.94) translateY(2px); opacity: 0.38; }
+  70%       { transform: scaleX(0.97) scaleY(1.06) translateY(-2px);opacity: 0.50; }
+}
+
+@keyframes flame-core {
+  0%, 100% { transform: scaleX(1)    scaleY(1)    translateY(0)    rotate(-1deg); opacity: 0.75; }
+  15%       { transform: scaleX(0.90) scaleY(1.12) translateY(-4px) rotate(2deg);  opacity: 0.90; }
+  35%       { transform: scaleX(1.08) scaleY(0.92) translateY(1px)  rotate(-2deg); opacity: 0.65; }
+  55%       { transform: scaleX(0.95) scaleY(1.08) translateY(-3px) rotate(1deg);  opacity: 0.85; }
+  80%       { transform: scaleX(1.04) scaleY(0.96) translateY(2px)  rotate(-1deg); opacity: 0.70; }
+}
+
+@keyframes twinkle {
+  0%,100% { opacity: 0.15; transform: scale(0.85); }
+  30%      { opacity: 1;    transform: scale(1.3);  }
+  50%      { opacity: 0.4;  transform: scale(0.95); }
+  75%      { opacity: 0.9;  transform: scale(1.15); }
+}
+
+@keyframes twinkle-slow {
+  0%,100% { opacity: 0.1;  transform: scale(0.8);  }
+  40%      { opacity: 0.85; transform: scale(1.2);  }
+  70%      { opacity: 0.25; transform: scale(0.9);  }
+}
+
+@keyframes border-glow {
+  0%, 100% { box-shadow: 0 0 8px 0px rgba(231,82,98,0.4); }
+  50%       { box-shadow: 0 0 22px 2px rgba(231,82,98,0.7); }
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
