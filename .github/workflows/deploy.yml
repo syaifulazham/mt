@@ -18,7 +18,7 @@ jobs:
         run: |
           cat > .env.production << 'EOF'
           NODE_ENV=production
-          DATABASE_URL=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.POSTGRES_DBNAME }}
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
           AUTH_SECRET=${{ secrets.AUTH_SECRET }}
           AUTH_TOTP_KEY=${{ secrets.AUTH_TOTP_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -68,7 +68,7 @@ jobs:
               --network host \
               --env-file .env.production \
               mt:latest \
-              npx prisma migrate deploy
+              node_modules/.bin/prisma migrate deploy
 
             echo "── Restarting container ──"
             docker stop mt 2>/dev/null || true

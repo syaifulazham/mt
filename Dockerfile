@@ -12,7 +12,7 @@ COPY . .
 
 # Prisma needs a DATABASE_URL at generate time (value doesn't matter)
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
-RUN npx prisma generate
+RUN node_modules/.bin/prisma generate
 RUN npm run build
 
 # ── 3. Runtime ────────────────────────────────────────────────────────────────
