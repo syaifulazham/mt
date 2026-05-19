@@ -34,18 +34,40 @@ jobs:
           PORT=3000
           EOF
 
-      # ── Copy .env.production to server ───────────────────────────────────────
-      - name: Copy env file to server
+      # ── Write nginx config on the runner ─────────────────────────────────────
+      - name: Generate nginx config
+        run: |
+          cat > nginx-mt.conf << 'EOF'
+          server {
+              listen 80;
+              server_name ${{ secrets.DOMAIN }};
+
+              location / {
+                  proxy_pass         http://127.0.0.1:3000;
+                  proxy_http_version 1.1;
+                  proxy_set_header   Upgrade           $http_upgrade;
+                  proxy_set_header   Connection        "upgrade";
+                  proxy_set_header   Host              $host;
+                  proxy_set_header   X-Real-IP         $remote_addr;
+                  proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+                  proxy_set_header   X-Forwarded-Proto $scheme;
+                  proxy_read_timeout 60s;
+              }
+          }
+          EOF
+
+      # ── Copy files to server ──────────────────────────────────────────────────
+      - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: .env.production
+          source: .env.production,nginx-mt.conf
           target: /opt/mt/
 
-      # ── SSH: pull, build, run ─────────────────────────────────────────────────
+      # ── SSH: nginx + certbot + deploy ─────────────────────────────────────────
       - name: Deploy on server
         uses: appleboy/ssh-action@v1
         with:
@@ -55,9 +77,42 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             set -e
-            cd /opt/mt
+            DOMAIN="${{ secrets.DOMAIN }}"
 
+            # ── nginx setup (idempotent) ────────────────────────────────────────
+            echo "── Setting up nginx ──"
+            if ! command -v nginx &>/dev/null; then
+              sudo apt-get update -qq && sudo apt-get install -y nginx
+            fi
+
+            sudo cp /opt/mt/nginx-mt.conf /etc/nginx/sites-available/mt
+            sudo ln -sf /etc/nginx/sites-available/mt /etc/nginx/sites-enabled/mt
+            sudo rm -f /etc/nginx/sites-enabled/default
+            sudo nginx -t
+            sudo systemctl enable nginx
+            sudo systemctl reload nginx
+
+            # ── certbot (only runs if cert doesn't exist yet) ───────────────────
+            echo "── Checking SSL certificate ──"
+            if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+              echo "── Obtaining SSL certificate for $DOMAIN ──"
+              if ! command -v certbot &>/dev/null; then
+                sudo apt-get install -y certbot python3-certbot-nginx
+              fi
+              sudo certbot --nginx \
+                --non-interactive \
+                --agree-tos \
+                --email admin@$DOMAIN \
+                --domains $DOMAIN \
+                --redirect
+              sudo systemctl reload nginx
+            else
+              echo "── Certificate already exists, skipping ──"
+            fi
+
+            # ── app deploy ─────────────────────────────────────────────────────
             echo "── Pulling latest code ──"
+            cd /opt/mt
             git pull origin main
 
             echo "── Building Docker images ──"
