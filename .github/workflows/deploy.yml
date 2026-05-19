@@ -60,15 +60,15 @@ jobs:
             echo "── Pulling latest code ──"
             git pull origin main
 
-            echo "── Building Docker image ──"
+            echo "── Building Docker images ──"
+            docker build --target migrator -t mt-migrator:latest .
             docker build -t mt:latest .
 
             echo "── Migrating database ──"
             docker run --rm \
               --network host \
               --env-file .env.production \
-              mt:latest \
-              node_modules/.bin/prisma migrate deploy
+              mt-migrator:latest
 
             echo "── Restarting container ──"
             docker stop mt 2>/dev/null || true

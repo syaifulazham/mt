@@ -15,7 +15,14 @@ ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholde
 RUN node_modules/.bin/prisma generate
 RUN npm run build
 
-# ── 3. Runtime ────────────────────────────────────────────────────────────────
+# ── 3. Migrator (has node_modules for prisma migrate deploy) ─────────────────
+FROM node:22-alpine AS migrator
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma       ./prisma
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+
+# ── 4. Runtime ────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
