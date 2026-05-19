@@ -69,6 +69,7 @@ function ViewDialog({ contestant, onClose }: { contestant: Contestant | null; on
   const [icRevealed, setIcRevealed] = useState(false);
 
   // Reset mask whenever a different contestant is opened
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setIcRevealed(false); }, [contestant?.id]);
 
   if (!contestant) return null;
@@ -78,6 +79,7 @@ function ViewDialog({ contestant, onClose }: { contestant: Contestant | null; on
 
   const rows: [string, string | null | undefined][] = [
     [t("view.age"),       c.age != null ? t("view.ageValue", { age: c.age }) : null],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [t("view.education"), t(`edu.${c.eduLevel}` as any)],
     [t("view.class"),     CLASS_LABEL(c) !== "–" ? CLASS_LABEL(c) : null],
     [t("view.email"),     c.email],
@@ -101,6 +103,7 @@ function ViewDialog({ contestant, onClose }: { contestant: Contestant | null; on
           </div>
           <p className="font-semibold text-base text-center leading-snug">{c.name}</p>
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${GENDER_COLOR[c.gender]}`}>
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             {t(`gender.${c.gender}` as any)}
           </span>
         </div>
@@ -185,6 +188,7 @@ function AddEditDialog({
   // Sync form when dialog opens with a new contestant
   useEffect(() => {
     if (open) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setError("");
       if (initial) {
         setForm({
@@ -204,6 +208,7 @@ function AddEditDialog({
       } else {
         setForm(defaultForm);
       }
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
@@ -223,8 +228,8 @@ function AddEditDialog({
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Failed"); }
       onSaved(); onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -440,6 +445,50 @@ function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Preview table (must be top-level to satisfy react-hooks/static-components)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PreviewTable({ rows }: { rows: CleanRow[]; isAi?: boolean }) {
+  const t = useTranslations("contestants");
+  const headers = [
+    t("bulk.colName"), t("bulk.colIc"), t("bulk.colGender"),
+    t("bulk.colAge"), t("bulk.colLevel"), t("bulk.colGrade"),
+    t("bulk.colClass"), t("bulk.colEmail"),
+  ];
+  return (
+    <div className="overflow-x-auto rounded-lg border text-xs">
+      <table className="w-full">
+        <thead className="bg-zinc-50">
+          <tr>
+            {headers.map((h) => (
+              <th key={h} className="text-left px-3 py-2 font-medium text-zinc-500">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-t hover:bg-zinc-50">
+              <td className="px-3 py-2 font-medium">{row.name}</td>
+              <td className="px-3 py-2 text-zinc-400">{row.ic ?? "–"}</td>
+              <td className="px-3 py-2">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${GENDER_COLOR[row.gender]}`}>
+                  {row.gender}
+                </span>
+              </td>
+              <td className="px-3 py-2">{row.age ?? "–"}</td>
+              <td className="px-3 py-2">{row.eduLevel}</td>
+              <td className="px-3 py-2">{row.classGrade ?? "–"}</td>
+              <td className="px-3 py-2">{row.className ?? "–"}</td>
+              <td className="px-3 py-2 text-zinc-400">{row.email ?? "–"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Bulk upload dialog
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -503,8 +552,8 @@ function BulkUploadDialog({
       setCleanRows(j.data);
       setAiErrors(j.errors ?? []);
       setStep("ai");
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setCleaning(false);
     }
@@ -524,54 +573,14 @@ function BulkUploadDialog({
       setImportCount(j.count);
       setStep("done");
       onSaved();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setConfirming(false);
     }
   }
 
   const issueCount = rawRows.filter((r) => r._issues.length > 0).length;
-
-  // ── shared preview table ──────────────────────────────────────────────────
-  function PreviewTable({ rows, isAi }: { rows: CleanRow[]; isAi?: boolean }) {
-    const headers = [
-      t("bulk.colName"), t("bulk.colIc"), t("bulk.colGender"),
-      t("bulk.colAge"), t("bulk.colLevel"), t("bulk.colGrade"),
-      t("bulk.colClass"), t("bulk.colEmail"),
-    ];
-    return (
-      <div className="overflow-x-auto rounded-lg border text-xs">
-        <table className="w-full">
-          <thead className="bg-zinc-50">
-            <tr>
-              {headers.map((h) => (
-                <th key={h} className="text-left px-3 py-2 font-medium text-zinc-500">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} className="border-t hover:bg-zinc-50">
-                <td className="px-3 py-2 font-medium">{row.name}</td>
-                <td className="px-3 py-2 text-zinc-400">{row.ic ?? "–"}</td>
-                <td className="px-3 py-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${GENDER_COLOR[row.gender]}`}>
-                    {row.gender}
-                  </span>
-                </td>
-                <td className="px-3 py-2">{row.age ?? "–"}</td>
-                <td className="px-3 py-2">{row.eduLevel}</td>
-                <td className="px-3 py-2">{row.classGrade ?? "–"}</td>
-                <td className="px-3 py-2">{row.className ?? "–"}</td>
-                <td className="px-3 py-2 text-zinc-400">{row.email ?? "–"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
 
   return (
     <Dialog open={open} onOpenChange={() => { reset(); onClose(); }}>
@@ -834,6 +843,7 @@ export function ContestantsClient({ contingents }: { contingents: Contingent[] }
     }
   }, [q, tab, ppkiOnly, page]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchContestants(); }, [fetchContestants]);
 
   function handleTabChange(key: EduLevel | "ALL") { setTab(key); setPage(1); }
@@ -893,6 +903,7 @@ export function ContestantsClient({ contingents }: { contingents: Contingent[] }
           {EDU_TABS.map(({ key, Icon }) => (
             <button
               key={key}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               title={t(`tabs.${key}` as any)}
               onClick={() => handleTabChange(key)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${

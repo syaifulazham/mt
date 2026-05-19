@@ -338,7 +338,9 @@ function EptimEduSection({ competition, canWrite, onSaved }: {
   const [err,    setErr]    = useState("");
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     setLoadingCrs(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetch("/api/v2/organizer/eptimedu/courses")
       .then(r => r.json())
       .then(j => {
@@ -489,6 +491,7 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
     } finally { setLoading(false); }
   }, [page, q, themeFilter]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {

@@ -63,7 +63,9 @@ Return ONLY a JSON array — no markdown, no explanation.
 CSV:
 ${csvText}`;
 
-  let rows: any[] = [];
+  type AiRow = { name: string; ic?: string; email?: string; phoneNumber?: string; gender: string; age?: number; eduLevel: string; classGrade?: string; className?: string };
+  type CleanRow = { name: string; ic: string | null; email: string | null; phoneNumber: string | null; gender: Gender; age: number | null; eduLevel: EduLevel; classGrade: string | null; className: string | null; contingentId: string };
+  let rows: AiRow[] = [];
   try {
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
@@ -75,7 +77,7 @@ ${csvText}`;
   }
 
   // ── Validate each row ─────────────────────────────────────────────────────
-  const cleaned: any[] = [];
+  const cleaned: CleanRow[] = [];
   const errors: string[] = [];
 
   rows.forEach((row, i) => {

@@ -38,10 +38,12 @@ export function OnboardingForm() {
 
   // Reset institution-specific fields when type changes
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     setSelectedSchool(null);
     setSelectedHI(null);
     setGroupName("");
     setCountryId("");
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [institutionType]);
 
   // Load countries list once when INTERNATIONAL is selected

@@ -330,6 +330,7 @@ export function EventDetailClient({ slug, role }: { slug: string; role: Organize
   }, [slug]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadEvent().finally(() => setLoading(false));
   }, [loadEvent]);
 

@@ -44,7 +44,7 @@ Return ONLY the JSON object. No markdown, no explanation.`;
 
   try {
     const result = await model.generateContent(prompt);
-    let raw = result.response.text().trim()
+    const raw = result.response.text().trim()
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/i, "");
 

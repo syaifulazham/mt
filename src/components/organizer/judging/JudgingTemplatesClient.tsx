@@ -420,6 +420,7 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   async function selectTemplate(t: TemplateListItem) {
@@ -699,7 +700,7 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
               {selected.criterions.length === 0 ? (
                 <div className="rounded-xl border-2 border-dashed border-zinc-200 py-12 text-center text-zinc-400">
                   <p className="text-sm">Belum ada kriteria.</p>
-                  {canWrite && <p className="text-xs mt-1">Klik "Tambah Kriteria" untuk bermula.</p>}
+                  {canWrite && <p className="text-xs mt-1">Klik &quot;Tambah Kriteria&quot; untuk bermula.</p>}
                 </div>
               ) : (
                 selected.criterions.map((c, idx) => (

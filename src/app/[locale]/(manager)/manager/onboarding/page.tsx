@@ -137,7 +137,7 @@ export default async function OnboardingPage({
               ["navVenues", tl("navVenues")],
               ["navGallery", tl("navGallery")],
             ] as [string, string][]).map(([key, label]) => (
-              <li key={key}><a href="/#" className="ob-nav-link">{label}</a></li>
+              <li key={key}><Link href="/#" className="ob-nav-link">{label}</Link></li>
             ))}
           </ul>
 

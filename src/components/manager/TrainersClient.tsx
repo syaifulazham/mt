@@ -70,6 +70,7 @@ function TrainerFormDialog({
 
   useEffect(() => {
     if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setError("");
     if (initial) {
       setForm({
@@ -82,6 +83,7 @@ function TrainerFormDialog({
     } else {
       setForm({ ...EMPTY_FORM, contingentId: contingents[0]?.id ?? "" });
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, initial, contingents]);
 
   function set(k: string, v: string) { setForm((f) => ({ ...f, [k]: v })); }
@@ -101,8 +103,8 @@ function TrainerFormDialog({
       if (!res.ok) throw new Error(j.error ?? "Failed");
       onSaved(j.data);
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -215,7 +217,9 @@ function AssignTeamsDialog({
 
   useEffect(() => {
     if (!trainer) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setLoading(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetch("/api/v2/manager/teams")
       .then((r) => r.json())
       .then((j) => setTeams(j.data ?? []))
@@ -237,8 +241,8 @@ function AssignTeamsDialog({
       const trRes = await fetch(`/api/v2/manager/trainers/${trainer.id}`);
       const trJ   = await trRes.json();
       onUpdated(trJ.data);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setToggling(null);
     }
@@ -342,7 +346,7 @@ function DeleteConfirmDialog({
         <DialogHeader>
           <DialogTitle>Delete Trainer</DialogTitle>
           <DialogDescription>
-            Remove <span className="font-medium text-foreground">"{trainer?.name}"</span>?
+            Remove <span className="font-medium text-foreground">&quot;{trainer?.name}&quot;</span>?
             They will be unassigned from all teams.
           </DialogDescription>
         </DialogHeader>
@@ -460,6 +464,7 @@ export function TrainersClient({ contingents }: { contingents: Contingent[] }) {
     }
   }, [q]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function patchTrainer(updated: Trainer) {

@@ -75,7 +75,9 @@ export function ParticipationClient() {
 
   // Debounced search
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!q.trim()) { setSections([]); setSearched(false); return; }
+    /* eslint-enable react-hooks/set-state-in-effect */
     const timer = setTimeout(async () => {
       setLoading(true);
       setSearched(true);

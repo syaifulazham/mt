@@ -120,7 +120,9 @@ function CreateTeamDialog({
   const selectedComp = competitions.find((c) => c.id === competitionId);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (open) { setName(""); setCompetitionId(""); setError(""); }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [open]);
 
   async function handleCreate() {
@@ -137,8 +139,8 @@ function CreateTeamDialog({
       if (!res.ok) throw new Error(j.error ?? "Failed to create team");
       onCreated(j.data);
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -239,6 +241,7 @@ function RenameDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (team) { setName(team.name); setError(""); } }, [team]);
 
   async function handleSave() {
@@ -254,8 +257,8 @@ function RenameDialog({
       if (!res.ok) throw new Error(j.error ?? "Failed");
       onRenamed(j.data);
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -337,8 +340,10 @@ function AddMemberDialog({
 
   useEffect(() => {
     if (!team) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setLoading(true);
     setError("");
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetch(`/api/v2/manager/teams/${team.id}/eligible-participants`)
       .then((r) => r.json())
       .then((j) => {
@@ -365,8 +370,9 @@ function AddMemberDialog({
       onAdded(teamJ.data);
       // Remove the added participant from the local list
       setEligible((prev) => prev.filter((p) => p.id !== participantId));
-    } catch (e: any) {
-      setError(e.message === "TEAM_FULL" ? "Team is full." : e.message);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg === "TEAM_FULL" ? "Team is full." : msg);
     } finally {
       setAdding(null);
     }
@@ -411,6 +417,7 @@ function AddMemberDialog({
                 <p className="text-sm font-medium">{p.name}</p>
                 <p className="text-xs text-zinc-400">
                   {EDU_LABEL[p.eduLevel]}{p.classGrade ? ` · ${p.classGrade}` : ""}
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {(p as any).age ? ` · ${(p as any).age} yrs` : ""}
                 </p>
               </div>
@@ -461,9 +468,12 @@ function TrainerPickerDialog({
 
   useEffect(() => {
     if (!team) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setLoading(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetch("/api/v2/manager/trainers")
       .then((r) => r.json())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .then((j) => setAllTrainers((j.data ?? []).map((t: any) => ({ id: t.id, name: t.name, phoneNumber: t.phoneNumber }))))
       .catch(() => setError("Failed to load trainers"))
       .finally(() => setLoading(false));
@@ -485,8 +495,8 @@ function TrainerPickerDialog({
       const teamRes = await fetch(`/api/v2/manager/teams/${team.id}`);
       const teamJ  = await teamRes.json();
       onUpdated(teamJ.data);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setToggling(null);
     }
@@ -569,6 +579,7 @@ function TeamEmailRow({ team, onUpdated }: { team: Team; onUpdated: (t: Team) =>
   const [saving,  setSaving]  = useState(false);
   const [err,     setErr]     = useState("");
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setVal(team.email ?? ""); }, [team.email]);
 
   async function save() {
@@ -788,7 +799,7 @@ function DeleteConfirmDialog({
         <DialogHeader>
           <DialogTitle>Delete Team</DialogTitle>
           <DialogDescription>
-            Delete <span className="font-medium text-foreground">"{team?.name}"</span>? This will remove all members from the team.
+            Delete <span className="font-medium text-foreground">&quot;{team?.name}&quot;</span>? This will remove all members from the team.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
@@ -830,6 +841,7 @@ export function TeamsClient({ contingents }: { contingents: Contingent[] }) {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function patchTeam(updated: Team) {

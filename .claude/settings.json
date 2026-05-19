@@ -59,7 +59,10 @@
       "Bash(PGPASSWORD=DBAzham231 psql -h localhost -U techlympics -d techlympics_dev -c 'ALTER TABLE \"Team\" ADD COLUMN IF NOT EXISTS \"lmsCourseEnrolled\" BOOLEAN NOT NULL DEFAULT false;')",
       "Bash(node -e \"const l=require\\('./package-lock.json'\\); console.log\\(l.packages['node_modules/prisma']?.version\\); console.log\\(l.packages['node_modules/@prisma/client']?.version\\)\")",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npx eslint *)",
+      "Bash(grep -E \"^/|error\\\\s+Error:|error\\\\s+Unexpected|error\\\\s+\\\\`\")",
+      "Bash(grep -n \"tabs.\\\\${key}\" /Users/azham/a-job/repo/mt/src/components/manager/ParticipantsClient.tsx)"
     ],
     "additionalDirectories": [
       "/Users/azham/a-job/repo/mt/src/app/(organizer)/invite",

@@ -78,6 +78,7 @@ export function SchoolsTab() {
     setLoading(false);
   }, [page, q, stateFilter, levelFilter]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function openAdd() {

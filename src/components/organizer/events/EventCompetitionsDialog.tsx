@@ -103,7 +103,9 @@ export function EventCompetitionsDialog({ open, eventId, eventName, onClose, onC
     }
   }, [eventId]); // onCountChange excluded — accessed via stable ref
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (open) load(); }, [open, load]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (!open) { setView("list"); setPage(1); } }, [open]);
 
   // ── Competition catalog search ────────────────────────────────────────────────

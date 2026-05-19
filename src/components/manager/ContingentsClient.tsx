@@ -321,11 +321,13 @@ function EditDialog({
 
   useEffect(() => {
     if (!contingent) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setName(contingent.name);
     setShortName(contingent.shortName ?? "");
     setLogoUrl(contingent.logoUrl ?? `builtin:${DEFAULT_BUILTIN}`);
     setStateId(contingent.state?.id ?? "");
     setError("");
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [contingent]);
 
   useEffect(() => {
@@ -508,7 +510,7 @@ function JoinRequestsPanel({
             <p className="text-sm font-medium leading-tight truncate">{req.manager.name}</p>
             <p className="text-xs text-zinc-400 truncate">{req.manager.email}</p>
             {req.requestMessage && (
-              <p className="text-xs text-zinc-500 mt-0.5 italic">"{req.requestMessage}"</p>
+              <p className="text-xs text-zinc-500 mt-0.5 italic">&quot;{req.requestMessage}&quot;</p>
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -678,6 +680,7 @@ export function ContingentsClient() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function patchContingent(updated: Contingent) {

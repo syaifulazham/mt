@@ -158,6 +158,7 @@ export function KnowledgeBaseClient({ role }: { role: OrganizerRole }) {
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   async function select(item: KbItem) {

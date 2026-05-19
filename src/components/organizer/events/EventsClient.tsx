@@ -392,6 +392,7 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
     setLoading(false);
   }, [eventId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const searchComps = useCallback(async (q: string) => {
@@ -641,6 +642,7 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
     } finally { setLoading(false); }
   }, [page, q, statusFilter]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {

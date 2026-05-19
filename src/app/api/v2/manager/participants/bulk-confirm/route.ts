@@ -21,8 +21,9 @@ export async function POST(req: NextRequest) {
   if (!contingentIds.includes(contingentId))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
+  type ParsedRow = { name: string; ic?: string; email?: string; phoneNumber?: string; gender: Gender; age?: number; eduLevel: EduLevel; classGrade?: string; className?: string };
   const created = await db.participant.createMany({
-    data: rows.map((r: any) => ({
+    data: rows.map((r: ParsedRow) => ({
       name:        r.name,
       ic:          r.ic          ?? null,
       email:       r.email       ?? null,

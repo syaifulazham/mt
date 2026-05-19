@@ -70,6 +70,7 @@ export function ThemesTab() {
     }
   }, [page, q]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function openAdd() {

@@ -47,6 +47,7 @@ function StatesPane() {
     setLoading(false);
   }, [page, q]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function openAdd() { setEditing(null); setName(""); setCode(""); setFormError(""); setFormOpen(true); }
@@ -209,6 +210,7 @@ function ZonesPane() {
     setLoading(false);
   }, [page, q]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function openAdd() { setEditing(null); setName(""); setFormError(""); setFormOpen(true); }

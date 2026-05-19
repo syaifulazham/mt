@@ -101,7 +101,7 @@ async function main() {
 
   let inserted = 0;
   let skipped = 0;
-  let warnings: string[] = [];
+  const warnings: string[] = [];
 
   for (const school of schools) {
     const stateCode = STATE_CODE_MAP[school.stateId];

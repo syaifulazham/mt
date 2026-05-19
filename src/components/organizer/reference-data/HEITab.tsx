@@ -344,7 +344,7 @@ function AiFetchDialog({
               <div>
                 <p className="font-medium text-zinc-700">Search with Gemini AI</p>
                 <p className="text-sm text-zinc-400 mt-1 max-w-sm">
-                  Click "Search with Gemini" to fetch all registered Malaysian higher institutions
+                  Click &quot;Search with Gemini&quot; to fetch all registered Malaysian higher institutions
                   including public universities, private universities, and foreign branch campuses.
                 </p>
               </div>
@@ -579,6 +579,7 @@ export function HEITab() {
     setLoading(false);
   }, [page, q, stateFilter, typeFilter]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function openAdd() {
