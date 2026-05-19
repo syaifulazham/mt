@@ -57,7 +57,9 @@
       "Bash(mkdir -p '/Users/azham/a-job/repo/mt/src/app/\\(organizer\\)/organizer/events/[slug]')",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,v\\) for k,v in {**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}.items\\(\\) if any\\(x in k.lower\\(\\) for x in ['google','gemini','ai','generative']\\)]\")",
       "Bash(PGPASSWORD=DBAzham231 psql -h localhost -U techlympics -d techlympics_dev -c 'ALTER TABLE \"Team\" ADD COLUMN IF NOT EXISTS \"lmsCourseEnrolled\" BOOLEAN NOT NULL DEFAULT false;')",
-      "Bash(node -e \"const l=require\\('./package-lock.json'\\); console.log\\(l.packages['node_modules/prisma']?.version\\); console.log\\(l.packages['node_modules/@prisma/client']?.version\\)\")"
+      "Bash(node -e \"const l=require\\('./package-lock.json'\\); console.log\\(l.packages['node_modules/prisma']?.version\\); console.log\\(l.packages['node_modules/@prisma/client']?.version\\)\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "/Users/azham/a-job/repo/mt/src/app/(organizer)/invite",
