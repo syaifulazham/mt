@@ -131,6 +131,12 @@ jobs:
             docker build -t mt:latest .
 
             echo "── Migrating database ──"
+            # Resolve any previously failed migration before re-applying
+            docker run --rm \
+              --network host \
+              --env-file /opt/mt/.env.production \
+              mt-migrator:latest \
+              node_modules/.bin/prisma migrate resolve --rolled-back 20260520000000_add_missing_tables_and_columns 2>/dev/null || true
             docker run --rm \
               --network host \
               --env-file /opt/mt/.env.production \
