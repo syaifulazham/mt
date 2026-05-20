@@ -34,14 +34,13 @@ jobs:
           PORT=${{ secrets.PORT }}
           EOF
 
-      # ── Write nginx config on the runner ─────────────────────────────────────
+      # ── Write nginx config (no indentation so file is valid) ─────────────────
       - name: Generate nginx config
         run: |
           cat > nginx-mt.conf << 'EOF'
           server {
               listen 80;
               server_name ${{ secrets.DOMAIN }};
-
               location / {
                   proxy_pass         http://127.0.0.1:${{ secrets.PORT }};
                   proxy_http_version 1.1;
@@ -55,6 +54,8 @@ jobs:
               }
           }
           EOF
+          # Strip leading whitespace caused by YAML indentation
+          sed -i 's/^          //' nginx-mt.conf
 
       # ── Copy files to server ──────────────────────────────────────────────────
       - name: Copy files to server
@@ -92,23 +93,18 @@ jobs:
             sudo systemctl enable nginx
             sudo systemctl reload nginx
 
-            # ── certbot (only runs if cert doesn't exist yet) ───────────────────
-            echo "── Checking SSL certificate ──"
-            if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-              echo "── Obtaining SSL certificate for $DOMAIN ──"
-              if ! command -v certbot &>/dev/null; then
-                sudo apt-get install -y certbot python3-certbot-nginx
-              fi
-              sudo certbot --nginx \
-                --non-interactive \
-                --agree-tos \
-                --email admin@$DOMAIN \
-                --domains $DOMAIN \
-                --redirect
-              sudo systemctl reload nginx
-            else
-              echo "── Certificate already exists, skipping ──"
+            # ── certbot (re-apply SSL after every nginx config overwrite) ────────
+            echo "── Applying SSL certificate ──"
+            if ! command -v certbot &>/dev/null; then
+              sudo apt-get install -y certbot python3-certbot-nginx
             fi
+            sudo certbot --nginx \
+              --non-interactive \
+              --agree-tos \
+              --email mahza13@gmail.com \
+              --domains $DOMAIN \
+              --redirect
+            sudo systemctl reload nginx
 
             # ── app deploy ─────────────────────────────────────────────────────
             echo "── Pulling latest code ──"
@@ -122,7 +118,7 @@ jobs:
             echo "── Migrating database ──"
             docker run --rm \
               --network host \
-              --env-file .env.production \
+              --env-file /opt/mt/.env.production \
               mt-migrator:latest
 
             echo "── Restarting container ──"
@@ -131,7 +127,7 @@ jobs:
             docker run -d \
               --name mt \
               --network host \
-              --env-file .env.production \
+              --env-file /opt/mt/.env.production \
               --restart unless-stopped \
               mt:latest
 
