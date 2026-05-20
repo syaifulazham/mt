@@ -28,13 +28,10 @@ async function main() {
     await db.school.upsert({
       where: { code: school.code },
       create: {
-        code:       school.code,
-        name:       school.name,
-        level:      school.level,
-        category:   school.category,
-        address:    school.address,
-        city:       school.city,
-        postcode:   school.postcode,
+        code:     school.code,
+        name:     school.name,
+        level:    school.level,
+        category: school.category,
         stateId,
       },
       update: {},
