@@ -6,6 +6,7 @@ import type { OrganizerRole } from "@/types";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET,
+  trustHost: true,
   session: { strategy: "jwt", maxAge: 8 * 60 * 60 }, // 8-hour JWT
   pages: {
     signIn: "/organizer/login",
