@@ -94,18 +94,30 @@ jobs:
             sudo systemctl enable nginx
             sudo systemctl reload nginx
 
-            # ── certbot (re-apply SSL after every nginx config overwrite) ────────
-            echo "── Applying SSL certificate ──"
-            if ! command -v certbot &>/dev/null; then
-              sudo apt-get install -y certbot python3-certbot-nginx
+            # ── certbot (only obtain cert if it doesn't exist yet) ──────────────
+            echo "── Checking SSL certificate ──"
+            if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+              echo "── Obtaining SSL certificate for $DOMAIN ──"
+              if ! command -v certbot &>/dev/null; then
+                sudo apt-get install -y certbot python3-certbot-nginx
+              fi
+              sudo rm -f /var/lib/letsencrypt/.certbot.lock
+              sudo certbot --nginx \
+                --non-interactive \
+                --agree-tos \
+                --email mahza13@gmail.com \
+                --domains $DOMAIN \
+                --redirect
+              sudo systemctl reload nginx
+            else
+              echo "── Certificate exists — restoring SSL to nginx config ──"
+              sudo certbot install \
+                --nginx \
+                --non-interactive \
+                --cert-name $DOMAIN \
+                --redirect 2>/dev/null || true
+              sudo systemctl reload nginx
             fi
-            sudo certbot --nginx \
-              --non-interactive \
-              --agree-tos \
-              --email mahza13@gmail.com \
-              --domains $DOMAIN \
-              --redirect
-            sudo systemctl reload nginx
 
             # ── app deploy ─────────────────────────────────────────────────────
             echo "── Pulling latest code ──"
