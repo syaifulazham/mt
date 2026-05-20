@@ -122,7 +122,9 @@ jobs:
             # ── app deploy ─────────────────────────────────────────────────────
             echo "── Pulling latest code ──"
             cd /opt/mt
-            git pull origin main
+            git fetch origin main
+            git clean -fd
+            git reset --hard origin/main
 
             echo "── Building Docker images ──"
             docker build --target migrator -t mt-migrator:latest .
