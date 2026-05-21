@@ -596,9 +596,10 @@ function CreateDialog({
 
   const needsState = institutionType === "INDEPENDENT" || institutionType === "INTERNATIONAL";
 
-  useEffect(() => {
-    if (!open) { setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError(""); }
-  }, [open]);
+  function handleClose() {
+    setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
+    onClose();
+  }
 
   useEffect(() => {
     if (!needsState || states.length > 0) return;
@@ -623,7 +624,7 @@ function CreateDialog({
       }
       if (!res.ok) throw new Error(j.error ?? "Failed to create");
       onCreated();
-      onClose();
+      handleClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create contingent");
     } finally {
@@ -632,7 +633,7 @@ function CreateDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-0">
           <DialogTitle>Create Contingent</DialogTitle>
@@ -681,7 +682,7 @@ function CreateDialog({
         </div>
 
         <DialogFooter className="px-6 pb-5 gap-2">
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleCreate} disabled={saving}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create
           </Button>
@@ -722,14 +723,15 @@ function JoinDialog({
   const [error,     setError]     = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
-  useEffect(() => {
-    if (!open) { setQ(""); setResults([]); setSelected(null); setMessage(""); setError(""); }
-  }, [open]);
+  function handleClose() {
+    setQ(""); setResults([]); setSelected(null); setMessage(""); setError("");
+    onClose();
+  }
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!q.trim()) { setResults([]); return; }
     debounceRef.current = setTimeout(async () => {
+      if (!q.trim()) { setResults([]); return; }
       setSearching(true);
       try {
         const res = await fetch(`/api/v2/manager/contingents/search?q=${encodeURIComponent(q)}`);
@@ -754,7 +756,7 @@ function JoinDialog({
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? "Request failed");
       onRequested();
-      onClose();
+      handleClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to send request");
     } finally {
@@ -763,7 +765,7 @@ function JoinDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-0">
           <DialogTitle>Join Existing Contingent</DialogTitle>
@@ -859,7 +861,7 @@ function JoinDialog({
         </div>
 
         <DialogFooter className="px-6 pb-5 gap-2">
-          <Button variant="outline" onClick={onClose} disabled={sending}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose} disabled={sending}>Cancel</Button>
           {selected && (
             <Button onClick={handleRequest} disabled={sending}>
               {sending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Send Request
