@@ -10,7 +10,7 @@ import { DeleteDialog } from "./DeleteDialog";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type State = { id: string; name: string; code: string; _count: { zoneStates: number; schools: number; higherInstitutions: number } };
+type State = { id: string; name: string; code: string; _count: { schools: number; higherInstitutions: number } };
 type ZoneStateEntry = { state: { id: string; name: string } };
 type Zone  = { id: string; name: string; states: ZoneStateEntry[]; _count: { districts: number; schools: number } };
 function zoneStateNames(states: ZoneStateEntry[]) {
@@ -97,23 +97,21 @@ function StatesPane() {
             <tr>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Name</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Code</th>
-              <th className="px-3 py-2 text-center font-medium text-zinc-600">Zones</th>
               <th className="px-3 py-2 text-center font-medium text-zinc-600">Schools</th>
               <th className="px-3 py-2 w-16"></th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>
+              <tr><td colSpan={4} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>
             )}
             {!loading && data.length === 0 && (
-              <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400">No states found.</td></tr>
+              <tr><td colSpan={4} className="px-3 py-8 text-center text-zinc-400">No states found.</td></tr>
             )}
             {!loading && data.map((s) => (
               <tr key={s.id} className="border-b last:border-0 hover:bg-zinc-50">
                 <td className="px-3 py-2">{s.name}</td>
                 <td className="px-3 py-2 font-mono text-xs">{s.code}</td>
-                <td className="px-3 py-2 text-center text-zinc-500">{s._count.zoneStates}</td>
                 <td className="px-3 py-2 text-center text-zinc-500">{s._count.schools}</td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">

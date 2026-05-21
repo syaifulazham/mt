@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: {
-        _count: { select: { zoneStates: true, schools: true, higherInstitutions: true } },
+        _count: { select: { schools: true, higherInstitutions: true } },
       },
     }),
     db.state.count({ where }),
