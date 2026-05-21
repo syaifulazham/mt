@@ -17,6 +17,7 @@ import {
   Award,
   Grid3X3,
   LogOut,
+  Lock,
 } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -35,12 +36,24 @@ function BottomTab({
   icon: Icon,
   label,
   isActive,
+  disabled,
 }: {
   href: string;
   icon: React.ElementType;
   label: string;
   isActive: boolean;
+  disabled?: boolean;
 }) {
+  if (disabled) {
+    return (
+      <span className="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-zinc-200 cursor-not-allowed select-none">
+        <Icon className="h-5 w-5" strokeWidth={1.8} />
+        <span className="text-[10px] font-medium leading-none">{label}</span>
+        <Lock className="absolute top-1.5 right-1.5 h-2.5 w-2.5 text-zinc-300" />
+      </span>
+    );
+  }
+
   return (
     <Link
       href={href}
@@ -65,6 +78,7 @@ function GridTile({
   label,
   isActive,
   color,
+  disabled,
   onClick,
 }: {
   href?: string;
@@ -72,8 +86,21 @@ function GridTile({
   label: string;
   isActive?: boolean;
   color: string;
+  disabled?: boolean;
   onClick?: () => void;
 }) {
+  if (disabled) {
+    return (
+      <div className="relative flex flex-col items-center gap-2 rounded-2xl p-4 opacity-35 cursor-not-allowed select-none">
+        <div className={`h-12 w-12 rounded-xl ${color} flex items-center justify-center shadow-sm`}>
+          <Icon className="h-6 w-6 text-white" strokeWidth={1.8} />
+        </div>
+        <span className="text-xs font-medium text-center leading-tight text-zinc-700">{label}</span>
+        <Lock className="absolute top-2 right-2 h-3 w-3 text-zinc-400" />
+      </div>
+    );
+  }
+
   const content = (
     <div
       className={`flex flex-col items-center gap-2 rounded-2xl p-4 transition-all active:scale-95 ${
@@ -109,7 +136,7 @@ function GridTile({
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export function MobileManagerNav() {
+export function MobileManagerNav({ hasContingent }: { hasContingent: boolean }) {
   const pathname = usePathname();
   const t = useTranslations("nav");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -119,20 +146,21 @@ export function MobileManagerNav() {
     : (user?.username ?? null);
 
   const primary = [
-    { href: "/manager/dashboard",   icon: Home,     label: t("dashboard") },
-    { href: "/manager/contingents", icon: Building2, label: t("contingents") },
-    { href: "/manager/participants", icon: Users,     label: t("participants") },
-    { href: "/manager/teams",       icon: Swords,    label: t("teams") },
+    { href: "/manager/dashboard",    icon: Home,     label: t("dashboard"),    gated: false },
+    { href: "/manager/contingents",  icon: Building2, label: t("contingents"), gated: false },
+    { href: "/manager/participants", icon: Users,     label: t("participants"), gated: true  },
+    { href: "/manager/teams",        icon: Swords,    label: t("teams"),        gated: true  },
   ];
 
   const secondary = [
-    { href: "/manager/profile",       icon: User,          label: t("profile"),      color: "bg-violet-500" },
-    { href: "/manager/trainers",      icon: GraduationCap, label: t("trainers"),     color: "bg-teal-500" },
-    { href: "/manager/lms",           icon: BookOpen,      label: t("lms"),          color: "bg-amber-500" },
-    { href: "/manager/certificates",  icon: Award,         label: t("certificates"), color: "bg-pink-500" },
+    { href: "/manager/profile",      icon: User,          label: t("profile"),      color: "bg-violet-500", gated: false },
+    { href: "/manager/trainers",     icon: GraduationCap, label: t("trainers"),     color: "bg-teal-500",   gated: true  },
+    { href: "/manager/lms",          icon: BookOpen,      label: t("lms"),          color: "bg-amber-500",  gated: true  },
+    { href: "/manager/certificates", icon: Award,         label: t("certificates"), color: "bg-pink-500",   gated: true  },
   ];
 
-  const moreActive = secondary.some((item) => active(pathname, item.href));
+  const moreActive = secondary.some((item) => !item.gated || hasContingent)
+    && secondary.some((item) => active(pathname, item.href));
 
   return (
     <>
@@ -145,6 +173,7 @@ export function MobileManagerNav() {
             icon={item.icon}
             label={item.label}
             isActive={active(pathname, item.href)}
+            disabled={item.gated && !hasContingent}
           />
         ))}
 
@@ -193,6 +222,7 @@ export function MobileManagerNav() {
                 label={item.label}
                 isActive={active(pathname, item.href)}
                 color={item.color}
+                disabled={item.gated && !hasContingent}
                 onClick={() => setMoreOpen(false)}
               />
             ))}

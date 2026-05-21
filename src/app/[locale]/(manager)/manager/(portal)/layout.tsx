@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { ManagerSidebar } from "@/components/manager/ManagerSidebar";
+import { MobileManagerNav } from "@/components/manager/MobileManagerNav";
 import { LocaleSwitcher } from "@/components/manager/LocaleSwitcher";
 import Image from "next/image";
 import Link from "next/link";
@@ -24,6 +25,12 @@ export default async function PortalLayout({ children }: { children: React.React
     profile.school?.name ??
     profile.higherInstitution?.name ??
     (profile.institutionType === "INDEPENDENT" ? "Independent Group" : "International");
+
+  const contingentManager = await db.contingentManager.findFirst({
+    where: { managerId: profile.id, status: "ACTIVE" },
+    select: { id: true },
+  });
+  const hasContingent = !!contingentManager;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -51,12 +58,14 @@ export default async function PortalLayout({ children }: { children: React.React
 
       {/* ── Body ──────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <ManagerSidebar userName={profile.name} institutionName={institutionLabel} />
+        <ManagerSidebar userName={profile.name} institutionName={institutionLabel} hasContingent={hasContingent} />
 
         <main className="flex-1 overflow-y-auto bg-zinc-50 p-6 pb-24 lg:pb-6">
           {children}
         </main>
       </div>
+
+      <MobileManagerNav hasContingent={hasContingent} />
     </div>
   );
 }

@@ -13,17 +13,18 @@ import {
   Swords,
   BookOpen,
   Award,
+  Lock,
 } from "lucide-react";
 
 const NAV = [
-  { href: "/manager/dashboard",   icon: Home,          key: "dashboard"   },
-  { href: "/manager/profile",     icon: User,          key: "profile"     },
-  { href: "/manager/contingents", icon: Building2,     key: "contingents" },
-  { href: "/manager/participants", icon: Users,         key: "participants" },
-  { href: "/manager/trainers",    icon: GraduationCap, key: "trainers"    },
-  { href: "/manager/teams",       icon: Swords,        key: "teams"       },
-  { href: "/manager/lms",         icon: BookOpen,      key: "lms"         },
-  { href: "/manager/certificates",icon: Award,         key: "certificates"},
+  { href: "/manager/dashboard",    icon: Home,          key: "dashboard",    gated: false },
+  { href: "/manager/profile",      icon: User,          key: "profile",      gated: false },
+  { href: "/manager/contingents",  icon: Building2,     key: "contingents",  gated: false },
+  { href: "/manager/participants", icon: Users,         key: "participants", gated: true  },
+  { href: "/manager/trainers",     icon: GraduationCap, key: "trainers",     gated: true  },
+  { href: "/manager/teams",        icon: Swords,        key: "teams",        gated: true  },
+  { href: "/manager/lms",          icon: BookOpen,      key: "lms",          gated: true  },
+  { href: "/manager/certificates", icon: Award,         key: "certificates", gated: true  },
 ] as const;
 
 function isActive(pathname: string, href: string) {
@@ -36,17 +37,34 @@ function isActive(pathname: string, href: string) {
 type Props = {
   userName: string;
   institutionName: string;
+  hasContingent: boolean;
 };
 
-export function ManagerSidebar({ userName, institutionName }: Props) {
+export function ManagerSidebar({ userName, institutionName, hasContingent }: Props) {
   const pathname = usePathname();
   const t = useTranslations("nav");
 
   return (
     <aside className="hidden lg:flex w-56 shrink-0 flex-col border-r bg-white">
       <nav className="flex-1 space-y-0.5 px-3 py-4">
-        {NAV.map(({ href, icon: Icon, key }) => {
-          const active = isActive(pathname, href);
+        {NAV.map(({ href, icon: Icon, key, gated }) => {
+          const disabled = gated && !hasContingent;
+          const active = !disabled && isActive(pathname, href);
+
+          if (disabled) {
+            return (
+              <span
+                key={href}
+                title="Set up a contingent first"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-300 cursor-not-allowed select-none"
+              >
+                <Icon className="h-4 w-4 shrink-0 text-zinc-200" strokeWidth={1.8} />
+                {t(key)}
+                <Lock className="ml-auto h-3 w-3 text-zinc-300" />
+              </span>
+            );
+          }
+
           return (
             <Link
               key={href}
