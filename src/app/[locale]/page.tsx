@@ -12,23 +12,31 @@ export const metadata: Metadata = {
   description: "Malaysia's premier technology olympiad — empowering the next generation of innovators, engineers, and digital creators.",
 };
 
-const CATEGORIES = [
-  { icon: "🤖", name: "Robotics & Automation",  desc: "Design and program autonomous robots to tackle real-world challenges in timed arenas.",       tag: "Open Division",   accent: "#00F5FF" },
-  { icon: "🧠", name: "AI & Machine Learning",   desc: "Build intelligent systems that learn, adapt, and solve complex problems using cutting-edge AI.", tag: "Senior Division", accent: "#FFD700" },
-  { icon: "🚁", name: "Drone Racing & FPV",      desc: "Navigate custom-built drones through precision obstacle courses at breakneck speeds.",           tag: "Open Division",   accent: "#CC0001" },
-  { icon: "💻", name: "Cybersecurity",           desc: "Capture the flag, penetration testing, and digital forensics challenges for elite defenders.",   tag: "Senior Division", accent: "#7B61FF" },
-  { icon: "🌱", name: "GreenTech Innovation",    desc: "Prototype sustainable tech solutions addressing Malaysia's environmental challenges.",            tag: "All Divisions",   accent: "#00FF9D" },
-  { icon: "🎮", name: "Game Dev Challenge",      desc: "Create original games from scratch in a 48-hour jam judged on creativity and playability.",      tag: "Youth Division",  accent: "#FF6B35" },
-  { icon: "💡", name: "IoT & Smart Systems",     desc: "Design connected devices and systems that bring intelligence to everyday Malaysian life.",        tag: "Open Division",   accent: "#00C8FF" },
-  { icon: "🔬", name: "Science Olympiad",        desc: "Multi-discipline STEM competitions spanning physics, chemistry, biology, and mathematics.",       tag: "All Divisions",   accent: "#FFD700" },
-];
-
 const STATS = [
   { value: "50+",   label: "Competition Categories" },
   { value: "100K+", label: "Expected Participants"  },
   { value: "16",    label: "States & Territories"   },
   { value: "RM 2M", label: "Total Prize Pool"       },
 ];
+
+function renderThemeIcon(logoUrl: string | null, name: string) {
+  if (!logoUrl) {
+    return (
+      <span style={{ fontSize: "2.2rem", display: "block", marginBottom: 18 }}>
+        {name.charAt(0)}
+      </span>
+    );
+  }
+  if (logoUrl.startsWith("/uploads/") || logoUrl.startsWith("https://") || logoUrl.startsWith("http://")) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={logoUrl} alt={name} style={{ width: 42, height: 42, objectFit: "contain", marginBottom: 18, display: "block" }} />
+    );
+  }
+  return (
+    <span style={{ fontSize: "2.2rem", display: "block", marginBottom: 18 }}>{logoUrl}</span>
+  );
+}
 
 export default async function LandingPage({
   params,
@@ -38,12 +46,15 @@ export default async function LandingPage({
   await params;
 
   const { userId } = await auth();
-  const manager = userId
-    ? await db.managerProfile.findUnique({
-        where: { clerkUserId: userId },
-        select: { name: true, profileComplete: true },
-      })
-    : null;
+  const [manager, themes] = await Promise.all([
+    userId
+      ? db.managerProfile.findUnique({
+          where: { clerkUserId: userId },
+          select: { name: true, profileComplete: true },
+        })
+      : Promise.resolve(null),
+    db.theme.findMany({ orderBy: { name: "asc" } }),
+  ]);
 
   return (
     <>
@@ -454,48 +465,35 @@ export default async function LandingPage({
               gap: 2,
             }}
           >
-            {CATEGORIES.map(c => (
-              <div
-                key={c.name}
-                className="cat-card group relative overflow-hidden"
-                style={{
-                  background: "rgba(0,232,255,0.07)",
-                  border: "1px solid rgba(0,245,255,0.08)",
-                  padding: "32px 28px",
-                  cursor: "default",
-                  transition: "border-color 0.3s, background 0.3s",
-                }}
-              >
-                {/* Left accent bar */}
+            {themes.map(c => {
+              const accent = c.color ?? "#00F5FF";
+              return (
                 <div
-                  className="cat-card-bar absolute top-0 left-0 w-[3px]"
-                  style={{ background: c.accent, height: 0, transition: "height 0.4s" }}
-                />
-                <span style={{ fontSize: "2.2rem", display: "block", marginBottom: 18 }}>{c.icon}</span>
-                <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1.1rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#fff", marginBottom: 10 }}>
-                  {c.name}
-                </div>
-                <div style={{ fontSize: "0.82rem", lineHeight: 1.65, color: "rgba(255,255,255,0.45)" }}>
-                  {c.desc}
-                </div>
-                <div
+                  key={c.id}
+                  className="cat-card group relative overflow-hidden"
                   style={{
-                    display: "inline-block",
-                    marginTop: 16,
-                    fontSize: "0.65rem",
-                    letterSpacing: "0.18em",
-                    textTransform: "uppercase",
-                    color: c.accent,
-                    border: `1px solid ${c.accent}`,
-                    padding: "3px 10px",
-                    opacity: 0.7,
-                    borderRadius: 1,
+                    background: "rgba(0,232,255,0.07)",
+                    border: "1px solid rgba(0,245,255,0.08)",
+                    padding: "32px 28px",
+                    cursor: "default",
+                    transition: "border-color 0.3s, background 0.3s",
                   }}
                 >
-                  {c.tag}
+                  {/* Left accent bar */}
+                  <div
+                    className="cat-card-bar absolute top-0 left-0 w-[3px]"
+                    style={{ background: accent, height: 0, transition: "height 0.4s" }}
+                  />
+                  {renderThemeIcon(c.logoUrl, c.name)}
+                  <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1.1rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#fff", marginBottom: 10 }}>
+                    {c.name}
+                  </div>
+                  <div style={{ fontSize: "0.82rem", lineHeight: 1.65, color: "rgba(255,255,255,0.45)" }}>
+                    {c.description}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
