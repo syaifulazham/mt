@@ -26,10 +26,50 @@ export default async function PortalLayout({ children }: { children: React.React
     profile.higherInstitution?.name ??
     (profile.institutionType === "INDEPENDENT" ? "Independent Group" : "International");
 
-  const contingentManager = await db.contingentManager.findFirst({
+  let contingentManager = await db.contingentManager.findFirst({
     where: { managerId: profile.id, status: "ACTIVE" },
     select: { id: true },
   });
+
+  // Auto-link: if the manager's school/HEI already has a contingent (pre-seeded
+  // by organizer) but this user has no ContingentManager record yet, create one.
+  if (!contingentManager) {
+    const institutionContingent = profile.schoolId
+      ? await db.contingent.findFirst({
+          where: { schoolId: profile.schoolId, status: "ACTIVE" },
+          select: { id: true },
+        })
+      : profile.higherInstitutionId
+      ? await db.contingent.findFirst({
+          where: { higherInstitutionId: profile.higherInstitutionId, status: "ACTIVE" },
+          select: { id: true },
+        })
+      : null;
+
+    if (institutionContingent) {
+      const existingLink = await db.contingentManager.findUnique({
+        where: {
+          contingentId_managerId: {
+            contingentId: institutionContingent.id,
+            managerId:    profile.id,
+          },
+        },
+        select: { id: true },
+      });
+      if (!existingLink) {
+        contingentManager = await db.contingentManager.create({
+          data: {
+            contingentId: institutionContingent.id,
+            managerId:    profile.id,
+            role:         "OWNER",
+            status:       "ACTIVE",
+          },
+          select: { id: true },
+        });
+      }
+    }
+  }
+
   const hasContingent = !!contingentManager;
 
   return (
