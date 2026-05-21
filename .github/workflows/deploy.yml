@@ -135,8 +135,16 @@ jobs:
             cp /tmp/.env.mt.production .env.production
 
             echo "── Building Docker images ──"
+            # Extract NEXT_PUBLIC_ vars from env file — needed as build args
+            # because .dockerignore excludes .env.* from the build context
+            CLERK_PK=$(grep ^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY .env.production | cut -d= -f2-)
+            APP_URL=$(grep  ^NEXT_PUBLIC_APP_URL                .env.production | cut -d= -f2-)
+
             docker build --target migrator -t mt-migrator:latest .
-            docker build -t mt:latest .
+            docker build \
+              --build-arg "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PK}" \
+              --build-arg "NEXT_PUBLIC_APP_URL=${APP_URL}" \
+              -t mt:latest .
 
             echo "── Migrating database ──"
             # Resolve any previously failed migration before re-applying
