@@ -171,12 +171,23 @@ async function searchKb(userText: string): Promise<{ title: string; path: string
   return scored.slice(0, 3);
 }
 
+function stripFrontmatter(content: string): string {
+  return content.replace(/^---[\s\S]*?---\s*/m, "").trim();
+}
+
 function buildKbBlock(articles: { title: string; path: string; content: string }[]): string {
   if (articles.length === 0) return "";
   const sections = articles.map(a =>
     `### ${a.title} (${a.path})\n${a.content.slice(0, 1200)}`
   ).join("\n\n---\n\n");
-  return `\n\n[KNOWLEDGE BASE CONTEXT — use this to answer questions about events/competitions]\n${sections}\n[/KNOWLEDGE BASE CONTEXT]`;
+  return `\n\n[KNOWLEDGE BASE CONTEXT — answer using ONLY this content; format reply with bullet points and markdown tables]\n${sections}\n[/KNOWLEDGE BASE CONTEXT]`;
+}
+
+function buildKbDirectReply(articles: { title: string; path: string; content: string }[]): string {
+  if (articles.length === 0) return "";
+  return articles
+    .map(a => stripFrontmatter(a.content).slice(0, 2000))
+    .join("\n\n---\n\n");
 }
 
 // ── AI callers ─────────────────────────────────────────────────────────────────
@@ -643,6 +654,12 @@ export async function POST(req: NextRequest) {
         intent: "GENERAL", action: "SEARCH", params: {},
         reply: content, needsClarification: false, clarificationQuestion: null,
       };
+    }
+
+    // When KB articles are matched and the AI intent is general/clarify,
+    // override reply with the structured KB content (bullet points + tables already in markdown)
+    if (kbArticles.length > 0 && (ai.intent === "GENERAL" || ai.intent === "CLARIFY")) {
+      ai.reply = buildKbDirectReply(kbArticles);
     }
 
     const result = await runQuery(ai.intent, ai.params, 1, 10);
