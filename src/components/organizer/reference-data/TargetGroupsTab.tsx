@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, CalendarDays, GraduationCap } from "lucide-react";
+import { PushKbButton } from "./PushKbButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -238,6 +239,7 @@ export function TargetGroupsTab() {
         <Button size="sm" onClick={openAdd}>
           <Plus className="h-4 w-4 mr-1" />Add Target Group
         </Button>
+        <PushKbButton entityType="reference/target-groups" label="Target Groups" />
       </div>
 
       <div className="rounded-md border overflow-hidden">

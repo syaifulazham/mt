@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { PushKbButton } from "./PushKbButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DeleteDialog } from "./DeleteDialog";
 
@@ -727,6 +728,7 @@ export function HEITab() {
         <Button size="sm" onClick={openAdd}>
           <Plus className="h-4 w-4 mr-1" /> Add HEI
         </Button>
+        <PushKbButton entityType="reference/higher-institutions" label="HEIs" />
       </div>
 
       {/* ── Table ───────────────────────────────────────── */}

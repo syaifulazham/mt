@@ -133,6 +133,121 @@ _Dikemaskini: ${new Date().toLocaleDateString("ms-MY", { day: "numeric", month: 
   return { path, title: comp.name, content };
 }
 
+// ── Reference data formatters (aggregate — one KB article per type) ───────────
+
+async function buildTargetGroupsMd() {
+  const groups = await db.targetGroup.findMany({ orderBy: [{ schoolLevel: "asc" }, { minAge: "asc" }] });
+  if (!groups.length) return null;
+
+  const rows = groups.map(g =>
+    `| ${g.code} | ${g.name} | ${g.schoolLevel} | ${g.minAge ?? "—"}–${g.maxAge ?? "—"} | ${g.ageGroup ?? "—"} |`
+  ).join("\n");
+
+  const content = `---
+entity_type: reference/target-groups
+last_synced: ${new Date().toISOString().slice(0, 10)}
+---
+
+# Kumpulan Sasaran (Target Groups)
+
+Senarai semua kumpulan sasaran yang digunakan dalam pertandingan Malaysia Techlympics.
+
+| Kod | Nama | Peringkat | Julat Umur | Kumpulan Umur |
+|-----|------|-----------|-----------|---------------|
+${rows}
+
+_Dikemaskini: ${new Date().toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric" })}_`.trim();
+
+  return { path: "reference/target-groups", title: "Kumpulan Sasaran (Target Groups)", content };
+}
+
+async function buildThemesMd() {
+  const themes = await db.theme.findMany({ orderBy: { name: "asc" } });
+  if (!themes.length) return null;
+
+  const rows = themes.map(t =>
+    `| ${t.name} | ${t.description ?? "—"} |`
+  ).join("\n");
+
+  const content = `---
+entity_type: reference/themes
+last_synced: ${new Date().toISOString().slice(0, 10)}
+---
+
+# Tema Pertandingan (Competition Themes)
+
+Senarai tema yang digunakan dalam Malaysia Techlympics.
+
+| Nama Tema | Keterangan |
+|-----------|-----------|
+${rows}
+
+_Dikemaskini: ${new Date().toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric" })}_`.trim();
+
+  return { path: "reference/themes", title: "Tema Pertandingan (Competition Themes)", content };
+}
+
+async function buildZonesMd() {
+  const zones = await db.zone.findMany({
+    include: { states: { include: { state: { select: { name: true, code: true } } }, orderBy: { state: { name: "asc" } } } },
+    orderBy: { name: "asc" },
+  });
+  if (!zones.length) return null;
+
+  const rows = zones.map(z => {
+    const stateList = z.states.map(s => s.state.name).join(", ") || "—";
+    return `| ${z.name} | ${stateList} |`;
+  }).join("\n");
+
+  const content = `---
+entity_type: reference/zones
+last_synced: ${new Date().toISOString().slice(0, 10)}
+---
+
+# Zon & Negeri (Zones & States)
+
+Pembahagian zon untuk Malaysia Techlympics beserta negeri di bawah setiap zon.
+
+| Zon | Negeri |
+|-----|--------|
+${rows}
+
+_Dikemaskini: ${new Date().toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric" })}_`.trim();
+
+  return { path: "reference/zones", title: "Zon & Negeri (Zones & States)", content };
+}
+
+async function buildHeiMd() {
+  const heis = await db.higherInstitution.findMany({
+    where: { heiType: "HQ", isActive: true },
+    include: { state: { select: { name: true } } },
+    orderBy: [{ sector: "asc" }, { name: "asc" }],
+    take: 300,
+  });
+  if (!heis.length) return null;
+
+  const rows = heis.map(h =>
+    `| ${h.name} | ${h.code ?? "—"} | ${h.sector ?? "—"} | ${h.state?.name ?? "—"} |`
+  ).join("\n");
+
+  const content = `---
+entity_type: reference/higher-institutions
+last_synced: ${new Date().toISOString().slice(0, 10)}
+---
+
+# Institusi Pengajian Tinggi (Higher Institutions)
+
+Senarai institusi pengajian tinggi (IPT) yang berdaftar dalam sistem Malaysia Techlympics.
+
+| Nama | Kod | Sektor | Negeri |
+|------|-----|--------|--------|
+${rows}
+
+_Dikemaskini: ${new Date().toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric" })}_`.trim();
+
+  return { path: "reference/higher-institutions", title: "Institusi Pengajian Tinggi (Higher Institutions)", content };
+}
+
 // ── POST handler ───────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -140,22 +255,31 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { entityType, entityId } = await req.json();
-  if (!entityType || !entityId)
+  if (!entityType)
+    return NextResponse.json({ error: "MISSING_PARAMS" }, { status: 400 });
+
+  // Per-entity types require entityId; aggregate reference types do not
+  const perEntityTypes = ["event", "competition"];
+  if (perEntityTypes.includes(entityType) && !entityId)
     return NextResponse.json({ error: "MISSING_PARAMS" }, { status: 400 });
 
   try {
     let built: { path: string; title: string; content: string } | null = null;
 
-    if (entityType === "event")       built = await buildEventMd(entityId);
-    else if (entityType === "competition") built = await buildCompetitionMd(entityId);
+    if      (entityType === "event")                      built = await buildEventMd(entityId);
+    else if (entityType === "competition")                built = await buildCompetitionMd(entityId);
+    else if (entityType === "reference/target-groups")    built = await buildTargetGroupsMd();
+    else if (entityType === "reference/themes")           built = await buildThemesMd();
+    else if (entityType === "reference/zones")            built = await buildZonesMd();
+    else if (entityType === "reference/higher-institutions") built = await buildHeiMd();
     else return NextResponse.json({ error: "UNSUPPORTED_TYPE" }, { status: 400 });
 
     if (!built) return NextResponse.json({ error: "ENTITY_NOT_FOUND" }, { status: 404 });
 
     const item = await db.knowledgeBase.upsert({
       where:  { path: built.path },
-      create: { ...built, entityType, entityId },
-      update: { title: built.title, content: built.content, entityType, entityId },
+      create: { ...built, entityType, entityId: entityId ?? null },
+      update: { title: built.title, content: built.content, entityType, entityId: entityId ?? null },
     });
 
     return NextResponse.json({ item });

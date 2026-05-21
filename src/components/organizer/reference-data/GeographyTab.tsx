@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { PushKbButton } from "./PushKbButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,6 +90,7 @@ function StatesPane() {
           <Input placeholder="Search states…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="pl-8" />
         </div>
         <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add State</Button>
+        <PushKbButton entityType="reference/zones" label="Zones" />
       </div>
 
       <div className="rounded-md border overflow-hidden">
@@ -298,6 +300,7 @@ function ZonesPane() {
           <Input placeholder="Search zones…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="pl-8" />
         </div>
         <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Zone</Button>
+        <PushKbButton entityType="reference/zones" label="Zones" />
       </div>
 
       <div className="rounded-md border overflow-hidden">
