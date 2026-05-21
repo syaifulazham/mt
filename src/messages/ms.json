@@ -41,7 +41,18 @@
         "desc": "Tambah pelajar anda dan daftarkan mereka dalam pertandingan yang dipilih."
       }
     ],
-    "footer": "© {year} Malaysia Techlympics. Hak cipta terpelihara."
+    "footer": "© {year} Malaysia Techlympics. Hak cipta terpelihara.",
+    "registrationOpen": "Pendaftaran Kini Dibuka — Edisi 2026",
+    "ministry": "Kementerian Sains, Teknologi & Inovasi",
+    "heroParagraph": "Di mana <highlight>inovasi bertemu persaingan.</highlight> Olimpiad teknologi terunggul negara yang memperkasa generasi baharu <highlight>inovator, jurutera, dan pencipta digital Malaysia.</highlight>",
+    "dashboardButton": "Dashboard →",
+    "registerNow": "Daftar Sekarang",
+    "goToDashboard": "Pergi ke Dashboard →",
+    "exploreCategories": "Jelajah Kategori",
+    "competitionTracksLabel": "Acara Pertandingan",
+    "tagline": "Luar Biasa, <golden>Global</golden>,",
+    "tagline2": "Inklusif.",
+    "footerCopy": "© 2026 MOSTI · Hak Cipta Terpelihara"
   },
   "auth": {
     "managerPortalTitle": "Techlympics",
@@ -113,8 +124,15 @@
       "empty": "Tiada peserta dijumpai.",
       "showing": "Menunjukkan {start}–{end} daripada {total} peserta"
     },
-    "gender": { "MALE": "Lelaki", "FEMALE": "Perempuan" },
-    "edu": { "PRIMARY": "Sekolah Rendah", "SECONDARY": "Sekolah Menengah", "YOUTH": "Belia" },
+    "gender": {
+      "MALE": "Lelaki",
+      "FEMALE": "Perempuan"
+    },
+    "edu": {
+      "PRIMARY": "Sekolah Rendah",
+      "SECONDARY": "Sekolah Menengah",
+      "YOUTH": "Belia"
+    },
     "view": {
       "title": "Maklumat Peserta",
       "ic": "Kad Pengenalan / Pasport",
@@ -181,9 +199,14 @@
       "issuesFound": "{count} baris mempunyai nilai samar — AI boleh membantu.",
       "issuesFoundPlural": "{count} baris mempunyai nilai samar — AI boleh membantu.",
       "allClean": "Semua nilai kelihatan bersih.",
-      "colName": "Nama", "colIc": "IC", "colGender": "Jantina",
-      "colAge": "Umur", "colLevel": "Tahap", "colGrade": "Tahun",
-      "colClass": "Kelas", "colEmail": "E-mel",
+      "colName": "Nama",
+      "colIc": "IC",
+      "colGender": "Jantina",
+      "colAge": "Umur",
+      "colLevel": "Tahap",
+      "colGrade": "Tahun",
+      "colClass": "Kelas",
+      "colEmail": "E-mel",
       "aiCleaned": "Gemini telah membersihkan {count} baris. Semak sebelum mengimport.",
       "aiCleanedPlural": "Gemini telah membersihkan {count} baris. Semak sebelum mengimport.",
       "excludedTitle": "Baris dengan isu (dikecualikan dari import):",

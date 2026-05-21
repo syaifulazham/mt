@@ -4,6 +4,7 @@ import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { DroneSceneLoader as DroneScene } from "@/components/landing/DroneSceneLoader";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -36,10 +37,10 @@ export default async function LandingPage({
 }: {
   params: Promise<{ locale: string }>;
 }) {
-  await params;
+  const { locale } = await params;
 
   const { userId } = await auth();
-  const [manager, themes] = await Promise.all([
+  const [manager, themes, t] = await Promise.all([
     userId
       ? db.managerProfile.findUnique({
           where: { clerkUserId: userId },
@@ -47,6 +48,7 @@ export default async function LandingPage({
         })
       : Promise.resolve(null),
     db.theme.findMany({ orderBy: { name: "asc" } }),
+    getTranslations({ locale, namespace: "landing" }),
   ]);
 
   return (
@@ -132,9 +134,11 @@ export default async function LandingPage({
           </Link>
 
           <ul className="hidden md:flex gap-9 list-none">
-            {["About", "Categories", "Schedule", "Venues", "Gallery"].map(l => (
-              <li key={l}>
-                <a href="#" className="nav-link">{l}</a>
+            {([
+              ["navAbout", "navCategories", "navSchedule", "navVenues", "navGallery"] as const,
+            ][0]).map(key => (
+              <li key={key}>
+                <a href="#" className="nav-link">{t(key)}</a>
               </li>
             ))}
           </ul>
@@ -146,7 +150,7 @@ export default async function LandingPage({
               className="text-xs text-slate-400 hover:text-white transition-colors"
               style={{ letterSpacing: "0.1em" }}
             >
-              Staff Login
+              {t("staffLogin")}
             </Link>
             {manager ? (
               <div className="flex items-center gap-3">
@@ -180,7 +184,7 @@ export default async function LandingPage({
                       boxShadow: "0 0 18px rgba(0,245,255,0.15)",
                     }}
                   >
-                    Dashboard →
+                    {t("dashboardButton")}
                   </button>
                 </Link>
               </div>
@@ -201,7 +205,7 @@ export default async function LandingPage({
                     clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
                   }}
                 >
-                  Register Now
+                  {t("registerNow")}
                 </button>
               </Link>
             )}
@@ -231,7 +235,7 @@ export default async function LandingPage({
               className="rounded-full"
               style={{ width: 6, height: 6, background: "#00F5FF", animation: "pulse 1.8s infinite", display: "inline-block" }}
             />
-            Registration Now Open — 2026 Edition
+            {t("registrationOpen")}
           </div>
 
           {/* Hero logo — glitch wrapper */}
@@ -285,7 +289,7 @@ export default async function LandingPage({
             className="mb-3.5"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: "0.8rem", letterSpacing: "0.5em", textTransform: "uppercase", color: "#FFD700" }}
           >
-            Ministry of Science, Technology &amp; Innovation
+            {t("ministry")}
           </p>
 
           {/* Main title */}
@@ -325,8 +329,11 @@ export default async function LandingPage({
             className="mt-7"
             style={{ maxWidth: 560, fontSize: "1.05rem", lineHeight: 1.7, color: "rgba(255,255,255,0.5)" }}
           >
-            Where <span style={{ color: "rgba(255,255,255,0.85)" }}>innovation meets competition.</span> The nation&apos;s premier technology olympiad empowering the next generation of{" "}
-            <span style={{ color: "rgba(255,255,255,0.85)" }}>Malaysian innovators, engineers, and digital creators.</span>
+            {t.rich("heroParagraph", {
+                highlight: (chunks) => (
+                  <span style={{ color: "rgba(255,255,255,0.85)" }}>{chunks}</span>
+                ),
+              })}
           </p>
 
           {/* CTAs */}
@@ -349,7 +356,7 @@ export default async function LandingPage({
                     boxShadow: "0 0 30px rgba(0,245,255,0.2)",
                   }}
                 >
-                  Go to Dashboard →
+                  {t("goToDashboard")}
                 </button>
               </Link>
             ) : (
@@ -370,7 +377,7 @@ export default async function LandingPage({
                     boxShadow: "0 0 30px rgba(204,0,1,0.4)",
                   }}
                 >
-                  Register Now
+                  {t("registerNow")}
                 </button>
               </Link>
             )}
@@ -389,7 +396,7 @@ export default async function LandingPage({
                 clipPath: "polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%)",
               }}
             >
-              Explore Categories
+              {t("exploreCategories")}
             </button>
           </div>
 
@@ -401,13 +408,15 @@ export default async function LandingPage({
           style={{ zIndex: 10, maxWidth: 1200, margin: "0 auto", padding: "0 60px 100px" }}
         >
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#00F5FF", marginBottom: 10, opacity: 0.8 }}>
-            Competition Tracks
+            {t("competitionTracksLabel")}
           </p>
           <h2
             style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.8rem, 3.5vw, 3rem)", textTransform: "uppercase", color: "#fff", marginBottom: 50, lineHeight: 1.1 }}
           >
-            Extraordinary, <span style={{ color: "#FFD700" }}>Global</span>,<br />
-            Inclusive.
+            {t.rich("tagline", {
+              golden: (chunks) => <span style={{ color: "#FFD700" }}>{chunks}</span>,
+            })}<br />
+            {t("tagline2")}
           </h2>
 
           <div
@@ -464,11 +473,11 @@ export default async function LandingPage({
           <div className="flex items-center gap-6">
             <LocaleSwitcher />
             <Link href="/organizer/login" className="text-xs text-slate-500 hover:text-white transition-colors" style={{ letterSpacing: "0.1em" }}>
-              Staff Login
+              {t("staffLogin")}
             </Link>
           </div>
           <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.2)", letterSpacing: "0.1em" }}>
-            © 2026 MOSTI · All Rights Reserved
+            {t("footerCopy")}
           </div>
         </footer>
       </div>

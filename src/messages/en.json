@@ -41,7 +41,18 @@
         "desc": "Add your students and enrol them in the competitions you choose."
       }
     ],
-    "footer": "© {year} Malaysia Techlympics. All rights reserved."
+    "footer": "© {year} Malaysia Techlympics. All rights reserved.",
+    "registrationOpen": "Registration Now Open — 2026 Edition",
+    "ministry": "Ministry of Science, Technology & Innovation",
+    "heroParagraph": "Where <highlight>innovation meets competition.</highlight> The nation’s premier technology olympiad empowering the next generation of <highlight>Malaysian innovators, engineers, and digital creators.</highlight>",
+    "dashboardButton": "Dashboard →",
+    "registerNow": "Register Now",
+    "goToDashboard": "Go to Dashboard →",
+    "exploreCategories": "Explore Categories",
+    "competitionTracksLabel": "Competition Tracks",
+    "tagline": "Extraordinary, <golden>Global</golden>,",
+    "tagline2": "Inclusive.",
+    "footerCopy": "© 2026 MOSTI · All Rights Reserved"
   },
   "auth": {
     "managerPortalTitle": "Techlympics",
@@ -113,8 +124,15 @@
       "empty": "No participants found.",
       "showing": "Showing {start}–{end} of {total} participants"
     },
-    "gender": { "MALE": "Male", "FEMALE": "Female" },
-    "edu": { "PRIMARY": "Primary School", "SECONDARY": "Secondary School", "YOUTH": "Youth" },
+    "gender": {
+      "MALE": "Male",
+      "FEMALE": "Female"
+    },
+    "edu": {
+      "PRIMARY": "Primary School",
+      "SECONDARY": "Secondary School",
+      "YOUTH": "Youth"
+    },
     "view": {
       "title": "Participant Details",
       "ic": "IC / Passport",
@@ -181,9 +199,14 @@
       "issuesFound": "{count} row has ambiguous values — AI can fix them.",
       "issuesFoundPlural": "{count} rows have ambiguous values — AI can fix them.",
       "allClean": "All values look clean.",
-      "colName": "Name", "colIc": "IC", "colGender": "Gender",
-      "colAge": "Age", "colLevel": "Level", "colGrade": "Grade",
-      "colClass": "Class", "colEmail": "Email",
+      "colName": "Name",
+      "colIc": "IC",
+      "colGender": "Gender",
+      "colAge": "Age",
+      "colLevel": "Level",
+      "colGrade": "Grade",
+      "colClass": "Class",
+      "colEmail": "Email",
       "aiCleaned": "Gemini cleaned {count} row. Review before importing.",
       "aiCleanedPlural": "Gemini cleaned {count} rows. Review before importing.",
       "excludedTitle": "Rows with issues (excluded from import):",
