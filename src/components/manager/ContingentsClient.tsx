@@ -578,15 +578,17 @@ function BuiltinLogoPicker({ value, onChange }: { value: string; onChange: (v: s
 function CreateDialog({
   open,
   institutionType,
+  defaultName,
   onClose,
   onCreated,
 }: {
   open: boolean;
   institutionType: string;
+  defaultName: string;
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [name,      setName]      = useState("");
+  const [name,      setName]      = useState(defaultName);
   const [shortName, setShortName] = useState("");
   const [logoUrl,   setLogoUrl]   = useState("builtin:shield");
   const [stateId,   setStateId]   = useState("");
@@ -597,7 +599,7 @@ function CreateDialog({
   const needsState = institutionType === "INDEPENDENT" || institutionType === "INTERNATIONAL";
 
   function handleClose() {
-    setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
+    setName(defaultName); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
     onClose();
   }
 
@@ -997,7 +999,13 @@ function ContingentCard({
 
 // ── Main ContingentsClient ────────────────────────────────────────────────────
 
-export function ContingentsClient({ institutionType }: { institutionType: string }) {
+export function ContingentsClient({
+  institutionType,
+  institutionName,
+}: {
+  institutionType: string;
+  institutionName: string | null;
+}) {
   const t = useTranslations("contingents");
   const [contingents,  setContingents]  = useState<Contingent[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -1039,9 +1047,19 @@ export function ContingentsClient({ institutionType }: { institutionType: string
             <Users className="h-10 w-10 text-zinc-400" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold">{t("noContingent")}</h2>
-            <p className="text-sm text-muted-foreground max-w-xs mt-1">{t("noContingentDesc")}</p>
-            <p className="text-xs text-zinc-400 mt-1">You can only belong to one contingent at a time.</p>
+            <h2 className="text-xl font-semibold">No Contingent Yet</h2>
+            {institutionName ? (
+              <p className="text-sm text-muted-foreground max-w-sm mt-1">
+                <span className="font-medium text-zinc-700">{institutionName}</span> does not have
+                a contingent set up. Create one to start managing participants and teams, or request
+                to join another existing contingent.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground max-w-xs mt-1">
+                You are not linked to any contingent yet. Create one or join an existing contingent.
+              </p>
+            )}
+            <p className="text-xs text-zinc-400 mt-2">You can only belong to one contingent at a time.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mt-2">
@@ -1057,6 +1075,7 @@ export function ContingentsClient({ institutionType }: { institutionType: string
         <CreateDialog
           open={createOpen}
           institutionType={institutionType}
+          defaultName={institutionName ?? ""}
           onClose={() => setCreateOpen(false)}
           onCreated={load}
         />
