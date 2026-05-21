@@ -31,39 +31,43 @@ export default async function PortalLayout({ children }: { children: React.React
     select: { id: true },
   });
 
-  // Auto-link: if the manager's school/HEI already has a contingent (pre-seeded
-  // by organizer) but this user has no ContingentManager record yet, create one.
-  if (!contingentManager) {
-    const institutionContingent = profile.schoolId
-      ? await db.contingent.findFirst({
-          where: { schoolId: profile.schoolId, status: "ACTIVE" },
-          select: { id: true },
-        })
-      : profile.higherInstitutionId
-      ? await db.contingent.findFirst({
-          where: { higherInstitutionId: profile.higherInstitutionId, status: "ACTIVE" },
-          select: { id: true },
-        })
-      : null;
+  // Auto-provision: selecting a school/HEI during onboarding implicitly registers
+  // a contingent. If none exists yet for this institution, create it now and make
+  // this manager the owner. If one already exists, link this user to it.
+  if (!contingentManager && (profile.schoolId || profile.higherInstitutionId)) {
+    const institutionName = profile.school?.name ?? profile.higherInstitution?.name ?? "My Contingent";
+    const linkField = profile.schoolId
+      ? { schoolId: profile.schoolId }
+      : { higherInstitutionId: profile.higherInstitutionId! };
 
-    if (institutionContingent) {
-      const existingLink = await db.contingentManager.findUnique({
-        where: {
-          contingentId_managerId: {
-            contingentId: institutionContingent.id,
-            managerId:    profile.id,
+    let institutionContingent = await db.contingent.findFirst({
+      where: { ...linkField, status: "ACTIVE" },
+      select: { id: true },
+    });
+
+    if (!institutionContingent) {
+      // No contingent exists yet — create one automatically
+      institutionContingent = await db.contingent.create({
+        data: {
+          name:           institutionName,
+          contingentType: profile.schoolId ? "SCHOOL" : "HIGHER",
+          ...linkField,
+          managers: {
+            create: { managerId: profile.id, role: "OWNER", status: "ACTIVE" },
           },
         },
         select: { id: true },
       });
+      contingentManager = { id: institutionContingent.id };
+    } else {
+      // Contingent exists — link this user if not already linked
+      const existingLink = await db.contingentManager.findUnique({
+        where: { contingentId_managerId: { contingentId: institutionContingent.id, managerId: profile.id } },
+        select: { id: true },
+      });
       if (!existingLink) {
         contingentManager = await db.contingentManager.create({
-          data: {
-            contingentId: institutionContingent.id,
-            managerId:    profile.id,
-            role:         "OWNER",
-            status:       "ACTIVE",
-          },
+          data: { contingentId: institutionContingent.id, managerId: profile.id, role: "OWNER", status: "ACTIVE" },
           select: { id: true },
         });
       }
