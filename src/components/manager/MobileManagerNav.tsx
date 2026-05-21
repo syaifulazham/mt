@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -108,10 +109,14 @@ function GridTile({
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export function MobileManagerNav({ userName }: { userName?: string | null }) {
+export function MobileManagerNav() {
   const pathname = usePathname();
   const t = useTranslations("nav");
   const [moreOpen, setMoreOpen] = useState(false);
+  const { user } = useUser();
+  const userName = user?.firstName
+    ? `${user.firstName} ${user.lastName ?? ""}`.trim()
+    : (user?.username ?? null);
 
   const primary = [
     { href: "/manager/dashboard",   icon: Home,     label: t("dashboard") },
