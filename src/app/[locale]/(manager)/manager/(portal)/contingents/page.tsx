@@ -15,5 +15,9 @@ export default async function ContingentsPage() {
   });
   if (!manager?.profileComplete) redirect("/manager/onboarding");
 
-  return <ContingentsClient />;
+  return (
+    <ContingentsClient
+      institutionType={manager.institutionType ?? "INDEPENDENT"}
+    />
+  );
 }

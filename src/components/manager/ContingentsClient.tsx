@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Pencil, Upload, Loader2, AlertCircle, Users, CheckCircle2,
   ImagePlus, Bell, Check, X, Clock, UserCircle2, MapPin,
+  Plus, Search, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -539,6 +540,337 @@ function JoinRequestsPanel({
   );
 }
 
+// ── Builtin Logo Picker (create flow — no upload needed yet) ─────────────────
+
+function BuiltinLogoPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-2">
+      <Label>Logo</Label>
+      <div className="grid grid-cols-6 gap-2">
+        {BUILTIN_LOGOS.map((l) => {
+          const selected = value === `builtin:${l.id}`;
+          return (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => onChange(`builtin:${l.id}`)}
+              className={`relative rounded-xl border-2 p-1.5 flex items-center justify-center transition-all ${
+                selected ? "border-blue-500 bg-blue-50" : "border-zinc-200 hover:border-zinc-300 bg-white"
+              }`}
+            >
+              <ContingentLogo logoUrl={`builtin:${l.id}`} size={32} />
+              {selected && (
+                <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-blue-500 flex items-center justify-center">
+                  <CheckCircle2 className="h-3 w-3 text-white" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-zinc-400">You can upload a custom logo after creating the contingent.</p>
+    </div>
+  );
+}
+
+// ── Create Dialog ─────────────────────────────────────────────────────────────
+
+function CreateDialog({
+  open,
+  institutionType,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  institutionType: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [name,      setName]      = useState("");
+  const [shortName, setShortName] = useState("");
+  const [logoUrl,   setLogoUrl]   = useState("builtin:shield");
+  const [stateId,   setStateId]   = useState("");
+  const [states,    setStates]    = useState<StateOption[]>([]);
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState("");
+
+  const needsState = institutionType === "INDEPENDENT" || institutionType === "INTERNATIONAL";
+
+  useEffect(() => {
+    if (!open) { setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError(""); }
+  }, [open]);
+
+  useEffect(() => {
+    if (!needsState || states.length > 0) return;
+    fetch("/api/v2/reference/states")
+      .then(r => r.json())
+      .then(j => setStates(j.data ?? []));
+  }, [needsState, states.length]);
+
+  async function handleCreate() {
+    if (!name.trim()) { setError("Contingent name is required."); return; }
+    setSaving(true); setError("");
+    try {
+      const res = await fetch("/api/v2/manager/contingents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, shortName, logoUrl, stateId: stateId || undefined }),
+      });
+      const j = await res.json();
+      if (res.status === 409 && j.error === "SCHOOL_HAS_CONTINGENT") {
+        setError("Your school already has a contingent. Use 'Join Existing' to request access.");
+        return;
+      }
+      if (!res.ok) throw new Error(j.error ?? "Failed to create");
+      onCreated();
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create contingent");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-0">
+          <DialogTitle>Create Contingent</DialogTitle>
+          <DialogDescription className="text-xs text-zinc-400 mt-0.5">
+            You will be the primary manager. Only one contingent per manager.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="space-y-1.5">
+            <Label htmlFor="cn-name">Contingent Name <span className="text-red-500">*</span></Label>
+            <Input id="cn-name" value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. SMK Bukit Bintang" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="cn-short">
+              Short Name <span className="text-zinc-400 font-normal text-xs">(optional)</span>
+            </Label>
+            <Input id="cn-short" value={shortName} onChange={(e) => setShortName(e.target.value)}
+              placeholder="e.g. SMKBB" maxLength={12} />
+          </div>
+
+          {needsState && (
+            <div className="space-y-1.5">
+              <Label htmlFor="cn-state">State</Label>
+              <select
+                id="cn-state"
+                value={stateId}
+                onChange={(e) => setStateId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Select state…</option>
+                {states.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <BuiltinLogoPicker value={logoUrl} onChange={setLogoUrl} />
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />{error}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 pb-5 gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleCreate} disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Join Dialog ───────────────────────────────────────────────────────────────
+
+type ContingentSearchResult = {
+  id: string;
+  name: string;
+  shortName: string | null;
+  logoUrl: string | null;
+  contingentType: string;
+  school:            { name: string } | null;
+  higherInstitution: { name: string } | null;
+  _count: { managers: number };
+};
+
+function JoinDialog({
+  open,
+  onClose,
+  onRequested,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onRequested: () => void;
+}) {
+  const [q,         setQ]         = useState("");
+  const [results,   setResults]   = useState<ContingentSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selected,  setSelected]  = useState<ContingentSearchResult | null>(null);
+  const [message,   setMessage]   = useState("");
+  const [sending,   setSending]   = useState(false);
+  const [error,     setError]     = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => {
+    if (!open) { setQ(""); setResults([]); setSelected(null); setMessage(""); setError(""); }
+  }, [open]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!q.trim()) { setResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/v2/manager/contingents/search?q=${encodeURIComponent(q)}`);
+        const j = await res.json();
+        setResults(j.data ?? []);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [q]);
+
+  async function handleRequest() {
+    if (!selected) return;
+    setSending(true); setError("");
+    try {
+      const res = await fetch(`/api/v2/manager/contingents/${selected.id}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Request failed");
+      onRequested();
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to send request");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-0">
+          <DialogTitle>Join Existing Contingent</DialogTitle>
+          <DialogDescription className="text-xs text-zinc-400 mt-0.5">
+            Search for a contingent and send a join request to its primary manager.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {!selected ? (
+            <>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Search by contingent or school name…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              {searching && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                </div>
+              )}
+
+              {!searching && q && results.length === 0 && (
+                <p className="text-sm text-zinc-400 text-center py-4">No contingents found.</p>
+              )}
+
+              {results.length > 0 && (
+                <div className="divide-y rounded-lg border overflow-hidden">
+                  {results.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelected(c)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-50 text-left transition-colors"
+                    >
+                      <ContingentLogo logoUrl={c.logoUrl} size={36} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-tight truncate">{c.name}</p>
+                        <p className="text-xs text-zinc-400 truncate">
+                          {c.school?.name ?? c.higherInstitution?.name ?? c.contingentType}
+                        </p>
+                      </div>
+                      <span className="text-xs text-zinc-400 shrink-0">{c._count.managers} mgr</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 rounded-lg border bg-zinc-50 px-3 py-2.5">
+                <ContingentLogo logoUrl={selected.logoUrl} size={40} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold leading-tight truncate">{selected.name}</p>
+                  <p className="text-xs text-zinc-400 truncate">
+                    {selected.school?.name ?? selected.higherInstitution?.name ?? selected.contingentType}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="text-xs text-blue-600 hover:underline shrink-0"
+                >
+                  Change
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="join-msg">Message <span className="text-zinc-400 font-normal text-xs">(optional)</span></Label>
+                <textarea
+                  id="join-msg"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Introduce yourself to the primary manager…"
+                  rows={3}
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />{error}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 pb-5 gap-2">
+          <Button variant="outline" onClick={onClose} disabled={sending}>Cancel</Button>
+          {selected && (
+            <Button onClick={handleRequest} disabled={sending}>
+              {sending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Send Request
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Contingent Card ───────────────────────────────────────────────────────────
 
 const ROLE_COLOR: Record<string, string> = {
@@ -663,11 +995,13 @@ function ContingentCard({
 
 // ── Main ContingentsClient ────────────────────────────────────────────────────
 
-export function ContingentsClient() {
+export function ContingentsClient({ institutionType }: { institutionType: string }) {
   const t = useTranslations("contingents");
-  const [contingents, setContingents] = useState<Contingent[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [editing, setEditing]         = useState<Contingent | null>(null);
+  const [contingents,  setContingents]  = useState<Contingent[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [editing,      setEditing]      = useState<Contingent | null>(null);
+  const [createOpen,   setCreateOpen]   = useState(false);
+  const [joinOpen,     setJoinOpen]     = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -697,13 +1031,39 @@ export function ContingentsClient() {
 
   if (contingents.length === 0) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-center p-8">
-        <div className="rounded-full bg-zinc-100 p-5">
-          <Users className="h-10 w-10 text-zinc-400" />
+      <>
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center p-8">
+          <div className="rounded-full bg-zinc-100 p-5">
+            <Users className="h-10 w-10 text-zinc-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold">{t("noContingent")}</h2>
+            <p className="text-sm text-muted-foreground max-w-xs mt-1">{t("noContingentDesc")}</p>
+            <p className="text-xs text-zinc-400 mt-1">You can only belong to one contingent at a time.</p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 mt-2">
+            <Button onClick={() => setCreateOpen(true)} className="gap-2">
+              <Plus className="h-4 w-4" />Create New Contingent
+            </Button>
+            <Button variant="outline" onClick={() => setJoinOpen(true)} className="gap-2">
+              <UserPlus className="h-4 w-4" />Join Existing Contingent
+            </Button>
+          </div>
         </div>
-        <h2 className="text-xl font-semibold">{t("noContingent")}</h2>
-        <p className="text-sm text-muted-foreground max-w-xs">{t("noContingentDesc")}</p>
-      </div>
+
+        <CreateDialog
+          open={createOpen}
+          institutionType={institutionType}
+          onClose={() => setCreateOpen(false)}
+          onCreated={load}
+        />
+        <JoinDialog
+          open={joinOpen}
+          onClose={() => setJoinOpen(false)}
+          onRequested={load}
+        />
+      </>
     );
   }
 
