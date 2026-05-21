@@ -161,11 +161,17 @@ jobs:
             echo "── Restarting container ──"
             docker stop mt 2>/dev/null || true
             docker rm   mt 2>/dev/null || true
+
+            # Ensure uploads directory exists on host and is writable by uid 1001 (nextjs)
+            sudo mkdir -p /opt/mt/uploads
+            sudo chown -R 1001:1001 /opt/mt/uploads
+
             docker run -d \
               --name mt \
               --network host \
               --env-file /opt/mt/.env.production \
               --restart unless-stopped \
+              -v /opt/mt/uploads:/app/public/uploads \
               mt:latest
 
             echo "── Pruning old images ──"
