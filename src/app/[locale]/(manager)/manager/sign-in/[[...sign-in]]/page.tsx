@@ -26,7 +26,7 @@ export default async function ManagerSignInPage({
               card: "shadow-sm border rounded-xl",
             },
           }}
-          afterSignInUrl="/manager/dashboard"
+          fallbackRedirectUrl="/manager/dashboard"
           signUpUrl="/manager/sign-up"
         />
       </div>
