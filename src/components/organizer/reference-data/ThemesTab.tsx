@@ -211,7 +211,6 @@ export function ThemesTab() {
         <Button size="sm" onClick={openAdd}>
           <Plus className="h-4 w-4 mr-1" />Add Theme
         </Button>
-        <PushKbButton entityType="reference/themes" label="Themes" />
       </div>
 
       <div className="rounded-md border overflow-hidden">
@@ -453,6 +452,10 @@ export function ThemesTab() {
         title={`Delete theme "${deleteTarget?.name}"?`}
         description="This will permanently remove the theme."
       />
+
+      <div className="mt-4 flex justify-start">
+        <PushKbButton entityType="reference/themes" label="Themes" />
+      </div>
     </div>
   );
 }

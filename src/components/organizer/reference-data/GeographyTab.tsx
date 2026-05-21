@@ -90,7 +90,6 @@ function StatesPane() {
           <Input placeholder="Search states…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="pl-8" />
         </div>
         <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add State</Button>
-        <PushKbButton entityType="reference/zones" label="Zones" />
       </div>
 
       <div className="rounded-md border overflow-hidden">
@@ -163,6 +162,10 @@ function StatesPane() {
         title={`Delete "${deleteTarget?.name}"?`}
         description="This will permanently remove the state. This action cannot be undone."
       />
+
+      <div className="mt-4 flex justify-start">
+        <PushKbButton entityType="reference/zones" label="Zones" />
+      </div>
     </div>
   );
 }
@@ -300,7 +303,6 @@ function ZonesPane() {
           <Input placeholder="Search zones…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="pl-8" />
         </div>
         <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Zone</Button>
-        <PushKbButton entityType="reference/zones" label="Zones" />
       </div>
 
       <div className="rounded-md border overflow-hidden">
@@ -417,6 +419,10 @@ function ZonesPane() {
         title={`Delete zone "${deleteTarget?.name}"?`}
         description="This will permanently remove the zone. This action cannot be undone."
       />
+
+      <div className="mt-4 flex justify-start">
+        <PushKbButton entityType="reference/zones" label="Zones" />
+      </div>
     </div>
   );
 }

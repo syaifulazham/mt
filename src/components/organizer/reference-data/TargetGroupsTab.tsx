@@ -239,7 +239,6 @@ export function TargetGroupsTab() {
         <Button size="sm" onClick={openAdd}>
           <Plus className="h-4 w-4 mr-1" />Add Target Group
         </Button>
-        <PushKbButton entityType="reference/target-groups" label="Target Groups" />
       </div>
 
       <div className="rounded-md border overflow-hidden">
@@ -492,6 +491,10 @@ export function TargetGroupsTab() {
         title={`Delete "${deleteTarget?.name}"?`}
         description="This will permanently remove the target group."
       />
+
+      <div className="mt-4 flex justify-start">
+        <PushKbButton entityType="reference/target-groups" label="Target Groups" />
+      </div>
     </div>
   );
 }

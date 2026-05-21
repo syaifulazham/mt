@@ -728,7 +728,6 @@ export function HEITab() {
         <Button size="sm" onClick={openAdd}>
           <Plus className="h-4 w-4 mr-1" /> Add HEI
         </Button>
-        <PushKbButton entityType="reference/higher-institutions" label="HEIs" />
       </div>
 
       {/* ── Table ───────────────────────────────────────── */}
@@ -967,6 +966,10 @@ export function HEITab() {
         title={`Delete "${deleteTarget?.name}"?`}
         description="This will permanently remove the institution record."
       />
+
+      <div className="mt-4 flex justify-start">
+        <PushKbButton entityType="reference/higher-institutions" label="HEIs" />
+      </div>
     </div>
   );
 }
