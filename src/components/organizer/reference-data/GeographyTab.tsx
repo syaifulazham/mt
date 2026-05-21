@@ -13,7 +13,7 @@ import { DeleteDialog } from "./DeleteDialog";
 
 type State = { id: string; name: string; code: string; _count: { schools: number; higherInstitutions: number } };
 type ZoneStateEntry = { state: { id: string; name: string } };
-type Zone  = { id: string; name: string; states: ZoneStateEntry[]; _count: { districts: number; schools: number } };
+type Zone  = { id: string; name: string; states: ZoneStateEntry[] };
 function zoneStateNames(states: ZoneStateEntry[]) {
   return states.map((s) => s.state.name).join(", ") || "—";
 }
@@ -309,14 +309,12 @@ function ZonesPane() {
             <tr>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Name</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">State</th>
-              <th className="px-3 py-2 text-center font-medium text-zinc-600">Districts</th>
-              <th className="px-3 py-2 text-center font-medium text-zinc-600">Schools</th>
               <th className="px-3 py-2 w-16"></th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>}
-            {!loading && data.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400">No zones found.</td></tr>}
+            {loading && <tr><td colSpan={3} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>}
+            {!loading && data.length === 0 && <tr><td colSpan={3} className="px-3 py-8 text-center text-zinc-400">No zones found.</td></tr>}
             {!loading && data.map((z) => (
               <tr key={z.id} className="border-b last:border-0 hover:bg-zinc-50">
                 <td className="px-3 py-2 font-medium">{z.name}</td>
@@ -331,8 +329,6 @@ function ZonesPane() {
                       : zoneStateNames(z.states)}
                   </button>
                 </td>
-                <td className="px-3 py-2 text-center text-zinc-500">{z._count.districts}</td>
-                <td className="px-3 py-2 text-center text-zinc-500">{z._count.schools}</td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
                     <button onClick={() => openEdit(z)} className="p-1 rounded hover:bg-zinc-100"><Pencil className="h-3.5 w-3.5 text-zinc-500" /></button>

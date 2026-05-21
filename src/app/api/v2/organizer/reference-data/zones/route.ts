@@ -6,7 +6,6 @@ const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
 const ZONE_INCLUDE = {
   states: { select: { state: { select: { id: true, name: true } } }, orderBy: { state: { name: "asc" } } },
-  _count: { select: { districts: true, schools: true } },
 } as const;
 
 export async function GET(req: NextRequest) {
