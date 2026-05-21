@@ -20,22 +20,28 @@ export async function POST(
     return NextResponse.json({ error: "ALREADY_IN_CONTINGENT" }, { status: 400 });
   }
 
-  const contingent = await db.contingent.findUnique({ where: { id } });
+  const contingent = await db.contingent.findUnique({
+    where: { id },
+    include: { _count: { select: { managers: { where: { status: "ACTIVE" } } } } },
+  });
   if (!contingent || contingent.status !== "ACTIVE") {
     return NextResponse.json({ error: "CONTINGENT_NOT_FOUND" }, { status: 404 });
   }
 
   const { message } = await req.json() as { message?: string };
 
+  // If no active managers exist, this is a "claim" — auto-approve as OWNER
+  const noManagers = contingent._count.managers === 0;
+
   await db.contingentManager.create({
     data: {
       contingentId:   id,
       managerId:      manager.id,
-      role:           "MANAGER",
-      status:         "PENDING",
+      role:           noManagers ? "OWNER"   : "MANAGER",
+      status:         noManagers ? "ACTIVE"  : "PENDING",
       requestMessage: message?.trim() || null,
     },
   });
 
-  return NextResponse.json({ ok: true }, { status: 201 });
+  return NextResponse.json({ ok: true, claimed: noManagers }, { status: 201 });
 }

@@ -31,23 +31,23 @@ export default async function PortalLayout({ children }: { children: React.React
     select: { id: true },
   });
 
-  // Auto-provision: selecting a school/HEI during onboarding implicitly registers
-  // a contingent. If none exists yet for this institution, create it now and make
-  // this manager the owner. If one already exists, link this user to it.
+  // Auto-provision: if the institution has no contingent yet, create one and
+  // make this manager the owner. If a contingent exists but has no active managers,
+  // also auto-link as owner. If it already has managers, let the user join manually.
   if (!contingentManager && (profile.schoolId || profile.higherInstitutionId)) {
     const institutionName = profile.school?.name ?? profile.higherInstitution?.name ?? "My Contingent";
     const linkField = profile.schoolId
       ? { schoolId: profile.schoolId }
       : { higherInstitutionId: profile.higherInstitutionId! };
 
-    let institutionContingent = await db.contingent.findFirst({
+    const institutionContingent = await db.contingent.findFirst({
       where: { ...linkField, status: "ACTIVE" },
-      select: { id: true },
+      include: { _count: { select: { managers: { where: { status: "ACTIVE" } } } } },
     });
 
     if (!institutionContingent) {
-      // No contingent exists yet — create one automatically
-      institutionContingent = await db.contingent.create({
+      // No contingent at all — create one automatically
+      const created = await db.contingent.create({
         data: {
           name:           institutionName,
           contingentType: profile.schoolId ? "SCHOOL" : "HIGHER",
@@ -58,9 +58,9 @@ export default async function PortalLayout({ children }: { children: React.React
         },
         select: { id: true },
       });
-      contingentManager = { id: institutionContingent.id };
-    } else {
-      // Contingent exists — link this user if not already linked
+      contingentManager = { id: created.id };
+    } else if (institutionContingent._count.managers === 0) {
+      // Contingent exists but has no managers — auto-claim as owner
       const existingLink = await db.contingentManager.findUnique({
         where: { contingentId_managerId: { contingentId: institutionContingent.id, managerId: profile.id } },
         select: { id: true },
@@ -72,6 +72,8 @@ export default async function PortalLayout({ children }: { children: React.React
         });
       }
     }
+    // If contingent has active managers and user isn't linked → falls through,
+    // hasContingent stays false; ContingentsClient will show the Join button.
   }
 
   const hasContingent = !!contingentManager;

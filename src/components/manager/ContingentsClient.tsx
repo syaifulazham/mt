@@ -999,12 +999,16 @@ function ContingentCard({
 
 // ── Main ContingentsClient ────────────────────────────────────────────────────
 
+type ExistingContingent = { id: string; name: string; hasManagers: boolean } | null;
+
 export function ContingentsClient({
   institutionType,
   institutionName,
+  existingContingent,
 }: {
   institutionType: string;
   institutionName: string | null;
+  existingContingent: ExistingContingent;
 }) {
   const t = useTranslations("contingents");
   const [contingents,  setContingents]  = useState<Contingent[]>([]);
@@ -1012,6 +1016,7 @@ export function ContingentsClient({
   const [editing,      setEditing]      = useState<Contingent | null>(null);
   const [createOpen,   setCreateOpen]   = useState(false);
   const [joinOpen,     setJoinOpen]     = useState(false);
+  const [claiming,     setClaiming]     = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1031,6 +1036,20 @@ export function ContingentsClient({
     setContingents((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   }
 
+  async function handleClaim(contingentId: string) {
+    setClaiming(true);
+    try {
+      await fetch(`/api/v2/manager/contingents/${contingentId}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await load();
+    } finally {
+      setClaiming(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-24">
@@ -1048,11 +1067,18 @@ export function ContingentsClient({
           </div>
           <div>
             <h2 className="text-xl font-semibold">No Contingent Yet</h2>
-            {institutionName ? (
+            {existingContingent ? (
+              <p className="text-sm text-muted-foreground max-w-sm mt-1">
+                A contingent for <span className="font-medium text-zinc-700">{existingContingent.name}</span> already
+                exists.{" "}
+                {existingContingent.hasManagers
+                  ? "It already has a manager. Send a join request to be added."
+                  : "It has no manager yet — you can claim it."}
+              </p>
+            ) : institutionName ? (
               <p className="text-sm text-muted-foreground max-w-sm mt-1">
                 <span className="font-medium text-zinc-700">{institutionName}</span> does not have
-                a contingent set up. Create one to start managing participants and teams, or request
-                to join another existing contingent.
+                a contingent yet. Create one to start managing participants and teams.
               </p>
             ) : (
               <p className="text-sm text-muted-foreground max-w-xs mt-1">
@@ -1063,12 +1089,31 @@ export function ContingentsClient({
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mt-2">
-            <Button onClick={() => setCreateOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />Create New Contingent
-            </Button>
-            <Button variant="outline" onClick={() => setJoinOpen(true)} className="gap-2">
-              <UserPlus className="h-4 w-4" />Join Existing Contingent
-            </Button>
+            {existingContingent ? (
+              // School/HEI contingent exists but user isn't linked
+              existingContingent.hasManagers ? (
+                <Button onClick={() => setJoinOpen(true)} className="gap-2">
+                  <UserPlus className="h-4 w-4" />Join {existingContingent.name}
+                </Button>
+              ) : (
+                <Button onClick={() => handleClaim(existingContingent.id)} disabled={claiming} className="gap-2">
+                  {claiming
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <UserPlus className="h-4 w-4" />}
+                  Claim as Manager
+                </Button>
+              )
+            ) : (
+              // No contingent exists at all
+              <>
+                <Button onClick={() => setCreateOpen(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />Create New Contingent
+                </Button>
+                <Button variant="outline" onClick={() => setJoinOpen(true)} className="gap-2">
+                  <UserPlus className="h-4 w-4" />Join Existing Contingent
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
