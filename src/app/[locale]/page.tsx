@@ -1,7 +1,6 @@
 import Image from "next/image";
 import { Link } from "@/i18n/navigation";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
-import { Countdown } from "@/components/landing/Countdown";
 import { DroneSceneLoader as DroneScene } from "@/components/landing/DroneSceneLoader";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
@@ -12,12 +11,6 @@ export const metadata: Metadata = {
   description: "Malaysia's premier technology olympiad — empowering the next generation of innovators, engineers, and digital creators.",
 };
 
-const STATS = [
-  { value: "50+",   label: "Competition Categories" },
-  { value: "100K+", label: "Expected Participants"  },
-  { value: "16",    label: "States & Territories"   },
-  { value: "RM 2M", label: "Total Prize Pool"       },
-];
 
 function renderThemeIcon(logoUrl: string | null, name: string) {
   if (!logoUrl) {
@@ -400,48 +393,7 @@ export default async function LandingPage({
             </button>
           </div>
 
-          {/* Countdown */}
-          <div className="mt-16">
-            <Countdown />
-          </div>
         </section>
-
-        {/* ── STATS STRIP ─────────────────────────────────────────────────────── */}
-        <div
-          className="relative flex justify-center flex-wrap gap-0"
-          style={{
-            zIndex: 10,
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
-            padding: "40px 0",
-            margin: "0 0 80px",
-          }}
-        >
-          {STATS.map((s, i) => (
-            <div
-              key={s.label}
-              className="text-center"
-              style={{
-                padding: "0 40px",
-                borderRight: i < STATS.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                minWidth: 180,
-              }}
-            >
-              <div
-                style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 900, fontSize: "2.8rem", color: "#fff", lineHeight: 1 }}
-              >
-                {s.value.replace(/(\d+)([^\d]+)$/, (_, n, u) => n + `<span style="color:#FFD700">${u}</span>`).includes("<span") ? (
-                  <span dangerouslySetInnerHTML={{ __html: s.value.replace(/([KM+]+)$/, '<span style="color:#FFD700">$1</span>').replace(/^(RM)/, '<span style="color:#FFD700">$1 </span>') }} />
-                ) : (
-                  <span>{s.value}</span>
-                )}
-              </div>
-              <div style={{ fontSize: "0.75rem", letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginTop: 8 }}>
-                {s.label}
-              </div>
-            </div>
-          ))}
-        </div>
 
         {/* ── CATEGORIES ──────────────────────────────────────────────────────── */}
         <section
