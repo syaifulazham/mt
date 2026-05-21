@@ -454,8 +454,8 @@ export default async function LandingPage({
           <h2
             style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.8rem, 3.5vw, 3rem)", textTransform: "uppercase", color: "#fff", marginBottom: 50, lineHeight: 1.1 }}
           >
-            Compete. Create.<br />
-            <span style={{ color: "#FFD700" }}>Conquer</span> the Future.
+            Extraordinary, <span style={{ color: "#FFD700" }}>Global</span>,<br />
+            Inclusive.
           </h2>
 
           <div
