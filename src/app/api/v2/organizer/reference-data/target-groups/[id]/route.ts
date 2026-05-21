@@ -10,7 +10,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
-  const { code, name, schoolLevel, ageGroup, minAge, maxAge, classGrades } = await req.json();
+  const { code, name, schoolLevel, ageGroup, minAge, maxAge, classGrades, ppki } = await req.json();
   try {
     const tg = await db.targetGroup.update({
       where: { id },
@@ -22,6 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(minAge !== undefined && { minAge: Number(minAge) }),
         ...(maxAge !== undefined && { maxAge: Number(maxAge) }),
         ...(Array.isArray(classGrades) && { classGrades }),
+        ...(ppki !== undefined && { ppki: Boolean(ppki) }),
       },
     });
     return NextResponse.json({ data: tg });

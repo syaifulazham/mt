@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Plus, Trash2, Loader2, Search, Save, Users, GraduationCap,
   UploadCloud, CheckCircle2, XCircle, Trophy,
-  Baby, BookOpen, Award, GraduationCap as CourseIcon,
+  Baby, BookOpen, Award, GraduationCap as CourseIcon, Sparkles,
 } from "lucide-react";
+import { AIImportDialog } from "./AIImportDialog";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -467,11 +468,12 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
   const [themes,       setThemes]       = useState<ThemeOption[]>([]);
   const [targetGroups, setTargetGroups] = useState<TargetGroupOption[]>([]);
 
-  const [newOpen,   setNewOpen]   = useState(false);
-  const [newCode,   setNewCode]   = useState("");
-  const [newName,   setNewName]   = useState("");
-  const [creating,  setCreating]  = useState(false);
-  const [createErr, setCreateErr] = useState("");
+  const [newOpen,      setNewOpen]      = useState(false);
+  const [newCode,      setNewCode]      = useState("");
+  const [newName,      setNewName]      = useState("");
+  const [creating,     setCreating]     = useState(false);
+  const [createErr,    setCreateErr]    = useState("");
+  const [aiImportOpen, setAiImportOpen] = useState(false);
 
   const [pushing,      setPushing]      = useState(false);
   const [pushOk,       setPushOk]       = useState(false);
@@ -588,10 +590,17 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
               : <><UploadCloud className="h-3 w-3" />Push All</>}
           </Button>
           {canWrite && (
-            <button onClick={() => setNewOpen(v => !v)}
-              className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500">
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+            <>
+              <button onClick={() => setAiImportOpen(true)}
+                title="Import dengan AI"
+                className="h-6 w-6 flex items-center justify-center rounded hover:bg-violet-100 text-violet-500">
+                <Sparkles className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => setNewOpen(v => !v)}
+                className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </>
           )}
         </div>
 
@@ -725,6 +734,13 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
           </div>
         )}
       </main>
+
+      {aiImportOpen && (
+        <AIImportDialog
+          onClose={() => setAiImportOpen(false)}
+          onImported={() => { load(); }}
+        />
+      )}
     </div>
   );
 }

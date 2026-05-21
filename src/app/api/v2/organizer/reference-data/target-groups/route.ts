@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
-  const { code, name, schoolLevel, ageGroup, minAge, maxAge, classGrades } = await req.json();
+  const { code, name, schoolLevel, ageGroup, minAge, maxAge, classGrades, ppki } = await req.json();
   if (!code?.trim() || !name?.trim() || !schoolLevel || !ageGroup?.trim())
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
 
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
         minAge:      Number(minAge) || 0,
         maxAge:      Number(maxAge) || 0,
         classGrades: Array.isArray(classGrades) ? classGrades : [],
+        ppki:        Boolean(ppki),
       },
     });
     return NextResponse.json({ data: tg }, { status: 201 });

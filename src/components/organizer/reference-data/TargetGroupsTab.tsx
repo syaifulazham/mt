@@ -18,6 +18,7 @@ type TargetGroup = {
   minAge: number;
   maxAge: number;
   classGrades: string[];
+  ppki: boolean;
 };
 
 type GroupBy = "age" | "grades";
@@ -48,6 +49,7 @@ const EMPTY_FORM = {
   minAge: "",
   maxAge: "",
   classGrades: [] as string[],
+  ppki: false,
 };
 
 function derivedAgeGroup(grades: string[]): string {
@@ -112,6 +114,7 @@ export function TargetGroupsTab() {
       minAge:      String(tg.minAge || ""),
       maxAge:      String(tg.maxAge || ""),
       classGrades: tg.classGrades,
+      ppki:        tg.ppki,
     });
     setGroupBy(mode);
     setFormError("");
@@ -186,6 +189,7 @@ export function TargetGroupsTab() {
           minAge:      groupBy === "age" ? (parseInt(form.minAge) || 0) : 0,
           maxAge:      groupBy === "age" ? (parseInt(form.maxAge) || 0) : 0,
           classGrades: groupBy === "grades" ? form.classGrades : [],
+          ppki:        form.ppki,
         }),
       });
       if (!res.ok) {
@@ -250,15 +254,16 @@ export function TargetGroupsTab() {
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Level</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Group By</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Value</th>
+              <th className="px-3 py-2 text-left font-medium text-zinc-600">PPKI</th>
               <th className="px-3 py-2 w-16"></th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>
             )}
             {!loading && data.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-zinc-400">No target groups found.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-zinc-400">No target groups found.</td></tr>
             )}
             {!loading && data.map((tg) => (
               <tr key={tg.id} className="border-b last:border-0 hover:bg-zinc-50">
@@ -280,6 +285,11 @@ export function TargetGroupsTab() {
                     : tg.ageGroup
                       ? `${tg.ageGroup}${tg.minAge > 0 ? ` (${tg.minAge}–${tg.maxAge} yrs)` : ""}`
                       : <span className="text-zinc-300">—</span>}
+                </td>
+                <td className="px-3 py-2">
+                  {tg.ppki
+                    ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-rose-50 text-rose-700">Yes</span>
+                    : <span className="text-xs text-zinc-300">No</span>}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
@@ -352,6 +362,29 @@ export function TargetGroupsTab() {
                 placeholder="e.g. Primary School Lower"
                 className="mt-1"
               />
+            </div>
+
+            {/* PPKI Students */}
+            <div className="flex items-center justify-between rounded-lg border px-4 py-3 bg-zinc-50">
+              <div>
+                <p className="text-sm font-medium leading-none">PPKI Students</p>
+                <p className="text-xs text-zinc-500 mt-1">This target group is for PPKI (special needs) students only.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.ppki}
+                onClick={() => setForm(f => ({ ...f, ppki: !f.ppki }))}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none ${
+                  form.ppki ? "bg-[#085782]" : "bg-zinc-200"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                    form.ppki ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
             </div>
 
             {/* Group By toggle */}
