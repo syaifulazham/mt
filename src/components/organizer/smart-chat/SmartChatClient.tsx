@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -253,16 +255,36 @@ function UserBubble({ msg }: { msg: ChatMsg }) {
   );
 }
 
-function BoldReply({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+function MarkdownReply({ text }: { text: string }) {
   return (
-    <p className="whitespace-pre-wrap">
-      {parts.map((p, i) =>
-        p.startsWith("**") && p.endsWith("**")
-          ? <strong key={i}>{p.slice(2, -2)}</strong>
-          : <span key={i}>{p}</span>
-      )}
-    </p>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h1 className="text-base font-bold mt-3 mb-1 first:mt-0">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-sm font-bold mt-3 mb-1 first:mt-0 text-zinc-700">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-0.5 text-zinc-600">{children}</h3>,
+        p:  ({ children }) => <p  className="mb-1.5 last:mb-0 leading-relaxed">{children}</p>,
+        ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+        li: ({ children }) => <li className="text-sm leading-snug">{children}</li>,
+        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        em:     ({ children }) => <em className="italic text-zinc-600">{children}</em>,
+        code:   ({ children }) => <code className="bg-zinc-100 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
+        hr: () => <hr className="my-2 border-zinc-200" />,
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-2">
+            <table className="w-full text-xs border-collapse border border-zinc-200 rounded">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className="bg-zinc-50">{children}</thead>,
+        tbody: ({ children }) => <tbody>{children}</tbody>,
+        tr:    ({ children }) => <tr className="border-b border-zinc-200 last:border-0">{children}</tr>,
+        th:    ({ children }) => <th className="px-2 py-1.5 text-left font-semibold text-zinc-600 border-r border-zinc-200 last:border-0">{children}</th>,
+        td:    ({ children }) => <td className="px-2 py-1.5 text-zinc-700 border-r border-zinc-200 last:border-0">{children}</td>,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
   );
 }
 
@@ -292,7 +314,7 @@ function AiBubble({
           "rounded-2xl rounded-tl-sm bg-white border px-4 py-3 text-sm leading-relaxed shadow-sm",
           msg.error && "border-red-200 bg-red-50 text-red-700",
         )}>
-          <BoldReply text={msg.content} />
+          <MarkdownReply text={msg.content} />
 
           {msg.stats && <StatCard stats={msg.stats} />}
 
