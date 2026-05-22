@@ -79,6 +79,7 @@ model ManagerProfile {
   idType              IdType?
   idNumber            String?
   nationality         String?
+  address             String?
   institutionType     InstitutionType?
   schoolId            String?
   higherInstitutionId String?

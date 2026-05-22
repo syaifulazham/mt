@@ -1,23 +1,21 @@
-import { Construction } from "lucide-react";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
 import type { Metadata } from "next";
+import { ProfileClient } from "@/components/manager/ProfileClient";
 
-export const metadata: Metadata = { title: "Profile" };
+export const metadata: Metadata = { title: "Profil Saya" };
 
-export default function ProfilePage() {
-  return <UnderConstruction title="Profile" />;
-}
+export default async function ProfilePage() {
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
 
-function UnderConstruction({ title }: { title: string }) {
-  return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center p-8">
-      <div className="rounded-full bg-amber-50 p-5">
-        <Construction className="h-10 w-10 text-amber-500" />
-      </div>
-      <h1 className="text-2xl font-bold">{title}</h1>
-      <p className="text-muted-foreground max-w-sm">
-        <span className="font-medium text-foreground">{title}</span> is currently under construction.
-        Check back soon.
-      </p>
-    </div>
-  );
+  const profile = await db.managerProfile.findUnique({
+    where: { clerkUserId: userId },
+    select: { id: true, name: true, email: true, idType: true, idNumber: true, phone: true, address: true, nationality: true },
+  });
+
+  if (!profile) redirect("/manager/onboarding");
+
+  return <ProfileClient profile={profile} />;
 }
