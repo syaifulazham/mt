@@ -942,10 +942,30 @@ function ContingentCard({
       </div>
 
       {isPending ? (
-        <div className="mt-4 pt-3 border-t">
+        <div className="mt-4 pt-3 border-t space-y-2">
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
             {t("pendingApprovalDesc")}
           </p>
+          {contingent.activeManagers.filter(m => m.role === "OWNER").map(owner => (
+            <div key={owner.id} className="flex items-center gap-3 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-200 text-zinc-600 text-xs font-semibold shrink-0">
+                {owner.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-zinc-700 truncate">{owner.name}</p>
+                <p className="text-[11px] text-zinc-400">Primary Manager</p>
+              </div>
+              {owner.phone && (
+                <a href={`tel:${owner.phone}`}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 shrink-0">
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  {owner.phone}
+                </a>
+              )}
+            </div>
+          ))}
         </div>
       ) : (
         <>
