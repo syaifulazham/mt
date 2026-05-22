@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Users, GraduationCap,
   UploadCloud, CheckCircle2, XCircle, Trophy,
   Baby, BookOpen, Award, GraduationCap as CourseIcon, Sparkles,
+  Maximize2, Minimize2,
 } from "lucide-react";
 import { AIImportDialog } from "./AIImportDialog";
 import type { LucideIcon } from "lucide-react";
@@ -468,6 +469,8 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
   const [themes,       setThemes]       = useState<ThemeOption[]>([]);
   const [targetGroups, setTargetGroups] = useState<TargetGroupOption[]>([]);
 
+  const [expanded,     setExpanded]     = useState(false);
+
   const [newOpen,      setNewOpen]      = useState(false);
   const [newCode,      setNewCode]      = useState("");
   const [newName,      setNewName]      = useState("");
@@ -575,6 +578,212 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
 
   const pages = Math.ceil(total / PAGE_SIZE);
 
+  // ── Shared toolbar fragments ───────────────────────────────────────────────
+
+  const toolbarActions = (
+    <>
+      <Button variant="outline" size="sm" onClick={pushAll} disabled={pushAllState === "running"}
+        className="h-6 text-[10px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 px-2">
+        {pushAllState === "running"
+          ? <><Loader2 className="h-3 w-3 animate-spin" />{pushProgress ? `${pushProgress.done}/${pushProgress.total}` : "…"}</>
+          : pushAllState === "done" ? <><CheckCircle2 className="h-3 w-3" />Pushed</>
+          : <><UploadCloud className="h-3 w-3" />Push All</>}
+      </Button>
+      {canWrite && (
+        <>
+          <button onClick={() => setAiImportOpen(true)} title="Import dengan AI"
+            className="h-6 w-6 flex items-center justify-center rounded hover:bg-violet-100 text-violet-500">
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => setNewOpen(v => !v)}
+            className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500">
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </>
+      )}
+    </>
+  );
+
+  const createForm = newOpen && (
+    <div className="px-4 py-3 border-b space-y-2 bg-zinc-50">
+      <div className={expanded ? "grid grid-cols-2 gap-2" : ""}>
+        <div>
+          <Label className="text-[10px]">Kod *</Label>
+          <Input value={newCode} onChange={e => setNewCode(e.target.value.toUpperCase())}
+            placeholder="e.g. DIGIT-PRI" className="mt-1 h-7 text-xs font-mono" />
+        </div>
+        <div>
+          <Label className="text-[10px]">Nama *</Label>
+          <Input value={newName} onChange={e => setNewName(e.target.value)}
+            placeholder="Nama pertandingan" className="mt-1 h-7 text-xs" />
+        </div>
+      </div>
+      {createErr && <p className="text-[10px] text-red-500">{createErr}</p>}
+      <div className="flex gap-1.5">
+        <Button size="sm" onClick={createCompetition} disabled={creating || !newCode.trim() || !newName.trim()} className="h-7 text-xs px-3">
+          {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Cipta"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => { setNewOpen(false); setCreateErr(""); }} className="h-7 text-xs px-3">Batal</Button>
+      </div>
+    </div>
+  );
+
+  // ── Expanded (full-width table) view ───────────────────────────────────────
+
+  if (expanded) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-white">
+
+        {/* Toolbar */}
+        <div className="px-4 py-2.5 border-b flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold mr-1">Pertandingan</span>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-400" />
+            <Input value={q} onChange={e => { setQ(e.target.value); setPage(1); }}
+              placeholder="Cari nama atau kod…" className="pl-8 h-7 text-xs w-52" />
+          </div>
+          <select value={themeFilter} onChange={e => { setThemeFilter(e.target.value); setPage(1); }}
+            className="h-7 rounded-md border border-input bg-background px-2 text-xs">
+            <option value="">Semua tema</option>
+            <option value="__none__">— Tiada tema</option>
+            {themes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <div className="flex-1" />
+          {toolbarActions}
+          <button onClick={() => setExpanded(false)} title="Collapse list"
+            className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500">
+            <Minimize2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {createForm}
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead className="sticky top-0 bg-zinc-50 border-b z-10">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-zinc-500 w-6"></th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-zinc-500">Kod</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-zinc-500">Nama Pertandingan</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-zinc-500">Tema</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-zinc-500">Kumpulan Sasaran</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-zinc-500">Penyertaan</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-zinc-500">Saiz Pasukan</th>
+                {canWrite && <th className="px-3 py-2 w-10"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr><td colSpan={canWrite ? 8 : 7} className="px-3 py-10 text-center text-zinc-400">
+                  <Loader2 className="h-5 w-5 animate-spin inline" />
+                </td></tr>
+              )}
+              {!loading && competitions.length === 0 && (
+                <tr><td colSpan={canWrite ? 8 : 7} className="px-3 py-10 text-center text-zinc-400 text-xs">
+                  Tiada pertandingan ditemui.
+                </td></tr>
+              )}
+              {!loading && competitions.map(c => {
+                const uniqueLevels = [...new Set(c.targetGroups.map(t => normLevel(t.targetGroup.schoolLevel)))];
+                const tgNames = c.targetGroups.map(t => t.targetGroup.name);
+                return (
+                  <tr key={c.id}
+                    className="border-b last:border-0 hover:bg-blue-50/40 cursor-pointer group transition-colors"
+                    onClick={() => { selectCompetition(c); setExpanded(false); }}
+                  >
+                    {/* Theme colour bar */}
+                    <td className="px-0 py-0">
+                      <div className="w-1.5 h-full min-h-[40px]" style={{ background: c.theme?.color ?? "#e4e4e7" }} />
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-xs font-semibold text-zinc-600 whitespace-nowrap">
+                      {c.code}
+                    </td>
+                    <td className="px-3 py-2.5 font-medium text-zinc-800 max-w-xs">
+                      <span className="line-clamp-2 leading-snug">{c.name}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {c.theme ? (
+                        <span className="flex items-center gap-1.5 text-xs text-zinc-700">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0 inline-block"
+                            style={{ background: c.theme.color ?? "#e4e4e7" }} />
+                          <span className="truncate max-w-[140px]" title={c.theme.name}>{c.theme.name}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {uniqueLevels.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {uniqueLevels.map(lk => {
+                            const info = LEVEL_INFO[lk] ?? { label: lk, bg: "bg-zinc-100", text: "text-zinc-500", Icon: BookOpen };
+                            return (
+                              <span key={lk} className={cn("flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-medium", info.bg, info.text)}>
+                                <info.Icon className="h-2.5 w-2.5 shrink-0" />{info.label}
+                              </span>
+                            );
+                          })}
+                          {tgNames.length > 0 && (
+                            <span className="text-[9px] text-zinc-400 self-center" title={tgNames.join(", ")}>
+                              {tgNames.length} kumpulan
+                            </span>
+                          )}
+                        </div>
+                      ) : <span className="text-xs text-zinc-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={cn(
+                        "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium w-fit whitespace-nowrap",
+                        c.participationType === "TEAM" ? "bg-indigo-50 text-indigo-700" : "bg-slate-100 text-slate-600"
+                      )}>
+                        {c.participationType === "TEAM"
+                          ? <><Users className="h-3 w-3 shrink-0" />Pasukan</>
+                          : <><GraduationCap className="h-3 w-3 shrink-0" />Individu</>}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-zinc-500 whitespace-nowrap">
+                      {c.participationType === "TEAM" ? `—` : "—"}
+                    </td>
+                    {canWrite && (
+                      <td className="px-3 py-2.5 text-right">
+                        <button
+                          onClick={e => { e.stopPropagation(); deleteCompetition(c); }}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 transition-opacity">
+                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="border-t px-4 py-2 flex items-center justify-between text-[10px] text-zinc-400 bg-white">
+          <span>{total} pertandingan</span>
+          {pages > 1 && (
+            <div className="flex gap-1 items-center">
+              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+                className="h-5 w-5 flex items-center justify-center rounded border hover:bg-zinc-50 disabled:opacity-30 text-xs">‹</button>
+              <span className="px-1">{page} / {pages}</span>
+              <button disabled={page >= pages} onClick={() => setPage(p => p + 1)}
+                className="h-5 w-5 flex items-center justify-center rounded border hover:bg-zinc-50 disabled:opacity-30 text-xs">›</button>
+            </div>
+          )}
+        </div>
+
+        {aiImportOpen && (
+          <AIImportDialog onClose={() => setAiImportOpen(false)} onImported={() => { load(); }} />
+        )}
+      </div>
+    );
+  }
+
+  // ── Split (panel + detail) view ────────────────────────────────────────────
+
   return (
     <div className="flex h-full overflow-hidden">
 
@@ -582,49 +791,14 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
       <aside className="w-64 shrink-0 flex flex-col border-r bg-white">
         <div className="px-4 py-3 border-b flex items-center gap-2">
           <span className="text-sm font-semibold flex-1">Pertandingan</span>
-          <Button variant="outline" size="sm" onClick={pushAll} disabled={pushAllState === "running"}
-            className="h-6 text-[10px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 px-2">
-            {pushAllState === "running"
-              ? <><Loader2 className="h-3 w-3 animate-spin" />{pushProgress ? `${pushProgress.done}/${pushProgress.total}` : "…"}</>
-              : pushAllState === "done" ? <><CheckCircle2 className="h-3 w-3" />Pushed</>
-              : <><UploadCloud className="h-3 w-3" />Push All</>}
-          </Button>
-          {canWrite && (
-            <>
-              <button onClick={() => setAiImportOpen(true)}
-                title="Import dengan AI"
-                className="h-6 w-6 flex items-center justify-center rounded hover:bg-violet-100 text-violet-500">
-                <Sparkles className="h-3.5 w-3.5" />
-              </button>
-              <button onClick={() => setNewOpen(v => !v)}
-                className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500">
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </>
-          )}
+          {toolbarActions}
+          <button onClick={() => setExpanded(true)} title="Expand full list"
+            className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600">
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        {newOpen && (
-          <div className="px-4 py-3 border-b space-y-2 bg-zinc-50">
-            <div>
-              <Label className="text-[10px]">Kod *</Label>
-              <Input value={newCode} onChange={e => setNewCode(e.target.value.toUpperCase())}
-                placeholder="e.g. DIGIT-PRI" className="mt-1 h-7 text-xs font-mono" />
-            </div>
-            <div>
-              <Label className="text-[10px]">Nama *</Label>
-              <Input value={newName} onChange={e => setNewName(e.target.value)}
-                placeholder="Nama pertandingan" className="mt-1 h-7 text-xs" />
-            </div>
-            {createErr && <p className="text-[10px] text-red-500">{createErr}</p>}
-            <div className="flex gap-1.5">
-              <Button size="sm" onClick={createCompetition} disabled={creating || !newCode.trim() || !newName.trim()} className="h-7 text-xs px-3">
-                {creating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Cipta"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => { setNewOpen(false); setCreateErr(""); }} className="h-7 text-xs px-3">Batal</Button>
-            </div>
-          </div>
-        )}
+        {createForm}
 
         <div className="px-3 py-2 border-b space-y-1.5">
           <div className="relative">
