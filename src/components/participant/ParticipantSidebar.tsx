@@ -2,24 +2,22 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { User, Swords, Trophy, Award, MessageCircle, LogOut } from "lucide-react";
+import { User, Swords, Trophy, BookOpen, Award, MessageCircle, LogOut } from "lucide-react";
 
 const NAV = [
   { href: "/participant/profile",      icon: User,          label: "Profil" },
   { href: "/participant/team",         icon: Swords,        label: "Pasukan" },
   { href: "/participant/competitions", icon: Trophy,        label: "Pertandingan" },
+  { href: "/participant/bengkel",      icon: BookOpen,      label: "Bengkel" },
   { href: "/participant/certificates", icon: Award,         label: "Sijil" },
   { href: "/participant/chat",         icon: MessageCircle, label: "Smart Chat" },
 ] as const;
 
-type Props = {
-  name: string;
-  contingentName: string;
-};
+type Props = { name: string; contingentName: string };
 
 export function ParticipantSidebar({ name, contingentName }: Props) {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
 
   async function handleLogout() {
     await fetch("/api/participant/auth/logout", { method: "POST" });
@@ -27,7 +25,13 @@ export function ParticipantSidebar({ name, contingentName }: Props) {
   }
 
   return (
-    <aside className="hidden lg:flex w-56 shrink-0 flex-col border-r bg-white dark:bg-zinc-900 dark:border-zinc-800">
+    <aside
+      className="hidden lg:flex w-56 shrink-0 flex-col border-r"
+      style={{
+        background:      "var(--pt-surface, white)",
+        borderRightColor: "var(--pt-border-color, #e4e4e7)",
+      }}
+    >
       <nav className="flex-1 space-y-0.5 px-3 py-4">
         {NAV.map(({ href, icon: Icon, label }) => {
           const active = pathname.startsWith(href);
@@ -35,14 +39,25 @@ export function ParticipantSidebar({ name, contingentName }: Props) {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`pt-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 active
-                  ? "bg-blue-50 text-[#085782] dark:bg-blue-950/30 dark:text-blue-400"
+                  ? "pt-nav-active"
                   : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               }`}
+              style={
+                active
+                  ? {
+                      background:   "var(--pt-active-bg,   #eff6ff)",
+                      color:        "var(--pt-active-text,  #085782)",
+                      borderLeft:   "3px solid var(--pt-active-border, transparent)",
+                      paddingLeft:  "calc(0.75rem - 3px)",
+                    }
+                  : {}
+              }
             >
               <Icon
-                className={`h-4 w-4 shrink-0 ${active ? "text-[#085782] dark:text-blue-400" : "text-zinc-400 dark:text-zinc-500"}`}
+                className="h-4 w-4 shrink-0"
+                style={{ color: active ? "var(--pt-active-text, #085782)" : undefined }}
                 strokeWidth={active ? 2.5 : 1.8}
               />
               {label}
@@ -51,16 +66,21 @@ export function ParticipantSidebar({ name, contingentName }: Props) {
         })}
       </nav>
 
-      {/* ── User account ──────────────────────────── */}
-      <div className="border-t dark:border-zinc-800 px-4 py-3 flex items-center gap-3">
+      {/* User row */}
+      <div
+        className="border-t px-4 py-3 flex items-center gap-3"
+        style={{ borderTopColor: "var(--pt-border-color, #e4e4e7)" }}
+      >
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium leading-tight truncate dark:text-zinc-200">{name}</p>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500 leading-tight truncate mt-0.5">{contingentName}</p>
+          <p className="text-xs leading-tight truncate mt-0.5" style={{ color: "var(--pt-muted, #71717a)" }}>
+            {contingentName}
+          </p>
         </div>
         <button
           type="button"
           onClick={handleLogout}
-          title="Log out"
+          title="Log keluar"
           className="shrink-0 rounded-md p-1.5 transition-colors text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400"
         >
           <LogOut className="h-4 w-4" strokeWidth={1.8} />
