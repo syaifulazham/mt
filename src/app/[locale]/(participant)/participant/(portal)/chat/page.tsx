@@ -15,7 +15,7 @@ export default async function ChatPage() {
       <p className="text-sm text-muted-foreground mb-4">
         Tanya apa sahaja tentang Techlympics
       </p>
-      <ChatClient participantName={session.name} />
+      <ChatClient />
     </div>
   );
 }

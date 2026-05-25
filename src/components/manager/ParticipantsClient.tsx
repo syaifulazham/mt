@@ -4,14 +4,13 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import {
   Search, Upload, Download, Plus, Eye, EyeOff, Pencil, Trash2,
-  Loader2, CheckCircle2, AlertCircle, X, Sparkles,
+  Loader2, CheckCircle2, AlertCircle, Sparkles,
   MoreHorizontal, Users, BookOpen, GraduationCap, Zap, Accessibility,
   KeyRound, ShieldOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";

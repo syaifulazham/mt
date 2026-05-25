@@ -21,11 +21,7 @@ const QUICK_QUESTIONS = [
   "Siapa jurulatih saya?",
 ];
 
-type Props = {
-  participantName: string;
-};
-
-export function ChatClient({ participantName: _participantName }: Props) {
+export function ChatClient() {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);

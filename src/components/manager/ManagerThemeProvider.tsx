@@ -1,12 +1,17 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 type ThemeCtx = { dark: boolean; toggle: () => void };
 const ThemeContext = createContext<ThemeCtx>({ dark: false, toggle: () => {} });
 export const useManagerTheme = () => useContext(ThemeContext);
 
 const STORAGE_KEY = "manager-theme";
+
+function readStoredTheme(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(STORAGE_KEY) === "dark";
+}
 
 export function ManagerThemeProvider({
   children,
@@ -15,13 +20,7 @@ export function ManagerThemeProvider({
   children: React.ReactNode;
   className?: string;
 }) {
-  const [dark, setDark] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    if (localStorage.getItem(STORAGE_KEY) === "dark") setDark(true);
-  }, []);
+  const [dark, setDark] = useState<boolean>(readStoredTheme);
 
   function toggle() {
     setDark(prev => {
@@ -34,8 +33,8 @@ export function ManagerThemeProvider({
   return (
     <ThemeContext.Provider value={{ dark, toggle }}>
       <div
-        className={`${mounted && dark ? "dark" : ""} ${className ?? ""}`.trim()}
-        style={{ colorScheme: mounted && dark ? "dark" : "normal" }}
+        className={`${dark ? "dark" : ""} ${className ?? ""}`.trim()}
+        style={{ colorScheme: dark ? "dark" : "normal" }}
       >
         {children}
       </div>
