@@ -275,7 +275,7 @@ function AssignTeamsDialog({
               <div
                 key={t.id}
                 className={`flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors ${
-                  assigned ? "bg-blue-50" : "hover:bg-zinc-50"
+                  assigned ? "bg-blue-50 dark:bg-blue-950/20" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
                 }`}
               >
                 <div>
@@ -377,7 +377,7 @@ function TrainerRow({
   const initials = trainer.name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
   return (
-    <div className="flex items-start gap-3 rounded-xl border bg-white px-4 py-3 shadow-sm">
+    <div className="flex items-start gap-3 rounded-xl border bg-white dark:bg-zinc-900 dark:border-zinc-800 px-4 py-3 shadow-sm dark:shadow-black/20">
       {/* Avatar */}
       <div className="h-10 w-10 shrink-0 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm select-none">
         {initials}

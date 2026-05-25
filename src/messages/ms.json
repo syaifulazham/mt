@@ -182,7 +182,9 @@
       "viewDetails": "Lihat Maklumat",
       "edit": "Edit",
       "delete": "Padam",
-      "cancel": "Batal"
+      "cancel": "Batal",
+      "generatePassword": "Jana Kata Laluan",
+      "resetPassword": "Set Semula Kata Laluan"
     },
     "bulk": {
       "title": "Muat Naik Pukal Peserta",
@@ -221,6 +223,30 @@
       "importAsIs": "Import {count} Seperti Sedia Ada",
       "importCleaned": "Import {count} Yang Dibersihkan",
       "doneBtn": "Selesai"
+    },
+    "genPwBtn": "Jana Kata Laluan",
+    "noPassword": "Tiada Kata Laluan",
+    "noPasswordFilter": "Tiada Kata Laluan",
+    "genPw": {
+      "title": "Jana Kata Laluan",
+      "desc": "Jana kata laluan awal untuk peserta yang belum mempunyai kata laluan.",
+      "modeLabel": "Pilih mod penjanaan:",
+      "mode_skip_title": "Jana untuk baharu sahaja",
+      "mode_skip_desc": "Langkau peserta yang sudah mempunyai kata laluan.",
+      "mode_reset_title": "Jana / Set semula semua",
+      "mode_reset_desc": "Gantikan kata laluan sedia ada dengan kata laluan awal.",
+      "generateBtn": "Jana",
+      "working": "Menjana…",
+      "doneMsg": "Berjaya jana {count} kata laluan. {skipped} dilangkau.",
+      "colName": "Nama",
+      "colPassword": "Kata Laluan Awal",
+      "csvNote": "ID Pengguna: Nombor IC (tanpa sempang). Kata laluan hanya boleh dilihat sekali.",
+      "downloadBtn": "Muat Turun CSV",
+      "singleGenConfirm": "Jana kata laluan awal untuk peserta ini?",
+      "singleResetConfirm": "Set semula kata laluan ke awal untuk peserta ini?",
+      "singleDone": "Kata laluan berjaya dijana.",
+      "errorNoIc": "Tidak dapat jana — peserta tiada nombor IC.",
+      "errorGeneric": "Ralat tidak dijangka. Sila cuba lagi."
     }
   },
   "dashboard": {
@@ -285,5 +311,26 @@
       "drone": "Dron",
       "rocket": "Roket"
     }
+  },
+  "lms": {
+    "title": "Bengkel MT",
+    "subtitle": "Daftarkan pasukan anda ke platform pembelajaran dalam talian Bengkel MT.",
+    "enrolled": "{enrolled}/{total} pasukan telah didaftarkan.",
+    "noTeams": "Tiada pasukan lagi",
+    "noTeamsDesc": "Buat pasukan pada halaman Pasukan terlebih dahulu.",
+    "noEmail": "Tiada emel ditetapkan",
+    "joinBtn": "Sertai Bengkel",
+    "joinEmailTitle": "Tetapkan emel pasukan dahulu (di halaman Pasukan)",
+    "registered": "Berdaftar",
+    "enrolBtn": "Daftar ke Kursus",
+    "loginPrefix": "Log masuk:",
+    "neverLoggedIn": "Belum log masuk",
+    "credsTitle": "Akaun Bengkel MT Bersedia",
+    "credsDesc": "Akaun dibuat untuk <strong>{teamName}</strong>. Kongsi kelayakan ini dengan pasukan.",
+    "credsUsername": "Nama Pengguna",
+    "credsPassword": "Kata Laluan",
+    "credsEnrolled": "Didaftarkan secara automatik ke kursus yang dikaitkan.",
+    "credsNote": "Nama pengguna diperoleh daripada emel pasukan. Kata laluan ditunjukkan sekali sahaja — simpan sekarang.",
+    "credsDone": "Selesai"
   }
 }

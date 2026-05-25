@@ -12,9 +12,10 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { searchParams } = req.nextUrl;
-  const q        = searchParams.get("q") ?? "";
-  const eduLevel = searchParams.get("eduLevel") as EduLevel | null;
-  const ppkiOnly = searchParams.get("ppki") === "true";
+  const q          = searchParams.get("q") ?? "";
+  const eduLevel   = searchParams.get("eduLevel") as EduLevel | null;
+  const ppkiOnly   = searchParams.get("ppki") === "true";
+  const noPassword = searchParams.get("noPassword") === "true";
   const page     = Math.max(1, parseInt(searchParams.get("page")     ?? "1",  10));
   const pageSize = Math.min(PAGE_SIZE_MAX, Math.max(1,
                     parseInt(searchParams.get("pageSize") ?? String(PAGE_SIZE_DEFAULT), 10)));
@@ -40,16 +41,30 @@ export async function GET(req: NextRequest) {
         { ic:   { contains: q, mode: "insensitive" as const } },
       ],
     }),
-    ...(ppkiOnly && { ppki: true }),
+    ...(ppkiOnly   && { ppki: true }),
+    ...(noPassword && { passwordHash: null }),
   };
 
   const where = { ...baseWhere, ...(eduLevel && { eduLevel }) };
 
-  const [data, total, eduCounts] = await Promise.all([
-    db.participant.findMany({ where, orderBy: { name: "asc" }, skip: (page - 1) * pageSize, take: pageSize }),
+  const [rawData, total, eduCounts] = await Promise.all([
+    db.participant.findMany({
+      where,
+      orderBy: { name: "asc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true, name: true, ic: true, email: true, phoneNumber: true,
+        gender: true, age: true, eduLevel: true, classGrade: true, className: true,
+        status: true, ppki: true, contingentId: true, createdAt: true, updatedAt: true,
+        passwordHash: true,
+      },
+    }),
     db.participant.count({ where }),
     db.participant.groupBy({ by: ["eduLevel"], where: baseWhere, _count: { id: true } }),
   ]);
+
+  const data = rawData.map(({ passwordHash, ...p }) => ({ ...p, hasPassword: passwordHash !== null }));
 
   const countMap = Object.fromEntries(eduCounts.map((e) => [e.eduLevel, e._count.id]));
   const counts = {

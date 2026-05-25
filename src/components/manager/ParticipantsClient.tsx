@@ -6,6 +6,7 @@ import {
   Search, Upload, Download, Plus, Eye, EyeOff, Pencil, Trash2,
   Loader2, CheckCircle2, AlertCircle, X, Sparkles,
   MoreHorizontal, Users, BookOpen, GraduationCap, Zap, Accessibility,
+  KeyRound, ShieldOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ type Participant = {
   id: string; name: string; ic: string | null; email: string | null;
   phoneNumber: string | null; gender: Gender; age: number | null;
   eduLevel: EduLevel; classGrade: string | null; className: string | null;
-  status: string; ppki: boolean;
+  status: string; ppki: boolean; hasPassword: boolean;
 };
 
 const EDU_TABS: { key: EduLevel | "ALL"; Icon: React.ComponentType<{ className?: string }> }[] = [
@@ -94,7 +95,7 @@ function ViewDialog({ participant, onClose }: { participant: Participant | null;
         </DialogHeader>
 
         {/* Avatar + name hero */}
-        <div className="flex flex-col items-center gap-2 py-5 mx-6 border-b">
+        <div className="flex flex-col items-center gap-2 py-5 mx-6 border-b dark:border-zinc-800">
           <div
             className={`h-16 w-16 rounded-full flex items-center justify-center text-xl font-bold text-white
               ${p.gender === "MALE" ? "bg-blue-500" : "bg-pink-500"}`}
@@ -111,7 +112,7 @@ function ViewDialog({ participant, onClose }: { participant: Participant | null;
         {/* Detail grid */}
         <div className="px-6 py-4 space-y-0">
           {/* IC row — masked by default */}
-          <div className="grid grid-cols-[120px_1fr] gap-2 py-2.5 border-b">
+          <div className="grid grid-cols-[120px_1fr] gap-2 py-2.5 border-b dark:border-zinc-800">
             <span className="text-xs text-zinc-400 self-center">{t("view.ic")}</span>
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium font-mono tracking-wider">
@@ -122,7 +123,7 @@ function ViewDialog({ participant, onClose }: { participant: Participant | null;
               {p.ic && (
                 <button
                   onClick={() => setIcRevealed((v) => !v)}
-                  className="p-1 rounded text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
+                  className="p-1 rounded text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                   title={icRevealed ? t("view.hideIc") : t("view.showIc")}
                 >
                   {icRevealed
@@ -134,7 +135,7 @@ function ViewDialog({ participant, onClose }: { participant: Participant | null;
           </div>
 
           {rows.map(([label, value]) => (
-            <div key={label} className="grid grid-cols-[120px_1fr] gap-2 py-2.5 border-b last:border-0">
+            <div key={label} className="grid grid-cols-[120px_1fr] gap-2 py-2.5 border-b last:border-0 dark:border-zinc-800">
               <span className="text-xs text-zinc-400 self-center">{label}</span>
               <span className="text-sm font-medium break-all">
                 {value ?? <span className="text-zinc-300 font-normal">—</span>}
@@ -250,7 +251,7 @@ function AddEditDialog({
 
         <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
           {/* PPKI toggle */}
-          <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+          <div className="flex items-center justify-between rounded-lg border px-4 py-3 dark:border-zinc-700">
             <span className="text-sm font-medium">{t("form.ppkiLabel")}</span>
             <div className="flex items-center gap-2">
               <button
@@ -260,7 +261,7 @@ function AddEditDialog({
                 onClick={() => set("ppki", !form.ppki)}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent
                   transition-colors focus-visible:outline-none
-                  ${form.ppki ? "bg-[#085782]" : "bg-zinc-200"}`}
+                  ${form.ppki ? "bg-[#085782]" : "bg-zinc-200 dark:bg-zinc-700"}`}
               >
                 <span className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow transition-transform
                   ${form.ppki ? "translate-x-5" : "translate-x-0"}`} />
@@ -456,18 +457,18 @@ function PreviewTable({ rows }: { rows: CleanRow[]; isAi?: boolean }) {
     t("bulk.colClass"), t("bulk.colEmail"),
   ];
   return (
-    <div className="overflow-x-auto rounded-lg border text-xs">
+    <div className="overflow-x-auto rounded-lg border text-xs dark:border-zinc-700">
       <table className="w-full">
-        <thead className="bg-zinc-50">
+        <thead className="bg-zinc-50 dark:bg-zinc-800">
           <tr>
             {headers.map((h) => (
-              <th key={h} className="text-left px-3 py-2 font-medium text-zinc-500">{h}</th>
+              <th key={h} className="text-left px-3 py-2 font-medium text-zinc-500 dark:text-zinc-400">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-t hover:bg-zinc-50">
+            <tr key={i} className="border-t hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40">
               <td className="px-3 py-2 font-medium">{row.name}</td>
               <td className="px-3 py-2 text-zinc-400">{row.ic ?? "–"}</td>
               <td className="px-3 py-2">
@@ -594,7 +595,7 @@ function BulkUploadDialog({
           {(["upload","raw","ai","done"] as BulkStep[]).map((s, i) => (
             <span key={s} className="flex items-center gap-2">
               {i > 0 && <span>›</span>}
-              <span className={step === s ? "text-[#085782] font-semibold" : ""}>
+              <span className={step === s ? "text-[#085782] font-semibold dark:text-blue-400" : ""}>
                 {s === "upload" ? t("bulk.stepUpload") : s === "raw" ? t("bulk.stepPreview") : s === "ai" ? t("bulk.stepAiClean") : t("bulk.stepDone")}
               </span>
             </span>
@@ -615,11 +616,11 @@ function BulkUploadDialog({
                 </div>
               )}
               <div
-                className="border-2 border-dashed border-zinc-200 rounded-xl p-10 text-center cursor-pointer hover:border-[#085782]/50 transition-colors"
+                className="border-2 border-dashed border-zinc-200 rounded-xl p-10 text-center cursor-pointer hover:border-[#085782]/50 transition-colors dark:border-zinc-700 dark:hover:border-blue-500/50"
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="h-8 w-8 mx-auto text-zinc-300 mb-3" />
-                <p className="text-sm font-medium text-zinc-600">{t("bulk.clickToChoose")}</p>
+                <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{t("bulk.clickToChoose")}</p>
                 <p className="text-xs text-zinc-400 mt-1">{t("bulk.noServerCall")}</p>
                 <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
               </div>
@@ -637,7 +638,7 @@ function BulkUploadDialog({
           {step === "raw" && (
             <>
               <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
-                issueCount > 0 ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
+                issueCount > 0 ? "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400" : "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400"
               }`}>
                 {issueCount > 0
                   ? <AlertCircle className="h-4 w-4 shrink-0" />
@@ -660,14 +661,14 @@ function BulkUploadDialog({
 
           {step === "ai" && (
             <>
-              <div className="flex items-center gap-2 rounded-lg bg-violet-50 p-3 text-sm text-violet-700">
+              <div className="flex items-center gap-2 rounded-lg bg-violet-50 p-3 text-sm text-violet-700 dark:bg-violet-950/20 dark:text-violet-400">
                 <Sparkles className="h-4 w-4 shrink-0" />
                 {cleanRows.length !== 1 ? t("bulk.aiCleanedPlural", { count: cleanRows.length }) : t("bulk.aiCleaned", { count: cleanRows.length })}
               </div>
               {aiErrors.length > 0 && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-amber-700">{t("bulk.excludedTitle")}</p>
-                  {aiErrors.map((e, i) => <p key={i} className="text-xs text-amber-600">{e}</p>)}
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-1 dark:bg-amber-950/20 dark:border-amber-800">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">{t("bulk.excludedTitle")}</p>
+                  {aiErrors.map((e, i) => <p key={i} className="text-xs text-amber-600 dark:text-amber-500">{e}</p>)}
                 </div>
               )}
               <PreviewTable rows={cleanRows} isAi />
@@ -735,8 +736,9 @@ function BulkUploadDialog({
 // Row actions dropdown
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RowMenu({ name, onView, onEdit, onDelete }: {
-  name: string; onView: () => void; onEdit: () => void; onDelete: () => void;
+function RowMenu({ name, hasPassword, onView, onEdit, onDelete, onGenPassword }: {
+  name: string; hasPassword: boolean;
+  onView: () => void; onEdit: () => void; onDelete: () => void; onGenPassword: () => void;
 }) {
   const t = useTranslations("participants");
   const [open, setOpen] = useState(false);
@@ -747,28 +749,33 @@ function RowMenu({ name, onView, onEdit, onDelete }: {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="p-1.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700"
+        className="p-1.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-xs p-0 overflow-hidden">
-          <DialogHeader className="px-5 pt-5 pb-3 border-b">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b dark:border-zinc-800">
             <DialogTitle className="text-sm font-semibold leading-snug line-clamp-2">{name}</DialogTitle>
           </DialogHeader>
           <div className="py-2">
             <button onClick={() => pick(onView)}
-              className="flex items-center gap-3 w-full px-5 py-3 text-sm hover:bg-zinc-50 text-zinc-700">
+              className="flex items-center gap-3 w-full px-5 py-3 text-sm hover:bg-zinc-50 text-zinc-700 dark:hover:bg-zinc-800 dark:text-zinc-300">
               <Eye className="h-4 w-4 text-zinc-400 shrink-0" /> {t("menu.viewDetails")}
             </button>
             <button onClick={() => pick(onEdit)}
-              className="flex items-center gap-3 w-full px-5 py-3 text-sm hover:bg-zinc-50 text-zinc-700">
+              className="flex items-center gap-3 w-full px-5 py-3 text-sm hover:bg-zinc-50 text-zinc-700 dark:hover:bg-zinc-800 dark:text-zinc-300">
               <Pencil className="h-4 w-4 text-zinc-400 shrink-0" /> {t("menu.edit")}
             </button>
-            <div className="border-t mx-5 my-1" />
+            <button onClick={() => pick(onGenPassword)}
+              className="flex items-center gap-3 w-full px-5 py-3 text-sm hover:bg-zinc-50 text-zinc-700 dark:hover:bg-zinc-800 dark:text-zinc-300">
+              <KeyRound className="h-4 w-4 text-zinc-400 shrink-0" />
+              {hasPassword ? t("menu.resetPassword") : t("menu.generatePassword")}
+            </button>
+            <div className="border-t mx-5 my-1 dark:border-zinc-800" />
             <button onClick={() => pick(onDelete)}
-              className="flex items-center gap-3 w-full px-5 py-3 text-sm hover:bg-red-50 text-red-600">
+              className="flex items-center gap-3 w-full px-5 py-3 text-sm hover:bg-red-50 text-red-600 dark:hover:bg-red-950/20">
               <Trash2 className="h-4 w-4 shrink-0" /> {t("menu.delete")}
             </button>
           </div>
@@ -778,6 +785,238 @@ function RowMenu({ name, onView, onEdit, onDelete }: {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Generate Passwords — bulk dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+type GenResult = { id: string; name: string; initialPassword: string };
+
+function GeneratePasswordsDialog({ open, onClose, onSaved }: {
+  open: boolean; onClose: () => void; onSaved: () => void;
+}) {
+  const t = useTranslations("participants");
+  const [step, setStep] = useState<"options" | "working" | "done">("options");
+  const [mode, setMode] = useState<"skip" | "reset">("skip");
+  const [results, setResults] = useState<GenResult[]>([]);
+  const [skipped, setSkipped] = useState(0);
+
+  function reset() { setStep("options"); setMode("skip"); setResults([]); setSkipped(0); }
+
+  async function run() {
+    setStep("working");
+    try {
+      const res = await fetch("/api/v2/manager/participants/generate-passwords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const j = await res.json();
+      setResults(j.data ?? []);
+      setSkipped(j.skipped ?? 0);
+      setStep("done");
+      onSaved();
+    } catch {
+      setStep("options");
+    }
+  }
+
+  function downloadCsv() {
+    const header = "Name,Initial Password,Note";
+    const rows = results.map(r =>
+      `"${r.name.replace(/"/g, '""')}","${r.initialPassword}","Use your IC number as User ID"`
+    );
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "participant-passwords.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
+      <DialogContent className="max-w-md dark:bg-zinc-900">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> {t("genPw.title")}
+          </DialogTitle>
+          <DialogDescription>{t("genPw.desc")}</DialogDescription>
+        </DialogHeader>
+
+        {step === "options" && (
+          <div className="space-y-4 py-4 px-1">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">{t("genPw.modeLabel")}</p>
+            <div className="space-y-3">
+              {(["skip", "reset"] as const).map((m) => (
+                <label key={m} className={`flex items-start gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${
+                  mode === m
+                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-600"
+                    : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300"
+                }`}>
+                  <input
+                    type="radio" name="gen-mode" value={m}
+                    checked={mode === m} onChange={() => setMode(m)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <p className="text-sm font-medium dark:text-zinc-200">{t(`genPw.mode_${m}_title`)}</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{t(`genPw.mode_${m}_desc`)}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === "working" && (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <p className="text-sm text-zinc-500">{t("genPw.working")}</p>
+          </div>
+        )}
+
+        {step === "done" && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {t("genPw.doneMsg", { count: results.length, skipped })}
+            </div>
+            {results.length > 0 && (
+              <>
+                <div className="rounded-lg border dark:border-zinc-700 overflow-hidden max-h-48 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-zinc-500">{t("genPw.colName")}</th>
+                        <th className="text-left px-3 py-2 font-medium text-zinc-500">{t("genPw.colPassword")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.map((r) => (
+                        <tr key={r.id} className="border-t dark:border-zinc-700">
+                          <td className="px-3 py-2 dark:text-zinc-200">{r.name}</td>
+                          <td className="px-3 py-2 font-mono dark:text-zinc-200">{r.initialPassword}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">{t("genPw.csvNote")}</p>
+              </>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          {step === "options" && (
+            <>
+              <Button variant="outline" onClick={() => { reset(); onClose(); }}>{t("bulk.cancelBtn")}</Button>
+              <Button onClick={run}>{t("genPw.generateBtn")}</Button>
+            </>
+          )}
+          {step === "done" && (
+            <>
+              {results.length > 0 && (
+                <Button variant="outline" onClick={downloadCsv}>
+                  <Download className="h-4 w-4 mr-1.5" /> {t("genPw.downloadBtn")}
+                </Button>
+              )}
+              <Button onClick={() => { reset(); onClose(); }}>{t("bulk.doneBtn")}</Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Generate Password — single participant dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SingleGeneratePasswordDialog({ participant, onClose, onSaved }: {
+  participant: Participant | null; onClose: () => void; onSaved: () => void;
+}) {
+  const t = useTranslations("participants");
+  const [saving, setSaving]     = useState(false);
+  const [result, setResult]     = useState<GenResult | null>(null);
+  const [error, setError]       = useState<string | null>(null);
+
+  function reset() { setSaving(false); setResult(null); setError(null); }
+
+  async function generate() {
+    if (!participant) return;
+    setSaving(true); setError(null);
+    try {
+      const res = await fetch("/api/v2/manager/participants/generate-passwords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantIds: [participant.id], mode: "reset" }),
+      });
+      const j = await res.json();
+      if (j.data?.[0]) { setResult(j.data[0]); onSaved(); }
+      else setError(t("genPw.errorNoIc"));
+    } catch {
+      setError(t("genPw.errorGeneric"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={!!participant} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
+      <DialogContent className="max-w-sm dark:bg-zinc-900">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" />
+            {participant?.hasPassword ? t("menu.resetPassword") : t("menu.generatePassword")}
+          </DialogTitle>
+          <DialogDescription className="line-clamp-2">{participant?.name}</DialogDescription>
+        </DialogHeader>
+
+        {!result && (
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {participant?.hasPassword ? t("genPw.singleResetConfirm") : t("genPw.singleGenConfirm")}
+            </p>
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> {t("genPw.singleDone")}
+            </div>
+            <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 px-4 py-3 space-y-1">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("genPw.colPassword")}</p>
+              <p className="text-lg font-mono font-bold dark:text-zinc-100 tracking-wider">{result.initialPassword}</p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500">{t("genPw.csvNote")}</p>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          {!result ? (
+            <>
+              <Button variant="outline" onClick={() => { reset(); onClose(); }}>{t("bulk.cancelBtn")}</Button>
+              <Button onClick={generate} disabled={saving}>
+                {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> {t("genPw.working")}</> : t("genPw.generateBtn")}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => { reset(); onClose(); }}>{t("bulk.doneBtn")}</Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -806,6 +1045,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
   const [q, setQ]                   = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [ppkiOnly, setPpkiOnly]     = useState(false);
+  const [noPassword, setNoPassword] = useState(false);
   const [page, setPage]             = useState(1);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [total, setTotal]           = useState(0);
@@ -813,6 +1053,8 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
   const [loading, setLoading]       = useState(false);
   const [addOpen, setAddOpen]       = useState(false);
   const [bulkOpen, setBulkOpen]     = useState(false);
+  const [genPwOpen, setGenPwOpen]   = useState(false);
+  const [singleGenTarget, setSingleGenTarget] = useState<Participant | null>(null);
   const [viewing, setViewing]       = useState<Participant | null>(null);
   const [editing, setEditing]       = useState<Participant | null>(null);
 
@@ -822,6 +1064,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
     if (q)              params.set("q", q);
     if (tab !== "ALL")  params.set("eduLevel", tab);
     if (ppkiOnly)       params.set("ppki", "true");
+    if (noPassword)     params.set("noPassword", "true");
     params.set("page",     String(page));
     params.set("pageSize", String(PAGE_SIZE));
     try {
@@ -833,7 +1076,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
     } finally {
       setLoading(false);
     }
-  }, [q, tab, ppkiOnly, page]);
+  }, [q, tab, ppkiOnly, noPassword, page]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchParticipants(); }, [fetchParticipants]);
@@ -853,7 +1096,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
           <h1 className="text-xl font-bold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <Button size="sm" variant="outline" className="gap-1.5 justify-center"
             onClick={() => {
               const blob = new Blob([CSV_TEMPLATE], { type: "text/csv" });
@@ -866,6 +1109,10 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
           </Button>
           <Button size="sm" variant="outline" className="gap-1.5 justify-center" onClick={() => setBulkOpen(true)}>
             <Upload className="h-4 w-4" /> {t("bulkUploadBtn")}
+          </Button>
+          <Button size="sm" variant="outline" className="gap-1.5 justify-center" onClick={() => setGenPwOpen(true)}>
+            <KeyRound className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("genPwBtn")}</span>
           </Button>
           <Button size="sm" className="gap-1.5 justify-center" onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4" />
@@ -891,7 +1138,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
 
       {/* ── Tabs + PPKI filter ────────────────────────── */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex gap-1 rounded-lg bg-zinc-100 p-1">
+        <div className="flex gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
           {EDU_TABS.map(({ key, Icon }) => (
             <button
               key={key}
@@ -900,8 +1147,8 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
               onClick={() => handleTabChange(key)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
                 tab === key
-                  ? "bg-white shadow-sm text-foreground"
-                  : "text-zinc-500 hover:text-zinc-700"
+                  ? "bg-white shadow-sm text-foreground dark:bg-zinc-700"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -917,27 +1164,40 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
             ppkiOnly
               ? "bg-violet-600 text-white border-violet-600"
-              : "bg-white text-zinc-500 border-zinc-200 hover:text-violet-600 hover:border-violet-300"
+              : "bg-white text-zinc-500 border-zinc-200 hover:text-violet-600 hover:border-violet-300 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
           }`}
           title="Filter PPKI"
         >
           <Accessibility className="h-4 w-4 shrink-0" />
           <span className="text-xs">PPKI</span>
         </button>
+
+        <button
+          onClick={() => { setNoPassword((v) => !v); setPage(1); }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            noPassword
+              ? "bg-red-600 text-white border-red-600"
+              : "bg-white text-zinc-500 border-zinc-200 hover:text-red-600 hover:border-red-300 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
+          }`}
+          title={t("noPasswordFilter")}
+        >
+          <ShieldOff className="h-4 w-4 shrink-0" />
+          <span className="text-xs">{t("noPasswordFilter")}</span>
+        </button>
       </div>
 
       {/* ── Table ─────────────────────────────────────── */}
-      <div className="rounded-xl border bg-white overflow-hidden">
+      <div className="rounded-xl border bg-white overflow-hidden dark:bg-zinc-900 dark:border-zinc-800">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-zinc-50">
-              <th className="text-left px-3 py-3 font-medium text-zinc-500 w-10">#</th>
+            <tr className="border-b bg-zinc-50 dark:bg-zinc-800/50 dark:border-zinc-800">
+              <th className="text-left px-3 py-3 font-medium text-zinc-500 dark:text-zinc-400 w-10">#</th>
               <th className="px-3 py-3 w-10"></th>
-              <th className="text-left px-5 py-3 font-medium text-zinc-500">{t("table.colName")}</th>
-              <th className="text-center px-3 py-3 font-medium text-zinc-500 w-16 hidden sm:table-cell">{t("table.colAge")}</th>
-              <th className="text-left px-5 py-3 font-medium text-zinc-500 hidden md:table-cell">{t("table.colClass")}</th>
+              <th className="text-left px-5 py-3 font-medium text-zinc-500 dark:text-zinc-400">{t("table.colName")}</th>
+              <th className="text-center px-3 py-3 font-medium text-zinc-500 dark:text-zinc-400 w-16 hidden sm:table-cell">{t("table.colAge")}</th>
+              <th className="text-left px-5 py-3 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">{t("table.colClass")}</th>
               <th className="px-3 py-3 w-10 hidden md:table-cell"></th>
-              <th className="text-right px-5 py-3 font-medium text-zinc-500"></th>
+              <th className="text-right px-5 py-3 font-medium text-zinc-500 dark:text-zinc-400"></th>
             </tr>
           </thead>
           <tbody>
@@ -956,7 +1216,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
               </tr>
             )}
             {!loading && participants.map((p, i) => (
-              <tr key={p.id} className="border-t hover:bg-zinc-50 transition-colors">
+              <tr key={p.id} className="border-t hover:bg-zinc-50 transition-colors dark:border-zinc-800 dark:hover:bg-zinc-800/40">
                 <td className="px-3 py-3 text-xs text-zinc-400 text-right tabular-nums w-10">
                   {rangeStart + i}
                 </td>
@@ -964,12 +1224,19 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
                   <GenderIcon gender={p.gender} />
                 </td>
                 <td className="px-5 py-3">
-                  <p className="font-medium leading-snug">{p.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium leading-snug">{p.name}</p>
+                    {!p.hasPassword && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 border border-red-100 dark:border-red-900/40 px-2 py-0.5 text-[10px] font-medium">
+                        <ShieldOff className="h-3 w-3" /> {t("noPassword")}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-3 text-center hidden sm:table-cell text-sm text-zinc-500 tabular-nums w-16">
                   {p.age ?? <span className="text-zinc-300">—</span>}
                 </td>
-                <td className="px-5 py-3 hidden md:table-cell text-zinc-500 text-xs">
+                <td className="px-5 py-3 hidden md:table-cell text-zinc-500 text-xs dark:text-zinc-400">
                   {CLASS_LABEL(p)}
                 </td>
                 <td className="px-3 py-3 hidden md:table-cell w-10 text-center">
@@ -986,9 +1253,11 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
                   <div className="flex justify-end">
                     <RowMenu
                       name={p.name}
+                      hasPassword={p.hasPassword}
                       onView={() => setViewing(p)}
                       onEdit={() => setEditing(p)}
                       onDelete={() => {/* TODO */}}
+                      onGenPassword={() => setSingleGenTarget(p)}
                     />
                   </div>
                 </td>
@@ -998,7 +1267,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
         </table>
 
         {!loading && total > 0 && (
-          <div className="border-t px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="border-t px-5 py-3 flex flex-wrap items-center justify-between gap-3 dark:border-zinc-800">
             <span className="text-xs text-zinc-400">
               {t("table.showing", { start: rangeStart, end: rangeEnd, total })}
             </span>
@@ -1007,7 +1276,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
                 <button
                   disabled={page === 1}
                   onClick={() => setPage((p) => p - 1)}
-                  className="px-2 py-1 rounded text-xs border border-zinc-200 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-2 py-1 rounded text-xs border border-zinc-200 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-700 dark:hover:bg-zinc-800 dark:text-zinc-300"
                 >
                   ←
                 </button>
@@ -1020,7 +1289,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
                         className={`min-w-[28px] px-2 py-1 rounded text-xs border transition-colors ${
                           p === page
                             ? "bg-[#085782] text-white border-[#085782]"
-                            : "border-zinc-200 hover:bg-zinc-50 text-zinc-600"
+                            : "border-zinc-200 hover:bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:hover:bg-zinc-800 dark:text-zinc-400"
                         }`}
                       >
                         {p}
@@ -1029,7 +1298,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
                 <button
                   disabled={page === totalPages}
                   onClick={() => setPage((p) => p + 1)}
-                  className="px-2 py-1 rounded text-xs border border-zinc-200 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-2 py-1 rounded text-xs border border-zinc-200 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-700 dark:hover:bg-zinc-800 dark:text-zinc-300"
                 >
                   →
                 </button>
@@ -1058,6 +1327,16 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
         open={bulkOpen}
         onClose={() => setBulkOpen(false)}
         contingents={contingents}
+        onSaved={fetchParticipants}
+      />
+      <GeneratePasswordsDialog
+        open={genPwOpen}
+        onClose={() => setGenPwOpen(false)}
+        onSaved={fetchParticipants}
+      />
+      <SingleGeneratePasswordDialog
+        participant={singleGenTarget}
+        onClose={() => setSingleGenTarget(null)}
         onSaved={fetchParticipants}
       />
     </div>

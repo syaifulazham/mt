@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { ManagerSidebar } from "@/components/manager/ManagerSidebar";
 import { MobileManagerNav } from "@/components/manager/MobileManagerNav";
 import { LocaleSwitcher } from "@/components/manager/LocaleSwitcher";
+import { ManagerThemeProvider } from "@/components/manager/ManagerThemeProvider";
+import { ThemeToggle } from "@/components/manager/ThemeToggle";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -79,16 +81,16 @@ export default async function PortalLayout({ children }: { children: React.React
   const hasContingent = !!contingentManager;
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <ManagerThemeProvider className="flex min-h-screen flex-col">
       {/* ── Header ────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b bg-white px-6 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-40 border-b bg-white dark:bg-zinc-900 dark:border-zinc-800 px-6 py-3 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3">
           <Image
             src="/logo-mt.svg"
             alt="Techlympics"
             width={120}
             height={40}
-            className="h-8 w-auto"
+            className="h-8 w-auto dark:brightness-0 dark:invert"
             unoptimized
             priority
           />
@@ -98,6 +100,7 @@ export default async function PortalLayout({ children }: { children: React.React
         </Link>
 
         <div className="flex items-center gap-3">
+          <ThemeToggle />
           <LocaleSwitcher />
         </div>
       </header>
@@ -106,12 +109,12 @@ export default async function PortalLayout({ children }: { children: React.React
       <div className="flex flex-1 overflow-hidden">
         <ManagerSidebar userName={profile.name} institutionName={institutionLabel} hasContingent={hasContingent} />
 
-        <main className="flex-1 overflow-y-auto bg-zinc-50 p-6 pb-24 lg:pb-6">
+        <main className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-6 pb-24 lg:pb-6">
           {children}
         </main>
       </div>
 
       <MobileManagerNav hasContingent={hasContingent} />
-    </div>
+    </ManagerThemeProvider>
   );
 }

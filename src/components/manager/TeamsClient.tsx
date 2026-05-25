@@ -72,12 +72,12 @@ const EDU_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  DRAFT:      "bg-zinc-100 text-zinc-600",
+  DRAFT:      "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
   PUBLISHED:  "bg-blue-50 text-blue-600",
   REG_OPEN:   "bg-green-50 text-green-700",
   REG_CLOSED: "bg-orange-50 text-orange-700",
   ONGOING:    "bg-purple-50 text-purple-700",
-  COMPLETED:  "bg-zinc-100 text-zinc-500",
+  COMPLETED:  "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
 };
 
 function MemberSlots({ filled, max }: { filled: number; max: number }) {
@@ -87,7 +87,7 @@ function MemberSlots({ filled, max }: { filled: number; max: number }) {
         <div
           key={i}
           className={`h-2.5 w-2.5 rounded-full border ${
-            i < filled ? "bg-blue-500 border-blue-500" : "bg-white border-zinc-300"
+            i < filled ? "bg-blue-500 border-blue-500" : "bg-white border-zinc-300 dark:bg-zinc-700 dark:border-zinc-600"
           }`}
         />
       ))}
@@ -412,7 +412,7 @@ function AddMemberDialog({
             </p>
           )}
           {!loading && eligible.map((p) => (
-            <div key={p.id} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-zinc-50">
+            <div key={p.id} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
               <div>
                 <p className="text-sm font-medium">{p.name}</p>
                 <p className="text-xs text-zinc-400">
@@ -529,7 +529,7 @@ function TrainerPickerDialog({
               <div
                 key={tr.id}
                 className={`flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors ${
-                  assigned ? "bg-indigo-50" : "hover:bg-zinc-50"
+                  assigned ? "bg-indigo-50 dark:bg-indigo-950/20" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
                 }`}
               >
                 <div>
@@ -599,7 +599,7 @@ function TeamEmailRow({ team, onUpdated }: { team: Team; onUpdated: (t: Team) =>
   }
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-t bg-zinc-50/60 text-xs">
+    <div className="flex items-center gap-2 px-4 py-2 border-t bg-zinc-50/60 text-xs dark:border-zinc-800 dark:bg-zinc-800/40">
       <Mail className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
       {editing ? (
         <>
@@ -609,7 +609,7 @@ function TeamEmailRow({ team, onUpdated }: { team: Team; onUpdated: (t: Team) =>
             value={val}
             onChange={e => setVal(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-            className="flex-1 h-6 rounded border border-input bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            className="flex-1 h-6 rounded border border-input bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring dark:bg-zinc-800"
             placeholder="team@email.com"
           />
           <button onClick={save} disabled={saving}
@@ -617,17 +617,17 @@ function TeamEmailRow({ team, onUpdated }: { team: Team; onUpdated: (t: Team) =>
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
           </button>
           <button onClick={() => { setEditing(false); setErr(""); setVal(team.email ?? ""); }}
-            className="h-6 w-6 rounded flex items-center justify-center bg-zinc-100 text-zinc-500 hover:bg-zinc-200">
+            className="h-6 w-6 rounded flex items-center justify-center bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-600">
             <X className="h-3 w-3" />
           </button>
         </>
       ) : (
         <>
-          <span className={`flex-1 truncate ${team.email ? "text-zinc-600" : "text-zinc-400 italic"}`}>
+          <span className={`flex-1 truncate ${team.email ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-400 italic"}`}>
             {team.email ?? "No email set"}
           </span>
           <button onClick={() => setEditing(true)}
-            className="text-[10px] text-zinc-400 hover:text-zinc-600 hover:underline shrink-0">
+            className="text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline shrink-0">
             {team.email ? "Edit" : "Set email"}
           </button>
         </>
@@ -658,10 +658,10 @@ function TeamCard({
   const isFull = team.members.length >= team.competition.maxTeamSize;
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-black/20">
       {/* Header row */}
       <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 transition-colors"
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex-1 min-w-0">
@@ -743,7 +743,7 @@ function TeamCard({
       <TeamEmailRow team={team} onUpdated={onUpdated} />
 
       {/* Trainer footer — always visible */}
-      <div className="bg-zinc-50 px-4 py-2.5 flex items-center gap-2 flex-wrap">
+      <div className="bg-zinc-50 px-4 py-2.5 flex items-center gap-2 flex-wrap dark:bg-zinc-800/50">
         <UserCheck className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
         {team.trainers.length === 0 ? (
           <span className="text-xs text-zinc-400 italic">No trainers assigned</span>

@@ -106,7 +106,7 @@ function LeaveDialog({
                 <label
                   key={p.id}
                   className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
-                    selectedPeer === p.id ? "border-blue-500 bg-blue-50" : "border-zinc-200 hover:border-zinc-300"
+                    selectedPeer === p.id ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700 dark:hover:border-zinc-600"
                   }`}
                 >
                   <input
@@ -179,7 +179,7 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
   }
 
   return (
-    <div className={`rounded-xl border bg-white p-5 shadow-sm ${isPending ? "border-amber-300" : ""}`}>
+    <div className={`rounded-xl border bg-white dark:bg-zinc-900 dark:border-zinc-800 p-5 shadow-sm ${isPending ? "border-amber-300 dark:border-amber-700" : ""}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate">{link.name}</p>
@@ -205,8 +205,8 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
             </div>
           ) : (
             <div className="text-right text-xs text-zinc-400 space-y-1">
-              <p><span className="font-semibold text-zinc-700">{link.participantCount}</span> participants</p>
-              <p><span className="font-semibold text-zinc-700">{link.teamCount}</span> teams</p>
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">{link.participantCount}</span> participants</p>
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">{link.teamCount}</span> teams</p>
             </div>
           )}
 

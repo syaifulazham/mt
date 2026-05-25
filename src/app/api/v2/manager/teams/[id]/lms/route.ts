@@ -21,6 +21,44 @@ function emailToUsername(email: string): string {
     .padEnd(3, "x");
 }
 
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  if (!eptimEduConfigured())
+    return NextResponse.json({ error: "EPTIMEDU_API_KEY not found" }, { status: 503 });
+
+  const { id } = await params;
+
+  const manager = await db.managerProfile.findUnique({
+    where: { clerkUserId: userId },
+    include: { contingentManagers: { select: { contingentId: true } } },
+  });
+  if (!manager) return NextResponse.json({ error: "PROFILE_NOT_FOUND" }, { status: 404 });
+
+  const team = await db.team.findUnique({ where: { id }, select: { contingentId: true, lmsUserId: true, email: true } });
+  if (!team) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+  const contingentIds = manager.contingentManagers.map((cm) => cm.contingentId);
+  if (!contingentIds.includes(team.contingentId))
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+
+  if (!team.lmsUserId || !team.email) return NextResponse.json({ data: null });
+
+  try {
+    const username = emailToUsername(team.email);
+    const result = await eptimEdu.userExists(username);
+    const user = result?.user ?? null;
+    return NextResponse.json({
+      data: user
+        ? { loginCount: user.loginCount ?? 0, lastLoginAt: user.lastLoginAt ?? null }
+        : null,
+    });
+  } catch {
+    return NextResponse.json({ data: null });
+  }
+}
+
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });

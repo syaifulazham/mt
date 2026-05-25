@@ -326,17 +326,32 @@ model Participant {
   eduLevel    EduLevel
   classGrade  String?
   className   String?
-  status      String        @default("ACTIVE")
-  ppki        Boolean       @default(false)
-  contingentId String
+  status        String        @default("ACTIVE")
+  ppki          Boolean       @default(false)
+  passwordHash  String?
+  contingentId  String
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   contingent  Contingent    @relation(fields: [contingentId], references: [id], onDelete: Cascade)
   teamMembers TeamMember[]
+  sessions    ParticipantSession[]
 
   @@index([contingentId])
   @@map("contestants")
+}
+
+model ParticipantSession {
+  id            String      @id @default(cuid())
+  participantId String
+  token         String      @unique @default(cuid())
+  expiresAt     DateTime
+  createdAt     DateTime    @default(now())
+
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([participantId])
+  @@map("participant_sessions")
 }
 
 enum Gender {

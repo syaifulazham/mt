@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import {
-  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck,
+  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,8 @@ type Team = {
 };
 
 type Credentials = { username: string; password: string; enrolled: boolean };
+type LoginStats  = { loginCount: number; lastLoginAt: string | null };
+type StatsEntry  = LoginStats | null;  // null = fetched, no data
 
 // ── Copy button ────────────────────────────────────────────────────────────────
 
@@ -39,7 +42,7 @@ function CopyBtn({ text }: { text: string }) {
   }
   return (
     <button onClick={copy}
-      className="ml-1 shrink-0 text-zinc-400 hover:text-zinc-700 transition-colors"
+      className="ml-1 shrink-0 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
       title="Copy">
       {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
@@ -55,30 +58,34 @@ function CredentialsDialog({
   teamName: string;
   onClose: () => void;
 }) {
+  const t = useTranslations("lms");
   return (
     <Dialog open={!!creds} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-green-500" /> Bengkel MT Account Ready
+            <CheckCircle2 className="h-5 w-5 text-green-500" /> {t("credsTitle")}
           </DialogTitle>
           <DialogDescription className="text-xs mt-1">
-            Account created for <strong>{teamName}</strong>. Share these credentials with the team.
+            {t.rich("credsDesc", {
+              teamName,
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </DialogDescription>
         </DialogHeader>
 
         {creds && (
           <div className="space-y-3 py-1">
-            <div className="rounded-lg border bg-zinc-50 px-4 py-3 space-y-2">
+            <div className="rounded-lg border bg-zinc-50 px-4 py-3 space-y-2 dark:bg-zinc-800 dark:border-zinc-700">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-zinc-500 text-xs font-medium uppercase tracking-wide">Username</span>
-                <div className="flex items-center font-mono text-zinc-800 font-medium">
+                <span className="text-zinc-500 text-xs font-medium uppercase tracking-wide">{t("credsUsername")}</span>
+                <div className="flex items-center font-mono text-zinc-800 dark:text-zinc-200 font-medium">
                   {creds.username}<CopyBtn text={creds.username} />
                 </div>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-zinc-500 text-xs font-medium uppercase tracking-wide">Password</span>
-                <div className="flex items-center font-mono text-zinc-800 font-medium">
+                <span className="text-zinc-500 text-xs font-medium uppercase tracking-wide">{t("credsPassword")}</span>
+                <div className="flex items-center font-mono text-zinc-800 dark:text-zinc-200 font-medium">
                   {creds.password}<CopyBtn text={creds.password} />
                 </div>
               </div>
@@ -86,17 +93,17 @@ function CredentialsDialog({
             {creds.enrolled && (
               <p className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-100 rounded-md px-3 py-2">
                 <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                Automatically enrolled in the linked course.
+                {t("credsEnrolled")}
               </p>
             )}
             <p className="text-[11px] text-zinc-400">
-              Username is derived from the team email. Password is shown once — save it now.
+              {t("credsNote")}
             </p>
           </div>
         )}
 
         <DialogFooter>
-          <Button onClick={onClose}>Done</Button>
+          <Button onClick={onClose}>{t("credsDone")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -107,19 +114,22 @@ function CredentialsDialog({
 
 function TeamRow({
   team,
+  stats,
   onJoined,
   onEnrolled,
 }: {
   team: Team;
+  stats: StatsEntry | undefined;
   onJoined: (teamId: string, creds: Credentials) => void;
   onEnrolled: (teamId: string) => void;
 }) {
+  const t = useTranslations("lms");
   const [joining,   setJoining]   = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [err,       setErr]       = useState("");
 
-  const hasAccount  = !!team.lmsUserId;
-  const hasCourse   = !!team.competition.eptimEduCourseId;
+  const hasAccount    = !!team.lmsUserId;
+  const hasCourse     = !!team.competition.eptimEduCourseId;
   const courseEnrolled = team.lmsCourseEnrolled;
 
   async function join() {
@@ -147,16 +157,35 @@ function TeamRow({
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors">
-      {/* Team name + email */}
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors dark:hover:bg-zinc-800/40">
+      {/* Team name + email + login stats */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-zinc-800 truncate">{team.name}</p>
+        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate">{team.name}</p>
         <div className="flex items-center gap-1 mt-0.5">
           <Mail className="h-3 w-3 text-zinc-400 shrink-0" />
           <span className={`text-xs truncate ${team.email ? "text-zinc-500" : "text-zinc-300 italic"}`}>
-            {team.email ?? "No email set"}
+            {team.email ?? t("noEmail")}
           </span>
         </div>
+        {hasAccount && (
+          <div className="flex items-center gap-1 mt-1">
+            <LogIn className="h-3 w-3 text-zinc-400 shrink-0" />
+            <span className="text-xs text-zinc-500">
+              {stats === undefined
+                ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+                : stats === null
+                  ? <span className="text-zinc-300">—</span>
+                  : stats.loginCount > 0
+                    ? <>{t("loginPrefix")} <span className="font-medium text-zinc-700 dark:text-zinc-300">{stats.loginCount}×</span>
+                        {stats.lastLoginAt && (
+                          <> · <span className="text-zinc-400">{new Date(stats.lastLoginAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })}</span></>
+                        )}
+                      </>
+                    : <span className="text-zinc-400 italic">{t("neverLoggedIn")}</span>
+              }
+            </span>
+          </div>
+        )}
         {err && (
           <p className="flex items-center gap-1 text-[11px] text-red-600 mt-1">
             <AlertCircle className="h-3 w-3 shrink-0" />{err}
@@ -172,19 +201,19 @@ function TeamRow({
             className="h-7 text-xs gap-1.5"
             disabled={joining || !team.email}
             onClick={join}
-            title={!team.email ? "Set team email first (in Teams page)" : undefined}
+            title={!team.email ? t("joinEmailTitle") : undefined}
           >
             {joining
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <KeyRound className="h-3.5 w-3.5" />}
-            Join Bengkel
+            {t("joinBtn")}
           </Button>
         ) : courseEnrolled ? (
           <BadgeCheck className="h-8 w-8 text-blue-500" />
         ) : (
           <>
             <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-100 px-2.5 py-1 rounded-full font-medium">
-              <CheckCircle2 className="h-3.5 w-3.5" />Registered
+              <CheckCircle2 className="h-3.5 w-3.5" />{t("registered")}
             </div>
             {hasCourse && (
               <Button
@@ -197,7 +226,7 @@ function TeamRow({
                 {enrolling
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <GraduationCap className="h-3.5 w-3.5" />}
-                Enrol to Course
+                {t("enrolBtn")}
               </Button>
             )}
           </>
@@ -210,9 +239,11 @@ function TeamRow({
 // ── Main BengkelClient ─────────────────────────────────────────────────────────
 
 export function BengkelClient() {
-  const [teams,   setTeams]   = useState<Team[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creds,   setCreds]   = useState<{ teamId: string; teamName: string; data: Credentials } | null>(null);
+  const t = useTranslations("lms");
+  const [teams,      setTeams]      = useState<Team[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [loginStats, setLoginStats] = useState<Record<string, StatsEntry>>({});
+  const [creds,      setCreds]      = useState<{ teamId: string; teamName: string; data: Credentials } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -242,6 +273,25 @@ export function BengkelClient() {
           setTeams(prev => prev.map(t => enrolledIds.has(t.id) ? { ...t, lmsCourseEnrolled: true } : t));
         }
       }
+
+      // Fetch login stats for enrolled teams
+      const enrolled = fetched.filter(t => t.lmsUserId);
+      if (enrolled.length > 0) {
+        const statsResults = await Promise.allSettled(
+          enrolled.map(t =>
+            fetch(`/api/v2/manager/teams/${t.id}/lms`)
+              .then(r => r.json())
+              .then(j => ({ id: t.id, data: (j.data ?? null) as StatsEntry }))
+          )
+        );
+        const statsMap: Record<string, StatsEntry> = {};
+        for (const r of statsResults) {
+          statsMap[r.status === "fulfilled" ? r.value.id : ""]
+            = r.status === "fulfilled" ? r.value.data : null;
+        }
+        delete statsMap[""];
+        setLoginStats(statsMap);
+      }
     } finally { setLoading(false); }
   }, []);
 
@@ -254,6 +304,7 @@ export function BengkelClient() {
     setTeams(prev => prev.map(t =>
       t.id === teamId ? { ...t, lmsUserId: data.username, lmsCourseEnrolled: data.enrolled } : t
     ));
+    setLoginStats(prev => ({ ...prev, [teamId]: { loginCount: 0, lastLoginAt: null } }));
   }
 
   function handleEnrolled(teamId: string) {
@@ -267,8 +318,8 @@ export function BengkelClient() {
     return acc;
   }, {});
 
-  const enrolled = teams.filter(t => t.lmsUserId).length;
-  const total    = teams.length;
+  const enrolledCount = teams.filter(t => t.lmsUserId).length;
+  const total         = teams.length;
 
   if (loading) {
     return (
@@ -281,10 +332,10 @@ export function BengkelClient() {
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-xl font-bold">Bengkel MT</h1>
+        <h1 className="text-xl font-bold">{t("title")}</h1>
         <p className="text-sm text-zinc-500 mt-0.5">
-          Register your teams for the Bengkel MT online learning platform.
-          {total > 0 && ` ${enrolled}/${total} teams enrolled.`}
+          {t("subtitle")}
+          {total > 0 && ` ${t("enrolled", { enrolled: enrolledCount, total })}`}
         </p>
       </div>
 
@@ -293,23 +344,23 @@ export function BengkelClient() {
           <div className="rounded-full bg-blue-50 p-4">
             <Trophy className="h-8 w-8 text-blue-400" />
           </div>
-          <p className="font-medium">No teams yet</p>
-          <p className="text-sm text-zinc-500">Create teams on the Teams page first.</p>
+          <p className="font-medium">{t("noTeams")}</p>
+          <p className="text-sm text-zinc-500">{t("noTeamsDesc")}</p>
         </div>
       ) : (
         <div className="space-y-5">
           {Object.entries(grouped).map(([, compTeams]) => {
             const comp = compTeams[0].competition;
             return (
-              <div key={comp.id} className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-zinc-50/80">
+              <div key={comp.id} className="rounded-xl border bg-white shadow-sm overflow-hidden dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-black/20">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-zinc-50/80 dark:bg-zinc-800/60 dark:border-zinc-800">
                   <Trophy className="h-3.5 w-3.5 text-zinc-400" />
-                  <span className="text-xs font-semibold text-zinc-600">{comp.name}</span>
+                  <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">{comp.name}</span>
                   <span className="text-[10px] text-zinc-400 font-mono">({comp.code})</span>
                 </div>
-                <div className="divide-y">
+                <div className="divide-y dark:divide-zinc-800">
                   {compTeams.map(t => (
-                    <TeamRow key={t.id} team={t} onJoined={handleJoined} onEnrolled={handleEnrolled} />
+                    <TeamRow key={t.id} team={t} stats={loginStats[t.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
                   ))}
                 </div>
               </div>

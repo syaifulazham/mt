@@ -182,7 +182,9 @@
       "viewDetails": "View Details",
       "edit": "Edit",
       "delete": "Delete",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "generatePassword": "Generate Password",
+      "resetPassword": "Reset Password"
     },
     "bulk": {
       "title": "Bulk Upload Participants",
@@ -221,6 +223,30 @@
       "importAsIs": "Import {count} As-Is",
       "importCleaned": "Import {count} Cleaned",
       "doneBtn": "Done"
+    },
+    "genPwBtn": "Gen. Passwords",
+    "noPassword": "No Password",
+    "noPasswordFilter": "No Password",
+    "genPw": {
+      "title": "Generate Passwords",
+      "desc": "Generate initial passwords for participants who have no password yet.",
+      "modeLabel": "Choose generation mode:",
+      "mode_skip_title": "Generate for new only",
+      "mode_skip_desc": "Skip participants who already have a password.",
+      "mode_reset_title": "Generate / Reset all",
+      "mode_reset_desc": "Overwrite existing passwords with the initial password.",
+      "generateBtn": "Generate",
+      "working": "Generating…",
+      "doneMsg": "Generated {count} password(s). {skipped} skipped.",
+      "colName": "Name",
+      "colPassword": "Initial Password",
+      "csvNote": "User ID: IC number (no dashes). Passwords are one-time view only.",
+      "downloadBtn": "Download CSV",
+      "singleGenConfirm": "Generate initial password for this participant?",
+      "singleResetConfirm": "Reset password to initial for this participant?",
+      "singleDone": "Password generated successfully.",
+      "errorNoIc": "Cannot generate — participant has no IC recorded.",
+      "errorGeneric": "Unexpected error. Please try again."
     }
   },
   "dashboard": {
@@ -285,5 +311,26 @@
       "drone": "Drone",
       "rocket": "Rocket"
     }
+  },
+  "lms": {
+    "title": "Bengkel MT",
+    "subtitle": "Register your teams for the Bengkel MT online learning platform.",
+    "enrolled": "{enrolled}/{total} teams enrolled.",
+    "noTeams": "No teams yet",
+    "noTeamsDesc": "Create teams on the Teams page first.",
+    "noEmail": "No email set",
+    "joinBtn": "Join Bengkel",
+    "joinEmailTitle": "Set team email first (in Teams page)",
+    "registered": "Registered",
+    "enrolBtn": "Enrol to Course",
+    "loginPrefix": "Login:",
+    "neverLoggedIn": "Never logged in",
+    "credsTitle": "Bengkel MT Account Ready",
+    "credsDesc": "Account created for <strong>{teamName}</strong>. Share these credentials with the team.",
+    "credsUsername": "Username",
+    "credsPassword": "Password",
+    "credsEnrolled": "Automatically enrolled in the linked course.",
+    "credsNote": "Username is derived from the team email. Password is shown once — save it now.",
+    "credsDone": "Done"
   }
 }

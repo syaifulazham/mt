@@ -138,7 +138,7 @@ const DEFAULT_BUILTIN: BuiltinId = "shield";
 
 const LOGO_COLORS: Record<BuiltinId, string> = {
   shield: "text-blue-600  bg-blue-50  border-blue-200",
-  cog:    "text-zinc-600  bg-zinc-100 border-zinc-200",
+  cog:    "text-zinc-600  bg-zinc-100 border-zinc-200 dark:text-zinc-400 dark:bg-zinc-800 dark:border-zinc-700",
   crank:  "text-amber-600 bg-amber-50 border-amber-200",
   robot:  "text-green-600 bg-green-50 border-green-200",
   drone:  "text-purple-600 bg-purple-50 border-purple-200",
@@ -170,7 +170,7 @@ function ContingentLogo({ logoUrl, size = 56 }: { logoUrl: string | null; size?:
 
   return (
     <div
-      className="rounded-xl border border-zinc-200 bg-white overflow-hidden flex items-center justify-center"
+      className="rounded-xl border border-zinc-200 bg-white overflow-hidden flex items-center justify-center dark:border-zinc-700 dark:bg-zinc-800"
       style={{ width: size, height: size, minWidth: size }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -240,13 +240,13 @@ function LogoPicker({
               onClick={() => onChange(`builtin:${l.id}`)}
               className={`relative rounded-xl border-2 p-2 flex flex-col items-center gap-1 transition-all ${
                 selected
-                  ? "border-blue-500 bg-blue-50 shadow-sm"
-                  : "border-zinc-200 hover:border-zinc-300 bg-white"
+                  ? "border-blue-500 bg-blue-50 shadow-sm dark:bg-blue-950/20"
+                  : "border-zinc-200 hover:border-zinc-300 bg-white dark:border-zinc-700 dark:hover:border-zinc-600 dark:bg-zinc-900"
               }`}
               title={t(`logoBuiltin.${l.id}`)}
             >
               <ContingentLogo logoUrl={`builtin:${l.id}`} size={36} />
-              <span className="text-[9px] text-zinc-500 leading-none">{t(`logoBuiltin.${l.id}`)}</span>
+              <span className="text-[9px] text-zinc-500 leading-none dark:text-zinc-400">{t(`logoBuiltin.${l.id}`)}</span>
               {selected && (
                 <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-blue-500 flex items-center justify-center">
                   <CheckCircle2 className="h-3 w-3 text-white" />
@@ -257,16 +257,16 @@ function LogoPicker({
         })}
       </div>
 
-      <div className="flex items-center gap-3 rounded-xl border border-dashed border-zinc-300 px-4 py-3">
+      <div className="flex items-center gap-3 rounded-xl border border-dashed border-zinc-300 px-4 py-3 dark:border-zinc-600">
         {value && !value.startsWith("builtin:") ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={value} alt="Custom logo" className="h-10 w-10 rounded-lg object-contain border" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-zinc-700">{t("logoCustomUploaded")}</p>
+              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{t("logoCustomUploaded")}</p>
               <p className="text-[11px] text-zinc-400 truncate">{value}</p>
             </div>
-            <Button size="sm" variant="ghost" className="text-xs text-zinc-500 h-7"
+            <Button size="sm" variant="ghost" className="text-xs text-zinc-500 dark:text-zinc-400 h-7"
               onClick={() => onChange(`builtin:${DEFAULT_BUILTIN}`)}>
               {t("logoRemove")}
             </Button>
@@ -275,7 +275,7 @@ function LogoPicker({
           <>
             <ImagePlus className="h-5 w-5 text-zinc-400 shrink-0" />
             <div className="flex-1">
-              <p className="text-xs text-zinc-600">{t("logoUploadOwn")}</p>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">{t("logoUploadOwn")}</p>
               <p className="text-[11px] text-zinc-400">{t("logoUploadHint")}</p>
             </div>
             <Button size="sm" variant="outline" className="h-7 text-xs"
@@ -434,7 +434,7 @@ function ManagersSection({ managers }: { managers: ActiveManager[] }) {
   const t = useTranslations("contingents");
 
   return (
-    <div className="mt-3 pt-3 border-t space-y-2">
+    <div className="mt-3 pt-3 border-t dark:border-zinc-800 space-y-2">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
         {t("managersHeading")}
       </p>
@@ -445,10 +445,10 @@ function ManagersSection({ managers }: { managers: ActiveManager[] }) {
           {managers.map((m) => (
             <div
               key={m.id}
-              className="flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1"
+              className="flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-zinc-700 dark:bg-zinc-800"
             >
               <UserCircle2 className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-              <span className="text-xs font-medium text-zinc-700 leading-none">{m.name}</span>
+              <span className="text-xs font-medium text-zinc-700 leading-none dark:text-zinc-300">{m.name}</span>
               <span className="text-[10px] text-zinc-400 leading-none">
                 {t(`roleLabel.${m.role}` as Parameters<typeof t>[0])}
               </span>
@@ -503,7 +503,7 @@ function JoinRequestsPanel({
 
       {requests.map((req) => (
         <div key={req.id}
-          className="flex items-center gap-3 bg-white rounded-md border border-amber-100 px-3 py-2.5">
+          className="flex items-center gap-3 bg-white rounded-md border border-amber-100 px-3 py-2.5 dark:bg-zinc-800 dark:border-amber-900/50">
           <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-sm shrink-0">
             {req.manager.name.charAt(0).toUpperCase()}
           </div>
@@ -511,7 +511,7 @@ function JoinRequestsPanel({
             <p className="text-sm font-medium leading-tight truncate">{req.manager.name}</p>
             <p className="text-xs text-zinc-400 truncate">{req.manager.email}</p>
             {req.requestMessage && (
-              <p className="text-xs text-zinc-500 mt-0.5 italic">&quot;{req.requestMessage}&quot;</p>
+              <p className="text-xs text-zinc-500 mt-0.5 italic dark:text-zinc-400">&quot;{req.requestMessage}&quot;</p>
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -555,7 +555,7 @@ function BuiltinLogoPicker({ value, onChange }: { value: string; onChange: (v: s
               type="button"
               onClick={() => onChange(`builtin:${l.id}`)}
               className={`relative rounded-xl border-2 p-1.5 flex items-center justify-center transition-all ${
-                selected ? "border-blue-500 bg-blue-50" : "border-zinc-200 hover:border-zinc-300 bg-white"
+                selected ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" : "border-zinc-200 hover:border-zinc-300 bg-white dark:border-zinc-700 dark:hover:border-zinc-600 dark:bg-zinc-900"
               }`}
             >
               <ContingentLogo logoUrl={`builtin:${l.id}`} size={32} />
@@ -801,13 +801,13 @@ function JoinDialog({
               )}
 
               {results.length > 0 && (
-                <div className="divide-y rounded-lg border overflow-hidden">
+                <div className="divide-y dark:divide-zinc-800 rounded-lg border dark:border-zinc-700 overflow-hidden">
                   {results.map((c) => (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => setSelected(c)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-50 text-left transition-colors"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-left transition-colors"
                     >
                       <ContingentLogo logoUrl={c.logoUrl} size={36} />
                       <div className="flex-1 min-w-0">
@@ -824,7 +824,7 @@ function JoinDialog({
             </>
           ) : (
             <>
-              <div className="flex items-center gap-3 rounded-lg border bg-zinc-50 px-3 py-2.5">
+              <div className="flex items-center gap-3 rounded-lg border bg-zinc-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800">
                 <ContingentLogo logoUrl={selected.logoUrl} size={40} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold leading-tight truncate">{selected.name}</p>
@@ -902,7 +902,7 @@ function ContingentCard({
   const isPending = contingent.managerStatus === "PENDING";
 
   return (
-    <div className={`rounded-xl border bg-white shadow-sm p-5 ${isPending ? "border-amber-300" : ""}`}>
+    <div className={`rounded-xl border bg-white shadow-sm p-5 dark:bg-zinc-900 dark:border-zinc-800 ${isPending ? "border-amber-300 dark:border-amber-700" : ""}`}>
       <div className="flex items-start gap-4">
         <ContingentLogo logoUrl={contingent.logoUrl} size={64} />
 
@@ -915,7 +915,7 @@ function ContingentCard({
                   <span className="text-xs text-zinc-400 font-mono">({contingent.shortName})</span>
                 )}
               </div>
-              <p className="text-xs text-zinc-500 mt-0.5">{institution}</p>
+              <p className="text-xs text-zinc-500 mt-0.5 dark:text-zinc-400">{institution}</p>
             </div>
             {!isPending && (
               <Button size="sm" variant="outline" className="h-7 px-2.5 shrink-0"
@@ -942,17 +942,17 @@ function ContingentCard({
       </div>
 
       {isPending ? (
-        <div className="mt-4 pt-3 border-t space-y-2">
+        <div className="mt-4 pt-3 border-t dark:border-zinc-800 space-y-2">
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
             {t("pendingApprovalDesc")}
           </p>
           {contingent.activeManagers.filter(m => m.role === "OWNER").map(owner => (
-            <div key={owner.id} className="flex items-center gap-3 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
-              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-200 text-zinc-600 text-xs font-semibold shrink-0">
+            <div key={owner.id} className="flex items-center gap-3 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
+              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-200 text-zinc-600 text-xs font-semibold shrink-0 dark:bg-zinc-700 dark:text-zinc-300">
                 {owner.name.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-zinc-700 truncate">{owner.name}</p>
+                <p className="text-xs font-semibold text-zinc-700 truncate dark:text-zinc-300">{owner.name}</p>
                 <p className="text-[11px] text-zinc-400">Primary Manager</p>
               </div>
               {owner.phone && (
@@ -983,17 +983,17 @@ function ContingentCard({
           )}
 
           {/* Stats row */}
-          <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-3">
+          <div className="mt-4 pt-3 border-t dark:border-zinc-800 grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-zinc-400" />
-              <span className="text-sm text-zinc-600">
+              <span className="text-sm text-zinc-600 dark:text-zinc-300">
                 <span className="font-semibold">{contingent._count.participants}</span>
                 <span className="text-zinc-400 ml-1">{t("participants")}</span>
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-zinc-400" />
-              <span className="text-sm text-zinc-600">
+              <span className="text-sm text-zinc-600 dark:text-zinc-300">
                 <span className="font-semibold">{contingent._count.teams}</span>
                 <span className="text-zinc-400 ml-1">{t("teams")}</span>
               </span>
@@ -1082,14 +1082,14 @@ export function ContingentsClient({
     return (
       <>
         <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center p-8">
-          <div className="rounded-full bg-zinc-100 p-5">
+          <div className="rounded-full bg-zinc-100 p-5 dark:bg-zinc-800">
             <Users className="h-10 w-10 text-zinc-400" />
           </div>
           <div>
             <h2 className="text-xl font-semibold">No Contingent Yet</h2>
             {existingContingent ? (
               <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                A contingent for <span className="font-medium text-zinc-700">{existingContingent.name}</span> already
+                A contingent for <span className="font-medium text-zinc-700 dark:text-zinc-300">{existingContingent.name}</span> already
                 exists.{" "}
                 {existingContingent.hasManagers
                   ? "It already has a manager. Send a join request to be added."
@@ -1097,7 +1097,7 @@ export function ContingentsClient({
               </p>
             ) : institutionName ? (
               <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                <span className="font-medium text-zinc-700">{institutionName}</span> does not have
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">{institutionName}</span> does not have
                 a contingent yet. Create one to start managing participants and teams.
               </p>
             ) : (
@@ -1157,7 +1157,7 @@ export function ContingentsClient({
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
       <div>
         <h1 className="text-xl font-bold">{t("title")}</h1>
-        <p className="text-sm text-zinc-500 mt-0.5">{t("subtitle")}</p>
+        <p className="text-sm text-zinc-500 mt-0.5 dark:text-zinc-400">{t("subtitle")}</p>
       </div>
 
       {contingents.map((c) => (
