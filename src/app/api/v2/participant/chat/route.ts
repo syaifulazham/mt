@@ -53,10 +53,13 @@ ${context}`;
     systemInstruction: systemPrompt,
   });
 
-  const history = messages.slice(0, -1).map((m: { role: string; content: string }) => ({
+  const allButLast = messages.slice(0, -1).map((m: { role: string; content: string }) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
+  // Gemini requires history to start with a user turn
+  const firstUser = allButLast.findIndex((m) => m.role === "user");
+  const history = firstUser === -1 ? [] : allButLast.slice(firstUser);
 
   const chat = model.startChat({ history });
   const last = messages[messages.length - 1];
