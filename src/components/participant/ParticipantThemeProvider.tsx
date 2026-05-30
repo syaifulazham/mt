@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useSyncExternalStore } from "react";
 
 export type ParticipantTheme = "light" | "electro" | "sakura";
 
@@ -10,6 +10,20 @@ export const useParticipantTheme = () => useContext(ThemeContext);
 
 const STORAGE_KEY = "participant-theme";
 
+function subscribe(cb: () => void) {
+  window.addEventListener("storage", cb);
+  return () => window.removeEventListener("storage", cb);
+}
+
+function getSnapshot(): ParticipantTheme {
+  const v = localStorage.getItem(STORAGE_KEY);
+  return v === "electro" || v === "sakura" ? v : "light";
+}
+
+function getServerSnapshot(): ParticipantTheme {
+  return "light";
+}
+
 export function ParticipantThemeProvider({
   children,
   className,
@@ -17,17 +31,13 @@ export function ParticipantThemeProvider({
   children: React.ReactNode;
   className?: string;
 }) {
-  const [theme, setThemeState] = useState<ParticipantTheme>("light");
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  useEffect(() => {
-    const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "electro" || v === "sakura") setThemeState(v);
-  }, []);
-
-  function setTheme(t: ParticipantTheme) {
-    setThemeState(t);
+  const setTheme = useCallback((t: ParticipantTheme) => {
     localStorage.setItem(STORAGE_KEY, t);
-  }
+    // Notify useSyncExternalStore in the same tab (storage event only fires cross-tab natively)
+    window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
+  }, []);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
