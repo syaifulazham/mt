@@ -62,7 +62,30 @@
       "Bash(git push *)",
       "Bash(npx eslint *)",
       "Bash(grep -E \"^/|error\\\\s+Error:|error\\\\s+Unexpected|error\\\\s+\\\\`\")",
-      "Bash(grep -n \"tabs.\\\\${key}\" /Users/azham/a-job/repo/mt/src/components/manager/ParticipantsClient.tsx)"
+      "Bash(grep -n \"tabs.\\\\${key}\" /Users/azham/a-job/repo/mt/src/components/manager/ParticipantsClient.tsx)",
+      "Bash(sed -n '85,105p' /Users/azham/a-job/repo/mt/src/components/organizer/reference-data/GeographyTab.tsx)",
+      "Bash(sed -n '295,315p' /Users/azham/a-job/repo/mt/src/components/organizer/reference-data/GeographyTab.tsx)",
+      "Bash(sed -n '235,255p' /Users/azham/a-job/repo/mt/src/components/organizer/reference-data/TargetGroupsTab.tsx)",
+      "Bash(sed -n '207,222p' /Users/azham/a-job/repo/mt/src/components/organizer/reference-data/ThemesTab.tsx)",
+      "Bash(sed -n '724,740p' /Users/azham/a-job/repo/mt/src/components/organizer/reference-data/HEITab.tsx)",
+      "Bash(sed -n '290,320p' /Users/azham/a-job/repo/mt/src/components/organizer/reference-data/TargetGroupsTab.tsx)",
+      "Bash(sed -n '268,295p' /Users/azham/a-job/repo/mt/src/components/organizer/reference-data/ThemesTab.tsx)",
+      "Bash(node -e \"const m = require\\('/Users/azham/a-job/repo/mt/src/messages/en.json'\\); console.log\\(JSON.stringify\\(m.contingents, null, 2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('landing', {}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\),**d.get\\('devDependencies',{}\\)}; [print\\(k,v\\) for k,v in deps.items\\(\\) if any\\(x in k for x in ['ai','anthropic','openai','langchain']\\)]\")",
+      "Bash(git -C /Users/azham/a-job/repo/mt diff --stat)",
+      "Bash(git -C /Users/azham/a-job/repo/mt status --short)",
+      "Bash(git -C /Users/azham/a-job/repo/mt log --oneline -3)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)\\)\")",
+      "Bash(echo \"exists: $?\")",
+      "Bash(find /Users/azham/a-job/repo/mt/src/app/[locale] -type f)",
+      "Bash(git -C /Users/azham/a-job/repo/mt status)",
+      "Bash(git -C /Users/azham/a-job/repo/mt log --oneline -5)",
+      "Bash(git -C /Users/azham/a-job/repo/mt diff --cached --stat)",
+      "Bash(git commit -m 'fix: upgrade Gemini model to gemini-2.5-flash *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
     ],
     "additionalDirectories": [
       "/Users/azham/a-job/repo/mt/src/app/(organizer)/invite",
@@ -84,7 +107,10 @@
       "/Users/azham/a-job/repo/mt/src/app/api/v2/organizer/judging/templates/[id]/criterions/[cid]/options",
       "/Users/azham/a-job/repo/mt/src/app/api/v2/organizer/participation/contingents",
       "/Users/azham/a-job/repo/mt/src/app/api/v2/organizer/participation/managers/[id]",
-      "/Users/azham/a-job/repo/mt/src/app/api/v2/manager/teams/[id]/lms"
+      "/Users/azham/a-job/repo/mt/src/app/api/v2/manager/teams/[id]/lms",
+      "/Users/azham/a-job/repo/mt/src/app/[locale]/(participant)/participant",
+      "/Users/azham/a-job/repo/mt/src/app/[locale]/(participant)/participant/(portal)/profile",
+      "/Users/azham/a-job/repo/mt/src/app/[locale]/(participant)/participant/(portal)"
     ]
   }
 }
