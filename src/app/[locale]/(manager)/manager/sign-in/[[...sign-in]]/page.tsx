@@ -36,11 +36,19 @@ export default async function ManagerSignInPage({
           signUpUrl="/manager/sign-up"
         />
 
-        {/* Fallback — shown when Clerk widget fails to render */}
+        {/* Fallback — when Clerk widget fails to render */}
         <div className="pt-2 space-y-2">
+          {/* Primary: go to working Account Portal sign-in */}
+          <a
+            href="https://accounts.techlympics.my/sign-in"
+            className="block w-full rounded-lg bg-zinc-900 hover:bg-zinc-700 text-white text-sm font-medium px-4 py-2.5 text-center transition-colors"
+          >
+            Log Masuk →
+          </a>
+          <p className="text-xs text-zinc-400 text-center">Sudah log masuk?</p>
           <Link
             href="/manager/dashboard"
-            className="block w-full rounded-lg bg-zinc-900 hover:bg-zinc-700 text-white text-sm font-medium px-4 py-2.5 text-center transition-colors"
+            className="block w-full rounded-lg border border-zinc-300 hover:bg-zinc-100 text-zinc-700 text-sm font-medium px-4 py-2.5 text-center transition-colors"
           >
             Pergi ke Dashboard →
           </Link>
