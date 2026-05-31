@@ -94,7 +94,7 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
     const { userId } = await clerkAuth();
     if (!userId) {
       const signInUrl = new URL("/manager/sign-in", req.url);
-      signInUrl.searchParams.set("redirect_url", pathname);
+      signInUrl.searchParams.set("next", pathname);
       return NextResponse.redirect(signInUrl);
     }
 
