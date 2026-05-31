@@ -39,20 +39,26 @@ export async function GET() {
   const competitions = await db.competition.findMany({
     select: {
       id: true, code: true, name: true,
-      targetGroups: { include: { targetGroup: { select: { schoolLevel: true } } } },
+      targetGroups: {
+        include: { targetGroup: { select: { schoolLevel: true, ppki: true } } },
+      },
     },
   });
 
-  // All participants with their eduLevel for fast in-memory counting
+  // All participants with eduLevel + ppki flag for eligibility counting
   const allParticipants = await db.participant.findMany({
-    select: { id: true, eduLevel: true },
+    select: { id: true, eduLevel: true, ppki: true },
   });
 
   const byCompetition = competitions.map(comp => {
-    const levels = new Set(
-      comp.targetGroups.map(tg => tg.targetGroup.schoolLevel.toUpperCase())
-    );
-    const count = allParticipants.filter(p => levels.has(p.eduLevel.toUpperCase())).length;
+    const count = allParticipants.filter(p =>
+      comp.targetGroups.some(tg => {
+        const tg_ = tg.targetGroup;
+        if (tg_.schoolLevel.toUpperCase() !== p.eduLevel.toUpperCase()) return false;
+        if (tg_.ppki && !p.ppki) return false;
+        return true;
+      })
+    ).length;
     return { code: comp.code, name: comp.name, count };
   }).sort((a, b) => b.count - a.count);
 
