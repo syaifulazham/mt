@@ -6,13 +6,10 @@ export const metadata: Metadata = { title: "Sign In" };
 
 export default async function ManagerSignInPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ next?: string }>;
 }) {
   const { locale } = await params;
-  const { next } = await searchParams;
   const t = await getTranslations({ locale, namespace: "auth" });
 
   return (
@@ -29,7 +26,7 @@ export default async function ManagerSignInPage({
               card: "shadow-sm border rounded-xl",
             },
           }}
-          forceRedirectUrl={next ?? "/manager/dashboard"}
+          fallbackRedirectUrl="/manager/dashboard"
           signUpUrl="/manager/sign-up"
         />
       </div>
