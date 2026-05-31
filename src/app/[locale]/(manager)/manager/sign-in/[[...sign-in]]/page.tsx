@@ -13,7 +13,6 @@ export default async function ManagerSignInPage() {
 
   return (
     <>
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@700;900&family=Rajdhani:wght@400;600;700&display=swap');
         @keyframes scan { 0% { top: -2px; } 100% { top: 100vh; } }

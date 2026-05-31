@@ -7,7 +7,15 @@
  *
  * Requires: npm install mysql2
  */
-import mysql from "mysql2/promise";
+import mysql, { RowDataPacket } from "mysql2/promise";
+
+type SchoolRow = RowDataPacket & {
+  code: string;
+  name: string;
+  category: string;
+  ppdCode: string | null;
+  stateName: string | null;
+};
 import { writeFileSync } from "fs";
 import { join } from "path";
 
@@ -96,7 +104,7 @@ async function main() {
     database: "mtdb",
   });
 
-  const [rows] = await conn.execute<any[]>(`
+  const [rows] = await conn.execute<SchoolRow[]>(`
     SELECT
       s.code,
       s.name,
