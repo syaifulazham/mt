@@ -10,6 +10,9 @@ function isEligible(participant: Participant, groups: TargetGroup[]): boolean {
     // Level must match (schoolLevel === eduLevel, same string values)
     if (g.schoolLevel.toUpperCase() !== participant.eduLevel) return false;
 
+    // PPKI competitions require PPKI participants
+    if (g.ppki && !participant.ppki) return false;
+
     // Grade-based group
     if (g.classGrades.length > 0) {
       return !!participant.classGrade && g.classGrades.includes(participant.classGrade);
