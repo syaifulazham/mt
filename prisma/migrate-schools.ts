@@ -11,33 +11,33 @@ const pg = new PrismaClient();
 
 // ── Category mapping: MySQL category string → Prisma SchoolCategory enum ────
 const CATEGORY_MAP: Record<string, SchoolCategory> = {
-  "SK":                       SchoolCategory.KEBANGSAAN,
-  "SK KHAS":                  SchoolCategory.LAIN_LAIN,
-  "K9":                       SchoolCategory.KEBANGSAAN,       // Kluster/K9
-  "SJKC":                     SchoolCategory.KEBANGSAAN_CINA,
-  "SJKT":                     SchoolCategory.KEBANGSAAN_TAMIL,
-  "SEK. RENDAH AKADEMIK":     SchoolCategory.KEBANGSAAN,
-  "SMK":                      SchoolCategory.KEBANGSAAN,
-  "KT6":                      SchoolCategory.LAIN_LAIN,        // Kolej Tingkatan 6
-  "SBP":                      SchoolCategory.LAIN_LAIN,        // Sekolah Berasrama Penuh
-  "SR SABK":                  SchoolCategory.AGAMA,
-  "SENI":                     SchoolCategory.LAIN_LAIN,
-  "MODEL KHAS":               SchoolCategory.LAIN_LAIN,
-  "SM SABK":                  SchoolCategory.AGAMA,
-  "SEK. MENENGAH AKADEMIK":   SchoolCategory.KEBANGSAAN,
-  "KV":                       SchoolCategory.TEKNIK,           // Kolej Vokasional
-  "SEK. RENDAH AGAMA":        SchoolCategory.AGAMA,
-  "SEK. MENENGAH AGAMA":      SchoolCategory.AGAMA,
-  "SEK. MEN. PERSENDIRIAN CINA": SchoolCategory.KEBANGSAAN_CINA,
-  "SMKA":                     SchoolCategory.AGAMA,
-  "SM KHAS":                  SchoolCategory.LAIN_LAIN,
-  "SUKAN":                    SchoolCategory.SPORT,
-  "SMT":                      SchoolCategory.TEKNIK,
-  "AK":                       SchoolCategory.LAIN_LAIN,        // Akademik (misc)
-  "SBJK":                     SchoolCategory.LAIN_LAIN,
-  "SEK. ANTARABANGSA":        SchoolCategory.PRIVATE,
-  "MRSM":                     SchoolCategory.LAIN_LAIN,        // Maktab Rendah Sains MARA
-  "SK TAHFIZ":                SchoolCategory.AGAMA,
+  "SK":                          SchoolCategory.SEKOLAH_KEBANGSAAN,
+  "SK KHAS":                     SchoolCategory.SEKOLAH_KEBANGSAAN_PENDIDIKAN_KHAS,
+  "K9":                          SchoolCategory.KOLEJ_TINGKATAN_ENAM,
+  "SJKC":                        SchoolCategory.SEKOLAH_JENIS_KEBANGSAAN_CINA,
+  "SJKT":                        SchoolCategory.SEKOLAH_JENIS_KEBANGSAAN_TAMIL,
+  "SEK. RENDAH AKADEMIK":        SchoolCategory.SEKOLAH_RENDAH_AKADEMIK,
+  "SMK":                         SchoolCategory.SEKOLAH_MENENGAH_KEBANGSAAN,
+  "KT6":                         SchoolCategory.PUSAT_TINGKATAN_ENAM,
+  "SBP":                         SchoolCategory.SEKOLAH_BERASRAMA_PENUH,
+  "SR SABK":                     SchoolCategory.SEKOLAH_RENDAH_AGAMA_BANTUAN_KERAJAAN,
+  "SENI":                        SchoolCategory.SEKOLAH_SENI_MALAYSIA,
+  "MODEL KHAS":                  SchoolCategory.SEKOLAH_MODEL_KHAS,
+  "SM SABK":                     SchoolCategory.SEKOLAH_MENENGAH_AGAMA_BANTUAN_KERAJAAN,
+  "SEK. MENENGAH AKADEMIK":      SchoolCategory.SEKOLAH_MENENGAH_AKADEMIK,
+  "KV":                          SchoolCategory.KOLEJ_VOKASIONAL,
+  "SEK. RENDAH AGAMA":           SchoolCategory.SEKOLAH_RENDAH_AGAMA,
+  "SEK. MENENGAH AGAMA":         SchoolCategory.SEKOLAH_MENENGAH_AGAMA,
+  "SEK. MEN. PERSENDIRIAN CINA": SchoolCategory.SEKOLAH_MENENGAH_PERSENDIRIAN_CINA,
+  "SMKA":                        SchoolCategory.SEKOLAH_MENENGAH_KEBANGSAAN_AGAMA,
+  "SM KHAS":                     SchoolCategory.SEKOLAH_MENENGAH_PENDIDIKAN_KHAS,
+  "SUKAN":                       SchoolCategory.SEKOLAH_SUKAN_MALAYSIA,
+  "SMT":                         SchoolCategory.SEKOLAH_MENENGAH_TEKNIK,
+  "AK":                          SchoolCategory.SEKOLAH_KEBANGSAAN,   // Akademik — fallback
+  "SBJK":                        SchoolCategory.SEKOLAH_BIMBINGAN_JALINAN_KASIH,
+  "SEK. ANTARABANGSA":           SchoolCategory.SEKOLAH_ANTARABANGSA,
+  "MRSM":                        SchoolCategory.MAKTAB_RENDAH_SAINS_MARA,
+  "SK TAHFIZ":                   SchoolCategory.SEKOLAH_KEBANGSAAN_TAHFIZ,
 };
 
 // ── Level mapping: MySQL level string → Prisma SchoolLevel enum ─────────────
@@ -133,7 +133,7 @@ async function main() {
         ppdCode: school.ppd ?? null,
         stateId: pgStateId,
         level,
-        category: category ?? SchoolCategory.LAIN_LAIN,
+        category: category ?? SchoolCategory.SEKOLAH_KEBANGSAAN,
         isActive: true,
       },
       update: {
@@ -141,7 +141,7 @@ async function main() {
         ppdCode: school.ppd ?? null,
         stateId: pgStateId,
         level,
-        category: category ?? SchoolCategory.LAIN_LAIN,
+        category: category ?? SchoolCategory.SEKOLAH_KEBANGSAAN,
       },
     });
 
