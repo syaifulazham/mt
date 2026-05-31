@@ -183,16 +183,17 @@ model District {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model School {
-  id         String         @id @default(cuid())
-  name       String
-  code       String         @unique
-  ppdCode    String?
-  stateId    String
-  zoneId     String?
-  districtId String?
-  level      SchoolLevel
-  category   SchoolCategory
-  isActive   Boolean        @default(true)
+  id            String         @id @default(cuid())
+  name          String
+  code          String         @unique
+  ppdCode       String?
+  stateId       String
+  zoneId        String?
+  districtId    String?
+  level         SchoolLevel
+  category      SchoolCategory
+  categoryShort String?
+  isActive      Boolean        @default(true)
 
   state      State     @relation(fields: [stateId], references: [id])
   zone       Zone?     @relation(fields: [zoneId], references: [id])
@@ -227,14 +228,45 @@ enum SchoolLevel {
 }
 
 enum SchoolCategory {
-  KEBANGSAAN
-  KEBANGSAAN_CINA
-  KEBANGSAAN_TAMIL
-  AGAMA
-  TEKNIK
-  SPORT
-  PRIVATE
-  LAIN_LAIN
+  // ── Public national schools ───────────────────────────────────────────────
+  SEKOLAH_KEBANGSAAN                     @map("Sekolah Kebangsaan")
+  SEKOLAH_MENENGAH_KEBANGSAAN            @map("Sekolah Menengah Kebangsaan")
+  SEKOLAH_JENIS_KEBANGSAAN_CINA          @map("Sekolah Jenis Kebangsaan Cina")
+  SEKOLAH_JENIS_KEBANGSAAN_TAMIL         @map("Sekolah Jenis Kebangsaan Tamil")
+
+  // ── Religious schools ─────────────────────────────────────────────────────
+  SEKOLAH_MENENGAH_KEBANGSAAN_AGAMA      @map("Sekolah Menengah Kebangsaan Agama")
+  SEKOLAH_MENENGAH_AGAMA_BANTUAN_KERAJAAN @map("Sekolah Menengah Agama Bantuan Kerajaan")
+  SEKOLAH_RENDAH_AGAMA_BANTUAN_KERAJAAN  @map("Sekolah Rendah Agama Bantuan Kerajaan")
+  SEKOLAH_MENENGAH_AGAMA                 @map("Sekolah Menengah Agama")
+  SEKOLAH_RENDAH_AGAMA                   @map("Sekolah Rendah Agama")
+  SEKOLAH_KEBANGSAAN_TAHFIZ              @map("Sekolah Kebangsaan Tahfiz")
+
+  // ── Elite / residential ───────────────────────────────────────────────────
+  SEKOLAH_BERASRAMA_PENUH                @map("Sekolah Berasrama Penuh")
+  MAKTAB_RENDAH_SAINS_MARA               @map("Maktab Rendah Sains MARA")
+
+  // ── Vocational & technical ────────────────────────────────────────────────
+  KOLEJ_VOKASIONAL                       @map("Kolej Vokasional")
+  SEKOLAH_MENENGAH_TEKNIK                @map("Sekolah Menengah Teknik")
+
+  // ── Special needs ─────────────────────────────────────────────────────────
+  SEKOLAH_KEBANGSAAN_PENDIDIKAN_KHAS     @map("Sekolah Kebangsaan Pendidikan Khas")
+  SEKOLAH_MENENGAH_PENDIDIKAN_KHAS       @map("Sekolah Menengah Pendidikan Khas")
+  SEKOLAH_BIMBINGAN_JALINAN_KASIH        @map("Sekolah Bimbingan Jalinan Kasih")
+  SEKOLAH_MODEL_KHAS                     @map("Sekolah Model Khas")
+
+  // ── Specialised public schools ────────────────────────────────────────────
+  SEKOLAH_SENI_MALAYSIA                  @map("Sekolah Seni Malaysia")
+  SEKOLAH_SUKAN_MALAYSIA                 @map("Sekolah Sukan Malaysia")
+  PUSAT_TINGKATAN_ENAM                   @map("Pusat Tingkatan Enam")
+  KOLEJ_TINGKATAN_ENAM                   @map("Kolej Tingkatan Enam")
+
+  // ── Private & independent ─────────────────────────────────────────────────
+  SEKOLAH_ANTARABANGSA                   @map("Sekolah Antarabangsa")
+  SEKOLAH_MENENGAH_PERSENDIRIAN_CINA     @map("Sekolah Menengah Persendirian Cina")
+  SEKOLAH_MENENGAH_AKADEMIK              @map("Sekolah Menengah Akademik")
+  SEKOLAH_RENDAH_AKADEMIK                @map("Sekolah Rendah Akademik")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

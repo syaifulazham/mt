@@ -1,6 +1,6 @@
 /**
  * Import schools from prisma/schools-export.json into the target DB.
- * Skips schools whose `code` already exists (idempotent).
+ * Upserts by code — safe to re-run (idempotent).
  * Run: npx tsx prisma/import-schools.ts
  */
 import { PrismaClient } from "@prisma/client";
@@ -28,13 +28,20 @@ async function main() {
     await db.school.upsert({
       where: { code: school.code },
       create: {
-        code:     school.code,
-        name:     school.name,
-        level:    school.level,
-        category: school.category,
+        code:          school.code,
+        name:          school.name,
+        level:         school.level,
+        category:      school.category,
+        categoryShort: school.categoryShort ?? null,
+        ppdCode:       school.ppdCode ?? null,
         stateId,
       },
-      update: {},
+      update: {
+        name:          school.name,
+        category:      school.category,
+        categoryShort: school.categoryShort ?? null,
+        ppdCode:       school.ppdCode ?? null,
+      },
     });
     created++;
 
