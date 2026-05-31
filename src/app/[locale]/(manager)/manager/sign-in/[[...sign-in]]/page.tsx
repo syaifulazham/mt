@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { SignIn } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Sign In" };
@@ -34,6 +35,22 @@ export default async function ManagerSignInPage({
           fallbackRedirectUrl="/manager/dashboard"
           signUpUrl="/manager/sign-up"
         />
+
+        {/* Fallback — shown when Clerk widget fails to render */}
+        <div className="pt-2 space-y-2">
+          <Link
+            href="/manager/dashboard"
+            className="block w-full rounded-lg bg-zinc-900 hover:bg-zinc-700 text-white text-sm font-medium px-4 py-2.5 text-center transition-colors"
+          >
+            Pergi ke Dashboard →
+          </Link>
+          <Link
+            href="/manager/onboarding"
+            className="block w-full rounded-lg border border-zinc-300 hover:bg-zinc-100 text-zinc-700 text-sm font-medium px-4 py-2.5 text-center transition-colors"
+          >
+            Lengkapkan Pendaftaran →
+          </Link>
+        </div>
       </div>
     </div>
   );
