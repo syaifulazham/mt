@@ -7,7 +7,10 @@ export const metadata: Metadata = {
 
 export default function ManagerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      signInUrl="/manager/sign-in"
+      signUpUrl="/manager/sign-up"
+    >
       {children}
     </ClerkProvider>
   );
