@@ -2,7 +2,7 @@ import Image from "next/image";
 import { Link } from "@/i18n/navigation";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { DroneSceneLoader as DroneScene } from "@/components/landing/DroneSceneLoader";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
@@ -50,6 +50,13 @@ export default async function LandingPage({
     db.theme.findMany({ orderBy: { name: "asc" } }),
     getTranslations({ locale, namespace: "landing" }),
   ]);
+
+  // Clerk user info only needed when signed in but profile not yet created
+  const clerkUser = userId && !manager ? await currentUser() : null;
+  const clerkDisplayName =
+    clerkUser?.firstName ??
+    clerkUser?.emailAddresses?.[0]?.emailAddress?.split("@")[0] ??
+    null;
 
   return (
     <>
@@ -185,6 +192,34 @@ export default async function LandingPage({
                     }}
                   >
                     {t("dashboardButton")}
+                  </button>
+                </Link>
+              </div>
+            ) : userId ? (
+              <div className="flex items-center gap-3">
+                {clerkDisplayName && (
+                  <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.55)", letterSpacing: "0.06em" }}>
+                    {clerkDisplayName}
+                  </span>
+                )}
+                <Link href="/manager/onboarding">
+                  <button
+                    style={{
+                      background: "linear-gradient(135deg, #1a5c1a, #22882a)",
+                      border: "1px solid rgba(0,255,100,0.4)",
+                      color: "#00ff66",
+                      fontFamily: "'Rajdhani', sans-serif",
+                      fontWeight: 700,
+                      fontSize: "0.8rem",
+                      letterSpacing: "0.15em",
+                      textTransform: "uppercase",
+                      padding: "9px 22px",
+                      cursor: "pointer",
+                      clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+                      boxShadow: "0 0 18px rgba(0,255,100,0.15)",
+                    }}
+                  >
+                    Lengkapkan Profil
                   </button>
                 </Link>
               </div>
@@ -357,6 +392,27 @@ export default async function LandingPage({
                   }}
                 >
                   {t("goToDashboard")}
+                </button>
+              </Link>
+            ) : userId ? (
+              <Link href="/manager/onboarding">
+                <button
+                  style={{
+                    background: "linear-gradient(135deg, #CC0001, #ff2244)",
+                    border: "none",
+                    color: "#fff",
+                    fontFamily: "'Exo 2', sans-serif",
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                    letterSpacing: "0.15em",
+                    textTransform: "uppercase",
+                    padding: "15px 38px",
+                    cursor: "pointer",
+                    clipPath: "polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%)",
+                    boxShadow: "0 0 30px rgba(204,0,1,0.4)",
+                  }}
+                >
+                  {t("registerNow")}
                 </button>
               </Link>
             ) : (
