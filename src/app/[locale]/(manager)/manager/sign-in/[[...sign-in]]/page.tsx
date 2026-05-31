@@ -1,5 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { SignIn } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Sign In" };
@@ -9,6 +11,9 @@ export default async function ManagerSignInPage({
 }: {
   params: Promise<{ locale: string }>;
 }) {
+  const { userId } = await auth();
+  if (userId) redirect("/manager/dashboard");
+
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "auth" });
 
