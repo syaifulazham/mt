@@ -130,7 +130,7 @@ async function main() {
       continue;
     }
 
-    const stateCode = STATE_CODE_MAP[row.stateName?.toUpperCase()];
+    const stateCode = row.stateName ? STATE_CODE_MAP[row.stateName.toUpperCase()] : undefined;
     if (!stateCode) {
       console.warn(`  ⚠ Unknown state '${row.stateName}' for ${row.code} — skipped`);
       skipped++;
