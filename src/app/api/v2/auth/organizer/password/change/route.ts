@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
     const valid = await argon2.verify(user.passwordHash, parsed.data.currentPassword);
     if (!valid)
-      return NextResponse.json({ error: { code: "WRONG_PASSWORD", message: "Kata laluan semasa tidak betul." } }, { status: 401 });
+      return NextResponse.json({ error: { code: "WRONG_PASSWORD", message: "Current password is incorrect." } }, { status: 401 });
   }
 
   const passwordHash = await argon2.hash(parsed.data.password);

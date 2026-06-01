@@ -17,8 +17,8 @@ export function OrganizerPasswordForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSuccess(false);
-    if (password !== confirm) { setError("Kata laluan baharu tidak sepadan."); return; }
-    if (password.length < 8)  { setError("Kata laluan mestilah sekurang-kurangnya 8 aksara."); return; }
+    if (password !== confirm) { setError("New passwords do not match."); return; }
+    if (password.length < 8)  { setError("Password must be at least 8 characters."); return; }
     setError(""); setLoading(true);
 
     const res = await fetch("/api/v2/auth/organizer/password/change", {
@@ -31,7 +31,7 @@ export function OrganizerPasswordForm() {
 
     if (!res.ok) {
       const j = await res.json();
-      setError(j.error?.message ?? "Gagal menukar kata laluan.");
+      setError(j.error?.message ?? "Failed to update password.");
       return;
     }
 
@@ -42,7 +42,7 @@ export function OrganizerPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-sm">
       <div className="space-y-1.5">
-        <Label htmlFor="current">Kata laluan semasa</Label>
+        <Label htmlFor="current">Current password</Label>
         <Input
           id="current"
           type="password"
@@ -54,7 +54,7 @@ export function OrganizerPasswordForm() {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="password">Kata laluan baharu</Label>
+        <Label htmlFor="password">New password</Label>
         <Input
           id="password"
           type="password"
@@ -65,10 +65,10 @@ export function OrganizerPasswordForm() {
           required
           disabled={loading}
         />
-        <p className="text-xs text-muted-foreground">Sekurang-kurangnya 8 aksara.</p>
+        <p className="text-xs text-muted-foreground">At least 8 characters.</p>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="confirm">Sahkan kata laluan baharu</Label>
+        <Label htmlFor="confirm">Confirm new password</Label>
         <Input
           id="confirm"
           type="password"
@@ -86,12 +86,12 @@ export function OrganizerPasswordForm() {
       {success && (
         <div className="flex items-center gap-2 text-sm text-green-600">
           <CheckCircle2 className="h-4 w-4" />
-          Kata laluan berjaya dikemas kini.
+          Password updated successfully.
         </div>
       )}
 
       <Button type="submit" disabled={loading}>
-        {loading ? "Menyimpan…" : "Kemas Kini Kata Laluan"}
+        {loading ? "Saving…" : "Update Password"}
       </Button>
     </form>
   );

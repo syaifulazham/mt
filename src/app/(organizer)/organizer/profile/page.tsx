@@ -6,7 +6,7 @@ import { OrganizerPasswordForm } from "@/components/organizer/OrganizerPasswordF
 import { Badge } from "@/components/ui/badge";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Profil" };
+export const metadata: Metadata = { title: "My Profile" };
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -16,7 +16,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
-  return d.toLocaleString("ms-MY", {
+  return d.toLocaleString("en-GB", {
     day: "numeric", month: "long", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -46,8 +46,8 @@ export default async function OrganizerProfilePage() {
     <div className="max-w-2xl space-y-8 p-8">
       {/* Page title */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Profil Saya</h1>
-        <p className="text-sm text-muted-foreground mt-1">Maklumat akaun dan tetapan keselamatan.</p>
+        <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
+        <p className="text-sm text-muted-foreground mt-1">Account information and security settings.</p>
       </div>
 
       {/* Profile card */}
@@ -72,7 +72,7 @@ export default async function OrganizerProfilePage() {
             <Badge variant="secondary">{ROLE_LABELS[user.role] ?? user.role}</Badge>
             {user.totpEnabled && (
               <Badge variant="outline" className="text-green-600 border-green-300">
-                2FA Aktif
+                2FA Enabled
               </Badge>
             )}
           </div>
@@ -83,11 +83,11 @@ export default async function OrganizerProfilePage() {
         {/* Details grid */}
         <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Log masuk terakhir</p>
+            <p className="text-xs text-muted-foreground mb-0.5">Last login</p>
             <p className="font-medium">{fmtDate(user.lastLoginAt)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Akaun dicipta</p>
+            <p className="text-xs text-muted-foreground mb-0.5">Account created</p>
             <p className="font-medium">{fmtDate(user.createdAt)}</p>
           </div>
         </div>
@@ -96,9 +96,9 @@ export default async function OrganizerProfilePage() {
       {/* Change password section */}
       <div className="rounded-xl border bg-white shadow-sm px-6 py-5 space-y-4">
         <div>
-          <h3 className="font-semibold">Tukar Kata Laluan</h3>
+          <h3 className="font-semibold">Change Password</h3>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Masukkan kata laluan semasa sebelum menetapkan yang baharu.
+            Enter your current password before setting a new one.
           </p>
         </div>
         <hr className="border-zinc-100" />
