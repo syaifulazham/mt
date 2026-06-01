@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
 
   const body = await req.json();
-  const { name, shortName, logoUrl, stateId } = body;
+  const { name, shortName, logoUrl, stateId, locality } = body;
 
   if (name !== undefined && !name.trim())
     return NextResponse.json({ error: "NAME_EMPTY" }, { status: 400 });
@@ -38,6 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(shortName !== undefined && { shortName: shortName?.trim() || null }),
       ...(logoUrl   !== undefined && { logoUrl:   logoUrl || null       }),
       ...(stateId   !== undefined && { stateId:   stateId || null       }),
+      ...(locality  !== undefined && { locality:  locality || null      }),
     },
     include: {
       school:            { select: { name: true } },

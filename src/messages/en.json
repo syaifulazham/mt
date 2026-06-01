@@ -296,6 +296,13 @@
     "cancelBtn": "Cancel",
     "saveBtn": "Save Changes",
     "saveFailed": "Failed to save",
+    "localityBandarDesc": "City or major urban centre (e.g. Kuala Lumpur, George Town, Johor Bahru).",
+    "localitySubBandarDesc": "Suburban town near a city (e.g. Pekan Sungai Besar, Pekan Kuala Selangor).",
+    "localityLuarBandarDesc": "Rural or remote area (e.g. kawasan kampung, estet, pedalaman).",
+    "localityReminderTitle": "Locality not set",
+    "localityReminderDesc": "Please select your contingent's locality to help us plan event distribution.",
+    "localitySelectPlaceholder": "Select locality",
+    "localitySaveBtn": "Save",
     "typeLabel": {
       "SCHOOL": "School",
       "HIGHER": "Higher Institution",

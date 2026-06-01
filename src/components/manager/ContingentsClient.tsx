@@ -35,12 +35,15 @@ type PendingRequest = {
 
 type StateOption = { id: string; name: string };
 
+type Locality = "BANDAR" | "SUB_BANDAR" | "LUAR_BANDAR";
+
 type Contingent = {
   id: string;
   name: string;
   shortName: string | null;
   logoUrl: string | null;
   contingentType: string;
+  locality: Locality | null;
   managerRole: string;
   managerStatus: string;
   status: string;
@@ -314,6 +317,7 @@ function EditDialog({
   const [shortName, setShortName] = useState("");
   const [logoUrl,   setLogoUrl]   = useState<string | null>(null);
   const [stateId,   setStateId]   = useState("");
+  const [locality,  setLocality]  = useState<Locality | "">("");
   const [states,    setStates]    = useState<StateOption[]>([]);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState("");
@@ -327,6 +331,7 @@ function EditDialog({
     setShortName(contingent.shortName ?? "");
     setLogoUrl(contingent.logoUrl ?? `builtin:${DEFAULT_BUILTIN}`);
     setStateId(contingent.state?.id ?? "");
+    setLocality((contingent.locality ?? "") as Locality | "");
     setError("");
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [contingent]);
@@ -346,7 +351,7 @@ function EditDialog({
       const res = await fetch(`/api/v2/manager/contingents/${contingent.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, shortName, logoUrl, ...(needsState && { stateId }) }),
+        body: JSON.stringify({ name, shortName, logoUrl, locality: locality || null, ...(needsState && { stateId }) }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? t("saveFailed"));
@@ -382,6 +387,30 @@ function EditDialog({
             <Input id="c-short" value={shortName} onChange={(e) => setShortName(e.target.value)}
               placeholder="e.g. SMKBB" maxLength={12} />
             <p className="text-[11px] text-zinc-400">{t("shortNameHint")}</p>
+          </div>
+
+          {/* Locality */}
+          <div className="space-y-1.5">
+            <Label htmlFor="c-locality">
+              Lokaliti{" "}
+              <span className="text-zinc-400 font-normal text-xs">(pilihan)</span>
+            </Label>
+            <select
+              id="c-locality"
+              value={locality}
+              onChange={(e) => setLocality(e.target.value as Locality | "")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">— Pilih lokaliti —</option>
+              <option value="BANDAR">Bandar</option>
+              <option value="SUB_BANDAR">Sub-Bandar</option>
+              <option value="LUAR_BANDAR">Luar Bandar</option>
+            </select>
+            <div className="rounded-md border border-zinc-100 bg-zinc-50 dark:bg-zinc-800/40 dark:border-zinc-700 px-3 py-2 space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Bandar</span> — {t("localityBandarDesc")}</p>
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Sub-Bandar</span> — {t("localitySubBandarDesc")}</p>
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Luar Bandar</span> — {t("localityLuarBandarDesc")}</p>
+            </div>
           </div>
 
           {/* State selector — required for INDEPENDENT / INTERNATIONAL */}
@@ -882,6 +911,56 @@ const ROLE_COLOR: Record<string, string> = {
   MANAGER: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
+function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onSaved: () => void }) {
+  const t = useTranslations("contingents");
+  const [value, setValue] = useState<Locality | "">("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!value) return;
+    setSaving(true);
+    await fetch(`/api/v2/manager/contingents/${contingentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locality: value }),
+    });
+    setSaving(false);
+    onSaved();
+  }
+
+  return (
+    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">{t("localityReminderTitle")}</p>
+          <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">{t("localityReminderDesc")}</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value as Locality | "")}
+          className="flex-1 h-8 rounded-md border border-amber-300 bg-white dark:bg-zinc-900 dark:border-amber-700 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
+        >
+          <option value="">— {t("localitySelectPlaceholder")} —</option>
+          <option value="BANDAR">Bandar</option>
+          <option value="SUB_BANDAR">Sub-Bandar</option>
+          <option value="LUAR_BANDAR">Luar Bandar</option>
+        </select>
+        <Button
+          size="sm"
+          className="h-8 px-3 text-xs bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+          disabled={!value || saving}
+          onClick={handleSave}
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("localitySaveBtn")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ContingentCard({
   contingent,
   onEdit,
@@ -980,6 +1059,11 @@ function ContingentCard({
                 </p>
               </div>
             </div>
+          )}
+
+          {/* Locality reminder */}
+          {!contingent.locality && contingent.managerRole !== "VIEWER" && (
+            <LocalityReminder contingentId={contingent.id} onSaved={onRefresh} />
           )}
 
           {/* Stats row */}
@@ -1154,7 +1238,7 @@ export function ContingentsClient({
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
+    <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold">{t("title")}</h1>
         <p className="text-sm text-zinc-500 mt-0.5 dark:text-zinc-400">{t("subtitle")}</p>

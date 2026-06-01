@@ -48,10 +48,10 @@ export default async function ManagerDashboardPage({
   }));
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+        <h1 className="text-xl font-bold dark:text-zinc-100">{t("title")}</h1>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{t("subtitle")}</p>
       </div>
 
       <div className="space-y-3">

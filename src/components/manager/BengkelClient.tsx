@@ -330,7 +330,7 @@ export function BengkelClient() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
+    <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold">{t("title")}</h1>
         <p className="text-sm text-zinc-500 mt-0.5">

@@ -50,10 +50,10 @@ export function ProfileClient({ profile }: Props) {
   }
 
   return (
-    <div className="max-w-xl mx-auto py-8 px-4">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[#085782]">Profil Saya</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-bold dark:text-zinc-100">Profil Saya</h1>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
           Maklumat ini digunakan untuk sijil penyertaan. Pastikan nama dan nombor ID adalah tepat.
         </p>
       </div>

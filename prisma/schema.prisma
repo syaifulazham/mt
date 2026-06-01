@@ -279,6 +279,7 @@ model Contingent {
   shortName           String?
   logoUrl             String?
   contingentType      ContingentType
+  locality            Locality?
   schoolId            String?
   higherInstitutionId String?
   countryInvitationId String?
@@ -318,6 +319,12 @@ model ContingentManager {
 
   @@unique([contingentId, managerId])
   @@map("contingent_managers")
+}
+
+enum Locality {
+  BANDAR
+  SUB_BANDAR
+  LUAR_BANDAR
 }
 
 enum ContingentType {

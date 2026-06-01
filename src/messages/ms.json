@@ -296,6 +296,13 @@
     "cancelBtn": "Batal",
     "saveBtn": "Simpan Perubahan",
     "saveFailed": "Gagal menyimpan",
+    "localityBandarDesc": "Kawasan bandaraya atau pusat bandar utama (cth: Kuala Lumpur, George Town, Johor Bahru).",
+    "localitySubBandarDesc": "Kawasan pinggir bandar atau pekan berdekatan bandar (cth: Pekan Sungai Besar, Pekan Kuala Selangor).",
+    "localityLuarBandarDesc": "Kawasan luar bandar atau pedalaman (cth: kawasan kampung, estet, pedalaman).",
+    "localityReminderTitle": "Lokaliti belum ditetapkan",
+    "localityReminderDesc": "Sila pilih lokaliti kontingen anda untuk membantu perancangan pengagihan acara.",
+    "localitySelectPlaceholder": "Pilih lokaliti",
+    "localitySaveBtn": "Simpan",
     "typeLabel": {
       "SCHOOL": "Sekolah",
       "HIGHER": "Institusi Pengajian Tinggi",

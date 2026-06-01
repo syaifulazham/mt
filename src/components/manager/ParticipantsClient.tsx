@@ -1263,8 +1263,8 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
       {/* ── Header ────────────────────────────────────── */}
       <div className="space-y-3">
         <div>
-          <h1 className="text-xl font-bold">{t("title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+          <h1 className="text-xl font-bold dark:text-zinc-100">{t("title")}</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{t("subtitle")}</p>
         </div>
 
         {/* Participant portal login note */}
