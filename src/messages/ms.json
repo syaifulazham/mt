@@ -229,6 +229,16 @@
     "genPwBtn": "Jana Kata Laluan",
     "noPassword": "Tiada Kata Laluan",
     "noPasswordFilter": "Tiada Kata Laluan",
+    "bulkDelete": {
+      "menuLabel": "Padam Secara Pukal",
+      "modeAlert": "Mod Padam — {count} peserta dipilih. Pilih peserta untuk dipadam.",
+      "deleteSelected": "Padam Yang Dipilih ({count})",
+      "cancel": "Batal",
+      "confirmTitle": "Padam {count} peserta?",
+      "confirmDesc": "Tindakan ini tidak boleh dibatalkan. Semua peserta yang dipilih dan keahlian pasukan mereka akan dipadam secara kekal.",
+      "typeCode": "Taip kod di bawah untuk mengesahkan",
+      "confirmBtn": "Padam {count} peserta"
+    },
     "genPw": {
       "title": "Jana Kata Laluan",
       "desc": "Jana kata laluan awal untuk peserta yang belum mempunyai kata laluan.",

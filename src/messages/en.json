@@ -229,6 +229,16 @@
     "genPwBtn": "Gen. Passwords",
     "noPassword": "No Password",
     "noPasswordFilter": "No Password",
+    "bulkDelete": {
+      "menuLabel": "Delete in Bulk",
+      "modeAlert": "Delete mode — {count} participant(s) selected. Select participants to delete.",
+      "deleteSelected": "Delete Selected ({count})",
+      "cancel": "Cancel",
+      "confirmTitle": "Delete {count} participant(s)?",
+      "confirmDesc": "This action cannot be undone. All selected participants and their team memberships will be permanently deleted.",
+      "typeCode": "Type the code below to confirm",
+      "confirmBtn": "Delete {count} participant(s)"
+    },
     "genPw": {
       "title": "Generate Passwords",
       "desc": "Generate initial passwords for participants who have no password yet.",

@@ -1151,6 +1151,81 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
   const [genPwOpen, setGenPwOpen]   = useState(false);
   const [singleGenTarget, setSingleGenTarget] = useState<Participant | null>(null);
   const [viewing, setViewing]       = useState<Participant | null>(null);
+
+  // ── Header action menu ──────────────────────────────────────────────────
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node))
+        setHeaderMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // ── Bulk delete state ───────────────────────────────────────────────────
+  const [bulkDeleteMode, setBulkDeleteMode]   = useState(false);
+  const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen]   = useState(false);
+  const [bulkDeleteCode, setBulkDeleteCode]   = useState("");
+  const [bulkDeleteInput, setBulkDeleteInput] = useState("");
+  const [bulkDeleting, setBulkDeleting]       = useState(false);
+
+  function enterBulkDelete() { setBulkDeleteMode(true); setSelectedIds(new Set()); }
+  function exitBulkDelete()  { setBulkDeleteMode(false); setSelectedIds(new Set()); }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  const allOnPageSelected =
+    participants.length > 0 && participants.every((p) => selectedIds.has(p.id));
+
+  function toggleSelectAll() {
+    if (allOnPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        participants.forEach((p) => next.delete(p.id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        participants.forEach((p) => next.add(p.id));
+        return next;
+      });
+    }
+  }
+
+  function openBulkDeleteConfirm() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const code  = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    setBulkDeleteCode(code);
+    setBulkDeleteInput("");
+    setBulkDeleteOpen(true);
+  }
+
+  async function handleBulkDelete() {
+    if (bulkDeleteInput !== bulkDeleteCode) return;
+    setBulkDeleting(true);
+    try {
+      await fetch("/api/v2/manager/participants/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      setBulkDeleteOpen(false);
+      exitBulkDelete();
+      fetchParticipants();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
   const [editing, setEditing]       = useState<Participant | null>(null);
 
   const fetchParticipants = useCallback(async () => {
@@ -1299,18 +1374,71 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
         </button>
       </div>
 
+      {/* ── Bulk delete alert banner ─────────────────── */}
+      {bulkDeleteMode && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-400">
+            <Trash2 className="h-4 w-4 shrink-0" />
+            {t("bulkDelete.modeAlert", { count: selectedIds.size })}
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <Button size="sm" variant="destructive" className="gap-1.5 h-7 text-xs" onClick={openBulkDeleteConfirm}>
+                <Trash2 className="h-3.5 w-3.5" />
+                {t("bulkDelete.deleteSelected", { count: selectedIds.size })}
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={exitBulkDelete}>
+              {t("bulkDelete.cancel")}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ── Table ─────────────────────────────────────── */}
       <div className="rounded-xl border bg-white overflow-hidden dark:bg-zinc-900 dark:border-zinc-800">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-zinc-50 dark:bg-zinc-800/50 dark:border-zinc-800">
-              <th className="text-left px-3 py-3 font-medium text-zinc-500 dark:text-zinc-400 w-10">#</th>
+              <th className="text-left px-3 py-3 font-medium text-zinc-500 dark:text-zinc-400 w-10">
+                {bulkDeleteMode ? (
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 cursor-pointer accent-red-600"
+                    title="Select all"
+                  />
+                ) : "#"}
+              </th>
               <th className="px-3 py-3 w-10"></th>
               <th className="text-left px-5 py-3 font-medium text-zinc-500 dark:text-zinc-400">{t("table.colName")}</th>
               <th className="text-center px-3 py-3 font-medium text-zinc-500 dark:text-zinc-400 w-16 hidden sm:table-cell">{t("table.colAge")}</th>
               <th className="text-left px-5 py-3 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">{t("table.colClass")}</th>
               <th className="px-3 py-3 w-10 hidden md:table-cell"></th>
-              <th className="text-right px-5 py-3 font-medium text-zinc-500 dark:text-zinc-400"></th>
+              <th className="text-right px-3 py-3 w-10">
+                {!bulkDeleteMode && (
+                  <div className="relative inline-block text-left" ref={headerMenuRef}>
+                    <button
+                      onClick={() => setHeaderMenuOpen((v) => !v)}
+                      className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-700 transition-colors"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                    {headerMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border bg-white dark:bg-zinc-900 dark:border-zinc-700 shadow-lg z-20 py-1">
+                        <button
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                          onClick={() => { setHeaderMenuOpen(false); enterBulkDelete(); }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {t("bulkDelete.menuLabel")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1329,9 +1457,23 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
               </tr>
             )}
             {!loading && participants.map((p, i) => (
-              <tr key={p.id} className="border-t hover:bg-zinc-50 transition-colors dark:border-zinc-800 dark:hover:bg-zinc-800/40">
+              <tr
+                key={p.id}
+                className={`border-t transition-colors dark:border-zinc-800 ${
+                  bulkDeleteMode && selectedIds.has(p.id)
+                    ? "bg-red-50 dark:bg-red-950/20"
+                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
+                }`}
+              >
                 <td className="px-3 py-3 text-xs text-zinc-400 text-right tabular-nums w-10">
-                  {rangeStart + i}
+                  {bulkDeleteMode ? (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(p.id)}
+                      onChange={() => toggleSelect(p.id)}
+                      className="h-4 w-4 cursor-pointer accent-red-600"
+                    />
+                  ) : rangeStart + i}
                 </td>
                 <td className="px-3 py-3 w-10">
                   <GenderIcon gender={p.gender} />
@@ -1452,6 +1594,49 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
         onClose={() => setSingleGenTarget(null)}
         onSaved={fetchParticipants}
       />
+
+      {/* ── Bulk delete confirmation dialog ─────────── */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={(v) => { if (!bulkDeleting) setBulkDeleteOpen(v); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> {t("bulkDelete.confirmTitle", { count: selectedIds.size })}
+            </DialogTitle>
+            <DialogDescription>
+              {t("bulkDelete.confirmDesc")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-4 py-3 text-center">
+              <p className="text-xs text-zinc-500 mb-1">{t("bulkDelete.typeCode")}</p>
+              <p className="text-2xl font-mono font-bold tracking-[0.3em] text-red-600">{bulkDeleteCode}</p>
+            </div>
+            <input
+              type="text"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-mono tracking-widest text-center uppercase"
+              placeholder={bulkDeleteCode.split("").map(() => "_").join(" ")}
+              value={bulkDeleteInput}
+              onChange={(e) => setBulkDeleteInput(e.target.value.toUpperCase())}
+              maxLength={5}
+              disabled={bulkDeleting}
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleting}>
+              {t("bulkDelete.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={bulkDeleteInput !== bulkDeleteCode || bulkDeleting}
+              onClick={handleBulkDelete}
+              className="gap-1.5"
+            >
+              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {t("bulkDelete.confirmBtn", { count: selectedIds.size })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
