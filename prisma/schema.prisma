@@ -358,6 +358,7 @@ model Participant {
   eduLevel    EduLevel
   classGrade  String?
   className   String?
+  ethnicity   Ethnicity?
   status        String        @default("ACTIVE")
   ppki          Boolean       @default(false)
   passwordHash  String?
@@ -384,6 +385,16 @@ model ParticipantSession {
 
   @@index([participantId])
   @@map("participant_sessions")
+}
+
+enum Ethnicity {
+  MELAYU
+  CINA
+  INDIA
+  ORANG_ASLI_SEMENANJUNG
+  BUMIPUTRA_SABAH
+  BUMIPUTRA_SARAWAK
+  LAIN_LAIN
 }
 
 enum Gender {

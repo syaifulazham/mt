@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true, name: true, ic: true, email: true, phoneNumber: true,
         gender: true, age: true, eduLevel: true, classGrade: true, className: true,
+        ethnicity: true,
         status: true, ppki: true, contingentId: true, createdAt: true, updatedAt: true,
         passwordHash: true,
       },
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "NO_CONTINGENT" }, { status: 400 });
 
   const body = await req.json();
-  const { name, ic, email, phoneNumber, gender, age, eduLevel, classGrade, className, contingentId } = body;
+  const { name, ic, email, phoneNumber, gender, age, eduLevel, classGrade, className, ethnicity, contingentId } = body;
 
   if (!name || !gender || !eduLevel)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
       eduLevel:    eduLevel    as EduLevel,
       classGrade:  classGrade  ?? null,
       className:   className   ?? null,
+      ethnicity:   ethnicity   ?? null,
       contingentId,
     },
   });

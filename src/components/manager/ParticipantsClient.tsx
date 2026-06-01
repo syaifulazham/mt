@@ -18,13 +18,59 @@ import {
 type Contingent = { id: string; name: string };
 type EduLevel   = "PRIMARY" | "SECONDARY" | "YOUTH";
 type Gender     = "MALE" | "FEMALE";
+type Ethnicity  = "MELAYU" | "CINA" | "INDIA" | "ORANG_ASLI_SEMENANJUNG" | "BUMIPUTRA_SABAH" | "BUMIPUTRA_SARAWAK" | "LAIN_LAIN";
+
+const ETHNICITY_OPTIONS: { value: Ethnicity; label: string }[] = [
+  { value: "MELAYU",               label: "Melayu" },
+  { value: "CINA",                 label: "Cina" },
+  { value: "INDIA",                label: "India" },
+  { value: "ORANG_ASLI_SEMENANJUNG", label: "Orang Asli Semenanjung" },
+  { value: "BUMIPUTRA_SABAH",      label: "Bumiputra Sabah" },
+  { value: "BUMIPUTRA_SARAWAK",    label: "Bumiputra Sarawak" },
+  { value: "LAIN_LAIN",            label: "Lain-lain" },
+];
 
 type Participant = {
   id: string; name: string; ic: string | null; email: string | null;
   phoneNumber: string | null; gender: Gender; age: number | null;
   eduLevel: EduLevel; classGrade: string | null; className: string | null;
+  ethnicity: Ethnicity | null;
   status: string; ppki: boolean; hasPassword: boolean;
 };
+
+/** Derive gender, age, eduLevel, classGrade from a 12-digit Malaysian IC. */
+function parseIcData(ic: string): { gender?: Gender; age?: number; eduLevel?: EduLevel; classGrade?: string } {
+  const digits = ic.replace(/\D/g, "");
+  if (digits.length !== 12) return {};
+
+  const yy = parseInt(digits.substring(0, 2), 10);
+  const mm = parseInt(digits.substring(2, 4), 10);
+  const dd = parseInt(digits.substring(4, 6), 10);
+  const genderDigit = parseInt(digits[11], 10);
+
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return {};
+
+  const currentYear = new Date().getFullYear();
+  const currentYY   = currentYear % 100;
+  const birthYear   = yy <= currentYY ? 2000 + yy : 1900 + yy;
+  const age         = currentYear - birthYear;
+
+  const gender: Gender = genderDigit % 2 === 1 ? "MALE" : "FEMALE";
+
+  let eduLevel: EduLevel;
+  let classGrade: string | undefined;
+  if (age >= 7 && age <= 12) {
+    eduLevel   = "PRIMARY";
+    classGrade = `Darjah ${age - 6}`;
+  } else if (age >= 13 && age <= 17) {
+    eduLevel   = "SECONDARY";
+    classGrade = `Tingkatan ${age - 12}`;
+  } else {
+    eduLevel = "YOUTH";
+  }
+
+  return { gender, age, eduLevel, classGrade };
+}
 
 const EDU_TABS: { key: EduLevel | "ALL"; Icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "ALL",       Icon: Users         },
@@ -50,7 +96,8 @@ const CLASS_LABEL = (p: Participant) =>
   [p.classGrade, p.className].filter(Boolean).join(" – ") || "–";
 
 // ── CSV template ──────────────────────────────────────────────────────────────
-const CSV_TEMPLATE = `name,ic,gender,age,edu_level,class_grade,class_name,email,phoneNumber
+const CSV_TEMPLATE = `name,ic,gender,age,edu_level,class_grade,class_name,email,phoneNumber,ethnicity
+# Bangsa / ethnicity: MELAYU | CINA | INDIA | ORANG_ASLI_SEMENANJUNG | BUMIPUTRA_SABAH | BUMIPUTRA_SARAWAK | LAIN_LAIN
 Ahmad Bin Ali,010101012345,MALE,13,sekolah menengah,Tingkatan 1,Amanah,ahmad@example.com,0123456789
 Siti Binti Bakar,020202023456,FEMALE,9,sekolah rendah,Darjah 3,Cerdas,,
 `;
@@ -178,6 +225,7 @@ function AddEditDialog({
     name: "", ic: "", gender: "MALE" as Gender, age: "",
     eduLevel: "SECONDARY" as EduLevel,
     classGrade: "", className: "", email: "", phoneNumber: "",
+    ethnicity: "" as Ethnicity | "",
     status: "ACTIVE", ppki: false,
   };
 
@@ -202,6 +250,7 @@ function AddEditDialog({
           className:   initial.className   ?? "",
           email:       initial.email       ?? "",
           phoneNumber: initial.phoneNumber ?? "",
+          ethnicity:   (initial.ethnicity  ?? "") as Ethnicity | "",
           status:      initial.status      ?? "ACTIVE",
           ppki:        initial.ppki        ?? false,
         });
@@ -214,6 +263,17 @@ function AddEditDialog({
   }, [open, initial]);
 
   function set(k: string, v: string | boolean) { setForm((f) => ({ ...f, [k]: v })); }
+
+  function handleIcChange(ic: string) {
+    set("ic", ic);
+    const derived = parseIcData(ic);
+    if (derived.gender)    set("gender", derived.gender);
+    if (derived.age !== undefined) set("age", String(derived.age));
+    if (derived.eduLevel) {
+      set("eduLevel", derived.eduLevel);
+      set("classGrade", derived.classGrade ?? "");
+    }
+  }
 
   async function handleSave() {
     if (!form.name.trim()) { setError(t("form.nameRequired")); return; }
@@ -286,7 +346,13 @@ function AddEditDialog({
 
           <div className="space-y-1.5">
             <Label className="text-sm">{t("form.icLabel")}</Label>
-            <Input value={form.ic} onChange={(e) => set("ic", e.target.value)} placeholder="010101012345" />
+            <Input
+              value={form.ic}
+              onChange={(e) => handleIcChange(e.target.value)}
+              placeholder="010101012345"
+              maxLength={14}
+            />
+            <p className="text-[11px] text-zinc-400">Jantina, umur & pendidikan akan diisi automatik dari IC 12 digit.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -345,6 +411,21 @@ function AddEditDialog({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label className="text-sm">Bangsa / Etnik</Label>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={form.ethnicity}
+              onChange={(e) => set("ethnicity", e.target.value)}
+            >
+              <option value="">— Pilih bangsa —</option>
+              {ETHNICITY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-zinc-400">Pilihan: Melayu, Cina, India, Orang Asli Semenanjung, Bumiputra Sabah, Bumiputra Sarawak, Lain-lain</p>
+          </div>
+
           {isEdit && (
             <div className="space-y-1.5">
               <Label className="text-sm">{t("form.statusLabel")}</Label>
@@ -387,14 +468,15 @@ const EDU_MAP: Record<string, EduLevel> = {
 type RawRow = {
   name: string; ic: string; gender: string; age: string;
   edu_level: string; class_grade: string; class_name: string;
-  email: string; phoneNumber: string;
+  email: string; phoneNumber: string; ethnicity: string;
   _issues: string[];
 };
 
 type CleanRow = {
   name: string; ic: string | null; gender: Gender; age: number | null;
   eduLevel: EduLevel; classGrade: string | null; className: string | null;
-  email: string | null; phoneNumber: string | null; contingentId: string;
+  email: string | null; phoneNumber: string | null;
+  ethnicity: Ethnicity | null; contingentId: string;
 };
 
 function parseCsv(text: string): RawRow[] {
@@ -411,17 +493,28 @@ function parseCsv(text: string): RawRow[] {
     const edu_level  = get("edu_level");
     const class_grade = get("class_grade");
     const class_name  = get("class_name");
-    const email      = get("email");
+    const email       = get("email");
     const phoneNumber = get("phonenumber") || get("phone_number") || get("phone");
+    const ethnicity   = get("ethnicity") || get("bangsa") || get("etnik");
     const issues: string[] = [];
     if (!name) issues.push("name");
     const gNorm = gender.toUpperCase();
     if (gNorm !== "MALE" && gNorm !== "FEMALE") issues.push("gender");
     const ednorm = edu_level.toLowerCase().trim();
     if (!EDU_MAP[ednorm] && !["primary","secondary","youth"].includes(ednorm)) issues.push("edu_level");
-    return { name, ic, gender, age, edu_level, class_grade, class_name, email, phoneNumber, _issues: issues };
+    return { name, ic, gender, age, edu_level, class_grade, class_name, email, phoneNumber, ethnicity, _issues: issues };
   });
 }
+
+const ETHNICITY_MAP: Record<string, Ethnicity> = {
+  melayu: "MELAYU", malay: "MELAYU",
+  cina: "CINA", chinese: "CINA",
+  india: "INDIA", indian: "INDIA", tamil: "INDIA",
+  orang_asli_semenanjung: "ORANG_ASLI_SEMENANJUNG", "orang asli": "ORANG_ASLI_SEMENANJUNG", asli: "ORANG_ASLI_SEMENANJUNG",
+  bumiputra_sabah: "BUMIPUTRA_SABAH", "bumiputra sabah": "BUMIPUTRA_SABAH", kadazan: "BUMIPUTRA_SABAH", dusun: "BUMIPUTRA_SABAH", bajau: "BUMIPUTRA_SABAH",
+  bumiputra_sarawak: "BUMIPUTRA_SARAWAK", "bumiputra sarawak": "BUMIPUTRA_SARAWAK", iban: "BUMIPUTRA_SARAWAK", bidayuh: "BUMIPUTRA_SARAWAK",
+  lain_lain: "LAIN_LAIN", "lain-lain": "LAIN_LAIN", other: "LAIN_LAIN", lain: "LAIN_LAIN",
+};
 
 function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
   return rows.map((r) => {
@@ -429,6 +522,9 @@ function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
     const gender: Gender = (gNorm === "FEMALE") ? "FEMALE" : "MALE";
     const ednorm = r.edu_level.toLowerCase().trim();
     const eduLevel: EduLevel = EDU_MAP[ednorm] ?? "SECONDARY";
+    const ethKey = r.ethnicity.toLowerCase().trim().replace(/\s+/g, "_");
+    const ethnicity: Ethnicity | null =
+      (ETHNICITY_MAP[ethKey] ?? ETHNICITY_MAP[r.ethnicity.toLowerCase().trim()]) ?? null;
     return {
       name:        r.name || "(no name)",
       ic:          r.ic  || null,
@@ -439,6 +535,7 @@ function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
       className:   r.class_name   || null,
       email:       r.email        || null,
       phoneNumber: r.phoneNumber  || null,
+      ethnicity,
       contingentId,
     };
   });

@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ("error" in auth_) return NextResponse.json({ error: auth_.error }, { status: auth_.status });
 
   const body = await req.json();
-  const { name, ic, email, phoneNumber, gender, age, eduLevel, classGrade, className, status, ppki } = body;
+  const { name, ic, email, phoneNumber, gender, age, eduLevel, classGrade, className, ethnicity, status, ppki } = body;
 
   if (!name || !gender || !eduLevel)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
@@ -46,6 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       eduLevel:    eduLevel    as EduLevel,
       classGrade:  classGrade  ?? null,
       className:   className   ?? null,
+      ethnicity:   ethnicity   ?? null,
       status:      status      ?? "ACTIVE",
       ppki:        ppki        ?? false,
     },
