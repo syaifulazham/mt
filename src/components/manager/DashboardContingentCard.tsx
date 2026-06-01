@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { Clock, LogOut, AlertCircle, Loader2, UserCheck } from "lucide-react";
+import { Clock, LogOut, AlertCircle, Loader2, UserCheck, MapPin } from "lucide-react";
 
 type Peer = { id: string; name: string; email: string };
+
+type Locality = "BANDAR" | "SUB_BANDAR" | "LUAR_BANDAR";
 
 type ContingentLink = {
   contingentId: string;
@@ -18,6 +20,7 @@ type ContingentLink = {
   name: string;
   contingentType: string;
   contingentStatus: string;
+  locality: string | null;
   participantCount: number;
   teamCount: number;
 };
@@ -166,6 +169,65 @@ function LeaveDialog({
   );
 }
 
+// ── Locality reminder ─────────────────────────────────────────────────────────
+
+function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onSaved: () => void }) {
+  const [value, setValue] = useState<Locality | "">("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!value) return;
+    setSaving(true);
+    await fetch(`/api/v2/manager/contingents/${contingentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locality: value }),
+    });
+    setSaving(false);
+    onSaved();
+  }
+
+  const LABELS: Record<Locality, string> = {
+    BANDAR: "Bandar",
+    SUB_BANDAR: "Sub-Bandar",
+    LUAR_BANDAR: "Luar Bandar",
+  };
+
+  return (
+    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <MapPin className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Locality not set</p>
+          <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+            Please select your contingent&apos;s locality to help us plan event distribution.
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value as Locality | "")}
+          className="flex-1 h-8 rounded-md border border-amber-300 bg-white dark:bg-zinc-900 dark:border-amber-700 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
+        >
+          <option value="">— Select locality —</option>
+          {(Object.entries(LABELS) as [Locality, string][]).map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          className="h-8 px-3 text-xs bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+          disabled={!value || saving}
+          onClick={handleSave}
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Card ──────────────────────────────────────────────────────────────────────
 
 export function DashboardContingentCard({ link }: { link: ContingentLink }) {
@@ -226,6 +288,10 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
         <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 leading-relaxed">
           Your request to join this contingent is awaiting approval from the primary manager. You will be able to manage this contingent once approved.
         </p>
+      )}
+
+      {!isPending && !link.locality && link.role !== "VIEWER" && (
+        <LocalityReminder contingentId={link.contingentId} onSaved={() => router.refresh()} />
       )}
 
       {leaving && (

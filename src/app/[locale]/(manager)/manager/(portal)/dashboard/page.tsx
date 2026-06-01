@@ -24,6 +24,7 @@ export default async function ManagerDashboardPage({
           contingent: {
             select: {
               id: true, name: true, contingentType: true, status: true,
+              locality: true,
               _count: { select: { participants: true, teams: true } },
             },
           },
@@ -43,6 +44,7 @@ export default async function ManagerDashboardPage({
     name:              cm.contingent.name,
     contingentType:    cm.contingent.contingentType,
     contingentStatus:  cm.contingent.status,
+    locality:          cm.contingent.locality as string | null,
     participantCount:  cm.contingent._count.participants,
     teamCount:         cm.contingent._count.teams,
   }));

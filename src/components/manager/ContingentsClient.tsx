@@ -1061,11 +1061,6 @@ function ContingentCard({
             </div>
           )}
 
-          {/* Locality reminder */}
-          {!contingent.locality && contingent.managerRole !== "VIEWER" && (
-            <LocalityReminder contingentId={contingent.id} onSaved={onRefresh} />
-          )}
-
           {/* Stats row */}
           <div className="mt-4 pt-3 border-t dark:border-zinc-800 grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2">
