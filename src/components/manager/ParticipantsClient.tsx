@@ -1191,6 +1191,24 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
           <h1 className="text-xl font-bold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
+
+        {/* Participant portal login note */}
+        <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+          <span className="shrink-0">🔗</span>
+          <span>
+            Participants can sign in at their portal:{" "}
+            <a
+              href="/participant/sign-in"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono font-semibold underline underline-offset-2 hover:text-blue-900"
+            >
+              {process.env.NEXT_PUBLIC_APP_URL ?? ""}/participant/sign-in
+            </a>
+            {" — "}use IC number as User ID.
+          </span>
+        </div>
+
         <div className="grid grid-cols-4 gap-2">
           <Button size="sm" variant="outline" className="gap-1.5 justify-center"
             onClick={() => {

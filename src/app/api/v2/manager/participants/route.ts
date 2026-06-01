@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       eduLevel:    eduLevel    as EduLevel,
       classGrade:  classGrade  ?? null,
       className:   className   ?? null,
-      ethnicity:   ethnicity   ?? null,
+      ethnicity:   ethnicity   || null,
       contingentId,
     },
   });

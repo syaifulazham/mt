@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       eduLevel:    eduLevel    as EduLevel,
       classGrade:  classGrade  ?? null,
       className:   className   ?? null,
-      ethnicity:   ethnicity   ?? null,
+      ethnicity:   ethnicity   || null,
       status:      status      ?? "ACTIVE",
       ppki:        ppki        ?? false,
     },
