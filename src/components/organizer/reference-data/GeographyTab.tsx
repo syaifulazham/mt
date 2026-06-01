@@ -113,7 +113,7 @@ function StatesPane() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-50 border-b">
             <tr>
-              <th className="px-3 py-2 w-10"></th>
+              <th className="px-3 py-2 w-14"></th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Name</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Code</th>
               <th className="px-3 py-2 text-center font-medium text-zinc-600">Schools</th>
@@ -131,8 +131,8 @@ function StatesPane() {
               <tr key={s.id} className="border-b last:border-0 hover:bg-zinc-50">
                 <td className="px-3 py-2 w-10">
                   {s.flagUrl
-                    ? <img src={s.flagUrl} alt={s.code} className="h-6 w-9 object-cover rounded-sm border border-zinc-200" />
-                    : <div className="h-6 w-9 rounded-sm bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[9px] text-zinc-400 font-mono">{s.code}</div>
+                    ? <img src={s.flagUrl} alt={s.code} className="h-6 w-10 shrink-0 object-cover rounded-sm border border-zinc-200" />
+                    : <div className="h-6 w-10 shrink-0 rounded-sm bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[9px] text-zinc-400 font-mono">{s.code}</div>
                   }
                 </td>
                 <td className="px-3 py-2">{s.name}</td>
