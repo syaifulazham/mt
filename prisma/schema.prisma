@@ -131,6 +131,7 @@ model State {
   id        String  @id @default(cuid())
   name      String
   code      String  @unique
+  flagUrl   String?
   countryId String
 
   country           Country             @relation(fields: [countryId], references: [id])

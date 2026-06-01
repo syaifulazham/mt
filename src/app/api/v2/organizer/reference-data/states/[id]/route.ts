@@ -18,13 +18,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
-  const { name, code } = await req.json();
+  const { name, code, flagUrl } = await req.json();
   try {
     const state = await db.state.update({
       where: { id },
       data: {
-        ...(name && { name: name.trim() }),
-        ...(code && { code: code.trim().toUpperCase() }),
+        ...(name    && { name:    name.trim() }),
+        ...(code    && { code:    code.trim().toUpperCase() }),
+        ...(flagUrl !== undefined && { flagUrl: flagUrl || null }),
       },
     });
     return NextResponse.json({ data: state });

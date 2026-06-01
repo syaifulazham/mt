@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, Upload } from "lucide-react";
 import { PushKbButton } from "./PushKbButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { DeleteDialog } from "./DeleteDialog";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type State = { id: string; name: string; code: string; _count: { schools: number; higherInstitutions: number } };
+type State = { id: string; name: string; code: string; flagUrl: string | null; _count: { schools: number; higherInstitutions: number } };
 type ZoneStateEntry = { state: { id: string; name: string } };
 type Zone  = { id: string; name: string; states: ZoneStateEntry[] };
 function zoneStateNames(states: ZoneStateEntry[]) {
@@ -31,6 +31,9 @@ function StatesPane() {
   const [editing, setEditing]     = useState<State | null>(null);
   const [name, setName]           = useState("");
   const [code, setCode]           = useState("");
+  const [flagUrl, setFlagUrl]     = useState<string | null>(null);
+  const [flagUploading, setFlagUploading] = useState(false);
+  const flagInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving]       = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -51,8 +54,22 @@ function StatesPane() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
-  function openAdd() { setEditing(null); setName(""); setCode(""); setFormError(""); setFormOpen(true); }
-  function openEdit(s: State) { setEditing(s); setName(s.name); setCode(s.code); setFormError(""); setFormOpen(true); }
+  function openAdd()  { setEditing(null); setName(""); setCode(""); setFlagUrl(null); setFormError(""); setFormOpen(true); }
+  function openEdit(s: State) { setEditing(s); setName(s.name); setCode(s.code); setFlagUrl(s.flagUrl ?? null); setFormError(""); setFormOpen(true); }
+
+  async function handleFlagUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !editing) return;
+    setFlagUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/v2/organizer/reference-data/states/${editing.id}/flag`, { method: "POST", body: fd });
+    const j = await res.json();
+    if (res.ok) setFlagUrl(j.url);
+    else setFormError(j.error ?? "Upload failed");
+    setFlagUploading(false);
+    e.target.value = "";
+  }
 
   async function handleSave() {
     if (!name.trim() || !code.trim()) { setFormError("Name and code are required."); return; }
@@ -96,6 +113,7 @@ function StatesPane() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-50 border-b">
             <tr>
+              <th className="px-3 py-2 w-10"></th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Name</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Code</th>
               <th className="px-3 py-2 text-center font-medium text-zinc-600">Schools</th>
@@ -104,13 +122,19 @@ function StatesPane() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={4} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>
+              <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>
             )}
             {!loading && data.length === 0 && (
-              <tr><td colSpan={4} className="px-3 py-8 text-center text-zinc-400">No states found.</td></tr>
+              <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400">No states found.</td></tr>
             )}
             {!loading && data.map((s) => (
               <tr key={s.id} className="border-b last:border-0 hover:bg-zinc-50">
+                <td className="px-3 py-2 w-10">
+                  {s.flagUrl
+                    ? <img src={s.flagUrl} alt={s.code} className="h-6 w-9 object-cover rounded-sm border border-zinc-200" />
+                    : <div className="h-6 w-9 rounded-sm bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[9px] text-zinc-400 font-mono">{s.code}</div>
+                  }
+                </td>
                 <td className="px-3 py-2">{s.name}</td>
                 <td className="px-3 py-2 font-mono text-xs">{s.code}</td>
                 <td className="px-3 py-2 text-center text-zinc-500">{s._count.schools}</td>
@@ -143,6 +167,39 @@ function StatesPane() {
           <div className="px-6 space-y-3">
             <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></div>
             <div><Label>Code (e.g. SGR)</Label><Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="mt-1 font-mono" maxLength={5} /></div>
+
+            {/* Flag image — edit only (need an id to upload) */}
+            {editing && (
+              <div>
+                <Label>Flag Image</Label>
+                <div className="mt-1 flex items-center gap-3">
+                  {flagUrl
+                    ? <img src={flagUrl} alt="flag" className="h-10 w-16 object-cover rounded border border-zinc-200" />
+                    : <div className="h-10 w-16 rounded border border-dashed border-zinc-300 bg-zinc-50 flex items-center justify-center text-xs text-zinc-400">No flag</div>
+                  }
+                  <input
+                    ref={flagInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={handleFlagUpload}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={flagUploading}
+                    onClick={() => flagInputRef.current?.click()}
+                    className="gap-1.5"
+                  >
+                    {flagUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    {flagUrl ? "Replace" : "Upload"}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-1">JPEG, PNG, WebP or SVG · max 2 MB</p>
+              </div>
+            )}
+
             {formError && <p className="text-sm text-red-500">{formError}</p>}
           </div>
           <DialogFooter>
