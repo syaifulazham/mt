@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { OrganizerPasswordForm } from "@/components/organizer/OrganizerPasswordForm";
 import { Badge } from "@/components/ui/badge";
 import type { Metadata } from "next";
@@ -41,6 +42,7 @@ export default async function OrganizerProfilePage() {
     .join("");
 
   return (
+    <OrganizerShell userName={user.name} role={user.role}>
     <div className="max-w-2xl space-y-8 p-8">
       {/* Page title */}
       <div>
@@ -103,5 +105,6 @@ export default async function OrganizerProfilePage() {
         <OrganizerPasswordForm />
       </div>
     </div>
+    </OrganizerShell>
   );
 }
