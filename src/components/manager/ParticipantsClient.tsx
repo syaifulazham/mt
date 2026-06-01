@@ -1284,7 +1284,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
           </span>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <Button size="sm" variant="outline" className="gap-1.5 justify-center"
             onClick={() => {
               const blob = new Blob([CSV_TEMPLATE], { type: "text/csv" });
@@ -1297,10 +1297,6 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
           </Button>
           <Button size="sm" variant="outline" className="gap-1.5 justify-center" onClick={() => setBulkOpen(true)}>
             <Upload className="h-4 w-4" /> {t("bulkUploadBtn")}
-          </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 justify-center" onClick={() => setGenPwOpen(true)}>
-            <KeyRound className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("genPwBtn")}</span>
           </Button>
           <Button size="sm" className="gap-1.5 justify-center" onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4" />
@@ -1426,7 +1422,15 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
                     {headerMenuOpen && (
-                      <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border bg-white dark:bg-zinc-900 dark:border-zinc-700 shadow-lg z-20 py-1">
+                      <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border bg-white dark:bg-zinc-900 dark:border-zinc-700 shadow-lg z-20 py-1">
+                        <button
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                          onClick={() => { setHeaderMenuOpen(false); setGenPwOpen(true); }}
+                        >
+                          <KeyRound className="h-4 w-4" />
+                          {t("genPwBtn")}
+                        </button>
+                        <hr className="my-1 border-zinc-100 dark:border-zinc-700" />
                         <button
                           className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
                           onClick={() => { setHeaderMenuOpen(false); enterBulkDelete(); }}
