@@ -4,7 +4,10 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getOrganizerSession } from "@/lib/auth/session";
 
-const schema = z.object({ password: z.string().min(8) });
+const schema = z.object({
+  password:        z.string().min(8),
+  currentPassword: z.string().optional(),
+});
 
 export async function POST(req: Request) {
   const session = await getOrganizerSession();
@@ -12,8 +15,21 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const parsed = schema.safeParse(body);
-  if (!parsed.success) {
+  if (!parsed.success)
     return NextResponse.json({ error: { code: "VALIDATION_ERROR" } }, { status: 422 });
+
+  // Voluntary change: verify current password first
+  if (parsed.data.currentPassword) {
+    const user = await db.organizerUser.findUnique({
+      where: { id: session.id },
+      select: { passwordHash: true },
+    });
+    if (!user?.passwordHash)
+      return NextResponse.json({ error: { code: "NO_PASSWORD", message: "No existing password found." } }, { status: 400 });
+
+    const valid = await argon2.verify(user.passwordHash, parsed.data.currentPassword);
+    if (!valid)
+      return NextResponse.json({ error: { code: "WRONG_PASSWORD", message: "Kata laluan semasa tidak betul." } }, { status: 401 });
   }
 
   const passwordHash = await argon2.hash(parsed.data.password);

@@ -15,6 +15,7 @@ import {
   ChevronRight,
   BotMessageSquare,
   BookMarked,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
@@ -83,6 +84,13 @@ export function Sidebar({ userName, role }: { userName: string; role: OrganizerR
             <Badge variant="outline" className="text-[10px] mt-0.5">{role}</Badge>
           </div>
         </div>
+        <Link
+          href="/organizer/change-password"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
+        >
+          <KeyRound className="h-4 w-4" />
+          Tukar Kata Laluan
+        </Link>
         <button
           onClick={() => signOut({ callbackUrl: "/organizer/login" })}
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
