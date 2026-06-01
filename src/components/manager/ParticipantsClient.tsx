@@ -1196,7 +1196,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
         <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
           <span className="shrink-0">🔗</span>
           <span>
-            Participants can sign in at their portal:{" "}
+            {t("portalNote")}{" "}
             <a
               href="/participant/sign-in"
               target="_blank"
@@ -1205,7 +1205,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
             >
               {process.env.NEXT_PUBLIC_APP_URL ?? ""}/participant/sign-in
             </a>
-            {" — "}use IC number as User ID.
+            {" — "}{t("portalNoteIc")}
           </span>
         </div>
 

@@ -106,6 +106,8 @@
   "participants": {
     "title": "Participants",
     "subtitle": "Register and manage participants for Techlympics",
+    "portalNote": "Participants can sign in at their portal:",
+    "portalNoteIc": "use IC number as User ID.",
     "templateBtn": "Template",
     "bulkUploadBtn": "Bulk Upload",
     "addBtn": "Add Participant",

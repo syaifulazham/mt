@@ -106,6 +106,8 @@
   "participants": {
     "title": "Peserta",
     "subtitle": "Daftar dan urus peserta untuk Techlympics",
+    "portalNote": "Peserta boleh log masuk di portal mereka:",
+    "portalNoteIc": "gunakan nombor IC sebagai ID pengguna.",
     "templateBtn": "Templat",
     "bulkUploadBtn": "Muat Naik Pukal",
     "addBtn": "Tambah Peserta",
