@@ -19,7 +19,7 @@ model OrganizerUser {
   role                OrganizerRole @default(VIEWER)
   totpSecretEnc       String?
   totpEnabled         Boolean       @default(false)
-  forcePasswordChange Boolean       @default(true)
+  forcePasswordChange Boolean       @default(false)
   isActive            Boolean       @default(true)
   inviteToken         String?       @unique
   inviteExpiresAt     DateTime?

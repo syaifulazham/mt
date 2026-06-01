@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       name: parsed.data.name,
       role: parsed.data.role,
       passwordHash,
-      forcePasswordChange: true,
+      forcePasswordChange: false,
       createdById: session.id,
     },
     select: { id: true, email: true, name: true, role: true },
