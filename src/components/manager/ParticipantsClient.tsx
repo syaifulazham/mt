@@ -97,7 +97,6 @@ const CLASS_LABEL = (p: Participant) =>
 
 // ── CSV template ──────────────────────────────────────────────────────────────
 const CSV_TEMPLATE = `name,ic,gender,age,edu_level,class_grade,class_name,email,phoneNumber,ethnicity
-# Bangsa / ethnicity: MELAYU | CINA | INDIA | ORANG_ASLI_SEMENANJUNG | BUMIPUTRA_SABAH | BUMIPUTRA_SARAWAK | LAIN_LAIN
 Ahmad Bin Ali,010101012345,MALE,13,sekolah menengah,Tingkatan 1,Amanah,ahmad@example.com,0123456789
 Siti Binti Bakar,020202023456,FEMALE,9,sekolah rendah,Darjah 3,Cerdas,,
 `;
