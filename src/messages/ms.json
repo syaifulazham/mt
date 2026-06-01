@@ -266,12 +266,24 @@
     "subtitle": "Urus kontinjen dan peserta anda",
     "contingentsHeading": "Kontinjen Anda",
     "addContingentNote": "Tambah kontinjen — Fasa 2",
-    "youAre": "Anda adalah",
-    "participants": "peserta",
-    "teams": "pasukan",
-    "pendingApproval": "Menunggu Kelulusan",
-    "pendingApprovalDesc": "Permintaan anda untuk menyertai kontinjen ini sedang menunggu kelulusan daripada pengurus utama. Anda boleh mengurus kontinjen ini setelah diluluskan.",
-    "noContingents": "Tiada kontinjen lagi."
+    "noContingents": "Tiada kontinjen lagi.",
+    "card": {
+      "roleMain": "Pengurus Utama",
+      "roleOther": "Pengurus Bersama",
+      "pending": "Menunggu Kelulusan",
+      "pendingDesc": "Permintaan anda sedang menunggu kelulusan daripada pengurus utama.",
+      "statPlaceholder": "—",
+      "statParticipants": "Peserta",
+      "statTrainers": "Jurulatih",
+      "statTeams": "Pasukan",
+      "linkParticipants": "Peserta",
+      "linkTeams": "Pasukan",
+      "linkTrainers": "Jurulatih",
+      "localityTitle": "Lokaliti belum ditetapkan",
+      "localityDesc": "Sila pilih lokaliti kontinjen anda untuk membantu perancangan pengagihan acara.",
+      "localityPlaceholder": "Pilih lokaliti",
+      "localitySave": "Simpan"
+    }
   },
   "contingents": {
     "title": "Kontinjen",

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, Link } from "@/i18n/navigation";
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -203,6 +204,7 @@ function LeaveDialog({
 // ── Locality reminder ─────────────────────────────────────────────────────────
 
 function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onSaved: () => void }) {
+  const t = useTranslations("dashboard.card");
   const [value, setValue] = useState<Locality | "">("");
   const [saving, setSaving] = useState(false);
 
@@ -229,10 +231,8 @@ function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onS
       <div className="flex items-start gap-2">
         <MapPin className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
         <div>
-          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Locality not set</p>
-          <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-            Please select your contingent&apos;s locality to help us plan event distribution.
-          </p>
+          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">{t("localityTitle")}</p>
+          <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">{t("localityDesc")}</p>
         </div>
       </div>
       <div className="flex gap-2">
@@ -241,7 +241,7 @@ function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onS
           onChange={(e) => setValue(e.target.value as Locality | "")}
           className="flex-1 h-8 rounded-md border border-amber-300 bg-white dark:bg-zinc-900 dark:border-amber-700 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
         >
-          <option value="">— Select locality —</option>
+          <option value="">— {t("localityPlaceholder")} —</option>
           {(Object.entries(LABELS) as [Locality, string][]).map(([k, label]) => (
             <option key={k} value={k}>{label}</option>
           ))}
@@ -252,7 +252,7 @@ function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onS
           disabled={!value || saving}
           onClick={handleSave}
         >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("localitySave")}
         </Button>
       </div>
     </div>
@@ -262,9 +262,11 @@ function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onS
 // ── Card ──────────────────────────────────────────────────────────────────────
 
 export function DashboardContingentCard({ link }: { link: ContingentLink }) {
+  const t = useTranslations("dashboard.card");
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
   const isPending = link.linkStatus === "PENDING";
+  const roleLabel = link.role === "OWNER" ? t("roleMain") : t("roleOther");
 
   function handleLeft() {
     setLeaving(false);
@@ -280,10 +282,10 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
           <p className="font-semibold text-base leading-tight truncate dark:text-zinc-100">{link.name}</p>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <Badge variant="outline" className="text-[11px] px-1.5 py-0">{link.contingentType}</Badge>
-            <span className="text-xs text-zinc-400">You are {link.role}</span>
+            <span className="text-xs text-zinc-400">{roleLabel}</span>
             {isPending && (
               <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-amber-700">
-                <Clock className="h-3 w-3" /> Pending Approval
+                <Clock className="h-3 w-3" /> {t("pending")}
               </span>
             )}
           </div>
@@ -301,7 +303,7 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
 
       {/* ── Info + Stats row ─────────────────────────────────────────── */}
       {!isPending && (
-        <div className="mx-5 mb-4 grid grid-cols-[1fr_auto] gap-3">
+        <div className="mx-5 mb-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
 
           {/* State / Zone card */}
           <div className="flex items-center gap-2.5 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2.5">
@@ -310,19 +312,19 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
               : <div className="h-8 w-12 rounded border border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-100 dark:bg-zinc-700 shrink-0" />
             }
             <div className="min-w-0">
-              <p className="text-sm font-medium leading-tight truncate dark:text-zinc-200">{link.stateName ?? "—"}</p>
+              <p className="text-sm font-medium leading-tight truncate dark:text-zinc-200">{link.stateName ?? t("statPlaceholder")}</p>
               {link.zoneName && <p className="text-[11px] text-zinc-400 truncate">{link.zoneName}</p>}
             </div>
           </div>
 
           {/* Stats card */}
-          <div className="flex items-stretch divide-x divide-zinc-100 dark:divide-zinc-800 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden">
+          <div className="flex items-stretch divide-x divide-zinc-100 dark:divide-zinc-800 rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden w-full sm:w-auto">
             {[
-              { icon: Users,    value: link.participantCount, label: "Peserta" },
-              { icon: Dumbbell, value: link.trainerCount,     label: "Jurulatih" },
-              { icon: Swords,   value: link.teamCount,        label: "Pasukan" },
+              { icon: Users,    value: link.participantCount, label: t("statParticipants") },
+              { icon: Dumbbell, value: link.trainerCount,     label: t("statTrainers") },
+              { icon: Swords,   value: link.teamCount,        label: t("statTeams") },
             ].map(({ icon: Icon, value, label }) => (
-              <div key={label} className="flex flex-col items-center justify-center px-4 py-2.5 min-w-[64px]">
+              <div key={label} className="flex flex-col items-center justify-center px-4 py-2.5 flex-1 sm:flex-initial sm:min-w-[64px]">
                 <Icon className="h-3.5 w-3.5 text-zinc-400 mb-1" strokeWidth={1.8} />
                 <p className="text-lg font-bold leading-none dark:text-zinc-100">{value}</p>
                 <p className="text-[10px] text-zinc-400 mt-0.5">{label}</p>
@@ -336,9 +338,9 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
       {!isPending && (
         <div className="border-t border-zinc-100 dark:border-zinc-800 divide-x divide-zinc-100 dark:divide-zinc-800 grid grid-cols-3">
           {[
-            { href: "/manager/participants", label: "Participants" },
-            { href: "/manager/teams",        label: "Teams" },
-            { href: "/manager/trainers",     label: "Trainers" },
+            { href: "/manager/participants", label: t("linkParticipants") },
+            { href: "/manager/teams",        label: t("linkTeams") },
+            { href: "/manager/trainers",     label: t("linkTrainers") },
           ].map(({ href, label }) => (
             <Link
               key={href}
@@ -354,7 +356,7 @@ export function DashboardContingentCard({ link }: { link: ContingentLink }) {
       {/* ── Pending message ──────────────────────────────────────────── */}
       {isPending && (
         <p className="mx-5 mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 leading-relaxed dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-400">
-          Your request to join this contingent is awaiting approval from the primary manager.
+          {t("pendingDesc")}
         </p>
       )}
 

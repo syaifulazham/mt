@@ -26,9 +26,12 @@ export default async function ManagerDashboardPage({
               id: true, name: true, contingentType: true, status: true,
               locality: true,
               _count: { select: { participants: true, teams: true, trainers: true } },
-              school: { select: { zone: { select: { name: true } }, state: { select: { name: true, flagUrl: true } } } },
-              zone:   { select: { name: true } },
-              state:  { select: { name: true, flagUrl: true } },
+              school: { select: {
+                zone:  { select: { name: true } },
+                state: { select: { name: true, flagUrl: true, zoneStates: { include: { zone: { select: { name: true } } }, take: 1 } } },
+              }},
+              zone:  { select: { name: true } },
+              state: { select: { name: true, flagUrl: true, zoneStates: { include: { zone: { select: { name: true } } }, take: 1 } } },
             },
           },
         },
@@ -51,7 +54,13 @@ export default async function ManagerDashboardPage({
     participantCount:  cm.contingent._count.participants,
     teamCount:         cm.contingent._count.teams,
     trainerCount:      cm.contingent._count.trainers,
-    zoneName:  cm.contingent.school?.zone?.name  ?? cm.contingent.zone?.name  ?? null,
+    zoneName: (
+      cm.contingent.school?.zone?.name ??
+      cm.contingent.school?.state?.zoneStates?.[0]?.zone?.name ??
+      cm.contingent.zone?.name ??
+      cm.contingent.state?.zoneStates?.[0]?.zone?.name ??
+      null
+    ),
     stateName: cm.contingent.school?.state?.name ?? cm.contingent.state?.name ?? null,
     stateFlagUrl: cm.contingent.school?.state?.flagUrl ?? cm.contingent.state?.flagUrl ?? null,
   }));
