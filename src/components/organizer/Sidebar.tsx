@@ -15,7 +15,7 @@ import {
   ChevronRight,
   BotMessageSquare,
   BookMarked,
-  KeyRound,
+  UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
@@ -78,18 +78,15 @@ export function Sidebar({ userName, role }: { userName: string; role: OrganizerR
       </nav>
 
       <div className="border-t px-4 py-4 space-y-2">
-        <div className="flex items-center gap-2">
+        <Link
+          href="/organizer/profile"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-50 transition-colors group"
+        >
+          <UserCircle className="h-5 w-5 text-zinc-400 group-hover:text-zinc-700 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{userName}</p>
+            <p className="text-sm font-medium truncate group-hover:text-zinc-900">{userName}</p>
             <Badge variant="outline" className="text-[10px] mt-0.5">{role}</Badge>
           </div>
-        </div>
-        <Link
-          href="/organizer/change-password"
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
-        >
-          <KeyRound className="h-4 w-4" />
-          Tukar Kata Laluan
         </Link>
         <button
           onClick={() => signOut({ callbackUrl: "/organizer/login" })}
