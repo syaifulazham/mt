@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
       school:            { select: { name: true } },
       higherInstitution: { select: { name: true } },
       _count:            { select: { managers: true } },
+      managers:          { where: { status: "ACTIVE", role: "OWNER" }, select: { id: true } },
     },
     take: 10,
     orderBy: { name: "asc" },

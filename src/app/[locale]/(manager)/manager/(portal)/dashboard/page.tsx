@@ -25,7 +25,10 @@ export default async function ManagerDashboardPage({
             select: {
               id: true, name: true, contingentType: true, status: true,
               locality: true,
-              _count: { select: { participants: true, teams: true } },
+              _count: { select: { participants: true, teams: true, trainers: true } },
+              school: { select: { zone: { select: { name: true } }, state: { select: { name: true, flagUrl: true } } } },
+              zone:   { select: { name: true } },
+              state:  { select: { name: true, flagUrl: true } },
             },
           },
         },
@@ -47,6 +50,10 @@ export default async function ManagerDashboardPage({
     locality:          cm.contingent.locality as string | null,
     participantCount:  cm.contingent._count.participants,
     teamCount:         cm.contingent._count.teams,
+    trainerCount:      cm.contingent._count.trainers,
+    zoneName:  cm.contingent.school?.zone?.name  ?? cm.contingent.zone?.name  ?? null,
+    stateName: cm.contingent.school?.state?.name ?? cm.contingent.state?.name ?? null,
+    stateFlagUrl: cm.contingent.school?.state?.flagUrl ?? cm.contingent.state?.flagUrl ?? null,
   }));
 
   return (

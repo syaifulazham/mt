@@ -734,6 +734,7 @@ type ContingentSearchResult = {
   school:            { name: string } | null;
   higherInstitution: { name: string } | null;
   _count: { managers: number };
+  managers: { id: string }[]; // active owners only
 };
 
 function JoinDialog({
@@ -845,7 +846,10 @@ function JoinDialog({
                           {c.school?.name ?? c.higherInstitution?.name ?? c.contingentType}
                         </p>
                       </div>
-                      <span className="text-xs text-zinc-400 shrink-0">{c._count.managers} mgr</span>
+                      {c.managers.length === 0
+                        ? <span className="text-[10px] font-semibold rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 shrink-0">Claim</span>
+                        : <span className="text-xs text-zinc-400 shrink-0">{c._count.managers} mgr</span>
+                      }
                     </button>
                   ))}
                 </div>
@@ -895,7 +899,8 @@ function JoinDialog({
           <Button variant="outline" onClick={handleClose} disabled={sending}>Cancel</Button>
           {selected && (
             <Button onClick={handleRequest} disabled={sending}>
-              {sending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Send Request
+              {sending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {selected.managers.length === 0 ? "Claim Contingent" : "Send Request"}
             </Button>
           )}
         </DialogFooter>
