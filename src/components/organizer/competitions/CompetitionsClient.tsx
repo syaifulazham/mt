@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, Trash2, Loader2, Search, Save, Users, GraduationCap,
   UploadCloud, CheckCircle2, XCircle, Trophy,
   Baby, BookOpen, Award, GraduationCap as CourseIcon, Sparkles,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, FileText, Upload, X, Download,
 } from "lucide-react";
 import { AIImportDialog } from "./AIImportDialog";
 import type { LucideIcon } from "lucide-react";
@@ -32,12 +32,22 @@ type CompetitionDetail = CompetitionListItem & {
   eptimEduCourseId: string | null;
   eptimEduCourseTitle: string | null;
   eventCompetitions: LinkedEventRow[];
+  docs: CompetitionDoc[];
   _count: { teams: number };
 };
 
 type LinkedEventRow = {
   id: string;
   event: { id: string; name: string; slug: string; startDate: string | null; status: string; scope: string };
+};
+
+type CompetitionDoc = {
+  id: string;
+  name: string;
+  url: string;
+  key: string;
+  size: number | null;
+  uploadedAt: string;
 };
 
 type ThemeOption       = { id: string; name: string; color: string | null };
@@ -413,6 +423,163 @@ function EptimEduSection({ competition, canWrite, onSaved }: {
         </div>
       )}
       {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+    </SectionCard>
+  );
+}
+
+// ── Concept paper section ─────────────────────────────────────────────────────
+
+function ConceptPaperSection({
+  competition,
+  canWrite,
+  onDocsChanged,
+}: {
+  competition: CompetitionDetail;
+  canWrite: boolean;
+  onDocsChanged: (docs: CompetitionDoc[]) => void;
+}) {
+  const [docs, setDocs]         = useState<CompetitionDoc[]>(competition.docs ?? []);
+  const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError]       = useState("");
+  const inputRef                = useRef<HTMLInputElement>(null);
+
+  function fmtSize(bytes: number | null) {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async function upload(files: FileList | File[]) {
+    const pdfs = Array.from(files).filter((f) => f.type === "application/pdf" || f.name.endsWith(".pdf"));
+    if (!pdfs.length) { setError("Only PDF files are accepted."); return; }
+    setUploading(true); setError("");
+    const form = new FormData();
+    pdfs.forEach((f) => form.append("files", f));
+    const res = await fetch(`/api/v2/organizer/competitions/${competition.id}/docs`, { method: "POST", body: form });
+    setUploading(false);
+    if (!res.ok) { const j = await res.json().catch(() => ({})); setError(j.error ?? "Upload failed."); return; }
+    const saved: CompetitionDoc[] = await res.json();
+    const updated = [...saved, ...docs];
+    setDocs(updated);
+    onDocsChanged(updated);
+  }
+
+  async function handleDelete(docId: string) {
+    setDeleting(docId);
+    await fetch(`/api/v2/organizer/competitions/${competition.id}/docs/${docId}`, { method: "DELETE" });
+    const updated = docs.filter((d) => d.id !== docId);
+    setDocs(updated);
+    setDeleting(null);
+    onDocsChanged(updated);
+  }
+
+  const uploadBtn = canWrite && (
+    <button
+      onClick={() => inputRef.current?.click()}
+      disabled={uploading}
+      className="flex items-center gap-1.5 text-xs text-sky-600 hover:text-sky-800 px-2 py-1 rounded hover:bg-sky-50 transition-colors disabled:opacity-50"
+    >
+      {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+      Upload PDF
+    </button>
+  );
+
+  return (
+    <SectionCard title={`Kertas Kerja Konsep (${docs.length})`} action={uploadBtn}>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => e.target.files && upload(e.target.files)}
+      />
+
+      {/* Drop zone — shown when empty */}
+      {docs.length === 0 && canWrite && (
+        <div
+          className={cn(
+            "rounded-xl border-2 border-dashed flex flex-col items-center justify-center py-8 cursor-pointer transition-colors",
+            isDragging ? "border-sky-400 bg-sky-50" : "border-zinc-200 bg-zinc-50 hover:border-zinc-300"
+          )}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setIsDragging(false); upload(e.dataTransfer.files); }}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading
+            ? <Loader2 className="h-6 w-6 animate-spin text-sky-400 mb-2" />
+            : <FileText className="h-6 w-6 text-zinc-300 mb-2" />}
+          <p className="text-xs text-zinc-500 font-medium">
+            {uploading ? "Uploading…" : "Drop PDF files here or click to browse"}
+          </p>
+        </div>
+      )}
+
+      {/* Drop overlay when docs exist */}
+      {docs.length > 0 && canWrite && (
+        <div
+          className={cn(
+            "rounded-lg border-2 border-dashed transition-colors mb-3",
+            isDragging ? "border-sky-400 bg-sky-50 p-3" : "border-transparent p-0"
+          )}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setIsDragging(false); upload(e.dataTransfer.files); }}
+        >
+          {isDragging && (
+            <p className="text-xs text-sky-600 text-center py-1">Release to upload PDFs</p>
+          )}
+        </div>
+      )}
+
+      {/* Doc list */}
+      {docs.length > 0 && (
+        <div className="divide-y">
+          {docs.map((doc) => (
+            <div key={doc.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+              <div className="h-8 w-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+                <FileText className="h-4 w-4 text-red-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-zinc-800 truncate">{doc.name}</p>
+                <p className="text-[11px] text-zinc-400">
+                  {fmtSize(doc.size)}{doc.size ? " · " : ""}
+                  {new Date(doc.uploadedAt).toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" })}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <a
+                  href={doc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-7 w-7 rounded-md flex items-center justify-center text-zinc-400 hover:text-sky-600 hover:bg-sky-50 transition-colors"
+                  title="Open PDF"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </a>
+                {canWrite && (
+                  <button
+                    onClick={() => handleDelete(doc.id)}
+                    disabled={deleting === doc.id}
+                    className="h-7 w-7 rounded-md flex items-center justify-center text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    title="Delete"
+                  >
+                    {deleting === doc.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <X className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
     </SectionCard>
   );
 }
@@ -906,6 +1073,7 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
             <ParticipationSection competition={selected} canWrite={canWrite}                        onSaved={handleSectionSaved} />
             <TargetGroupsSection competition={selected} canWrite={canWrite} targetGroups={targetGroups} onSaved={handleSectionSaved} />
             <EptimEduSection     competition={selected} canWrite={canWrite}                        onSaved={handleSectionSaved} />
+            <ConceptPaperSection competition={selected} canWrite={canWrite}                        onDocsChanged={(docs) => handleSectionSaved({ docs })} />
             <LinkedEventsSection competition={selected} />
           </div>
         )}

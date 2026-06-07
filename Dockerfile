@@ -14,8 +14,10 @@ COPY . .
 # Pass them as build args since .env.production is excluded from the build context.
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_R2_PUBLIC_URL
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_R2_PUBLIC_URL=$NEXT_PUBLIC_R2_PUBLIC_URL
 
 # Prisma needs a DATABASE_URL at generate time (value doesn't matter)
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"

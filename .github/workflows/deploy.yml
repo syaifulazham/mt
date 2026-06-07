@@ -28,11 +28,18 @@ jobs:
           AUTH_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
           RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
           EPTIM_API_KEY=${{ secrets.EPTIM_API_KEY }}
           EPTIM_URL=${{ secrets.EPTIM_URL }}
           EPTIMEDU_API_KEY=${{ secrets.EPTIMEDU_API_KEY }}
           EPTIMEDU_BASE_URL=${{ secrets.EPTIMEDU_BASE_URL }}
           PORT=${{ secrets.PORT }}
+          R2_ACCOUNT_ID=${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }}
+          NEXT_PUBLIC_R2_PUBLIC_URL=${{ secrets.NEXT_PUBLIC_R2_PUBLIC_URL }}
           EOF
 
       # ── Write nginx config (no indentation so file is valid) ─────────────────
@@ -144,11 +151,13 @@ jobs:
             # because .dockerignore excludes .env.* from the build context
             CLERK_PK=$(grep ^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY .env.production | cut -d= -f2-)
             APP_URL=$(grep  ^NEXT_PUBLIC_APP_URL                .env.production | cut -d= -f2-)
+            R2_URL=$(grep   ^NEXT_PUBLIC_R2_PUBLIC_URL          .env.production | cut -d= -f2-)
 
             docker build --target migrator -t mt-migrator:latest .
             docker build \
               --build-arg "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PK}" \
               --build-arg "NEXT_PUBLIC_APP_URL=${APP_URL}" \
+              --build-arg "NEXT_PUBLIC_R2_PUBLIC_URL=${R2_URL}" \
               -t mt:latest .
 
             echo "── Migrating database ──"

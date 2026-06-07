@@ -19,6 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         include: { event: { select: { id: true, name: true, slug: true, startDate: true, status: true, scope: true } } },
         orderBy: { createdAt: "asc" },
       },
+      docs: { orderBy: { uploadedAt: "desc" } },
       _count: { select: { teams: true } },
     },
   });

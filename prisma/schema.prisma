@@ -512,8 +512,24 @@ model Competition {
   judgingCriteria   JudgingCriteria[]
   eventCompetitions EventCompetition[]
   teams             Team[]
+  docs              CompetitionDoc[]
 
   @@map("competitions")
+}
+
+model CompetitionDoc {
+  id            String      @id @default(cuid())
+  competitionId String
+  name          String
+  url           String
+  key           String
+  size          Int?
+  uploadedAt    DateTime    @default(now())
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@index([competitionId])
+  @@map("competition_docs")
 }
 
 model EventCompetition {
@@ -735,4 +751,37 @@ model KnowledgeBase {
 
   @@index([entityType, entityId])
   @@map("knowledge_base")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LANDING PAGE CONTENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Gallery {
+  id          String         @id @default(cuid())
+  title       String
+  year        Int
+  description String?        @db.Text
+  coverUrl    String?
+  photos      GalleryPhoto[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("galleries")
+}
+
+model GalleryPhoto {
+  id          String   @id @default(cuid())
+  galleryId   String
+  driveFileId String
+  thumbUrl    String
+  fullUrl     String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  gallery Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  @@index([galleryId])
+  @@map("gallery_photos")
 }
