@@ -61,18 +61,20 @@ function fmtDate(d: string | null) {
 type LevelInfo = { label: string; bg: string; text: string; Icon: LucideIcon };
 
 const LEVEL_INFO: Record<string, LevelInfo> = {
-  PRESCHOOL: { label: "Preschool", bg: "bg-amber-100",   text: "text-amber-700",   Icon: Baby         },
-  PRIMARY:   { label: "Primary",   bg: "bg-emerald-100", text: "text-emerald-700", Icon: BookOpen      },
-  SECONDARY: { label: "Secondary", bg: "bg-blue-100",    text: "text-blue-700",    Icon: GraduationCap },
-  HIGHER:    { label: "Higher",    bg: "bg-purple-100",  text: "text-purple-600",  Icon: Award         },
+  KINDERGARTEN: { label: "Kindergarten", bg: "bg-pink-100",    text: "text-pink-700",    Icon: Baby         },
+  PRESCHOOL:    { label: "Preschool",    bg: "bg-amber-100",   text: "text-amber-700",   Icon: Baby         },
+  PRIMARY:      { label: "Primary",      bg: "bg-emerald-100", text: "text-emerald-700", Icon: BookOpen      },
+  SECONDARY:    { label: "Secondary",    bg: "bg-blue-100",    text: "text-blue-700",    Icon: GraduationCap },
+  HIGHER:       { label: "Higher",       bg: "bg-purple-100",  text: "text-purple-600",  Icon: Award         },
 };
 
 function normLevel(schoolLevel: string): string {
   const k = schoolLevel.toUpperCase().replace(/[-\s]/g, "_");
-  if (k.includes("PRESCHOOL") || k.includes("PRE_SCHOOL") || k.includes("PRASEKOLAH")) return "PRESCHOOL";
-  if (k.includes("PRIMARY")   || k.includes("RENDAH"))                                  return "PRIMARY";
-  if (k.includes("SECONDARY") || k.includes("MENENGAH"))                                return "SECONDARY";
-  if (k.includes("HIGHER")    || k.includes("POST") || k.includes("UNIVERSITY"))        return "HIGHER";
+  if (k === "KINDERGARTEN" || k.includes("TADIKA"))                                       return "KINDERGARTEN";
+  if (k.includes("PRESCHOOL") || k.includes("PRE_SCHOOL") || k.includes("PRASEKOLAH"))   return "PRESCHOOL";
+  if (k.includes("PRIMARY")   || k.includes("RENDAH"))                                    return "PRIMARY";
+  if (k.includes("SECONDARY") || k.includes("MENENGAH"))                                  return "SECONDARY";
+  if (k.includes("HIGHER")    || k.includes("POST") || k.includes("UNIVERSITY"))          return "HIGHER";
   return "PRIMARY";
 }
 
