@@ -35,11 +35,16 @@ export async function PublicNav({ locale }: { locale: string }) {
       </Link>
 
       <ul className="hidden md:flex gap-8 list-none m-0 p-0">
-        {(["navAbout", "navCategories", "navSchedule", "navVenues", "navGallery"] as const).map((key) => (
+        {([
+          { key: "navCompetition", href: "/#categories" },
+          { key: "navNews",        href: "/#news" },
+          { key: "navAnnouncements", href: "/#announcements" },
+          { key: "navGallery",     href: "/#gallery" },
+        ] as const).map(({ key, href }) => (
           <li key={key}>
-            <a href="/#categories" style={{ color: "#374151", textDecoration: "none", fontSize: "0.82rem", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>
+            <Link href={href} style={{ color: "#374151", textDecoration: "none", fontSize: "0.82rem", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>
               {t(key)}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

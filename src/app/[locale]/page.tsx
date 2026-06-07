@@ -403,7 +403,7 @@ export default async function LandingPage({
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 16 }}>
               {/* ── Competition Mapping featured card ── */}
-              <a
+              <Link
                 href="/mapping"
                 style={{ textDecoration: "none" }}
               >
@@ -455,7 +455,7 @@ export default async function LandingPage({
                     </div>
                   </div>
                 </div>
-              </a>
+              </Link>
 
               {themes.map((c) => {
                 const accent = c.color ?? "#003893";
