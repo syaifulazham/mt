@@ -115,6 +115,7 @@
     "searchBtn": "Cari",
     "tabs": {
       "ALL": "Semua",
+      "KINDERGARTEN": "Tadika",
       "PRIMARY": "Sekolah Rendah",
       "SECONDARY": "Sekolah Menengah",
       "YOUTH": "Belia"
@@ -131,6 +132,7 @@
       "FEMALE": "Perempuan"
     },
     "edu": {
+      "KINDERGARTEN": "Tadika / Prasekolah",
       "PRIMARY": "Sekolah Rendah",
       "SECONDARY": "Sekolah Menengah",
       "YOUTH": "Belia"
@@ -166,6 +168,7 @@
       "genderFemale": "Perempuan",
       "ageLabel": "Umur",
       "eduLabel": "Pendidikan",
+      "eduKindergarten": "Tadika / Prasekolah",
       "eduPrimary": "Sekolah Rendah",
       "eduSecondary": "Sekolah Menengah",
       "eduYouth": "Belia",

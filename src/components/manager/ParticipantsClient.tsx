@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 
 type Contingent = { id: string; name: string };
-type EduLevel   = "PRIMARY" | "SECONDARY" | "YOUTH";
+type EduLevel   = "KINDERGARTEN" | "PRIMARY" | "SECONDARY" | "YOUTH";
 type Gender     = "MALE" | "FEMALE";
 type Ethnicity  = "MELAYU" | "CINA" | "INDIA" | "ORANG_ASLI_SEMENANJUNG" | "BUMIPUTRA_SABAH" | "BUMIPUTRA_SARAWAK" | "LAIN_LAIN";
 
@@ -59,7 +59,10 @@ function parseIcData(ic: string): { gender?: Gender; age?: number; eduLevel?: Ed
 
   let eduLevel: EduLevel;
   let classGrade: string | undefined;
-  if (age >= 7 && age <= 12) {
+  if (age >= 5 && age <= 6) {
+    eduLevel   = "KINDERGARTEN";
+    classGrade = age <= 5 ? "Prasekolah 5thn" : "Prasekolah 6thn";
+  } else if (age >= 7 && age <= 12) {
     eduLevel   = "PRIMARY";
     classGrade = `Darjah ${age - 6}`;
   } else if (age >= 13 && age <= 17) {
@@ -72,11 +75,28 @@ function parseIcData(ic: string): { gender?: Gender; age?: number; eduLevel?: Ed
   return { gender, age, eduLevel, classGrade };
 }
 
+/** Derive the expected class grade from a numeric age and known education level. */
+function gradeForAge(age: number, level: EduLevel): string {
+  if (level === "KINDERGARTEN") return age <= 5 ? "Prasekolah 5thn" : "Prasekolah 6thn";
+  if (level === "PRIMARY")      return `Darjah ${Math.min(Math.max(age - 6, 1), 6)}`;
+  if (level === "SECONDARY")    return `Tingkatan ${Math.min(Math.max(age - 12, 1), 5)}`;
+  return "";
+}
+
+/** Derive eduLevel from age (matches parseIcData logic). */
+function eduLevelForAge(age: number): EduLevel {
+  if (age >= 5  && age <= 6)  return "KINDERGARTEN";
+  if (age >= 7  && age <= 12) return "PRIMARY";
+  if (age >= 13 && age <= 17) return "SECONDARY";
+  return "YOUTH";
+}
+
 const EDU_TABS: { key: EduLevel | "ALL"; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: "ALL",       Icon: Users         },
-  { key: "PRIMARY",   Icon: BookOpen      },
-  { key: "SECONDARY", Icon: GraduationCap },
-  { key: "YOUTH",     Icon: Zap           },
+  { key: "ALL",          Icon: Users         },
+  { key: "KINDERGARTEN", Icon: Zap           },
+  { key: "PRIMARY",      Icon: BookOpen      },
+  { key: "SECONDARY",    Icon: GraduationCap },
+  { key: "YOUTH",        Icon: Zap           },
 ];
 
 const GENDER_COLOR: Record<Gender, string> = {
@@ -202,9 +222,10 @@ function ViewDialog({ participant, onClose }: { participant: Participant | null;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GRADE_OPTIONS: Record<EduLevel, string[]> = {
-  PRIMARY:   ["Darjah 1","Darjah 2","Darjah 3","Darjah 4","Darjah 5","Darjah 6"],
-  SECONDARY: ["Tingkatan 1","Tingkatan 2","Tingkatan 3","Tingkatan 4","Tingkatan 5"],
-  YOUTH:     [],
+  KINDERGARTEN: ["Prasekolah 5thn", "Prasekolah 6thn"],
+  PRIMARY:      ["Darjah 1","Darjah 2","Darjah 3","Darjah 4","Darjah 5","Darjah 6"],
+  SECONDARY:    ["Tingkatan 1","Tingkatan 2","Tingkatan 3","Tingkatan 4","Tingkatan 5"],
+  YOUTH:        [],
 };
 
 function AddEditDialog({
@@ -376,7 +397,18 @@ function AddEditDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm">{t("form.ageLabel")}</Label>
-              <Input type="number" min="1" value={form.age} onChange={(e) => set("age", e.target.value)} placeholder="13" />
+              <Input type="number" min="1" value={form.age}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const n = parseInt(raw, 10);
+                  if (!isNaN(n) && n > 0) {
+                    const lvl = eduLevelForAge(n);
+                    setForm((f) => ({ ...f, age: raw, eduLevel: lvl, classGrade: gradeForAge(n, lvl) }));
+                  } else {
+                    set("age", raw);
+                  }
+                }}
+                placeholder="13" />
             </div>
           </div>
 
@@ -384,7 +416,13 @@ function AddEditDialog({
             <Label className="text-sm">{t("form.eduLabel")}</Label>
             <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={form.eduLevel}
-              onChange={(e) => { set("eduLevel", e.target.value); set("classGrade", ""); }}>
+              onChange={(e) => {
+                const lvl = e.target.value as EduLevel;
+                const n = parseInt(form.age, 10);
+                const grade = !isNaN(n) && n > 0 ? gradeForAge(n, lvl) : "";
+                setForm((f) => ({ ...f, eduLevel: lvl, classGrade: grade }));
+              }}>
+              <option value="KINDERGARTEN">{t("form.eduKindergarten")}</option>
               <option value="PRIMARY">{t("form.eduPrimary")}</option>
               <option value="SECONDARY">{t("form.eduSecondary")}</option>
               <option value="YOUTH">{t("form.eduYouth")}</option>
@@ -457,6 +495,7 @@ function AddEditDialog({
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EDU_MAP: Record<string, EduLevel> = {
+  kindergarten: "KINDERGARTEN", prasekolah: "KINDERGARTEN", tadika: "KINDERGARTEN",
   primary: "PRIMARY", rendah: "PRIMARY", "sekolah rendah": "PRIMARY",
   darjah: "PRIMARY", std: "PRIMARY",
   secondary: "SECONDARY", menengah: "SECONDARY", "sekolah menengah": "SECONDARY",
@@ -500,7 +539,7 @@ function parseCsv(text: string): RawRow[] {
     const gNorm = gender.toUpperCase();
     if (gNorm !== "MALE" && gNorm !== "FEMALE") issues.push("gender");
     const ednorm = edu_level.toLowerCase().trim();
-    if (!EDU_MAP[ednorm] && !["primary","secondary","youth"].includes(ednorm)) issues.push("edu_level");
+    if (!EDU_MAP[ednorm] && !["kindergarten","primary","secondary","youth"].includes(ednorm)) issues.push("edu_level");
     return { name, ic, gender, age, edu_level, class_grade, class_name, email, phoneNumber, ethnicity, _issues: issues };
   });
 }

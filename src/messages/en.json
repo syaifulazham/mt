@@ -115,6 +115,7 @@
     "searchBtn": "Search",
     "tabs": {
       "ALL": "All",
+      "KINDERGARTEN": "Kindergarten",
       "PRIMARY": "Primary School",
       "SECONDARY": "Secondary School",
       "YOUTH": "Youth"
@@ -131,6 +132,7 @@
       "FEMALE": "Female"
     },
     "edu": {
+      "KINDERGARTEN": "Kindergarten",
       "PRIMARY": "Primary School",
       "SECONDARY": "Secondary School",
       "YOUTH": "Youth"
@@ -166,6 +168,7 @@
       "genderFemale": "Female",
       "ageLabel": "Age",
       "eduLabel": "Education",
+      "eduKindergarten": "Kindergarten",
       "eduPrimary": "Primary School",
       "eduSecondary": "Secondary School",
       "eduYouth": "Youth / Belia",

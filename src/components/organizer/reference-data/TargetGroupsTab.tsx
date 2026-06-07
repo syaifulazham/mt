@@ -23,20 +23,22 @@ type TargetGroup = {
 
 type GroupBy = "age" | "grades";
 
-const SCHOOL_LEVELS = ["PRIMARY", "SECONDARY", "YOUTH", "HIGHER"] as const;
+const SCHOOL_LEVELS = ["KINDERGARTEN", "PRIMARY", "SECONDARY", "YOUTH", "HIGHER"] as const;
 
 const GRADE_OPTIONS: Record<string, string[]> = {
-  PRIMARY:   ["Darjah 1", "Darjah 2", "Darjah 3", "Darjah 4", "Darjah 5", "Darjah 6"],
-  SECONDARY: ["Tingkatan 1", "Tingkatan 2", "Tingkatan 3", "Tingkatan 4", "Tingkatan 5"],
-  YOUTH:     [],
-  HIGHER:    [],
+  KINDERGARTEN: ["Prasekolah 5thn", "Prasekolah 6thn"],
+  PRIMARY:      ["Darjah 1", "Darjah 2", "Darjah 3", "Darjah 4", "Darjah 5", "Darjah 6"],
+  SECONDARY:    ["Tingkatan 1", "Tingkatan 2", "Tingkatan 3", "Tingkatan 4", "Tingkatan 5"],
+  YOUTH:        [],
+  HIGHER:       [],
 };
 
 const LEVEL_STYLES: Record<string, string> = {
-  PRIMARY:   "bg-blue-50 text-blue-700",
-  SECONDARY: "bg-purple-50 text-purple-700",
-  YOUTH:     "bg-amber-50 text-amber-700",
-  HIGHER:    "bg-green-50 text-green-700",
+  KINDERGARTEN: "bg-pink-50 text-pink-700",
+  PRIMARY:      "bg-blue-50 text-blue-700",
+  SECONDARY:    "bg-purple-50 text-purple-700",
+  YOUTH:        "bg-amber-50 text-amber-700",
+  HIGHER:       "bg-green-50 text-green-700",
 };
 
 const PAGE_SIZE = 20;
