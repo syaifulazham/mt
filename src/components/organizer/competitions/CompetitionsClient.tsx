@@ -76,6 +76,7 @@ const LEVEL_INFO: Record<string, LevelInfo> = {
   PRIMARY:      { label: "Primary",      bg: "bg-emerald-100", text: "text-emerald-700", Icon: BookOpen      },
   SECONDARY:    { label: "Secondary",    bg: "bg-blue-100",    text: "text-blue-700",    Icon: GraduationCap },
   HIGHER:       { label: "Higher",       bg: "bg-purple-100",  text: "text-purple-600",  Icon: Award         },
+  YOUTH:        { label: "Youth",        bg: "bg-orange-100",  text: "text-orange-700",  Icon: Users         },
 };
 
 function normLevel(schoolLevel: string): string {
@@ -85,6 +86,7 @@ function normLevel(schoolLevel: string): string {
   if (k.includes("PRIMARY")   || k.includes("RENDAH"))                                    return "PRIMARY";
   if (k.includes("SECONDARY") || k.includes("MENENGAH"))                                  return "SECONDARY";
   if (k.includes("HIGHER")    || k.includes("POST") || k.includes("UNIVERSITY"))          return "HIGHER";
+  if (k.includes("YOUTH")     || k.includes("BELIA") || k.includes("TERBUKA"))            return "YOUTH";
   return "PRIMARY";
 }
 
