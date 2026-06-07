@@ -203,6 +203,8 @@ export type MasterTheme = {
 
 /**
  * Sync mapping data from master DB.
+ *  - Groups same-name master competitions into one mapping competition
+ *    (e.g. "Cabaran Robot" with codes 1.1K + 1.1R → 1 mapping comp, 2 entries).
  *  - Upserts clusters and competitions (matched by master_comp_id).
  *  - PRESERVES user-set: method, is_international, desc_bm, desc_en.
  *  - ALWAYS replaces entries with master target groups.
@@ -217,7 +219,7 @@ export function syncFromMaster(
   const db = getMappingDb();
 
   const tx = db.transaction(() => {
-    // Snapshot existing competitions' preserved fields
+    // Snapshot existing mapping competitions keyed by master_comp_id
     const existing = db.prepare(
       "SELECT id, master_comp_id FROM competitions WHERE master_comp_id IS NOT NULL"
     ).all() as { id: string; master_comp_id: string }[];
@@ -234,42 +236,63 @@ export function syncFromMaster(
         db.prepare("INSERT INTO clusters (id, name_bm, name_en, sort_order) VALUES (?,?,'',?)").run(clusterId, theme.name, ti);
       }
 
-      theme.competitions.forEach((comp, ci) => {
-        const pdfJson = comp.pdfDocs.length ? JSON.stringify(comp.pdfDocs) : null;
-        // Code is unique per competition; append it so same-name competitions get distinct slugs
-        const slug = slugify(`${comp.name}-${comp.code}`);
-        const existingId = byMasterId.get(comp.id);
-        let compId: string;
+      // Group master competitions by base slug (same name → one mapping competition)
+      const groups = new Map<string, typeof theme.competitions>();
+      for (const comp of theme.competitions) {
+        const baseSlug = slugify(comp.name);
+        const arr = groups.get(baseSlug) ?? [];
+        arr.push(comp);
+        groups.set(baseSlug, arr);
+      }
 
-        if (existingId) {
-          compId = existingId;
-          // Update master-controlled fields; method/int/desc_bm/desc_en preserved
+      let ci = 0;
+      for (const [baseSlug, comps] of groups) {
+        const primary = comps[0];
+
+        // Merge PDF docs from all variants, deduplicate by URL
+        const allPdfDocs = comps.flatMap(c => c.pdfDocs);
+        const uniquePdfDocs = Array.from(new Map(allPdfDocs.map(d => [d.url, d])).values());
+        const pdfJson = uniquePdfDocs.length ? JSON.stringify(uniquePdfDocs) : null;
+
+        // Find existing mapping competition matched by ANY of the group's master IDs
+        let compId: string | undefined;
+        for (const comp of comps) {
+          const found = byMasterId.get(comp.id);
+          if (found) { compId = found; break; }
+        }
+
+        if (compId) {
           db.prepare(
-            "UPDATE competitions SET name=?, slug=?, cluster_id=?, pdf_url=?, sort_order=? WHERE id=?"
-          ).run(comp.name, slug, clusterId, pdfJson, ci, compId);
+            "UPDATE competitions SET name=?, slug=?, cluster_id=?, pdf_url=?, sort_order=?, master_comp_id=? WHERE id=?"
+          ).run(primary.name, baseSlug, clusterId, pdfJson, ci, primary.id, compId);
         } else {
           compId = randomUUID();
           db.prepare(`
             INSERT INTO competitions
               (id, slug, name, cluster_id, is_international, method, desc_bm, desc_en, pdf_url, is_active, master_comp_id, sort_order)
             VALUES (?,?,?,?,0,null,null,null,?,1,?,?)
-          `).run(compId, slug, comp.name, clusterId, pdfJson, comp.id, ci);
+          `).run(compId, baseSlug, primary.name, clusterId, pdfJson, primary.id, ci);
         }
 
-        // Re-sync entries from master target groups
+        // Re-sync entries: one entry per (master comp code × target group), preserving each code
         db.prepare("DELETE FROM entries WHERE competition_id=?").run(compId);
         const seen = new Set<string>();
-        for (const { targetGroup: tg } of comp.targetGroups) {
-          const mapKey = `${tg.name}|${tg.schoolLevel}`;
-          const levelKey = levelMap[mapKey] ?? schoolLevelToKey(tg.schoolLevel);
-          const dedupKey = `${levelKey}|${tg.name}`;
-          if (seen.has(dedupKey)) continue;
-          seen.add(dedupKey);
-          db.prepare(
-            "INSERT INTO entries (id, competition_id, code, level, tg_name) VALUES (?,?,?,?,?)"
-          ).run(randomUUID(), compId, comp.code, levelKey, tg.name);
+        for (const comp of comps) {
+          for (const { targetGroup: tg } of comp.targetGroups) {
+            const mapKey = `${tg.name}|${tg.schoolLevel}`;
+            const levelKey = levelMap[mapKey] ?? schoolLevelToKey(tg.schoolLevel);
+            // Dedup by code+level+tgName to avoid true duplicates
+            const dedupKey = `${comp.code}|${levelKey}|${tg.name}`;
+            if (seen.has(dedupKey)) continue;
+            seen.add(dedupKey);
+            db.prepare(
+              "INSERT INTO entries (id, competition_id, code, level, tg_name) VALUES (?,?,?,?,?)"
+            ).run(randomUUID(), compId, comp.code, levelKey, tg.name);
+          }
         }
-      });
+
+        ci++;
+      }
     });
   });
 
