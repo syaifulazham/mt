@@ -239,24 +239,25 @@ export default async function LandingPage({
               {t("registrationOpen")}
             </div>
 
-            {/* Logo — light backdrop so original colours show against dark carousel */}
-            <div
-              className="mb-6 rounded-2xl px-8 py-5"
-              style={{
-                width: "clamp(200px, 30vw, 300px)",
-                background: "rgba(255,255,255,0.18)",
-                backdropFilter: "blur(12px)",
-                border: "1px solid rgba(255,255,255,0.35)",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
-              }}
-            >
+            {/* Logo — white edge glow so original colours stand out on dark carousel */}
+            <div className="mb-6" style={{ width: "clamp(200px, 30vw, 300px)" }}>
               <Image
                 src="/logo-mt.svg"
                 alt="Malaysia Techlympics 2026"
                 width={280}
                 height={160}
                 priority
-                style={{ width: "100%", height: "auto" }}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  filter: [
+                    "drop-shadow(2px  0px 0 #fff)",
+                    "drop-shadow(-2px 0px 0 #fff)",
+                    "drop-shadow(0px  2px 0 #fff)",
+                    "drop-shadow(0px -2px 0 #fff)",
+                    "drop-shadow(0 0 12px rgba(255,255,255,0.6))",
+                  ].join(" "),
+                }}
               />
             </div>
 
