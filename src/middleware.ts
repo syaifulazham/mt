@@ -23,6 +23,16 @@ const isWebhookRoute = createRouteMatcher(["/api/v2/webhooks(.*)"]);
 // Auth.js uses /api/auth/* internally — must be fully public
 const isAuthJsInternalRoute = createRouteMatcher(["/api/auth(.*)"]);
 
+// Build a safe base URL for redirects — uses the public origin from
+// X-Forwarded-Host/Proto headers (set by nginx) so internal port never leaks.
+function publicOrigin(req: NextRequest): string {
+  const proto = req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
+  const host  = req.headers.get("x-forwarded-host")  ?? req.headers.get("host") ?? req.nextUrl.host;
+  // Strip any port from the host — the public URL is always on standard 80/443
+  const cleanHost = host.replace(/:\d+$/, "");
+  return `${proto}://${cleanHost}`;
+}
+
 export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
   const { pathname } = req.nextUrl;
 
@@ -46,17 +56,17 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
     });
 
     if (!token) {
-      const loginUrl = new URL("/organizer/login", req.url);
+      const loginUrl = new URL("/organizer/login", publicOrigin(req));
       loginUrl.searchParams.set("callbackUrl", pathname);
       return NextResponse.redirect(loginUrl);
     }
 
     if (token.totpPending && pathname !== "/organizer/totp") {
-      return NextResponse.redirect(new URL("/organizer/totp", req.url));
+      return NextResponse.redirect(new URL("/organizer/totp", publicOrigin(req)));
     }
 
     if (token.forcePasswordChange && pathname !== "/organizer/change-password") {
-      return NextResponse.redirect(new URL("/organizer/change-password", req.url));
+      return NextResponse.redirect(new URL("/organizer/change-password", publicOrigin(req)));
     }
 
     const allowed = canAccess(token.role, pathname, req.method);
@@ -67,7 +77,7 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
           { status: 403 },
         );
       }
-      return NextResponse.redirect(new URL("/organizer/dashboard", req.url));
+      return NextResponse.redirect(new URL("/organizer/dashboard", publicOrigin(req)));
     }
 
     return NextResponse.next();
@@ -93,7 +103,7 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
 
     const { userId } = await clerkAuth();
     if (!userId) {
-      const signInUrl = new URL("/manager/sign-in", req.url);
+      const signInUrl = new URL("/manager/sign-in", publicOrigin(req));
       return NextResponse.redirect(signInUrl);
     }
 

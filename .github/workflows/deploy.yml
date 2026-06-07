@@ -24,8 +24,8 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
           CLERK_WEBHOOK_SECRET=${{ secrets.CLERK_WEBHOOK_SECRET }}
-          NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-          AUTH_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_APP_URL=https://${{ secrets.DOMAIN }}
+          AUTH_URL=https://${{ secrets.DOMAIN }}
           RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
           GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
@@ -63,6 +63,8 @@ jobs:
                   proxy_set_header   X-Real-IP         $remote_addr;
                   proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
                   proxy_set_header   X-Forwarded-Proto $scheme;
+                  proxy_set_header   X-Forwarded-Host  $host;
+                  proxy_set_header   X-Forwarded-Port  443;
                   proxy_read_timeout 60s;
               }
           }
