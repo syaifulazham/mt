@@ -116,7 +116,8 @@ export async function POST() {
     const clusters = getAllClusters();
     return NextResponse.json({ clusters });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Failed to load initial data" }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[load-initial]", msg, e);
+    return NextResponse.json({ error: `Failed to load initial data: ${msg}` }, { status: 500 });
   }
 }
