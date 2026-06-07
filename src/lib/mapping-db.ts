@@ -236,7 +236,8 @@ export function syncFromMaster(
 
       theme.competitions.forEach((comp, ci) => {
         const pdfJson = comp.pdfDocs.length ? JSON.stringify(comp.pdfDocs) : null;
-        const slug = slugify(comp.name);
+        // Code is unique per competition; append it so same-name competitions get distinct slugs
+        const slug = slugify(`${comp.name}-${comp.code}`);
         const existingId = byMasterId.get(comp.id);
         let compId: string;
 
