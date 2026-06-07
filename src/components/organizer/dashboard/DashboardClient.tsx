@@ -19,6 +19,7 @@ type Stats = {
   secondaryContingents: number;
   higherContingents: number;
   independentContingents: number;
+  internationalContingents: number;
 };
 type ChartRow = { label: string; count: number };
 type CompRow  = { code: string; name: string; count: number };
@@ -130,21 +131,21 @@ export function DashboardClient({ userName }: { userName: string }) {
       </div>
 
       {/* Primary stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard label="Total Participation"  value={stats.totalParticipation} icon={Trophy}    color="bg-[#085782]"   sub="across all competitions" />
         <StatCard label="Total Contingents"    value={stats.totalContingents}   icon={Building2} color="bg-sky-500"     />
         <StatCard label="Registered Managers"  value={stats.totalManagers}      icon={UserCheck} color="bg-violet-500"  />
-        <StatCard label="Total Participants"   value={stats.totalParticipants}  icon={Users}     color="bg-emerald-500" sub="registered individuals" />
       </div>
 
       {/* Contingent breakdown */}
       <div>
         <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Contingents by Type</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Primary School"      value={stats.primaryContingents}    icon={BookOpen}     color="bg-emerald-400" />
-          <StatCard label="Secondary School"    value={stats.secondaryContingents}  icon={GraduationCap} color="bg-blue-400"   />
-          <StatCard label="Higher Institution"  value={stats.higherContingents}     icon={School}       color="bg-purple-400"  />
-          <StatCard label="Independent"         value={stats.independentContingents} icon={Briefcase}   color="bg-amber-400"   />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard label="Primary School"      value={stats.primaryContingents}      icon={BookOpen}      color="bg-emerald-400" />
+          <StatCard label="Secondary School"    value={stats.secondaryContingents}    icon={GraduationCap} color="bg-blue-400"    />
+          <StatCard label="Higher Institution"  value={stats.higherContingents}       icon={School}        color="bg-purple-400"  />
+          <StatCard label="Independent"         value={stats.independentContingents}  icon={Briefcase}     color="bg-amber-400"   />
+          <StatCard label="International"       value={stats.internationalContingents} icon={Users}        color="bg-rose-400"    />
         </div>
       </div>
 

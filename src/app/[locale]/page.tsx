@@ -39,7 +39,7 @@ export default async function LandingPage({
 }) {
   const { locale } = await params;
 
-  const { userId } = await auth();
+  const { userId } = await auth().catch(() => ({ userId: null }));
   const [manager, themes, t] = await Promise.all([
     userId
       ? db.managerProfile.findUnique({

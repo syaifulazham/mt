@@ -16,6 +16,7 @@ export async function GET() {
     secondaryContingents,
     higherContingents,
     independentContingents,
+    internationalContingents,
   ] = await Promise.all([
     db.participant.count(),
     db.contingent.count(),
@@ -28,8 +29,9 @@ export async function GET() {
     db.contingent.count({
       where: { contingentType: "SCHOOL", school: { level: "SECONDARY" } },
     }),
-    db.contingent.count({ where: { contingentType: "HIGHER"      } }),
-    db.contingent.count({ where: { contingentType: "INDEPENDENT" } }),
+    db.contingent.count({ where: { contingentType: "HIGHER"        } }),
+    db.contingent.count({ where: { contingentType: "INDEPENDENT"   } }),
+    db.contingent.count({ where: { contingentType: "INTERNATIONAL" } }),
   ]);
 
   // ── Participation by competition ───────────────────────────────────────────
@@ -80,19 +82,25 @@ export async function GET() {
   // Zones are many-to-many with states via ZoneState; build a stateId→zoneName
   // lookup so we can resolve the correct zone from the school's stateId.
 
-  const [zoneStates, participantsByGeo] = await Promise.all([
+  // Use TeamMember (one row = one competition participation) so zone/state
+  // charts accumulate competition entries, not unique participant headcounts.
+  const [zoneStates, teamMembersByGeo] = await Promise.all([
     db.zoneState.findMany({ include: { zone: { select: { name: true } } } }),
-    db.participant.findMany({
+    db.teamMember.findMany({
       select: {
-        contingent: {
+        participant: {
           select: {
-            contingentType: true,
-            zone:  { select: { name: true } },
-            state: { select: { id: true, name: true } },
-            school: {
+            contingent: {
               select: {
+                contingentType: true,
                 zone:  { select: { name: true } },
                 state: { select: { id: true, name: true } },
+                school: {
+                  select: {
+                    zone:  { select: { name: true } },
+                    state: { select: { id: true, name: true } },
+                  },
+                },
               },
             },
           },
@@ -110,8 +118,9 @@ export async function GET() {
   const zoneMap:  Record<string, number> = {};
   const stateMap: Record<string, number> = {};
 
-  for (const p of participantsByGeo) {
-    const c = p.contingent;
+  for (const tm of teamMembersByGeo) {
+    const c = tm.participant.contingent;
+    if (!c) continue;
     const isSchool = c.contingentType === "SCHOOL";
 
     const geoState = isSchool ? c.school?.state : c.state;
@@ -146,6 +155,7 @@ export async function GET() {
       secondaryContingents,
       higherContingents,
       independentContingents,
+      internationalContingents,
     },
     charts: { byGender, byZone, byState, byCompetition },
   });
