@@ -393,7 +393,7 @@ export function NewsClient({ initialArticles }: { initialArticles: NewsArticle[]
                       className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       value={form.sourceUrl}
                       onChange={e => updateForm("sourceUrl", e.target.value)}
-                      placeholder="https://…"
+                      placeholder="https://www.thestar.com.my/news/…/article-title"
                     />
                     {form.sourceUrl && (
                       <a href={form.sourceUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-blue-500 hover:text-blue-700">
@@ -401,6 +401,10 @@ export function NewsClient({ initialArticles }: { initialArticles: NewsArticle[]
                       </a>
                     )}
                   </div>
+                  {form.sourceUrl && (() => { try { const u = new URL(form.sourceUrl); return u.pathname.replace(/\/+$/, "").length === 0; } catch { return false; } })() && (
+                    <p className="mt-1 text-[10px] text-amber-600">URL ini seperti laman utama sahaja — masukkan URL penuh artikel</p>
+                  )}
+                  {!form.sourceUrl && <p className="mt-1 text-[10px] text-slate-400">Masukkan URL penuh artikel (bukan laman utama)</p>}
                 </div>
               </div>
 

@@ -25,9 +25,11 @@ export async function POST(req: NextRequest) {
 For each article found, extract:
 - title: the article headline
 - source: publication name (e.g. "The Star", "Bernama", "New Straits Times", "Utusan Malaysia")
-- sourceUrl: direct URL to the article
+- sourceUrl: the FULL direct URL to the specific article page (e.g. "https://www.thestar.com.my/news/nation/2026/06/08/techlympics-article-title") — NOT the homepage or domain root. If you cannot find the exact article URL, omit this article.
 - publishedDate: ISO date string (YYYY-MM-DD) if known, otherwise null
 - summary: 3–4 sentence summary suitable for a news website
+
+IMPORTANT: sourceUrl must be the complete URL to the individual article, not just the publication's homepage (e.g. NOT "https://www.bernama.com" or "https://www.thestar.com.my"). Only include articles where you have the full article URL.
 
 Return ONLY a valid JSON array (no markdown fences, no explanation):
 [{"title":"...","source":"...","sourceUrl":"...","publishedDate":"...","summary":"..."}]
