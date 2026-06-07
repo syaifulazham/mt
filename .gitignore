@@ -49,4 +49,4 @@ next-env.d.ts
 .env.test.local
 .env.production.local
 
-SERVER_SETUP.md
+SERVER_SETUP.mddata/

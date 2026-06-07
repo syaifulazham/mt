@@ -22,6 +22,7 @@ import {
   Images,
   Newspaper,
   Megaphone,
+  Map,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
@@ -49,9 +50,10 @@ const NAV: NavItem[] = [
   {
     label: "Landing Page", href: "/organizer/landing", icon: Globe,
     children: [
-      { label: "Galleries",      href: "/organizer/landing/galleries",      icon: Images },
-      { label: "News",           href: "/organizer/landing/news",           icon: Newspaper },
-      { label: "Announcements",  href: "/organizer/landing/announcements",  icon: Megaphone },
+      { label: "Galleries",           href: "/organizer/landing/galleries",     icon: Images },
+      { label: "News",               href: "/organizer/landing/news",          icon: Newspaper },
+      { label: "Announcements",      href: "/organizer/landing/announcements", icon: Megaphone },
+      { label: "Competition Mapping", href: "/organizer/landing/mapping",       icon: Map },
     ],
   },
   { label: "Smart Chat",     href: "/organizer/smart-chat",     icon: BotMessageSquare },

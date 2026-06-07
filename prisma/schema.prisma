@@ -785,3 +785,18 @@ model GalleryPhoto {
   @@index([galleryId])
   @@map("gallery_photos")
 }
+
+model NewsArticle {
+  id          String    @id @default(cuid())
+  title       String
+  source      String?
+  sourceUrl   String?
+  content     String    @db.Text
+  images      String[]  @default([])
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("news_articles")
+}
