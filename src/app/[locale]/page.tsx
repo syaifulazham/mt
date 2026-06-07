@@ -65,6 +65,7 @@ export default async function LandingPage({
     select: { thumbUrl: true },
     where: { thumbUrl: { startsWith: "https://" } },
   });
+  // eslint-disable-next-line react-hooks/purity
   const shuffled = [...galleryPhotos].sort(() => Math.random() - 0.5).slice(0, 5);
   const carouselImages = shuffled.map((p) => p.thumbUrl);
 
