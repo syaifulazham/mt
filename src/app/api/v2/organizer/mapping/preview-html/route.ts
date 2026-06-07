@@ -10,15 +10,22 @@ export async function GET() {
   }));
 
   const comps = clusters.flatMap((cl) =>
-    cl.competitions.map((c) => ({
-      id: c.slug || c.id,
-      name: c.name,
-      cl: cl.id,
-      int: c.is_international === 1,
-      method: c.method ?? undefined,
-      d: { bm: c.desc_bm ?? "", en: c.desc_en ?? "" },
-      entries: c.entries.map((e) => [e.code, e.level]),
-    }))
+    cl.competitions.map((c) => {
+      let pdfs: { name: string; url: string }[] = [];
+      if (c.pdf_url) {
+        try { pdfs = JSON.parse(c.pdf_url); } catch { pdfs = []; }
+      }
+      return {
+        id: c.slug || c.id,
+        name: c.name,
+        cl: cl.id,
+        int: c.is_international === 1,
+        method: c.method ?? undefined,
+        d: { bm: c.desc_bm ?? "", en: c.desc_en ?? "" },
+        entries: c.entries.map((e) => [e.code, e.level]),
+        pdfs,
+      };
+    })
   );
 
   const dataJson = JSON.stringify({ clusters: clusterMeta, comps });
@@ -111,7 +118,7 @@ export async function GET() {
   <p class="meta" id="p-method"></p>
   <p class="desc" id="p-desc"></p>
   <div class="pa">
-    <button class="btn" id="p-pdf"></button>
+    <div id="p-pdf-area" style="display:contents"></div>
     <button class="btn" id="p-reg"></button>
   </div>
   <p class="draft" id="p-draft"></p>
@@ -179,9 +186,13 @@ if(COMPS.length===0){
     document.getElementById("p-where").textContent=S().offered+": "+c.entries.map(e=>e[0]+" · "+(S().levels[e[1]]||e[1])).join("   |   ");
     document.getElementById("p-method").textContent=c.method?S().methods[c.method]:"";
     document.getElementById("p-desc").textContent=c.d[lang]||"";
-    const pdf=document.getElementById("p-pdf");
-    if(c.pdf_path){pdf.textContent=S().download;pdf.disabled=false;pdf.onclick=()=>{window.open(c.pdf_path,"_blank");};}
-    else{pdf.textContent="📄 Modul akan dimuat naik";pdf.disabled=true;pdf.onclick=null;}
+    const pdfArea=document.getElementById("p-pdf-area");
+    pdfArea.innerHTML="";
+    const hasPdfs=c.pdfs&&c.pdfs.length>0;
+    if(hasPdfs){
+      c.pdfs.forEach(doc=>{const btn=document.createElement("button");btn.className="btn";btn.textContent="📄 "+doc.name;btn.onclick=()=>window.open(doc.url,"_blank");pdfArea.appendChild(btn);});
+    }else{const btn=document.createElement("button");btn.className="btn";btn.textContent="📄 Modul akan dimuat naik";btn.disabled=true;pdfArea.appendChild(btn);}
+    document.getElementById("p-draft").style.display=hasPdfs?"none":"";
     document.getElementById("panel").classList.add("on");
   }
   function closePanel(){document.getElementById("panel").classList.remove("on");}

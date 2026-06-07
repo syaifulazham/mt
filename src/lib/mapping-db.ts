@@ -167,6 +167,7 @@ export function updateCompetitionUserFields(
   const sets: string[] = [];
   const vals: Record<string, unknown> = { id };
   for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) continue;  // skip fields not being updated
     sets.push(`${k}=@${k}`); vals[k] = v;
   }
   if (sets.length) db.prepare(`UPDATE competitions SET ${sets.join(",")} WHERE id=@id`).run(vals);

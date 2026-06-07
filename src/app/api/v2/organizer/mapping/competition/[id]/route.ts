@@ -26,8 +26,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const clusters = getAllClusters();
     return NextResponse.json({ ok: true, clusters });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Failed to update competition" }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[competition PUT]", msg, e);
+    return NextResponse.json({ error: `Failed to update competition: ${msg}` }, { status: 500 });
   }
 }
 
