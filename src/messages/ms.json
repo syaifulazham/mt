@@ -79,7 +79,15 @@
     "countdownSeconds": "Saat",
     "carouselPrevious": "Sebelumnya",
     "carouselNext": "Seterusnya",
-    "carouselSlide": "Slaid {number}"
+    "carouselSlide": "Slaid {number}",
+    "rimauChatTitle": "AiRimau",
+    "rimauChatSubtitle": "Pembantu Techlympics",
+    "rimauChatBubble": "Hai! Tanya saya tentang Techlympics 🐯",
+    "rimauChatPlaceholder": "Tanya tentang Techlympics…",
+    "rimauChatSend": "Hantar",
+    "rimauChatWelcome": "Hai! Saya **AiRimau**, panduan Malaysia Techlympics 2026 anda. Tanya saya tentang pertandingan, pendaftaran, tarikh, tempat — apa sahaja! 🐯",
+    "rimauChatError": "Maaf, berlaku ralat. Sila cuba lagi!",
+    "rimauChatClose": "Tutup chat"
   },
   "auth": {
     "managerPortalTitle": "Techlympics",

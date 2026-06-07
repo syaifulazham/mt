@@ -2,6 +2,7 @@ import Image from "next/image";
 import { Link } from "@/i18n/navigation";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { HeroCarousel } from "@/components/landing/HeroCarousel";
+import { AiRimauChat } from "@/components/landing/AiRimauChat";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { getTranslations } from "next-intl/server";
@@ -650,6 +651,9 @@ export default async function LandingPage({
             </div>
           </section>
         )}
+
+        {/* ── AI RIMAU CHAT ────────────────────────────────────────────────────── */}
+        <AiRimauChat />
 
         {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
         <footer style={{ background: "#0f172a", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
