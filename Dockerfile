@@ -1,8 +1,10 @@
 # ── 1. Install dependencies ───────────────────────────────────────────────────
 FROM node:22-alpine AS deps
 WORKDIR /app
+# Build tools needed for better-sqlite3 native compilation
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
-RUN npm install --ignore-scripts
+RUN npm install --ignore-scripts && npm rebuild better-sqlite3
 
 # ── 2. Build ──────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
@@ -44,8 +46,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static     ./.next/static
 COPY --from=builder /app/prisma                          ./prisma
 COPY --from=builder /app/node_modules/.prisma            ./node_modules/.prisma
+# better-sqlite3 native binary is not auto-traced by Next.js standalone; copy explicitly
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
-RUN mkdir -p /app/public/uploads && chown -R nextjs:nodejs /app/public
+RUN mkdir -p /app/public/uploads /app/data && chown -R nextjs:nodejs /app/public /app/data
 
 USER nextjs
 EXPOSE 3000

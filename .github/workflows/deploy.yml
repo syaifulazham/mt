@@ -178,9 +178,9 @@ jobs:
             docker stop mt 2>/dev/null || true
             docker rm   mt 2>/dev/null || true
 
-            # Uploads live OUTSIDE the git repo so git clean never deletes them
-            sudo mkdir -p /var/mt/uploads
-            sudo chown -R 1001:1001 /var/mt/uploads
+            # Uploads and SQLite data live OUTSIDE the git repo so git clean never deletes them
+            sudo mkdir -p /var/mt/uploads /var/mt/data
+            sudo chown -R 1001:1001 /var/mt/uploads /var/mt/data
 
             docker run -d \
               --name mt \
@@ -188,6 +188,7 @@ jobs:
               --env-file /opt/mt/.env.production \
               --restart unless-stopped \
               -v /var/mt/uploads:/app/public/uploads \
+              -v /var/mt/data:/app/data \
               mt:latest
 
             echo "── Pruning old images ──"
