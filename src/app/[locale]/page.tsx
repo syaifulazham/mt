@@ -598,7 +598,8 @@ export default async function LandingPage({
                 {galleries.map((g) => {
                   const thumb = g.coverUrl ?? g.photos[0]?.thumbUrl ?? null;
                   return (
-                    <div key={g.id} className="gallery-card">
+                    <Link key={g.id} href={`/gallery/${g.id}`} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+                    <div className="gallery-card" style={{ height: "100%" }}>
                       {/* Cover image */}
                       <div style={{ aspectRatio: "16/9", background: "#f3f4f6", overflow: "hidden", position: "relative" }}>
                         {thumb ? (
@@ -642,6 +643,7 @@ export default async function LandingPage({
                         </p>
                       </div>
                     </div>
+                    </Link>
                   );
                 })}
               </div>

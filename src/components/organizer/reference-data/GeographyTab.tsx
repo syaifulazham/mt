@@ -213,6 +213,7 @@ function StatesPane() {
       </Dialog>
 
       <DeleteDialog
+        key={deleteTarget?.id ?? "none"}
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}

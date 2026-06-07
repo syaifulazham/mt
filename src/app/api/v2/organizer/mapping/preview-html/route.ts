@@ -117,10 +117,7 @@ export async function GET() {
   <p class="where" id="p-where"></p>
   <p class="meta" id="p-method"></p>
   <p class="desc" id="p-desc"></p>
-  <div class="pa">
-    <div id="p-pdf-area" style="display:contents"></div>
-    <button class="btn" id="p-reg"></button>
-  </div>
+  <div class="pa" id="p-pdf-area"></div>
   <p class="draft" id="p-draft"></p>
 </div>
 
@@ -191,7 +188,7 @@ if(COMPS.length===0){
     const hasPdfs=c.pdfs&&c.pdfs.length>0;
     if(hasPdfs){
       c.pdfs.forEach(doc=>{const btn=document.createElement("button");btn.className="btn";btn.textContent="📄 "+doc.name;btn.onclick=()=>window.open(doc.url,"_blank");pdfArea.appendChild(btn);});
-    }else{const btn=document.createElement("button");btn.className="btn";btn.textContent="📄 Modul akan dimuat naik";btn.disabled=true;pdfArea.appendChild(btn);}
+    }
     document.getElementById("p-draft").style.display=hasPdfs?"none":"";
     document.getElementById("panel").classList.add("on");
   }
@@ -213,8 +210,6 @@ if(COMPS.length===0){
     document.getElementById("q").placeholder=S().search;
     document.getElementById("t-hint").textContent=S().hint;
     document.getElementById("t-footer").textContent=S().footer;
-    document.getElementById("p-reg").textContent=S().register;
-    document.getElementById("p-reg").onclick=()=>alert(S().regmsg);
     document.getElementById("p-draft").textContent=S().draft;
     document.getElementById("legend").innerHTML=Object.keys(LVCOLOR).map(k=>'<span><i style="background:'+LVCOLOR[k]+'"></i>'+(S().levels[k]||k)+'</span>').join("")+'<span><span class="inttag">INT</span>'+S().intf+'</span>';
   }
