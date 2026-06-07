@@ -55,7 +55,31 @@
     "competitionTracksLabel": "Acara Pertandingan",
     "tagline": "Luar Biasa, <golden>Global</golden>,",
     "tagline2": "Inklusif.",
-    "footerCopy": "© 2026 MOSTI · Hak Cipta Terpelihara"
+    "footerCopy": "© 2026 MOSTI · Hak Cipta Terpelihara",
+    "mappingTitle": "Peta Pertandingan",
+    "mappingDescription": "Laluan lengkap menuju peringkat kebangsaan — terokai semua kluster, pertandingan, dan kategori penyertaan rasmi Techlympics 2026.",
+    "viewFullMap": "Lihat Peta Penuh",
+    "seeMore": "Lihat Selanjutnya",
+    "morePlus": "+{count} lagi",
+    "newsHeading": "Berita",
+    "newsLatest": "Terkini",
+    "readFull": "Baca Penuh",
+    "galleryHeading": "Galeri",
+    "galleryPhotos": "Foto",
+    "photoCount": "{count} foto",
+    "noPhotos": "Tiada foto",
+    "followUs": "Ikuti kami",
+    "scroll": "Tatal",
+    "completeProfile": "Lengkapkan Profil",
+    "iframeTitle": "Peta Pertandingan Malaysia Techlympics 2026",
+    "profileFallback": "Profil",
+    "countdownDays": "Hari",
+    "countdownHours": "Jam",
+    "countdownMinutes": "Minit",
+    "countdownSeconds": "Saat",
+    "carouselPrevious": "Sebelumnya",
+    "carouselNext": "Seterusnya",
+    "carouselSlide": "Slaid {number}"
   },
   "auth": {
     "managerPortalTitle": "Techlympics",
@@ -369,5 +393,36 @@
     "credsEnrolled": "Didaftarkan secara automatik ke kursus yang dikaitkan.",
     "credsNote": "Nama pengguna diperoleh daripada emel pasukan. Kata laluan ditunjukkan sekali sahaja — simpan sekarang.",
     "credsDone": "Selesai"
+  },
+  "gallery": {
+    "back": "Galeri",
+    "photoCount": "{count} foto",
+    "noPhotos": "Tiada foto dalam galeri ini.",
+    "close": "Tutup",
+    "previous": "Sebelumnya",
+    "next": "Seterusnya"
+  },
+  "competition": {
+    "breadcrumbHome": "Laman Utama",
+    "details": "Maklumat Pertandingan",
+    "targetGroup": "Kumpulan Sasaran",
+    "participationType": "Jenis Penyertaan",
+    "individual": "Individu",
+    "teamFixed": "Berpasukan ({count} ahli)",
+    "teamRange": "Berpasukan ({min}–{max} ahli)",
+    "venue": "Tempat",
+    "date": "Tarikh",
+    "registration": "Pendaftaran",
+    "documents": "Kertas Kerja / Dokumen",
+    "themeLabel": "Tema",
+    "seeAll": "Lihat Semua Pertandingan",
+    "back": "Kembali",
+    "download": "Muat Turun"
+  },
+  "theme": {
+    "breadcrumbHome": "Laman Utama",
+    "competitions": "Pertandingan",
+    "competitionCount": "{count} Pertandingan dalam tema ini",
+    "noCompetitions": "Tiada pertandingan buat masa ini."
   }
 }

@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { PublicNav } from "@/components/landing/PublicNav";
 import { Link } from "@/i18n/navigation";
+import { getTranslations } from "next-intl/server";
 import { ChevronRight } from "lucide-react";
 
-const LEVEL_PILL: Record<string, { label: string; bg: string; color: string }> = {
+const LEVEL_PILL: Record<string, { bg: string; color: string; label: string }> = {
   KINDERGARTEN: { label: "Prasekolah", bg: "#fce7f3", color: "#be185d" },
   PRIMARY:      { label: "Rendah",     bg: "#d1fae5", color: "#065f46" },
   SECONDARY:    { label: "Menengah",   bg: "#dbeafe", color: "#1e40af" },
@@ -29,17 +30,20 @@ export default async function ThemePage({
 }) {
   const { locale, id } = await params;
 
-  const theme = await db.theme.findUnique({
-    where: { id },
-    include: {
-      competitions: {
-        orderBy: { code: "asc" },
-        include: {
-          targetGroups: { include: { targetGroup: true }, take: 1 },
+  const [theme, t] = await Promise.all([
+    db.theme.findUnique({
+      where: { id },
+      include: {
+        competitions: {
+          orderBy: { code: "asc" },
+          include: {
+            targetGroups: { include: { targetGroup: true }, take: 1 },
+          },
         },
       },
-    },
-  });
+    }),
+    getTranslations({ locale, namespace: "theme" }),
+  ]);
 
   if (!theme) notFound();
 
@@ -60,7 +64,7 @@ export default async function ThemePage({
         <div style={{ background: accent, padding: "64px 40px 48px", position: "relative", overflow: "hidden" }}>
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
             <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.75)", textDecoration: "none", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 24 }}>
-              Laman Utama <ChevronRight size={12} />
+              {t("breadcrumbHome")} <ChevronRight size={12} />
             </Link>
             <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 16 }}>
               {theme.logoUrl && (
@@ -84,10 +88,10 @@ export default async function ThemePage({
         {/* Competitions */}
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "56px 40px" }}>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: accent, marginBottom: 10, fontWeight: 700 }}>
-            Pertandingan
+            {t("competitions")}
           </p>
           <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.4rem, 2.5vw, 2rem)", textTransform: "uppercase", color: "#111827", marginBottom: 32, lineHeight: 1.2 }}>
-            {theme.competitions.length} Pertandingan dalam tema ini
+            {t("competitionCount", { count: theme.competitions.length })}
           </h2>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -116,7 +120,7 @@ export default async function ThemePage({
             })}
 
             {theme.competitions.length === 0 && (
-              <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>Tiada pertandingan buat masa ini.</p>
+              <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>{t("noCompetitions")}</p>
             )}
           </div>
         </div>

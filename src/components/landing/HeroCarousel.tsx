@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function HeroCarousel({ images }: { images: string[] }) {
+  const t = useTranslations("landing");
   const [current, setCurrent] = useState(0);
   const [paused, setPaused]   = useState(false);
 
@@ -47,14 +49,14 @@ export function HeroCarousel({ images }: { images: string[] }) {
           <button
             onClick={prev}
             className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white hover:bg-white/40 transition-colors"
-            aria-label="Previous"
+            aria-label={t("carouselPrevious")}
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
           <button
             onClick={next}
             className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white hover:bg-white/40 transition-colors"
-            aria-label="Next"
+            aria-label={t("carouselNext")}
           >
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -72,7 +74,7 @@ export function HeroCarousel({ images }: { images: string[] }) {
                 "h-1.5 rounded-full transition-all duration-300",
                 i === current ? "w-8 bg-white" : "w-1.5 bg-white/50 hover:bg-white/75"
               )}
-              aria-label={`Slide ${i + 1}`}
+              aria-label={t("carouselSlide", { number: i + 1 })}
             />
           ))}
         </div>

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { Link } from "@/i18n/navigation";
+import { getTranslations } from "next-intl/server";
 import { ChevronLeft, Download } from "lucide-react";
 
 export default async function DocViewerPage({
@@ -8,12 +9,15 @@ export default async function DocViewerPage({
 }: {
   params: Promise<{ locale: string; id: string; docId: string }>;
 }) {
-  const { id, docId } = await params;
+  const { locale, id, docId } = await params;
 
-  const doc = await db.competitionDoc.findFirst({
-    where: { id: docId, competitionId: id },
-    include: { competition: { select: { id: true, name: true, code: true, theme: { select: { color: true } } } } },
-  });
+  const [doc, t] = await Promise.all([
+    db.competitionDoc.findFirst({
+      where: { id: docId, competitionId: id },
+      include: { competition: { select: { id: true, name: true, code: true, theme: { select: { color: true } } } } },
+    }),
+    getTranslations({ locale, namespace: "competition" }),
+  ]);
 
   if (!doc) notFound();
 
@@ -27,7 +31,7 @@ export default async function DocViewerPage({
           href={`/competition/${id}`}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.65)", textDecoration: "none", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "6px 10px", borderRadius: 6, background: "rgba(255,255,255,0.06)", transition: "background 0.15s" }}
         >
-          <ChevronLeft size={14} /> Kembali
+          <ChevronLeft size={14} /> {t("back")}
         </Link>
 
         <div style={{ flex: 1, overflow: "hidden" }}>
@@ -44,7 +48,7 @@ export default async function DocViewerPage({
           download={doc.name}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#fff", textDecoration: "none", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", padding: "6px 14px", borderRadius: 6, background: accent, flexShrink: 0 }}
         >
-          <Download size={13} /> Muat Turun
+          <Download size={13} /> {t("download")}
         </a>
       </div>
 

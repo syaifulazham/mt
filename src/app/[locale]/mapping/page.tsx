@@ -116,7 +116,7 @@ export default async function MappingPreviewPage({
                 {clerkDisplayName && <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{clerkDisplayName}</span>}
                 <Link href="/manager/onboarding">
                   <button style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 20px", borderRadius: 999, background: "#16a34a", color: "#fff", border: "none", cursor: "pointer" }}>
-                    Lengkapkan Profil
+                    {t("completeProfile")}
                   </button>
                 </Link>
               </div>
@@ -136,7 +136,7 @@ export default async function MappingPreviewPage({
         <iframe
           src="/api/v2/organizer/mapping/preview-html"
           style={{ flex: 1, width: "100%", border: "none", display: "block" }}
-          title="Peta Pertandingan Malaysia Techlympics 2026"
+          title={t("iframeTitle")}
         />
       </div>
     </>

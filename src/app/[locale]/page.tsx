@@ -250,7 +250,7 @@ export default async function LandingPage({
                     className="text-xs font-bold tracking-widest uppercase px-5 py-2 rounded-full"
                     style={{ background: "#16a34a", color: "#fff" }}
                   >
-                    Lengkapkan Profil
+                    {t("completeProfile")}
                   </button>
                 </Link>
               </div>
@@ -382,7 +382,7 @@ export default async function LandingPage({
 
           {/* Scroll indicator */}
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-white/50">
-            <span className="text-[10px] tracking-widest uppercase">Scroll</span>
+            <span className="text-[10px] tracking-widest uppercase">{t("scroll")}</span>
             <div className="w-px h-8 bg-gradient-to-b from-white/40 to-transparent" />
           </div>
         </section>
@@ -443,14 +443,14 @@ export default async function LandingPage({
                     </div>
 
                     <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "#FFD700", marginBottom: 6 }}>
-                      Peta Pertandingan
+                      {t("mappingTitle")}
                     </div>
                     <div style={{ fontSize: "0.78rem", lineHeight: 1.6, color: "rgba(255,255,255,0.6)", marginBottom: 20, flex: 1 }}>
-                      Laluan lengkap menuju peringkat kebangsaan — terokai semua kluster, pertandingan, dan kategori penyertaan rasmi Techlympics 2026.
+                      {t("mappingDescription")}
                     </div>
 
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.75rem", fontWeight: 700, color: "#FFD700", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "auto" }}>
-                      Lihat Peta Penuh
+                      {t("viewFullMap")}
                       <ChevronRight size={14} />
                     </div>
                   </div>
@@ -504,7 +504,7 @@ export default async function LandingPage({
                       href={`/theme/${c.id}`}
                       style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.75rem", fontWeight: 700, color: accent, textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase", marginTop: "auto" }}
                     >
-                      {c._count.competitions > 5 ? `+${c._count.competitions - 5} lagi · ` : ""}Lihat Selanjutnya <ChevronRight size={14} />
+                      {c._count.competitions > 5 ? `${t("morePlus", { count: c._count.competitions - 5 })} · ` : ""}{t("seeMore")} <ChevronRight size={14} />
                     </Link>
                   </div>
                 );
@@ -521,7 +521,7 @@ export default async function LandingPage({
                 {t("navNews")}
               </p>
               <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
-                Berita <span style={{ color: "#003893" }}>Terkini</span>
+                {t("newsHeading")} <span style={{ color: "#003893" }}>{t("newsLatest")}</span>
               </h2>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
@@ -572,7 +572,7 @@ export default async function LandingPage({
                           rel="noopener noreferrer"
                           style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 14, fontSize: "0.75rem", fontWeight: 700, color: "#003893", textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase" }}
                         >
-                          Baca Penuh <ChevronRight size={13} />
+                          {t("readFull")} <ChevronRight size={13} />
                         </a>
                       )}
                     </div>
@@ -591,7 +591,7 @@ export default async function LandingPage({
                 {t("navGallery")}
               </p>
               <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
-                Galeri <span style={{ color: "#CC0001" }}>Foto</span>
+                {t("galleryHeading")} <span style={{ color: "#CC0001" }}>{t("galleryPhotos")}</span>
               </h2>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
@@ -639,7 +639,7 @@ export default async function LandingPage({
                           </p>
                         )}
                         <p style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                          {g._count.photos > 0 ? `${g._count.photos} foto` : "Tiada foto"}
+                          {g._count.photos > 0 ? t("photoCount", { count: g._count.photos }) : t("noPhotos")}
                         </p>
                       </div>
                     </div>
@@ -675,7 +675,7 @@ export default async function LandingPage({
 
               {/* Social icons */}
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <p style={{ fontSize: "0.68rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginRight: 4 }}>Ikuti kami</p>
+                <p style={{ fontSize: "0.68rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginRight: 4 }}>{t("followUs")}</p>
 
                 {/* Instagram */}
                 <a href="https://www.instagram.com/mytechlympics" target="_blank" rel="noopener noreferrer"

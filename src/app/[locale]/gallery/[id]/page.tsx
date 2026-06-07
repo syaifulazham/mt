@@ -4,6 +4,7 @@ import { PublicNav } from "@/components/landing/PublicNav";
 import { GalleryPhotoGrid } from "@/components/landing/GalleryPhotoGrid";
 import { Images, ArrowLeft, CalendarDays } from "lucide-react";
 import { Link } from "@/i18n/navigation";
+import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 
 type Props = { params: Promise<{ locale: string; id: string }> };
@@ -18,10 +19,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function GalleryDetailPage({ params }: Props) {
   const { locale, id } = await params;
 
-  const gallery = await db.gallery.findUnique({
-    where: { id },
-    include: { photos: { orderBy: { order: "asc" } } },
-  });
+  const [gallery, t] = await Promise.all([
+    db.gallery.findUnique({
+      where: { id },
+      include: { photos: { orderBy: { order: "asc" } } },
+    }),
+    getTranslations({ locale, namespace: "gallery" }),
+  ]);
 
   if (!gallery) notFound();
 
@@ -42,7 +46,7 @@ export default async function GalleryDetailPage({ params }: Props) {
               href="/#gallery"
               style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", textDecoration: "none", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 20 }}
             >
-              <ArrowLeft size={14} /> Galeri
+              <ArrowLeft size={14} /> {t("back")}
             </Link>
             <h1 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 900, fontSize: "clamp(1.6rem, 4vw, 2.8rem)", textTransform: "uppercase", letterSpacing: "0.03em", margin: "0 0 10px" }}>
               {gallery.title}
@@ -52,7 +56,7 @@ export default async function GalleryDetailPage({ params }: Props) {
                 <CalendarDays size={14} /> {gallery.year}
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Images size={14} /> {gallery.photos.length} foto
+                <Images size={14} /> {t("photoCount", { count: gallery.photos.length })}
               </span>
             </div>
             {gallery.description && (

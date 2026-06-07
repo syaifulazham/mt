@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Images, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 type Photo = { id: string; thumbUrl: string; fullUrl: string; description: string | null };
 
 export function GalleryPhotoGrid({ photos, galleryTitle }: { photos: Photo[]; galleryTitle: string }) {
+  const t = useTranslations("gallery");
   const [idx, setIdx] = useState<number | null>(null);
 
   const open  = (i: number) => setIdx(i);
@@ -34,7 +36,7 @@ export function GalleryPhotoGrid({ photos, galleryTitle }: { photos: Photo[]; ga
     return (
       <div style={{ textAlign: "center", padding: "80px 0", color: "#9ca3af" }}>
         <Images size={48} style={{ margin: "0 auto 16px", display: "block" }} />
-        <p style={{ fontSize: "1rem" }}>Tiada foto dalam galeri ini.</p>
+        <p style={{ fontSize: "1rem" }}>{t("noPhotos")}</p>
       </div>
     );
   }
@@ -80,7 +82,7 @@ export function GalleryPhotoGrid({ photos, galleryTitle }: { photos: Photo[]; ga
           <button
             onClick={close}
             style={{ position: "absolute", top: 20, right: 24, background: "none", border: "none", color: "#fff", cursor: "pointer", padding: 4 }}
-            aria-label="Close"
+            aria-label={t("close")}
           >
             <X size={28} />
           </button>
@@ -90,7 +92,7 @@ export function GalleryPhotoGrid({ photos, galleryTitle }: { photos: Photo[]; ga
             <button
               onClick={(e) => { e.stopPropagation(); prev(); }}
               style={{ position: "absolute", left: 16, background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", cursor: "pointer", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
-              aria-label="Previous"
+              aria-label={t("previous")}
             >
               <ChevronLeft size={22} />
             </button>
@@ -119,7 +121,7 @@ export function GalleryPhotoGrid({ photos, galleryTitle }: { photos: Photo[]; ga
             <button
               onClick={(e) => { e.stopPropagation(); next(); }}
               style={{ position: "absolute", right: 16, background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", cursor: "pointer", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
-              aria-label="Next"
+              aria-label={t("next")}
             >
               <ChevronRight size={22} />
             </button>

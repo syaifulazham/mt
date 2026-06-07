@@ -55,7 +55,31 @@
     "competitionTracksLabel": "Competition Tracks",
     "tagline": "Extraordinary, <golden>Global</golden>,",
     "tagline2": "Inclusive.",
-    "footerCopy": "© 2026 MOSTI · All Rights Reserved"
+    "footerCopy": "© 2026 MOSTI · All Rights Reserved",
+    "mappingTitle": "Competition Map",
+    "mappingDescription": "Complete pathway to national level — explore all clusters, competitions, and official participation categories of Techlympics 2026.",
+    "viewFullMap": "View Full Map",
+    "seeMore": "See More",
+    "morePlus": "+{count} more",
+    "newsHeading": "News",
+    "newsLatest": "Latest",
+    "readFull": "Read Full",
+    "galleryHeading": "Gallery",
+    "galleryPhotos": "Photos",
+    "photoCount": "{count} photos",
+    "noPhotos": "No photos",
+    "followUs": "Follow us",
+    "scroll": "Scroll",
+    "completeProfile": "Complete Profile",
+    "iframeTitle": "Malaysia Techlympics 2026 Competition Map",
+    "profileFallback": "Profile",
+    "countdownDays": "Days",
+    "countdownHours": "Hours",
+    "countdownMinutes": "Minutes",
+    "countdownSeconds": "Seconds",
+    "carouselPrevious": "Previous",
+    "carouselNext": "Next",
+    "carouselSlide": "Slide {number}"
   },
   "auth": {
     "managerPortalTitle": "Techlympics",
@@ -369,5 +393,36 @@
     "credsEnrolled": "Automatically enrolled in the linked course.",
     "credsNote": "Username is derived from the team email. Password is shown once — save it now.",
     "credsDone": "Done"
+  },
+  "gallery": {
+    "back": "Gallery",
+    "photoCount": "{count} photos",
+    "noPhotos": "No photos in this gallery.",
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "competition": {
+    "breadcrumbHome": "Home",
+    "details": "Competition Information",
+    "targetGroup": "Target Group",
+    "participationType": "Type of Participation",
+    "individual": "Individual",
+    "teamFixed": "Team ({count} members)",
+    "teamRange": "Team ({min}–{max} members)",
+    "venue": "Venue",
+    "date": "Date",
+    "registration": "Registration",
+    "documents": "Concept Papers / Documents",
+    "themeLabel": "Theme",
+    "seeAll": "See All Competitions",
+    "back": "Back",
+    "download": "Download"
+  },
+  "theme": {
+    "breadcrumbHome": "Home",
+    "competitions": "Competitions",
+    "competitionCount": "{count} Competitions in this theme",
+    "noCompetitions": "No competitions at this time."
   }
 }

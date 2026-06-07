@@ -63,7 +63,7 @@ export async function PublicNav({ locale }: { locale: string }) {
         ) : userId ? (
           <Link href="/manager/onboarding">
             <button className="text-xs font-bold tracking-widest uppercase px-5 py-2 rounded-full" style={{ background: "#16a34a", color: "#fff" }}>
-              {displayName ?? "Profil"}
+              {displayName ?? t("profileFallback")}
             </button>
           </Link>
         ) : (

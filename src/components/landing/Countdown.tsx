@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, Fragment } from "react";
+import { useTranslations } from "next-intl";
 
 const TARGET = new Date("2026-08-15T09:00:00+08:00");
 
 function pad(n: number, w = 2) { return String(n).padStart(w, "0"); }
 
 export function Countdown() {
+  const t = useTranslations("landing");
   const [diff, setDiff] = useState(0);
 
   useEffect(() => {
@@ -22,10 +24,10 @@ export function Countdown() {
   const s = Math.floor((diff % 60000) / 1000);
 
   const blocks = [
-    { val: pad(d, 3), label: "Days"    },
-    { val: pad(h),    label: "Hours"   },
-    { val: pad(m),    label: "Minutes" },
-    { val: pad(s),    label: "Seconds" },
+    { val: pad(d, 3), label: t("countdownDays")    },
+    { val: pad(h),    label: t("countdownHours")   },
+    { val: pad(m),    label: t("countdownMinutes") },
+    { val: pad(s),    label: t("countdownSeconds") },
   ];
 
   return (

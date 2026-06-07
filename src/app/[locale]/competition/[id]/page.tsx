@@ -2,30 +2,41 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { PublicNav } from "@/components/landing/PublicNav";
 import { Link } from "@/i18n/navigation";
+import { getTranslations } from "next-intl/server";
 import { ChevronRight, FileText, Download, Users, Calendar, MapPin } from "lucide-react";
 
-const LEVEL_PILL: Record<string, { label: string; bg: string; color: string }> = {
-  KINDERGARTEN: { label: "Prasekolah", bg: "#fce7f3", color: "#be185d" },
-  PRIMARY:      { label: "Rendah",     bg: "#d1fae5", color: "#065f46" },
-  SECONDARY:    { label: "Menengah",   bg: "#dbeafe", color: "#1e40af" },
-  YOUTH:        { label: "Belia",      bg: "#ffedd5", color: "#9a3412" },
-  HIGHER:       { label: "Tinggi",     bg: "#ede9fe", color: "#5b21b6" },
+const LEVEL_PILL: Record<string, { bg: string; color: string }> = {
+  KINDERGARTEN: { bg: "#fce7f3", color: "#be185d" },
+  PRIMARY:      { bg: "#d1fae5", color: "#065f46" },
+  SECONDARY:    { bg: "#dbeafe", color: "#1e40af" },
+  YOUTH:        { bg: "#ffedd5", color: "#9a3412" },
+  HIGHER:       { bg: "#ede9fe", color: "#5b21b6" },
 };
 
-function levelPill(schoolLevel: string) {
+type LevelKey = "KINDERGARTEN" | "PRIMARY" | "SECONDARY" | "YOUTH" | "HIGHER";
+
+function levelKey(schoolLevel: string): LevelKey {
   const k = schoolLevel.toUpperCase();
-  if (k.includes("KINDERGARTEN") || k.includes("TADIKA")) return LEVEL_PILL.KINDERGARTEN;
-  if (k.includes("PRIMARY")   || k.includes("RENDAH"))    return LEVEL_PILL.PRIMARY;
-  if (k.includes("SECONDARY") || k.includes("MENENGAH"))  return LEVEL_PILL.SECONDARY;
-  if (k.includes("YOUTH") || k.includes("BELIA") || k.includes("TERBUKA")) return LEVEL_PILL.YOUTH;
-  if (k.includes("HIGHER") || k.includes("UNIVERSITY"))   return LEVEL_PILL.HIGHER;
-  return LEVEL_PILL.PRIMARY;
+  if (k.includes("KINDERGARTEN") || k.includes("TADIKA")) return "KINDERGARTEN";
+  if (k.includes("PRIMARY")   || k.includes("RENDAH"))    return "PRIMARY";
+  if (k.includes("SECONDARY") || k.includes("MENENGAH"))  return "SECONDARY";
+  if (k.includes("YOUTH") || k.includes("BELIA") || k.includes("TERBUKA")) return "YOUTH";
+  if (k.includes("HIGHER") || k.includes("UNIVERSITY"))   return "HIGHER";
+  return "PRIMARY";
 }
 
-function fmt(d: Date | null | undefined) {
+function fmt(d: Date | null | undefined, locale: string) {
   if (!d) return null;
-  return new Intl.DateTimeFormat("ms-MY", { day: "numeric", month: "long", year: "numeric" }).format(d);
+  return new Intl.DateTimeFormat(locale === "ms" ? "ms-MY" : "en-MY", { day: "numeric", month: "long", year: "numeric" }).format(d);
 }
+
+const LEVEL_LABEL: Record<LevelKey, string> = {
+  KINDERGARTEN: "Prasekolah",
+  PRIMARY:      "Rendah",
+  SECONDARY:    "Menengah",
+  YOUTH:        "Belia",
+  HIGHER:       "Tinggi",
+};
 
 export default async function CompetitionPage({
   params,
@@ -34,28 +45,33 @@ export default async function CompetitionPage({
 }) {
   const { locale, id } = await params;
 
-  const competition = await db.competition.findUnique({
-    where: { id },
-    include: {
-      theme: true,
-      targetGroups: { include: { targetGroup: true } },
-      docs: { orderBy: { uploadedAt: "desc" } },
-    },
-  });
+  const [competition, t] = await Promise.all([
+    db.competition.findUnique({
+      where: { id },
+      include: {
+        theme: true,
+        targetGroups: { include: { targetGroup: true } },
+        docs: { orderBy: { uploadedAt: "desc" } },
+      },
+    }),
+    getTranslations({ locale, namespace: "competition" }),
+  ]);
 
   if (!competition) notFound();
 
   const tg = competition.targetGroups[0]?.targetGroup;
-  const pill = tg ? levelPill(tg.schoolLevel) : LEVEL_PILL.PRIMARY;
+  const key = tg ? levelKey(tg.schoolLevel) : "PRIMARY";
+  const pill = LEVEL_PILL[key];
+  const pillLabel = LEVEL_LABEL[key];
   const accent = competition.theme?.color ?? "#003893";
 
   const { minTeamSize: min, maxTeamSize: max } = competition;
   const participationLabel =
     competition.participationType !== "TEAM" || (min === 1 && max === 1)
-      ? "Individu"
+      ? t("individual")
       : min === max
-      ? `Berpasukan (${min} ahli)`
-      : `Berpasukan (${min}–${max} ahli)`;
+      ? t("teamFixed", { count: min })
+      : t("teamRange", { min, max });
 
   return (
     <>
@@ -76,7 +92,7 @@ export default async function CompetitionPage({
             {/* Breadcrumb */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24, flexWrap: "wrap" }}>
               <Link href="/" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none", fontSize: "0.72rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                Laman Utama
+                {t("breadcrumbHome")}
               </Link>
               {competition.theme && (
                 <>
@@ -94,7 +110,7 @@ export default async function CompetitionPage({
 
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
               <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: pill.bg, color: pill.color, whiteSpace: "nowrap" }}>
-                {pill.label}
+                {pillLabel}
               </span>
               <span style={{ fontSize: "0.68rem", fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.18)", color: "#fff", letterSpacing: "0.06em" }}>
                 {competition.code}
@@ -121,7 +137,7 @@ export default async function CompetitionPage({
             {/* Competition details */}
             <section style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "24px 28px", marginBottom: 28 }}>
               <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "#6b7280", margin: "0 0 16px" }}>
-                Maklumat Pertandingan
+                {t("details")}
               </h2>
 
               <div>
@@ -129,7 +145,7 @@ export default async function CompetitionPage({
                   <div className="info-row">
                     <Users size={16} style={{ color: "#9ca3af", marginTop: 1, flexShrink: 0 }} />
                     <div>
-                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Kumpulan Sasaran</p>
+                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{t("targetGroup")}</p>
                       <p style={{ margin: 0, fontSize: "0.88rem", color: "#111827", fontWeight: 600 }}>
                         {competition.targetGroups.map((cg) => cg.targetGroup.name).join(", ")}
                       </p>
@@ -140,7 +156,7 @@ export default async function CompetitionPage({
                 <div className="info-row">
                   <Users size={16} style={{ color: "#9ca3af", marginTop: 1, flexShrink: 0 }} />
                   <div>
-                    <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Jenis Penyertaan</p>
+                    <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{t("participationType")}</p>
                     <p style={{ margin: 0, fontSize: "0.88rem", color: "#111827", fontWeight: 600 }}>{participationLabel}</p>
                   </div>
                 </div>
@@ -149,7 +165,7 @@ export default async function CompetitionPage({
                   <div className="info-row">
                     <MapPin size={16} style={{ color: "#9ca3af", marginTop: 1, flexShrink: 0 }} />
                     <div>
-                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tempat</p>
+                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{t("venue")}</p>
                       <p style={{ margin: 0, fontSize: "0.88rem", color: "#111827", fontWeight: 600 }}>{competition.venue}</p>
                       {competition.address && <p style={{ margin: "2px 0 0", fontSize: "0.8rem", color: "#6b7280" }}>{competition.address}</p>}
                     </div>
@@ -160,9 +176,9 @@ export default async function CompetitionPage({
                   <div className="info-row">
                     <Calendar size={16} style={{ color: "#9ca3af", marginTop: 1, flexShrink: 0 }} />
                     <div>
-                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tarikh</p>
+                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{t("date")}</p>
                       <p style={{ margin: 0, fontSize: "0.88rem", color: "#111827", fontWeight: 600 }}>
-                        {fmt(competition.startDate)}{competition.endDate && competition.endDate !== competition.startDate ? ` – ${fmt(competition.endDate)}` : ""}
+                        {fmt(competition.startDate, locale)}{competition.endDate && competition.endDate !== competition.startDate ? ` – ${fmt(competition.endDate, locale)}` : ""}
                       </p>
                     </div>
                   </div>
@@ -172,9 +188,9 @@ export default async function CompetitionPage({
                   <div className="info-row">
                     <Calendar size={16} style={{ color: "#9ca3af", marginTop: 1, flexShrink: 0 }} />
                     <div>
-                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Pendaftaran</p>
+                      <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{t("registration")}</p>
                       <p style={{ margin: 0, fontSize: "0.88rem", color: "#111827", fontWeight: 600 }}>
-                        {fmt(competition.registrationStart)}{competition.registrationEnd ? ` – ${fmt(competition.registrationEnd)}` : ""}
+                        {fmt(competition.registrationStart, locale)}{competition.registrationEnd ? ` – ${fmt(competition.registrationEnd, locale)}` : ""}
                       </p>
                     </div>
                   </div>
@@ -186,7 +202,7 @@ export default async function CompetitionPage({
             {competition.docs.length > 0 && (
               <section style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "24px 28px" }}>
                 <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "#6b7280", margin: "0 0 16px" }}>
-                  Kertas Kerja / Dokumen
+                  {t("documents")}
                 </h2>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {competition.docs.map((doc) => (
@@ -213,7 +229,7 @@ export default async function CompetitionPage({
               <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ height: 5, background: accent }} />
                 <div style={{ padding: "20px 22px" }}>
-                  <p style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af", margin: "0 0 6px", fontWeight: 700 }}>Tema</p>
+                  <p style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af", margin: "0 0 6px", fontWeight: 700 }}>{t("themeLabel")}</p>
                   <p style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "1rem", textTransform: "uppercase", color: "#111827", margin: "0 0 10px" }}>
                     {competition.theme.name}
                   </p>
@@ -226,7 +242,7 @@ export default async function CompetitionPage({
                     href={`/theme/${competition.theme.id}`}
                     style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.75rem", fontWeight: 700, color: accent, textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase" }}
                   >
-                    Lihat Semua Pertandingan <ChevronRight size={14} />
+                    {t("seeAll")} <ChevronRight size={14} />
                   </Link>
                 </div>
               </div>
