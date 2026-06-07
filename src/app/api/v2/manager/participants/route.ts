@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   const contingentIds = manager.contingentManagers.map((cm) => cm.contingentId);
   if (contingentIds.length === 0)
-    return NextResponse.json({ data: [], total: 0, page, pageSize, counts: { ALL: 0, PRIMARY: 0, SECONDARY: 0, YOUTH: 0 } });
+    return NextResponse.json({ data: [], total: 0, page, pageSize, counts: { ALL: 0, KINDERGARTEN: 0, PRIMARY: 0, SECONDARY: 0, YOUTH: 0 } });
 
   // Base where (no eduLevel filter) — used for per-tab counts
   const baseWhere = {
@@ -69,10 +69,11 @@ export async function GET(req: NextRequest) {
 
   const countMap = Object.fromEntries(eduCounts.map((e) => [e.eduLevel, e._count.id]));
   const counts = {
-    ALL:       (countMap["PRIMARY"] ?? 0) + (countMap["SECONDARY"] ?? 0) + (countMap["YOUTH"] ?? 0),
-    PRIMARY:   countMap["PRIMARY"]   ?? 0,
-    SECONDARY: countMap["SECONDARY"] ?? 0,
-    YOUTH:     countMap["YOUTH"]     ?? 0,
+    ALL:          (countMap["KINDERGARTEN"] ?? 0) + (countMap["PRIMARY"] ?? 0) + (countMap["SECONDARY"] ?? 0) + (countMap["YOUTH"] ?? 0),
+    KINDERGARTEN: countMap["KINDERGARTEN"] ?? 0,
+    PRIMARY:      countMap["PRIMARY"]      ?? 0,
+    SECONDARY:    countMap["SECONDARY"]    ?? 0,
+    YOUTH:        countMap["YOUTH"]        ?? 0,
   };
 
   return NextResponse.json({ data, total, page, pageSize, counts });

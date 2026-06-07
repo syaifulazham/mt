@@ -1183,7 +1183,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
   const [page, setPage]             = useState(1);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [total, setTotal]           = useState(0);
-  const [tabCounts, setTabCounts]   = useState({ ALL: 0, PRIMARY: 0, SECONDARY: 0, YOUTH: 0 });
+  const [tabCounts, setTabCounts]   = useState<Record<EduLevel | "ALL", number>>({ ALL: 0, KINDERGARTEN: 0, PRIMARY: 0, SECONDARY: 0, YOUTH: 0 });
   const [loading, setLoading]       = useState(false);
   const [addOpen, setAddOpen]       = useState(false);
   const [bulkOpen, setBulkOpen]     = useState(false);
