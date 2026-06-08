@@ -64,9 +64,11 @@ export function AiRimauChat() {
     return () => clearInterval(id);
   }, []);
 
+  const bubbleVisible = showBubble && !open;
+
   // Show idle bubble after 2s, hide after 6s, repeat every 14s
   useEffect(() => {
-    if (open) { setShowBubble(false); return; }
+    if (open) return;
     const show = setTimeout(() => setShowBubble(true), 2000);
     const hide = setTimeout(() => setShowBubble(false), 8000);
     const cycle = setInterval(() => {
@@ -291,8 +293,8 @@ export function AiRimauChat() {
           position: "absolute",
           bottom: SPRITE_DISPLAY_H + 20,
           right: 0,
-          opacity: showBubble ? 1 : 0,
-          transform: showBubble ? "translateY(0) scale(1)" : "translateY(8px) scale(0.95)",
+          opacity: bubbleVisible ? 1 : 0,
+          transform: bubbleVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.95)",
           transition: "opacity 0.3s ease, transform 0.3s ease",
           background: "#fff",
           border: "1px solid rgba(0,56,147,0.15)",

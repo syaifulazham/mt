@@ -66,11 +66,8 @@ function maskIc(ic: string) {
 
 function ViewDialog({ contestant, onClose }: { contestant: Contestant | null; onClose: () => void }) {
   const t = useTranslations("contestants");
-  const [icRevealed, setIcRevealed] = useState(false);
-
-  // Reset mask whenever a different contestant is opened
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setIcRevealed(false); }, [contestant?.id]);
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const icRevealed = revealedId === contestant?.id && !!contestant?.id;
 
   if (!contestant) return null;
   const c = contestant;
@@ -121,7 +118,7 @@ function ViewDialog({ contestant, onClose }: { contestant: Contestant | null; on
               </span>
               {c.ic && (
                 <button
-                  onClick={() => setIcRevealed((v) => !v)}
+                  onClick={() => setRevealedId(icRevealed ? null : c.id)}
                   className="p-1 rounded text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
                   title={icRevealed ? t("view.hideIc") : t("view.showIc")}
                 >
@@ -181,37 +178,22 @@ function AddEditDialog({
     status: "ACTIVE", ppki: false,
   };
 
-  const [form, setForm] = useState({ ...defaultForm });
+  const [form, setForm] = useState(() => initial ? {
+    contingentId: contingents[0]?.id ?? "",
+    name:        initial.name        ?? "",
+    ic:          initial.ic          ?? "",
+    gender:      initial.gender      ?? "MALE" as Gender,
+    age:         initial.age != null ? String(initial.age) : "",
+    eduLevel:    initial.eduLevel    ?? "SECONDARY" as EduLevel,
+    classGrade:  initial.classGrade  ?? "",
+    className:   initial.className   ?? "",
+    email:       initial.email       ?? "",
+    phoneNumber: initial.phoneNumber ?? "",
+    status:      initial.status      ?? "ACTIVE",
+    ppki:        initial.ppki        ?? false,
+  } : { ...defaultForm });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
-
-  // Sync form when dialog opens with a new contestant
-  useEffect(() => {
-    if (open) {
-      /* eslint-disable react-hooks/set-state-in-effect */
-      setError("");
-      if (initial) {
-        setForm({
-          contingentId: contingents[0]?.id ?? "",
-          name:        initial.name        ?? "",
-          ic:          initial.ic          ?? "",
-          gender:      initial.gender      ?? "MALE",
-          age:         initial.age != null ? String(initial.age) : "",
-          eduLevel:    initial.eduLevel    ?? "SECONDARY",
-          classGrade:  initial.classGrade  ?? "",
-          className:   initial.className   ?? "",
-          email:       initial.email       ?? "",
-          phoneNumber: initial.phoneNumber ?? "",
-          status:      initial.status      ?? "ACTIVE",
-          ppki:        initial.ppki        ?? false,
-        });
-      } else {
-        setForm(defaultForm);
-      }
-      /* eslint-enable react-hooks/set-state-in-effect */
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initial]);
 
   function set(k: string, v: string | boolean) { setForm((f) => ({ ...f, [k]: v })); }
 
@@ -1050,12 +1032,14 @@ export function ContestantsClient({ contingents }: { contingents: Contingent[] }
       {/* ── Dialogs ───────────────────────────────────── */}
       <ViewDialog contestant={viewing} onClose={() => setViewing(null)} />
       <AddEditDialog
+        key={addOpen ? "add-open" : "add-closed"}
         open={addOpen}
         onClose={() => setAddOpen(false)}
         contingents={contingents}
         onSaved={fetchContestants}
       />
       <AddEditDialog
+        key={editing?.id ?? "edit-closed"}
         open={!!editing}
         onClose={() => setEditing(null)}
         contingents={contingents}
