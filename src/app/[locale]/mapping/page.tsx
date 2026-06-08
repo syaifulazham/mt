@@ -91,7 +91,7 @@ export default async function MappingPreviewPage({
               width={140}
               height={80}
               priority
-              style={{ height: 38, width: "auto" }}
+              style={{ height: "clamp(28px,5vw,38px)", width: "auto" }}
             />
           </Link>
 
@@ -102,7 +102,7 @@ export default async function MappingPreviewPage({
             <li><Link href="/#gallery" className="nav-link">{t("navGallery")}</Link></li>
           </ul>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <LocaleSwitcher />
             <Link href="/organizer/login" className="map-nav-staff" style={{ fontSize: "0.75rem", color: "#9ca3af", textDecoration: "none", letterSpacing: "0.08em" }}>
               {t("staffLogin")}
@@ -110,7 +110,7 @@ export default async function MappingPreviewPage({
             {manager ? (
               <Link href="/manager/dashboard">
                 <button
-                  style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 20px", borderRadius: 999, background: "#003893", color: "#fff", border: "none", cursor: "pointer" }}
+                  style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "6px 12px", borderRadius: 999, background: "#003893", color: "#fff", border: "none", cursor: "pointer" }}
                 >
                   {t("dashboardButton")}
                 </button>
@@ -119,7 +119,7 @@ export default async function MappingPreviewPage({
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {clerkDisplayName && <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{clerkDisplayName}</span>}
                 <Link href="/manager/onboarding">
-                  <button style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 20px", borderRadius: 999, background: "#16a34a", color: "#fff", border: "none", cursor: "pointer" }}>
+                  <button style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "6px 12px", borderRadius: 999, background: "#16a34a", color: "#fff", border: "none", cursor: "pointer" }}>
                     {t("completeProfile")}
                   </button>
                 </Link>
@@ -127,7 +127,7 @@ export default async function MappingPreviewPage({
             ) : (
               <Link href="/manager/sign-up">
                 <button
-                  style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 20px", borderRadius: 999, background: "#CC0001", color: "#fff", border: "none", cursor: "pointer" }}
+                  style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", padding: "6px 12px", borderRadius: 999, background: "#CC0001", color: "#fff", border: "none", cursor: "pointer" }}
                 >
                   {t("registerNow")}
                 </button>

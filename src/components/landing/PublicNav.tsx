@@ -31,7 +31,7 @@ export async function PublicNav({ locale }: { locale: string }) {
       }}
     >
       <Link href="/" className="flex items-center">
-        <Image src="/logo-mt.svg" alt="Malaysia Techlympics" width={140} height={80} priority style={{ height: 38, width: "auto" }} />
+        <Image src="/logo-mt.svg" alt="Malaysia Techlympics" width={140} height={80} priority style={{ height: "clamp(28px,5vw,38px)", width: "auto" }} />
       </Link>
 
       <ul className="hidden md:flex gap-8 list-none m-0 p-0">
@@ -49,26 +49,26 @@ export async function PublicNav({ locale }: { locale: string }) {
         ))}
       </ul>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         <LocaleSwitcher />
         <Link href="/organizer/login" className="hidden sm:inline text-xs text-slate-400 hover:text-slate-700 transition-colors" style={{ letterSpacing: "0.08em" }}>
           {t("staffLogin")}
         </Link>
         {manager ? (
           <Link href="/manager/dashboard">
-            <button className="text-xs font-bold tracking-widest uppercase px-5 py-2 rounded-full transition-all" style={{ background: "#003893", color: "#fff" }}>
+            <button className="text-xs font-bold tracking-wide sm:tracking-widest uppercase px-3 py-1.5 sm:px-5 sm:py-2 rounded-full transition-all" style={{ background: "#003893", color: "#fff" }}>
               {t("dashboardButton")}
             </button>
           </Link>
         ) : userId ? (
           <Link href="/manager/onboarding">
-            <button className="text-xs font-bold tracking-widest uppercase px-5 py-2 rounded-full" style={{ background: "#16a34a", color: "#fff" }}>
+            <button className="text-xs font-bold tracking-wide sm:tracking-widest uppercase px-3 py-1.5 sm:px-5 sm:py-2 rounded-full" style={{ background: "#16a34a", color: "#fff" }}>
               {displayName ?? t("profileFallback")}
             </button>
           </Link>
         ) : (
           <Link href="/manager/sign-up">
-            <button className="text-xs font-bold tracking-widest uppercase px-5 py-2 rounded-full" style={{ background: "#CC0001", color: "#fff" }}>
+            <button className="text-xs font-bold tracking-wide sm:tracking-widest uppercase px-3 py-1.5 sm:px-5 sm:py-2 rounded-full" style={{ background: "#CC0001", color: "#fff" }}>
               {t("registerNow")}
             </button>
           </Link>
