@@ -24,7 +24,6 @@ export function GalleryPhotoGrid({ photos, galleryTitle }: { photos: Photo[]; ga
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, photos.length]);
 
   useEffect(() => {

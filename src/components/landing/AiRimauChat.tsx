@@ -41,7 +41,9 @@ export function AiRimauChat() {
   const [open, setOpen]       = useState(false);
   const [pose, setPose]       = useState(0);
   const [showBubble, setShowBubble] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => [
+    { role: "assistant", content: t("rimauChatWelcome") },
+  ]);
   const [input, setInput]     = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -74,13 +76,9 @@ export function AiRimauChat() {
     return () => { clearTimeout(show); clearTimeout(hide); clearInterval(cycle); };
   }, [open]);
 
-  // Welcome message on first open
   useEffect(() => {
-    if (open && messages.length === 0) {
-      setMessages([{ role: "assistant", content: t("rimauChatWelcome") }]);
-    }
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Scroll to bottom on new message
   useEffect(() => {
