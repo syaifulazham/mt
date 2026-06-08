@@ -120,8 +120,8 @@ export function AiRimauChat() {
     <div
       style={{
         position: "fixed",
-        bottom: 28,
-        right: 28,
+        bottom: "max(16px, 3vw)",
+        right: "max(12px, 3vw)",
         zIndex: 9000,
         display: "flex",
         flexDirection: "column",
@@ -133,7 +133,7 @@ export function AiRimauChat() {
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}
       <div
         style={{
-          width: 360,
+          width: "min(360px, calc(100vw - 32px))",
           maxHeight: open ? 500 : 0,
           opacity: open ? 1 : 0,
           overflow: "hidden",
@@ -271,7 +271,7 @@ export function AiRimauChat() {
             disabled={loading || !input.trim()}
             aria-label={t("rimauChatSend")}
             style={{
-              width: 36, height: 36,
+              width: 44, height: 44,
               borderRadius: "50%",
               background: input.trim() && !loading ? "#003893" : "#e5e7eb",
               border: "none",

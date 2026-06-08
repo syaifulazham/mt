@@ -81,13 +81,15 @@ export default async function CompetitionPage({
         .doc-row:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); transform: translateY(-1px); }
         .info-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid #f3f4f6; }
         .info-row:last-child { border-bottom: none; }
+        .comp-body { display: grid; grid-template-columns: 1fr minmax(280px, 320px); gap: 40px; max-width: 900px; margin: 0 auto; padding: clamp(24px,4vw,48px) clamp(16px,5vw,40px); align-items: start; }
+        @media (max-width: 768px) { .comp-body { grid-template-columns: 1fr; gap: 20px; } }
       `}</style>
 
       <PublicNav locale={locale} />
 
       <div style={{ paddingTop: 64 }}>
         {/* Hero */}
-        <div style={{ background: accent, padding: "56px 40px 44px" }}>
+        <div style={{ background: accent, padding: "clamp(24px,5vw,56px) clamp(16px,5vw,40px) clamp(20px,4vw,44px)" }}>
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
             {/* Breadcrumb */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24, flexWrap: "wrap" }}>
@@ -130,7 +132,7 @@ export default async function CompetitionPage({
         </div>
 
         {/* Body */}
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "48px 40px", display: "grid", gridTemplateColumns: "1fr minmax(280px, 320px)", gap: 40, alignItems: "start" }}>
+        <div className="comp-body">
 
           {/* Left: Details + Docs */}
           <div>

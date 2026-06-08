@@ -389,8 +389,8 @@ export default async function LandingPage({
         </section>
 
         {/* ── CATEGORIES ──────────────────────────────────────────────────────── */}
-        <section id="categories" style={{ background: "#f8fafc", padding: "96px 0" }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 40px" }}>
+        <section id="categories" style={{ background: "#f8fafc", padding: "clamp(48px,8vw,96px) 0" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
             <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
               {t("competitionTracksLabel")}
             </p>
@@ -516,8 +516,8 @@ export default async function LandingPage({
 
         {/* ── NEWS ────────────────────────────────────────────────────────────── */}
         {newsArticles.length > 0 && (
-          <section id="news" style={{ background: "#f1f5f9", padding: "96px 0" }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 40px" }}>
+          <section id="news" style={{ background: "#f1f5f9", padding: "clamp(48px,8vw,96px) 0" }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
               <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
                 {t("navNews")}
               </p>
@@ -525,7 +525,7 @@ export default async function LandingPage({
                 {t("newsHeading")} <span style={{ color: "#003893" }}>{t("newsLatest")}</span>
               </h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 20 }}>
                 {newsArticles.map((article) => (
                   <div
                     key={article.id}
@@ -586,8 +586,8 @@ export default async function LandingPage({
 
         {/* ── GALLERY ─────────────────────────────────────────────────────────── */}
         {galleries.length > 0 && (
-          <section id="gallery" style={{ background: "#ffffff", padding: "96px 0" }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 40px" }}>
+          <section id="gallery" style={{ background: "#ffffff", padding: "clamp(48px,8vw,96px) 0" }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
               <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
                 {t("navGallery")}
               </p>
@@ -595,7 +595,7 @@ export default async function LandingPage({
                 {t("galleryHeading")} <span style={{ color: "#CC0001" }}>{t("galleryPhotos")}</span>
               </h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 20 }}>
                 {galleries.map((g) => {
                   const thumb = g.coverUrl ?? g.photos[0]?.thumbUrl ?? null;
                   return (
@@ -659,7 +659,7 @@ export default async function LandingPage({
         <footer style={{ background: "#0f172a", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
 
           {/* Social media strip */}
-          <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "40px 60px" }}>
+          <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "clamp(24px,4vw,40px) clamp(16px,5vw,60px)" }}>
             <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 40 }}>
 
               {/* Official site */}
@@ -723,7 +723,7 @@ export default async function LandingPage({
           </div>
 
           {/* Bottom bar */}
-          <div style={{ padding: "24px 60px" }}>
+          <div style={{ padding: "16px clamp(16px,5vw,60px)" }}>
             <div className="flex flex-wrap justify-between items-center gap-4" style={{ maxWidth: 1200, margin: "0 auto" }}>
               <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 900, fontSize: "0.9rem", letterSpacing: "0.12em", color: "rgba(255,255,255,0.5)" }}>
                 Malaysia Techlympics 2026

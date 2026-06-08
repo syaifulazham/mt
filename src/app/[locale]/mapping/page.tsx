@@ -60,6 +60,10 @@ export default async function MappingPreviewPage({
           transition: width 0.25s ease;
         }
         .nav-link:hover::after { width: 100%; }
+        @media (max-width: 767px) {
+          .map-nav-links { display: none !important; }
+          .map-nav-staff { display: none !important; }
+        }
       `}</style>
 
       <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
@@ -71,7 +75,7 @@ export default async function MappingPreviewPage({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "0 40px",
+            padding: "0 clamp(16px,4vw,40px)",
             background: "rgba(255,255,255,0.96)",
             backdropFilter: "blur(12px)",
             borderBottom: "1px solid rgba(0,0,0,0.07)",
@@ -91,7 +95,7 @@ export default async function MappingPreviewPage({
             />
           </Link>
 
-          <ul style={{ display: "flex", gap: 32, listStyle: "none", margin: 0, padding: 0 }}>
+          <ul className="map-nav-links" style={{ display: "flex", gap: 32, listStyle: "none", margin: 0, padding: 0 }}>
             <li><Link href="/#categories" className="nav-link">{t("navCompetition")}</Link></li>
             <li><Link href="/#news" className="nav-link">{t("navNews")}</Link></li>
             <li><Link href="/#announcements" className="nav-link">{t("navAnnouncements")}</Link></li>
@@ -100,7 +104,7 @@ export default async function MappingPreviewPage({
 
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <LocaleSwitcher />
-            <Link href="/organizer/login" style={{ fontSize: "0.75rem", color: "#9ca3af", textDecoration: "none", letterSpacing: "0.08em" }}>
+            <Link href="/organizer/login" className="map-nav-staff" style={{ fontSize: "0.75rem", color: "#9ca3af", textDecoration: "none", letterSpacing: "0.08em" }}>
               {t("staffLogin")}
             </Link>
             {manager ? (

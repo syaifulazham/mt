@@ -41,7 +41,7 @@ export default async function GalleryDetailPage({ params }: Props) {
 
         {/* Hero bar */}
         <div style={{ background: "linear-gradient(135deg, #003893 0%, #001f5c 100%)", color: "#fff", padding: "48px 0 40px" }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 40px" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
             <Link
               href="/#gallery"
               style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.8rem", color: "rgba(255,255,255,0.6)", textDecoration: "none", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 20 }}
@@ -68,7 +68,7 @@ export default async function GalleryDetailPage({ params }: Props) {
         </div>
 
         {/* Photo grid with lightbox (client component) */}
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 40px 80px" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(24px,4vw,48px) clamp(16px,5vw,40px) clamp(40px,6vw,80px)" }}>
           <GalleryPhotoGrid
             photos={gallery.photos.map((p) => ({ id: p.id, thumbUrl: p.thumbUrl, fullUrl: p.fullUrl, description: p.description ?? null }))}
             galleryTitle={gallery.title}

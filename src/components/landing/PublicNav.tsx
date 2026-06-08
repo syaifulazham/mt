@@ -20,7 +20,7 @@ export async function PublicNav({ locale }: { locale: string }) {
 
   return (
     <nav
-      className="fixed top-0 left-0 right-0 flex justify-between items-center z-50 px-8 md:px-16"
+      className="fixed top-0 left-0 right-0 flex justify-between items-center z-50 px-4 sm:px-8 md:px-16"
       style={{
         height: 64,
         background: "rgba(255,255,255,0.92)",
@@ -51,7 +51,7 @@ export async function PublicNav({ locale }: { locale: string }) {
 
       <div className="flex items-center gap-4">
         <LocaleSwitcher />
-        <Link href="/organizer/login" className="text-xs text-slate-400 hover:text-slate-700 transition-colors" style={{ letterSpacing: "0.08em" }}>
+        <Link href="/organizer/login" className="hidden sm:inline text-xs text-slate-400 hover:text-slate-700 transition-colors" style={{ letterSpacing: "0.08em" }}>
           {t("staffLogin")}
         </Link>
         {manager ? (

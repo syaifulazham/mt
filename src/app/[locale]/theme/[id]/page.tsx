@@ -61,7 +61,7 @@ export default async function ThemePage({
 
       <div style={{ paddingTop: 64 }}>
         {/* Hero */}
-        <div style={{ background: accent, padding: "64px 40px 48px", position: "relative", overflow: "hidden" }}>
+        <div style={{ background: accent, padding: "clamp(32px,5vw,64px) clamp(16px,5vw,40px) clamp(24px,4vw,48px)", position: "relative", overflow: "hidden" }}>
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
             <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.75)", textDecoration: "none", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 24 }}>
               {t("breadcrumbHome")} <ChevronRight size={12} />
@@ -86,7 +86,7 @@ export default async function ThemePage({
         </div>
 
         {/* Competitions */}
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "56px 40px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: "clamp(32px,5vw,56px) clamp(16px,5vw,40px)" }}>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: accent, marginBottom: 10, fontWeight: 700 }}>
             {t("competitions")}
           </p>
