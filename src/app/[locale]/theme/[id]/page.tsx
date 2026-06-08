@@ -70,7 +70,7 @@ export default async function ThemePage({
               {theme.logoUrl && (
                 (theme.logoUrl.startsWith("/") || theme.logoUrl.startsWith("http://") || theme.logoUrl.startsWith("https://"))
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={theme.logoUrl} alt={theme.name} style={{ width: 64, height: 64, objectFit: "contain", filter: "brightness(0) invert(1) drop-shadow(0 2px 6px rgba(0,0,0,0.3))", flexShrink: 0 }} />
+                  ? <img src={theme.logoUrl} alt={theme.name} style={{ width: 64, height: 64, objectFit: "contain", filter: "drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff) drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 0 10px rgba(255,255,255,0.85))", flexShrink: 0 }} />
                   : <span style={{ fontSize: "3rem", lineHeight: 1, flexShrink: 0 }}>{theme.logoUrl}</span>
               )}
               <h1 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.8rem, 4vw, 3rem)", textTransform: "uppercase", color: "#fff", margin: 0, lineHeight: 1.1 }}>
