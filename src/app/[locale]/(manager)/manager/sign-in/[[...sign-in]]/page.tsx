@@ -93,15 +93,6 @@ export default async function ManagerSignInPage() {
               />
             </div>
 
-            {/* Ministry label */}
-            <p style={{
-              fontFamily: "'Rajdhani', sans-serif",
-              fontSize: "0.68rem", letterSpacing: "0.38em", textTransform: "uppercase",
-              color: "#FFD700", marginBottom: 10,
-            }}>
-              Kementerian Pendidikan Malaysia
-            </p>
-
             {/* Main title */}
             <h1 style={{
               fontFamily: "'Exo 2', sans-serif", fontWeight: 900,
@@ -135,25 +126,6 @@ export default async function ManagerSignInPage() {
               Empowering the next generation of innovators, engineers &amp; digital creators.
             </p>
 
-            {/* Divider */}
-            <div style={{
-              margin: "28px auto", width: 48, height: 2,
-              background: "linear-gradient(90deg, transparent, #FFD700, transparent)",
-            }} />
-
-            {/* Feature tags */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-              {["Olimpiad Teknologi", "Sekolah Seluruh Malaysia", "Percuma"].map((tag) => (
-                <span key={tag} style={{
-                  fontSize: "0.68rem", letterSpacing: "0.1em", textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.6)",
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  borderRadius: 100, padding: "3px 12px",
-                }}>
-                  {tag}
-                </span>
-              ))}
-            </div>
           </div>
 
           {/* Back to home link */}
