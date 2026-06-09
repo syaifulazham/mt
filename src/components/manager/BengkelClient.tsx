@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import {
-  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn,
+  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn, UserCircle2, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,146 @@ function CopyBtn({ text }: { text: string }) {
       title="Copy">
       {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
+  );
+}
+
+// ── Manager account section ────────────────────────────────────────────────────
+
+type ManagerAccountStatus =
+  | { registered: true;  username: string; loginUrl: string; loginCount: number; lastLoginAt: string | null }
+  | { registered: false; username: string; loginUrl: string };
+
+function ManagerAccountSection() {
+  const [status,      setStatus]      = useState<ManagerAccountStatus | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [creating,    setCreating]    = useState(false);
+  const [newCreds,    setNewCreds]    = useState<{ username: string; password: string; loginUrl: string } | null>(null);
+  const [err,         setErr]         = useState("");
+
+  useEffect(() => {
+    fetch("/api/v2/manager/lms/account")
+      .then(r => r.json())
+      .then(j => setStatus(j.registered !== undefined ? j : null))
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function createAccount() {
+    setCreating(true); setErr("");
+    try {
+      const res = await fetch("/api/v2/manager/lms/account", { method: "POST" });
+      const j   = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Failed");
+      setNewCreds(j);
+      setStatus({ registered: true, username: j.username, loginUrl: j.loginUrl, loginCount: 0, lastLoginAt: null });
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally { setCreating(false); }
+  }
+
+  return (
+    <>
+      <div className="rounded-xl border bg-white shadow-sm overflow-hidden dark:bg-zinc-900 dark:border-zinc-800">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-zinc-50/80 dark:bg-zinc-800/60 dark:border-zinc-800">
+          <UserCircle2 className="h-3.5 w-3.5 text-zinc-400" />
+          <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Your Bengkel MT Account</span>
+        </div>
+
+        <div className="px-4 py-4">
+          {loading ? (
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking account…
+            </div>
+          ) : status === null ? (
+            <p className="text-sm text-zinc-400">Bengkel MT is not configured.</p>
+          ) : status.registered ? (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Account registered</span>
+                </div>
+                <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500 ml-6">
+                  <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-700 dark:text-zinc-300">
+                    {status.username}
+                  </span>
+                  <CopyBtn text={status.username} />
+                  {status.loginCount > 0 ? (
+                    <span className="text-zinc-400">
+                      · logged in {status.loginCount}×
+                      {status.lastLoginAt && (
+                        <> · {new Date(status.lastLoginAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-zinc-400 italic">· never logged in</span>
+                  )}
+                </div>
+              </div>
+              <a href={status.loginUrl} target="_blank" rel="noreferrer">
+                <Button size="sm" className="h-8 gap-1.5 text-xs">
+                  <ExternalLink className="h-3.5 w-3.5" /> Login to Bengkel MT
+                </Button>
+              </a>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm text-zinc-700 dark:text-zinc-300">You don&apos;t have a Bengkel MT account yet.</p>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Your username will be <span className="font-mono">{status.username}</span>
+                </p>
+              </div>
+              <Button size="sm" className="h-8 gap-1.5 text-xs" disabled={creating} onClick={createAccount}>
+                {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+                Create Account
+              </Button>
+            </div>
+          )}
+          {err && (
+            <p className="flex items-center gap-1.5 text-xs text-red-600 mt-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />{err}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* New-credentials dialog shown once after account creation */}
+      {newCreds && (
+        <Dialog open onOpenChange={() => setNewCreds(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500" /> Account Created
+              </DialogTitle>
+              <DialogDescription className="text-xs mt-1">
+                Save your Bengkel MT credentials — the password won&apos;t be shown again.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-zinc-500 text-xs font-medium uppercase tracking-wide">Username</span>
+                <div className="flex items-center font-mono text-zinc-800 dark:text-zinc-200 font-medium">
+                  {newCreds.username}<CopyBtn text={newCreds.username} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-zinc-500 text-xs font-medium uppercase tracking-wide">Password</span>
+                <div className="flex items-center font-mono text-zinc-800 dark:text-zinc-200 font-medium">
+                  {newCreds.password}<CopyBtn text={newCreds.password} />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="flex-col gap-2">
+              <a href={newCreds.loginUrl} target="_blank" rel="noreferrer" className="w-full">
+                <Button className="w-full gap-1.5"><ExternalLink className="h-4 w-4" /> Go to Bengkel MT</Button>
+              </a>
+              <Button variant="outline" className="w-full" onClick={() => setNewCreds(null)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 
@@ -338,6 +478,8 @@ export function BengkelClient() {
           {total > 0 && ` ${t("enrolled", { enrolled: enrolledCount, total })}`}
         </p>
       </div>
+
+      <ManagerAccountSection />
 
       {total === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
