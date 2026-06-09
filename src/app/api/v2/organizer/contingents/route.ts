@@ -14,12 +14,16 @@ export async function GET(req: NextRequest) {
   const where = q
     ? {
         OR: [
-          { name:      { contains: q, mode: "insensitive" as const } },
-          { shortName: { contains: q, mode: "insensitive" as const } },
-          { state:     { name: { contains: q, mode: "insensitive" as const } } },
+          { name:                { contains: q, mode: "insensitive" as const } },
+          { shortName:           { contains: q, mode: "insensitive" as const } },
+          { state:               { name: { contains: q, mode: "insensitive" as const } } },
+          { school:              { state: { name: { contains: q, mode: "insensitive" as const } } } },
+          { higherInstitution:   { state: { name: { contains: q, mode: "insensitive" as const } } } },
         ],
       }
     : {};
+
+  const stateSelect = { select: { name: true, code: true } };
 
   const [total, contingents] = await Promise.all([
     db.contingent.count({ where }),
@@ -35,7 +39,9 @@ export async function GET(req: NextRequest) {
         contingentType: true,
         status:         true,
         createdAt:      true,
-        state:          { select: { name: true, code: true } },
+        state:             stateSelect,
+        school:            { select: { state: stateSelect } },
+        higherInstitution: { select: { state: stateSelect } },
         _count: {
           select: {
             managers:     true,
@@ -47,5 +53,11 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  return NextResponse.json({ total, page, pageSize, data: contingents });
+  const data = contingents.map(({ school, higherInstitution, state, ...rest }) => ({
+    ...rest,
+    stateName: school?.state?.name ?? higherInstitution?.state?.name ?? state?.name ?? null,
+    stateCode:  school?.state?.code ?? higherInstitution?.state?.code ?? state?.code ?? null,
+  }));
+
+  return NextResponse.json({ total, page, pageSize, data });
 }

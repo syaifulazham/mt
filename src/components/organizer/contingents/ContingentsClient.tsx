@@ -13,7 +13,8 @@ type ContingentRow = {
   contingentType: "SCHOOL" | "HIGHER" | "INDEPENDENT" | "INTERNATIONAL";
   status: "ACTIVE" | "SUSPENDED";
   createdAt: string;
-  state: { name: string; code: string } | null;
+  stateName: string | null;
+  stateCode: string | null;
   _count: { managers: number; participants: number; teams: number };
 };
 
@@ -183,7 +184,7 @@ export function ContingentsClient() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-zinc-600 text-xs">
-                      {row.state?.name ?? <span className="text-zinc-300">—</span>}
+                      {row.stateName ?? <span className="text-zinc-300">—</span>}
                     </td>
                     <td className="px-4 py-3 tabular-nums text-zinc-700">{row._count.managers}</td>
                     <td className="px-4 py-3 tabular-nums text-zinc-700">{row._count.participants}</td>
