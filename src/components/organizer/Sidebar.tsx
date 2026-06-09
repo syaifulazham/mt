@@ -23,6 +23,7 @@ import {
   Newspaper,
   Megaphone,
   Map,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
@@ -44,6 +45,7 @@ const NAV: NavItem[] = [
   { label: "Staff",          href: "/organizer/users",          icon: Users,      roles: ["SUPER_ADMIN", "ADMIN"] },
   { label: "Reference Data", href: "/organizer/reference-data", icon: Database,   roles: ["SUPER_ADMIN", "ADMIN"] },
   { label: "Competitions",   href: "/organizer/competitions",   icon: Trophy },
+  { label: "Contingents",    href: "/organizer/contingents",    icon: Building2 },
   { label: "Participation",  href: "/organizer/participation",  icon: UserCheck },
   { label: "Events",         href: "/organizer/events",         icon: CalendarDays },
   { label: "Judging",        href: "/organizer/judging",        icon: Gavel },

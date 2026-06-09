@@ -1,0 +1,1281 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft, Users, UserCheck, Trophy,
+  Search, Pencil, ChevronLeft, ChevronRight,
+  School as SchoolIcon, Building2, MapPin, Loader2, X, Check,
+} from "lucide-react";
+
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type ZoneRef    = { id: string; name: string };
+type ZoneState  = { zone: ZoneRef };
+type StateRef   = { id: string; name: string; code: string; zoneStates?: ZoneState[] };
+
+type SchoolDetail = {
+  id: string; name: string; code: string;
+  level: string; category: string; categoryShort: string | null; ppdCode: string | null;
+  zone: ZoneRef | null;
+  district: { id: string; name: string } | null;
+  state: StateRef | null;
+};
+
+type HIDetail = {
+  id: string; name: string; code: string | null;
+  heiType: string; sector: string | null;
+  state: StateRef | null;
+};
+
+type ContingentDetail = {
+  id: string;
+  name: string;
+  shortName: string | null;
+  contingentType: "SCHOOL" | "HIGHER" | "INDEPENDENT" | "INTERNATIONAL";
+  locality: string | null;
+  status: "ACTIVE" | "SUSPENDED";
+  createdAt: string;
+  updatedAt: string;
+  state: StateRef | null;
+  zone: ZoneRef | null;
+  school: SchoolDetail | null;
+  higherInstitution: HIDetail | null;
+  stateName: string | null;
+  stateCode: string | null;
+  zoneName: string | null;
+  managers: ManagerMember[];
+  teams: TeamRow[];
+  _count: { participants: number };
+};
+
+type ManagerMember = {
+  id: string; role: string; status: string; createdAt: string;
+  manager: { id: string; name: string; email: string; phone: string | null };
+};
+
+type TeamRow = {
+  id: string; name: string; status: string;
+  competition: { id: string; code: string; name: string; participationType: string } | null;
+  _count: { members: number };
+};
+
+type Participant = {
+  id: string; name: string; ic: string | null; email: string | null;
+  phoneNumber: string | null; gender: string; age: number | null;
+  eduLevel: string; classGrade: string | null; className: string | null;
+  status: string; ppki: boolean; createdAt: string;
+};
+
+type ParticipantsPage = { total: number; page: number; pageSize: number; data: Participant[] };
+
+type TrainerTeam = {
+  team: { id: string; name: string; competition: { code: string; name: string } | null } | null;
+};
+
+type TrainerRow = {
+  id: string; name: string; ic: string | null; email: string | null;
+  phoneNumber: string | null; status: string; createdAt: string;
+  teams: TrainerTeam[];
+};
+
+type SchoolResult = { id: string; name: string; code: string; level: string; state: { name: string } };
+type HIResult     = { id: string; name: string; code: string | null; state: { name: string } | null };
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+
+const TABS = ["Details", "Managers", "Trainers", "Teams", "Participants"] as const;
+type Tab = typeof TABS[number];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const TYPE_LABEL: Record<string, string> = {
+  SCHOOL: "School", HIGHER: "Higher Ed",
+  INDEPENDENT: "Independent", INTERNATIONAL: "International",
+};
+const TYPE_COLOR: Record<string, string> = {
+  SCHOOL:        "bg-blue-50 text-blue-700 border-blue-200",
+  HIGHER:        "bg-purple-50 text-purple-700 border-purple-200",
+  INDEPENDENT:   "bg-amber-50 text-amber-700 border-amber-200",
+  INTERNATIONAL: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
+const EDU_OPTIONS = [
+  "PRASEKOLAH","TAHUN1","TAHUN2","TAHUN3","TAHUN4","TAHUN5","TAHUN6",
+  "TINGKATAN1","TINGKATAN2","TINGKATAN3","TINGKATAN4","TINGKATAN5","TINGKATAN6",
+  "MATRIKULASI","DIPLOMA","DEGREE","MASTERS","PHD","OTHER",
+];
+
+function Dl({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs text-zinc-400 font-medium uppercase tracking-wide">{label}</dt>
+      <dd className="mt-0.5 text-sm text-zinc-800">{value ?? <span className="text-zinc-300">—</span>}</dd>
+    </div>
+  );
+}
+
+// ─── School search dialog ─────────────────────────────────────────────────────
+
+function SchoolPickerDialog({
+  open, onClose, onPick,
+}: { open: boolean; onClose: () => void; onPick: (s: SchoolResult) => void }) {
+  const [q, setQ]           = useState("");
+  const [results, setResults] = useState<SchoolResult[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function search() {
+    if (!q.trim()) return;
+    setLoading(true);
+    try {
+      const res  = await fetch(`/api/v2/reference/schools?q=${encodeURIComponent(q)}&limit=50`);
+      const json = await res.json();
+      setResults(json.data ?? []);
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Search School</DialogTitle>
+        </DialogHeader>
+        <div className="flex gap-2 px-6 pt-2">
+          <Input value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Type school name or code…" />
+          <Button onClick={search} disabled={loading || !q.trim()} className="shrink-0">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          </Button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-6 py-3 space-y-1">
+          {results.length === 0 && !loading && (
+            <p className="text-sm text-zinc-400 text-center py-8">Search to find schools.</p>
+          )}
+          {results.map((s) => (
+            <button key={s.id} type="button" onClick={() => { onPick(s); onClose(); }}
+              className="w-full text-left p-3 rounded-lg border hover:bg-zinc-50 transition-colors flex items-start gap-3">
+              <div className="h-8 w-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 shrink-0 mt-0.5">
+                <SchoolIcon className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium leading-tight">{s.name}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {s.code} · {s.state.name} · <span className="capitalize">{s.level.toLowerCase()}</span>
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── HEI search dialog ────────────────────────────────────────────────────────
+
+function HIPickerDialog({
+  open, onClose, onPick,
+}: { open: boolean; onClose: () => void; onPick: (h: HIResult) => void }) {
+  const [q, setQ]           = useState("");
+  const [results, setResults] = useState<HIResult[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function search() {
+    if (!q.trim()) return;
+    setLoading(true);
+    try {
+      const res  = await fetch(`/api/v2/reference/higher-institutions?q=${encodeURIComponent(q)}&limit=50`);
+      const json = await res.json();
+      setResults(json.data ?? []);
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Search Higher Institution</DialogTitle>
+        </DialogHeader>
+        <div className="flex gap-2 px-6 pt-2">
+          <Input value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Type institution name or code…" />
+          <Button onClick={search} disabled={loading || !q.trim()} className="shrink-0">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          </Button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-6 py-3 space-y-1">
+          {results.length === 0 && !loading && (
+            <p className="text-sm text-zinc-400 text-center py-8">Search to find institutions.</p>
+          )}
+          {results.map((h) => (
+            <button key={h.id} type="button" onClick={() => { onPick(h); onClose(); }}
+              className="w-full text-left p-3 rounded-lg border hover:bg-zinc-50 transition-colors flex items-start gap-3">
+              <div className="h-8 w-8 flex items-center justify-center rounded-full bg-violet-50 text-violet-600 shrink-0 mt-0.5">
+                <Building2 className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium leading-tight">{h.name}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {[h.code, h.state?.name].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Change-confirmation dialog ───────────────────────────────────────────────
+
+function genCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+type PendingChange = {
+  label: string;
+  body: Record<string, unknown>;
+};
+
+function ConfirmChangeDialog({
+  pending, onConfirm, onCancel,
+}: {
+  pending: PendingChange | null;
+  onConfirm: (body: Record<string, unknown>, note: string) => void;
+  onCancel: () => void;
+}) {
+  const [code]       = useState(genCode);
+  const [typed, setTyped]   = useState("");
+  const [note,  setNote]    = useState("");
+
+  const match = typed.toUpperCase() === code;
+
+  if (!pending) return null;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Confirm Change</DialogTitle>
+        </DialogHeader>
+        <div className="px-6 py-4 space-y-4 text-sm">
+          {pending.label.split("\n\n").map((line, i) => (
+            <p key={i} className={i === 0 ? "text-zinc-600" : "text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs mt-1"}>{line}</p>
+          ))}
+
+          <div className="rounded-lg border bg-zinc-50 p-3 space-y-1">
+            <p className="text-xs text-zinc-500">Type the code below to confirm:</p>
+            <p className="text-xl font-bold tracking-[0.3em] text-zinc-900 select-none text-center py-1">
+              {code}
+            </p>
+            <Input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value.toUpperCase())}
+              placeholder="Enter code…"
+              maxLength={5}
+              className={`text-center tracking-[0.25em] font-mono uppercase text-base mt-1 transition-colors ${
+                typed.length === 5
+                  ? match ? "border-green-400 bg-green-50" : "border-red-400 bg-red-50"
+                  : ""
+              }`}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <Label className="text-xs text-zinc-500">Note (optional)</Label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Reason for this change…"
+              rows={2}
+              className="mt-1 block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-zinc-400"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={() => onConfirm(pending.body, note)} disabled={!match}>
+            Confirm
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Institution card with edit ───────────────────────────────────────────────
+
+function InstitutionCard({
+  contingentId,
+  contingentType,
+  school,
+  hi,
+  onUpdated,
+}: {
+  contingentId: string;
+  contingentType: ContingentDetail["contingentType"];
+  school: SchoolDetail | null;
+  hi: HIDetail | null;
+  onUpdated: (patch: { school: SchoolDetail | null; higherInstitution: HIDetail | null; name?: string }) => void;
+}) {
+  const [schoolPicker, setSchoolPicker] = useState(false);
+  const [hiPicker,     setHiPicker]     = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [pending,      setPending]      = useState<PendingChange | null>(null);
+
+  async function applyPatch(body: Record<string, unknown>, note?: string) {
+    setSaving(true);
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, note: note || undefined }),
+      });
+      const json = await res.json();
+      if (res.ok) onUpdated({ school: json.school ?? null, higherInstitution: json.higherInstitution ?? null, name: json.name });
+    } finally { setSaving(false); }
+  }
+
+  function requestChange(label: string, body: Record<string, unknown>) {
+    setPending({ label, body });
+  }
+
+  function handleConfirm(body: Record<string, unknown>, note: string) {
+    setPending(null);
+    applyPatch(body, note);
+  }
+
+  const mapQuery = school
+    ? encodeURIComponent(`${school.name}, ${school.state?.name ?? ""}, Malaysia`)
+    : null;
+  const mapSrc = mapQuery
+    ? `https://maps.google.com/maps?q=${mapQuery}&output=embed&z=15`
+    : null;
+
+  const hasInstitution = school || hi;
+
+  return (
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+      {/* Card header */}
+      <div className="flex items-center justify-between px-5 py-3 border-b bg-zinc-50">
+        <h3 className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
+          {school ? <SchoolIcon className="h-4 w-4 text-blue-500" /> : <Building2 className="h-4 w-4 text-violet-500" />}
+          {school ? "School" : hi ? "Higher Institution" : "Institution"}
+        </h3>
+        <div className="flex items-center gap-2">
+          {hasInstitution && (
+            <button
+              onClick={() => requestChange(
+                `Remove the current ${school ? "school" : "institution"} assignment from this contingent.`,
+                { clearInstitution: true }
+              )}
+              disabled={saving}
+              className="text-xs text-zinc-400 hover:text-red-500 transition-colors flex items-center gap-1 disabled:opacity-40">
+              <X className="h-3.5 w-3.5" /> Remove
+            </button>
+          )}
+          {(contingentType === "SCHOOL" || contingentType === "INDEPENDENT" || !school) && (
+            <button onClick={() => setSchoolPicker(true)} disabled={saving}
+              className="text-xs text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 disabled:opacity-40">
+              <SchoolIcon className="h-3.5 w-3.5" /> {school ? "Change School" : "Assign School"}
+            </button>
+          )}
+          {(contingentType === "HIGHER" || contingentType === "INDEPENDENT" || !hi) && (
+            <button onClick={() => setHiPicker(true)} disabled={saving}
+              className="text-xs text-violet-600 hover:text-violet-800 transition-colors flex items-center gap-1 disabled:opacity-40">
+              <Building2 className="h-3.5 w-3.5" /> {hi ? "Change HEI" : "Assign HEI"}
+            </button>
+          )}
+          {saving && <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />}
+        </div>
+      </div>
+
+      {/* Institution details */}
+      {!hasInstitution ? (
+        <p className="px-5 py-8 text-sm text-zinc-400 text-center">No institution assigned.</p>
+      ) : school ? (
+        <div className="divide-y">
+          {/* Info grid */}
+          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 p-5">
+            <div className="col-span-2 sm:col-span-3">
+              <dt className="text-xs text-zinc-400 font-medium uppercase tracking-wide">School Name</dt>
+              <dd className="mt-0.5 text-sm font-semibold text-zinc-900">{school.name}</dd>
+            </div>
+            <Dl label="Code" value={school.code} />
+            <Dl label="Pejabat Pendidikan" value={school.ppdCode} />
+            <Dl label="Level" value={<span className="capitalize">{school.level?.toLowerCase()}</span>} />
+            <Dl label="Category" value={school.categoryShort ?? school.category?.replace(/_/g, " ")} />
+            <Dl label="State" value={school.state?.name} />
+          </dl>
+
+          {/* Map */}
+          {mapSrc && (
+            <div className="w-full h-56 bg-zinc-100 relative">
+              <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 text-xs text-zinc-600 shadow-sm border">
+                <MapPin className="h-3 w-3 text-red-500" /> {school.name}
+              </div>
+              <iframe
+                title="School location"
+                src={mapSrc}
+                className="w-full h-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          )}
+        </div>
+      ) : hi ? (
+        <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 p-5">
+          <div className="col-span-2 sm:col-span-3">
+            <dt className="text-xs text-zinc-400 font-medium uppercase tracking-wide">Institution Name</dt>
+            <dd className="mt-0.5 text-sm font-semibold text-zinc-900">{hi.name}</dd>
+          </div>
+          <Dl label="Code" value={hi.code} />
+          <Dl label="Type" value={hi.heiType} />
+          <Dl label="Sector" value={hi.sector} />
+          <Dl label="State" value={hi.state?.name} />
+        </dl>
+      ) : null}
+
+      <SchoolPickerDialog open={schoolPicker} onClose={() => setSchoolPicker(false)}
+        onPick={(s) => {
+          setSchoolPicker(false);
+          requestChange(
+            `Assign school "${s.name}" (${s.code}) to this contingent.\n\nThe contingent name will also be updated to "${s.name}".`,
+            { schoolId: s.id, name: s.name }
+          );
+        }} />
+      <HIPickerDialog open={hiPicker} onClose={() => setHiPicker(false)}
+        onPick={(h) => {
+          setHiPicker(false);
+          requestChange(
+            `Assign higher institution "${h.name}" to this contingent.\n\nThe contingent name will also be updated to "${h.name}".`,
+            { higherInstitutionId: h.id, name: h.name }
+          );
+        }} />
+
+      <ConfirmChangeDialog
+        pending={pending}
+        onConfirm={handleConfirm}
+        onCancel={() => setPending(null)}
+      />
+    </div>
+  );
+}
+
+// ─── Managers Tab ────────────────────────────────────────────────────────────
+
+function ManagersTab({
+  contingentId,
+  managers,
+  onManagersUpdated,
+}: {
+  contingentId: string;
+  managers: ManagerMember[];
+  onManagersUpdated: (m: ManagerMember[]) => void;
+}) {
+  const [pendingTransfer, setPendingTransfer] = useState<PendingChange | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const coManagers = managers.filter((m) => m.role !== "OWNER");
+
+  async function applyTransfer(body: Record<string, unknown>) {
+    setSaving(true);
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/managers/transfer-owner`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (res.ok) onManagersUpdated(json.managers ?? managers);
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+      {managers.length === 0 ? (
+        <p className="px-5 py-10 text-center text-sm text-zinc-400">No managers registered.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="border-b bg-zinc-50">
+            <tr>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Name</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Email</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Phone</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Role</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Status</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Joined</th>
+              <th className="px-4 py-2.5 w-8" />
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {managers.map((m) => (
+              <tr key={m.id} className="hover:bg-zinc-50">
+                <td className="px-4 py-3 font-medium text-zinc-900">{m.manager.name}</td>
+                <td className="px-4 py-3 text-zinc-500 text-xs">{m.manager.email}</td>
+                <td className="px-4 py-3 text-zinc-500 text-xs">{m.manager.phone ?? "—"}</td>
+                <td className="px-4 py-3">
+                  {m.role === "OWNER"
+                    ? <Badge variant="outline" className="text-xs text-indigo-700 border-indigo-200 bg-indigo-50">Primary Manager</Badge>
+                    : <Badge variant="outline" className="text-xs text-blue-700 border-blue-200 bg-blue-50">Co-Manager</Badge>}
+                </td>
+                <td className="px-4 py-3">
+                  {m.status === "ACTIVE"
+                    ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
+                    : <Badge variant="outline" className="text-xs text-zinc-500">{m.status}</Badge>}
+                </td>
+                <td className="px-4 py-3 text-xs text-zinc-400">{new Date(m.createdAt).toLocaleDateString("en-MY")}</td>
+                <td className="px-4 py-3">
+                  {m.role !== "OWNER" && coManagers.length > 0 && (
+                    <button
+                      onClick={() => setPendingTransfer({
+                        label: `Transfer Primary Manager role to "${m.manager.name}".\n\nThe roles will be swapped — the current Primary Manager becomes a Co-Manager.`,
+                        body: { newOwnerId: m.id },
+                      })}
+                      disabled={saving}
+                      title="Make Primary Manager"
+                      className="text-zinc-300 hover:text-indigo-600 transition-colors disabled:opacity-40"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {managers.length > 0 && (
+        <div className="flex items-start gap-2 px-4 py-3 border-t bg-zinc-50 text-xs text-zinc-500">
+          <span className="mt-0.5 shrink-0 h-4 w-4 rounded-full bg-zinc-200 text-zinc-500 flex items-center justify-center font-semibold text-[10px]">i</span>
+          <span>
+            To change the <span className="font-medium text-zinc-700">Primary Manager</span>, click the{" "}
+            <Check className="inline h-3.5 w-3.5 text-indigo-500 align-text-bottom" />{" "}
+            icon on any <span className="font-medium text-zinc-700">Co-Manager</span> row to swap roles — they become the Primary Manager and the current one becomes a Co-Manager.
+          </span>
+        </div>
+      )}
+
+      {pendingTransfer && (
+        <ConfirmChangeDialog
+          pending={pendingTransfer}
+          onConfirm={(body, _note) => { setPendingTransfer(null); applyTransfer(body); }}
+          onCancel={() => setPendingTransfer(null)}
+        />
+      )}
+      {saving && (
+        <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-zinc-900 text-white text-xs px-3 py-2 rounded-lg shadow-lg">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Teams Tab ───────────────────────────────────────────────────────────────
+
+type TeamDetail = {
+  id: string;
+  members: { id: string; participant: { id: string; name: string; ic: string | null; gender: string; age: number | null; eduLevel: string; status: string } }[];
+  trainers: { trainer: { id: string; name: string; ic: string | null; phoneNumber: string | null; status: string } }[];
+};
+
+function TeamsTab({ contingentId, teams }: {
+  contingentId: string;
+  teams: TeamRow[];
+}) {
+  const [expanded,  setExpanded]  = useState<string | null>(null);
+  const [details,   setDetails]   = useState<Record<string, TeamDetail>>({});
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  async function toggle(teamId: string) {
+    if (expanded === teamId) { setExpanded(null); return; }
+    setExpanded(teamId);
+    if (details[teamId]) return;
+    setLoadingId(teamId);
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/teams/${teamId}`);
+      const json = await res.json();
+      setDetails((prev) => ({ ...prev, [teamId]: json }));
+    } finally { setLoadingId(null); }
+  }
+
+  if (teams.length === 0) {
+    return (
+      <div className="rounded-xl border bg-white shadow-sm">
+        <p className="px-5 py-10 text-center text-sm text-zinc-400">No teams registered.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden divide-y">
+      {teams.map((t) => {
+        const isOpen    = expanded === t.id;
+        const isLoading = loadingId === t.id;
+        const detail    = details[t.id];
+
+        return (
+          <div key={t.id}>
+            {/* Row */}
+            <button
+              type="button"
+              onClick={() => toggle(t.id)}
+              className="w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors flex items-center gap-3"
+            >
+              <ChevronRight className={`h-4 w-4 text-zinc-400 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+              <div className="flex-1 min-w-0 grid grid-cols-[1fr_1fr_auto_auto_auto] items-center gap-4 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium text-zinc-900 truncate">{t.name}</p>
+                  {t.competition && <p className="text-xs text-zinc-400 font-mono mt-0.5">{t.competition.code}</p>}
+                </div>
+                <div className="min-w-0 hidden sm:block">
+                  <p className="text-zinc-700 truncate text-xs">{t.competition?.name ?? "—"}</p>
+                  <p className="text-zinc-400 text-xs">{t.competition?.participationType ?? ""}</p>
+                </div>
+                <span className="text-xs text-zinc-500 tabular-nums whitespace-nowrap">
+                  {t._count.members} member{t._count.members !== 1 ? "s" : ""}
+                </span>
+                {t.status === "ACTIVE"
+                  ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
+                  : <Badge variant="outline" className="text-xs text-zinc-500">{t.status}</Badge>}
+                {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
+              </div>
+            </button>
+
+            {/* Expanded detail */}
+            {isOpen && (
+              <div className="bg-slate-50 border-t px-6 py-5 space-y-5">
+                {!detail ? (
+                  <p className="text-sm text-zinc-400 text-center py-4">Loading…</p>
+                ) : (
+                  <>
+                    {/* Members */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-2">
+                        Members ({detail.members.length})
+                      </h4>
+                      {detail.members.length === 0 ? (
+                        <p className="text-xs text-zinc-400">No members.</p>
+                      ) : (
+                        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead className="bg-slate-100 border-b border-slate-200">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500 w-6">#</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Name</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">IC</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Gender</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Age</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Level</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {detail.members.map((m, i) => (
+                                <tr key={m.id} className="hover:bg-slate-50">
+                                  <td className="px-3 py-2 text-zinc-400 tabular-nums">{i + 1}</td>
+                                  <td className="px-3 py-2 font-medium text-zinc-800">{m.participant.name}</td>
+                                  <td className="px-3 py-2 text-zinc-500 font-mono">{m.participant.ic ?? "—"}</td>
+                                  <td className="px-3 py-2 text-zinc-500">{m.participant.gender}</td>
+                                  <td className="px-3 py-2 text-zinc-500 tabular-nums">{m.participant.age ?? "—"}</td>
+                                  <td className="px-3 py-2 text-zinc-500">{m.participant.eduLevel}</td>
+                                  <td className="px-3 py-2">
+                                    {m.participant.status === "ACTIVE"
+                                      ? <span className="text-green-700">Active</span>
+                                      : <span className="text-zinc-400">{m.participant.status}</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Trainers */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-2">
+                        Trainers ({detail.trainers.length})
+                      </h4>
+                      {detail.trainers.length === 0 ? (
+                        <p className="text-xs text-zinc-400">No trainers assigned.</p>
+                      ) : (
+                        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead className="bg-slate-100 border-b border-slate-200">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500 w-6">#</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Name</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">IC</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Phone</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {detail.trainers.map((tt, i) => (
+                                <tr key={tt.trainer.id} className="hover:bg-slate-50">
+                                  <td className="px-3 py-2 text-zinc-400 tabular-nums">{i + 1}</td>
+                                  <td className="px-3 py-2 font-medium text-zinc-800">{tt.trainer.name}</td>
+                                  <td className="px-3 py-2 text-zinc-500 font-mono">{tt.trainer.ic ?? "—"}</td>
+                                  <td className="px-3 py-2 text-zinc-500">{tt.trainer.phoneNumber ?? "—"}</td>
+                                  <td className="px-3 py-2">
+                                    {tt.trainer.status === "ACTIVE"
+                                      ? <span className="text-green-700">Active</span>
+                                      : <span className="text-zinc-400">{tt.trainer.status}</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Trainers Tab ────────────────────────────────────────────────────────────
+
+function TrainersTab({ contingentId }: { contingentId: string }) {
+  const [rows, setRows]       = useState<TrainerRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/v2/organizer/contingents/${contingentId}/trainers`)
+      .then((r) => r.json())
+      .then((j) => { setRows(j.data ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [contingentId]);
+
+  if (loading) {
+    return <p className="text-sm text-zinc-400 py-10 text-center">Loading…</p>;
+  }
+
+  return (
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+      {rows.length === 0 ? (
+        <p className="px-5 py-10 text-center text-sm text-zinc-400">No trainers registered.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="border-b bg-zinc-50">
+            <tr>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600 w-8">#</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Name</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">IC</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Email</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Phone</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Teams</th>
+              <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {rows.map((t, i) => (
+              <tr key={t.id} className="hover:bg-zinc-50">
+                <td className="px-4 py-3 text-zinc-400 text-xs tabular-nums">{i + 1}</td>
+                <td className="px-4 py-3 font-medium text-zinc-900">{t.name}</td>
+                <td className="px-4 py-3 text-xs text-zinc-500 font-mono">{t.ic ?? "—"}</td>
+                <td className="px-4 py-3 text-xs text-zinc-500">{t.email ?? "—"}</td>
+                <td className="px-4 py-3 text-xs text-zinc-500">{t.phoneNumber ?? "—"}</td>
+                <td className="px-4 py-3">
+                  {t.teams.length === 0 ? (
+                    <span className="text-zinc-300 text-xs">—</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {t.teams.map((tt, j) => tt.team && (
+                        <span key={j} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-zinc-100 text-zinc-600 border border-zinc-200">
+                          {tt.team.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {t.status === "ACTIVE"
+                    ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
+                    : <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-300 bg-zinc-50">{t.status}</Badge>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ─── Edit Participant Dialog ──────────────────────────────────────────────────
+
+function EditParticipantDialog({
+  contingentId, participant, open, onClose, onSaved,
+}: {
+  contingentId: string; participant: Participant | null;
+  open: boolean; onClose: () => void; onSaved: (updated: Participant) => void;
+}) {
+  const [form, setForm] = useState<Omit<Participant, "id" | "ppki" | "createdAt"> & { ppki: boolean }>(() =>
+    participant
+      ? {
+          name: participant.name, ic: participant.ic ?? "", email: participant.email ?? "",
+          phoneNumber: participant.phoneNumber ?? "", gender: participant.gender,
+          age: participant.age, eduLevel: participant.eduLevel,
+          classGrade: participant.classGrade ?? "", className: participant.className ?? "",
+          status: participant.status, ppki: participant.ppki,
+        }
+      : { name: "", ic: "", email: "", phoneNumber: "", gender: "MALE", age: null,
+          eduLevel: "TINGKATAN1", classGrade: "", className: "", status: "ACTIVE", ppki: false }
+  );
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!participant) return;
+    setSaving(true); setError(null);
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/participants/${participant.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Save failed"); return; }
+      onSaved(json.data); onClose();
+    } catch { setError("Network error"); }
+    finally   { setSaving(false); }
+  }
+
+  const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const selCls = "mt-1 block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Participant</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-4 px-6 py-4 text-sm">
+          <div className="col-span-2">
+            <Label>Name *</Label>
+            <Input value={form.name} onChange={f("name")} className="mt-1" />
+          </div>
+          <div>
+            <Label>IC / Passport</Label>
+            <Input value={form.ic ?? ""} onChange={f("ic")} className="mt-1" />
+          </div>
+          <div>
+            <Label>Phone</Label>
+            <Input value={form.phoneNumber ?? ""} onChange={f("phoneNumber")} className="mt-1" />
+          </div>
+          <div className="col-span-2">
+            <Label>Email</Label>
+            <Input value={form.email ?? ""} onChange={f("email")} className="mt-1" />
+          </div>
+          <div>
+            <Label>Gender *</Label>
+            <select value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))} className={selCls}>
+              <option value="MALE">MALE</option>
+              <option value="FEMALE">FEMALE</option>
+            </select>
+          </div>
+          <div>
+            <Label>Age</Label>
+            <Input type="number" value={form.age ?? ""} onChange={(e) => setForm((p) => ({ ...p, age: e.target.value ? Number(e.target.value) : null }))} className="mt-1" />
+          </div>
+          <div>
+            <Label>Education Level *</Label>
+            <select value={form.eduLevel} onChange={(e) => setForm((p) => ({ ...p, eduLevel: e.target.value }))} className={selCls}>
+              {EDU_OPTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Class Grade</Label>
+            <Input value={form.classGrade ?? ""} onChange={f("classGrade")} className="mt-1" />
+          </div>
+          <div>
+            <Label>Class Name</Label>
+            <Input value={form.className ?? ""} onChange={f("className")} className="mt-1" />
+          </div>
+          <div>
+            <Label>Status</Label>
+            <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))} className={selCls}>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 mt-5">
+            <input type="checkbox" id="ppki" checked={form.ppki} onChange={(e) => setForm((p) => ({ ...p, ppki: e.target.checked }))} />
+            <Label htmlFor="ppki">PPKI</Label>
+          </div>
+        </div>
+        {error && <p className="px-6 pb-2 text-red-600 text-sm">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !form.name.trim()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Participants Tab ─────────────────────────────────────────────────────────
+
+function ParticipantsTab({ contingentId }: { contingentId: string }) {
+  const [q, setQ]           = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage]     = useState(1);
+  const [pageSize]          = useState(20);
+  const [result, setResult] = useState<ParticipantsPage | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState<Participant | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchPage = useCallback(async (q: string, p: number) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(p), pageSize: String(pageSize) });
+      if (q) params.set("q", q);
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/participants?${params}`);
+      const json = await res.json();
+      setResult(json);
+    } finally { setLoading(false); }
+  }, [contingentId, pageSize]);
+
+  useEffect(() => { fetchPage(search, page); }, [search, page, fetchPage]);
+
+  function handleInput(val: string) {
+    setQ(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { setSearch(val); setPage(1); }, 300);
+  }
+
+  function handleSaved(updated: Participant) {
+    setResult((prev) => prev ? { ...prev, data: prev.data.map((p) => p.id === updated.id ? updated : p) } : prev);
+  }
+
+  const totalPages = result ? Math.max(1, Math.ceil(result.total / pageSize)) : 1;
+  const rangeStart = (page - 1) * pageSize + 1;
+  const rangeEnd   = result ? Math.min(page * pageSize, result.total) : 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+          <Input value={q} onChange={(e) => handleInput(e.target.value)}
+            placeholder="Search name, IC, email, class…" className="pl-9" />
+        </div>
+        <span className="text-sm text-zinc-400 ml-auto">
+          {result ? `${result.total.toLocaleString()} participant${result.total !== 1 ? "s" : ""}` : ""}
+        </span>
+      </div>
+
+      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-zinc-50">
+              <tr>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600 w-8">#</th>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Name</th>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600">IC</th>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Gender</th>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Age</th>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Edu Level</th>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Class</th>
+                <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Status</th>
+                <th className="px-4 py-2.5 w-10" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {loading && !result ? (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-zinc-400">Loading…</td></tr>
+              ) : !result?.data.length ? (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-zinc-400">No participants found.</td></tr>
+              ) : (
+                result.data.map((p, i) => (
+                  <tr key={p.id} className="hover:bg-zinc-50">
+                    <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">{rangeStart + i}</td>
+                    <td className="px-4 py-2.5">
+                      <p className="font-medium text-zinc-900">{p.name}</p>
+                      {p.email && <p className="text-xs text-zinc-400">{p.email}</p>}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-500 font-mono">{p.ic ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-600">{p.gender}</td>
+                    <td className="px-4 py-2.5 text-xs tabular-nums text-zinc-600">{p.age ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-600">{p.eduLevel}</td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-600">
+                      {[p.classGrade, p.className].filter(Boolean).join(" · ") || "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {p.status === "ACTIVE"
+                        ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
+                        : <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-300 bg-zinc-50">{p.status}</Badge>}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <button onClick={() => setEditing(p)} className="text-zinc-400 hover:text-zinc-700 transition-colors">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {result && totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-zinc-50 text-sm">
+            <span className="text-zinc-500">Showing {rangeStart}–{rangeEnd} of {result.total.toLocaleString()}</span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                className="p-1 rounded border disabled:opacity-40 hover:bg-white transition-colors">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="px-3 text-zinc-600 tabular-nums">{page} / {totalPages}</span>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="p-1 rounded border disabled:opacity-40 hover:bg-white transition-colors">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <EditParticipantDialog
+        key={editing?.id ?? "none"}
+        contingentId={contingentId} participant={editing}
+        open={!!editing} onClose={() => setEditing(null)} onSaved={handleSaved}
+      />
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+export function ContingentOrgDetailClient({ contingentId }: { contingentId: string }) {
+  const router = useRouter();
+  const [detail, setDetail]   = useState<ContingentDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab]         = useState<Tab>("Details");
+
+  // short-name inline edit
+  const [editingShortName, setEditingShortName] = useState(false);
+  const [shortNameDraft,   setShortNameDraft]   = useState("");
+  const [pendingField,     setPendingField]      = useState<PendingChange | null>(null);
+  const [savingField,      setSavingField]       = useState(false);
+
+  async function applyFieldPatch(body: Record<string, unknown>) {
+    setSavingField(true);
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (res.ok) setDetail((prev) => prev ? { ...prev, shortName: json.shortName ?? prev.shortName } : prev);
+    } finally { setSavingField(false); }
+  }
+
+  function openShortNameEdit() {
+    setShortNameDraft(detail?.shortName ?? "");
+    setEditingShortName(true);
+  }
+
+  function submitShortName() {
+    const trimmed = shortNameDraft.trim();
+    const current = detail?.shortName ?? "";
+    if (trimmed === current) { setEditingShortName(false); return; }
+    setEditingShortName(false);
+    setPendingField({
+      label: trimmed
+        ? `Update short name to "${trimmed}".`
+        : `Clear the short name (currently "${current}").`,
+      body: { shortName: trimmed || null },
+    });
+  }
+
+  useEffect(() => {
+    fetch(`/api/v2/organizer/contingents/${contingentId}`)
+      .then((r) => r.json())
+      .then((d) => { setDetail(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [contingentId]);
+
+  if (loading) {
+    return <div className="p-6 max-w-5xl mx-auto"><p className="text-zinc-400 text-sm">Loading…</p></div>;
+  }
+  if (!detail || (detail as { error?: string }).error) {
+    return <div className="p-6 max-w-5xl mx-auto"><p className="text-red-500 text-sm">Contingent not found.</p></div>;
+  }
+
+  const showSchool = detail.contingentType === "SCHOOL" || !!detail.school;
+  const showHI     = detail.contingentType === "HIGHER" || !!detail.higherInstitution;
+  const showInstitutionCard = showSchool || showHI || detail.contingentType === "INDEPENDENT";
+
+  function handleInstitutionUpdated(patch: { school: SchoolDetail | null; higherInstitution: HIDetail | null; name?: string }) {
+    setDetail((prev) => {
+      if (!prev) return prev;
+      return { ...prev, ...patch, ...(patch.name ? { name: patch.name } : {}) };
+    });
+  }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      {/* Back + heading */}
+      <div className="flex items-start gap-3">
+        <button onClick={() => router.back()} className="mt-0.5 text-zinc-400 hover:text-zinc-700 transition-colors">
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold leading-tight">{detail.name}</h1>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${TYPE_COLOR[detail.contingentType]}`}>
+              {TYPE_LABEL[detail.contingentType]}
+            </span>
+            {detail.status !== "ACTIVE" && (
+              <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50 text-xs">Suspended</Badge>
+            )}
+          </div>
+          {detail.shortName && <p className="text-sm text-zinc-400 mt-0.5">{detail.shortName}</p>}
+        </div>
+        <div className="hidden sm:flex items-center gap-4 text-sm">
+          <span className="flex items-center gap-1.5 text-zinc-500"><Users className="h-4 w-4" /> {detail.managers.length}</span>
+          <span className="flex items-center gap-1.5 text-zinc-500"><UserCheck className="h-4 w-4" /> {detail._count.participants}</span>
+          <span className="flex items-center gap-1.5 text-zinc-500"><Trophy className="h-4 w-4" /> {detail.teams.length}</span>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex border-b gap-1">
+        {TABS.map((t) => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              tab === t ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-700"
+            }`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Details ── */}
+      {tab === "Details" && (
+        <div className="space-y-4">
+          {/* Contingent meta */}
+          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5 bg-white rounded-xl border p-5 shadow-sm">
+            <Dl label="Full Name" value={detail.name} />
+            <div>
+              <dt className="text-xs text-zinc-400 font-medium uppercase tracking-wide flex items-center gap-1.5">
+                Short Name
+                {!editingShortName && (
+                  <button onClick={openShortNameEdit} className="text-zinc-300 hover:text-zinc-600 transition-colors">
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </dt>
+              <dd className="mt-0.5">
+                {editingShortName ? (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={shortNameDraft}
+                      onChange={(e) => setShortNameDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") submitShortName(); if (e.key === "Escape") setEditingShortName(false); }}
+                      className="h-7 text-sm py-0 px-2"
+                      placeholder="Short name…"
+                      autoFocus
+                    />
+                    <button onClick={submitShortName} className="text-green-600 hover:text-green-700">
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => setEditingShortName(false)} className="text-zinc-400 hover:text-zinc-600">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-sm text-zinc-800">{detail.shortName ?? <span className="text-zinc-300">—</span>}</span>
+                )}
+              </dd>
+            </div>
+            <Dl label="Type" value={TYPE_LABEL[detail.contingentType]} />
+            <Dl label="Status" value={
+              detail.status === "ACTIVE"
+                ? <span className="text-green-700">Active</span>
+                : <span className="text-red-600">Suspended</span>
+            } />
+            <Dl label="State" value={detail.stateName ? `${detail.stateName}${detail.stateCode ? ` (${detail.stateCode})` : ""}` : null} />
+            <Dl label="Zone" value={detail.zoneName} />
+            <Dl label="Locality" value={detail.locality} />
+            <Dl label="Registered" value={new Date(detail.createdAt).toLocaleDateString("en-MY", { year: "numeric", month: "long", day: "numeric" })} />
+            <Dl label="Last Updated" value={new Date(detail.updatedAt).toLocaleDateString("en-MY", { year: "numeric", month: "long", day: "numeric" })} />
+          </dl>
+
+          {/* Institution card */}
+          {showInstitutionCard && (
+            <InstitutionCard
+              contingentId={detail.id}
+              contingentType={detail.contingentType}
+              school={detail.school}
+              hi={detail.higherInstitution}
+              onUpdated={handleInstitutionUpdated}
+            />
+          )}
+        </div>
+      )}
+
+      {/* short-name confirm dialog */}
+      {pendingField && (
+        <ConfirmChangeDialog
+          pending={pendingField}
+          onConfirm={(body, _note) => { setPendingField(null); applyFieldPatch(body); }}
+          onCancel={() => setPendingField(null)}
+        />
+      )}
+      {savingField && (
+        <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-zinc-900 text-white text-xs px-3 py-2 rounded-lg shadow-lg">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+        </div>
+      )}
+
+      {/* ── Managers ── */}
+      {tab === "Managers" && (
+        <ManagersTab
+          contingentId={contingentId}
+          managers={detail.managers}
+          onManagersUpdated={(managers) => setDetail((prev) => prev ? { ...prev, managers } : prev)}
+        />
+      )}
+
+      {/* ── Trainers ── */}
+      {tab === "Trainers" && <TrainersTab contingentId={contingentId} />}
+
+      {/* ── Teams ── */}
+      {tab === "Teams" && <TeamsTab contingentId={contingentId} teams={detail.teams} />}
+
+      {/* ── Participants ── */}
+      {tab === "Participants" && <ParticipantsTab contingentId={contingentId} />}
+    </div>
+  );
+}
