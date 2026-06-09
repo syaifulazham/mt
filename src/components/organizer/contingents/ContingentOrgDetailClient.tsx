@@ -575,7 +575,7 @@ function ManagersTab({
       {pendingTransfer && (
         <ConfirmChangeDialog
           pending={pendingTransfer}
-          onConfirm={(body, _note) => { setPendingTransfer(null); applyTransfer(body); }}
+          onConfirm={(body) => { setPendingTransfer(null); applyTransfer(body); }}
           onCancel={() => setPendingTransfer(null)}
         />
       )}
@@ -950,12 +950,11 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
   const [page, setPage]     = useState(1);
   const [pageSize]          = useState(20);
   const [result, setResult] = useState<ParticipantsPage | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Participant | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(async (q: string, p: number) => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), pageSize: String(pageSize) });
       if (q) params.set("q", q);
@@ -1139,7 +1138,18 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
   function handleInstitutionUpdated(patch: { school: SchoolDetail | null; higherInstitution: HIDetail | null; name?: string }) {
     setDetail((prev) => {
       if (!prev) return prev;
-      return { ...prev, ...patch, ...(patch.name ? { name: patch.name } : {}) };
+      const s = patch.school;
+      const h = patch.higherInstitution;
+      const stateName = s?.state?.name ?? h?.state?.name ?? prev.state?.name ?? null;
+      const stateCode = s?.state?.code ?? h?.state?.code ?? prev.state?.code ?? null;
+      const zoneName  =
+        s?.zone?.name ??
+        s?.state?.zoneStates?.[0]?.zone?.name ??
+        h?.state?.zoneStates?.[0]?.zone?.name ??
+        prev.zone?.name ??
+        prev.state?.zoneStates?.[0]?.zone?.name ??
+        null;
+      return { ...prev, ...patch, ...(patch.name ? { name: patch.name } : {}), stateName, stateCode, zoneName };
     });
   }
 
@@ -1249,7 +1259,7 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
       {pendingField && (
         <ConfirmChangeDialog
           pending={pendingField}
-          onConfirm={(body, _note) => { setPendingField(null); applyFieldPatch(body); }}
+          onConfirm={(body) => { setPendingField(null); applyFieldPatch(body); }}
           onCancel={() => setPendingField(null)}
         />
       )}

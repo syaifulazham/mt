@@ -41,11 +41,10 @@ export function ContingentsClient() {
   const [pageSize, setPageSize] = useState<20 | 50 | 100>(50);
   const [rows, setRows]       = useState<ContingentRow[]>([]);
   const [total, setTotal]     = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchData = useCallback(async (q: string, p: number, ps: number) => {
-    setLoading(true);
     const params = new URLSearchParams({ page: String(p), pageSize: String(ps) });
     if (q) params.set("q", q);
     try {
