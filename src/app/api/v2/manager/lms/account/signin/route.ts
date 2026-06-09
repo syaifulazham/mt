@@ -35,6 +35,7 @@ export async function POST() {
     return NextResponse.json({ loginUrl: result.loginUrl });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
+    console.error("[lms/account/signin POST] eptim-edu error:", msg, { username });
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

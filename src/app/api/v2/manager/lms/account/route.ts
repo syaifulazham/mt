@@ -19,7 +19,10 @@ function emailToUsername(email: string): string {
     .padEnd(3, "x");
 }
 
-const LOGIN_URL = `${process.env.EPTIMEDU_BASE_URL ?? ""}/auth/login`;
+// EPTIMEDU_PUBLIC_URL is the browser-accessible URL for eptim-edu.
+// Falls back to EPTIMEDU_BASE_URL if not set (works when both are the same).
+const PUBLIC_URL = process.env.EPTIMEDU_PUBLIC_URL ?? process.env.EPTIMEDU_BASE_URL ?? "";
+const LOGIN_URL  = `${PUBLIC_URL}/auth/login`;
 
 /** GET — check whether this manager has an eptim-edu account */
 export async function GET() {
@@ -98,15 +101,30 @@ export async function POST() {
     let finalPassword = password;
 
     if (check?.exists) {
+      // Username already exists — reuse the account
       lmsUserId     = check.user.id;
-      finalPassword = manager.lmsPassword ?? password; // reuse stored password if exists
+      finalPassword = manager.lmsPassword ?? password;
     } else {
-      const created = await eptimEdu.createUser({
-        username,
-        password,
-        name:  manager.name,
-        email: manager.email,
-      });
+      // Try creating with the real email; if that email is already taken in
+      // eptim-edu (409), fall back to creating without an email so the username
+      // is still provisioned (username-based login skips email verification).
+      let created: { id: string };
+      try {
+        created = await eptimEdu.createUser({
+          username,
+          password,
+          name:  manager.name,
+          email: manager.email,
+        });
+      } catch (emailErr: unknown) {
+        const errMsg = emailErr instanceof Error ? emailErr.message : "";
+        if (errMsg.toLowerCase().includes("email")) {
+          // Email already registered under a different account — create without email
+          created = await eptimEdu.createUser({ username, password, name: manager.name });
+        } else {
+          throw emailErr; // rethrow non-email errors
+        }
+      }
       lmsUserId = created.id;
     }
 
@@ -115,13 +133,10 @@ export async function POST() {
       data: { lmsUserId, lmsPassword: finalPassword },
     });
 
-    return NextResponse.json({
-      username,
-      password: finalPassword,
-      loginUrl: LOGIN_URL,
-    });
+    return NextResponse.json({ username, password: finalPassword, loginUrl: LOGIN_URL });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
+    console.error("[lms/account POST] eptim-edu error:", msg, { username });
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
