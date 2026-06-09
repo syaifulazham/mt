@@ -59,6 +59,7 @@ function ManagerAccountSection() {
   const [status,      setStatus]      = useState<ManagerAccountStatus | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [creating,    setCreating]    = useState(false);
+  const [signingIn,   setSigningIn]   = useState(false);
   const [newCreds,    setNewCreds]    = useState<{ username: string; password: string; loginUrl: string } | null>(null);
   const [err,         setErr]         = useState("");
 
@@ -81,6 +82,18 @@ function ManagerAccountSection() {
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally { setCreating(false); }
+  }
+
+  async function signInToEptimEdu() {
+    setSigningIn(true); setErr("");
+    try {
+      const res = await fetch("/api/v2/manager/lms/account/signin", { method: "POST" });
+      const j   = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Failed");
+      window.open(j.loginUrl, "_blank", "noopener,noreferrer");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally { setSigningIn(false); }
   }
 
   return (
@@ -122,11 +135,10 @@ function ManagerAccountSection() {
                   )}
                 </div>
               </div>
-              <a href={status.loginUrl} target="_blank" rel="noreferrer">
-                <Button size="sm" className="h-8 gap-1.5 text-xs">
-                  <ExternalLink className="h-3.5 w-3.5" /> Login to Bengkel MT
-                </Button>
-              </a>
+              <Button size="sm" className="h-8 gap-1.5 text-xs" disabled={signingIn} onClick={signInToEptimEdu}>
+                {signingIn ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                Sign in to Eptim Edu
+              </Button>
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -177,9 +189,14 @@ function ManagerAccountSection() {
               </div>
             </div>
             <DialogFooter className="flex-col gap-2">
-              <a href={newCreds.loginUrl} target="_blank" rel="noreferrer" className="w-full">
-                <Button className="w-full gap-1.5"><ExternalLink className="h-4 w-4" /> Go to Bengkel MT</Button>
-              </a>
+              <Button
+                className="w-full gap-1.5"
+                disabled={signingIn}
+                onClick={async () => { setNewCreds(null); await signInToEptimEdu(); }}
+              >
+                {signingIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                Sign in to Eptim Edu
+              </Button>
               <Button variant="outline" className="w-full" onClick={() => setNewCreds(null)}>Done</Button>
             </DialogFooter>
           </DialogContent>

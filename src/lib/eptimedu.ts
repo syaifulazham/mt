@@ -31,4 +31,7 @@ export const eptimEdu = {
 
   enrol: (username: string, courseId: string) =>
     req("/api/v1/enrolments", { method: "POST", body: JSON.stringify({ username, courseId }) }),
+
+  createSsoToken: (username: string) =>
+    req("/api/v1/auth/sso-token", { method: "POST", body: JSON.stringify({ username }) }),
 };
