@@ -116,9 +116,9 @@ const CLASS_LABEL = (p: Participant) =>
   [p.classGrade, p.className].filter(Boolean).join(" – ") || "–";
 
 // ── CSV template ──────────────────────────────────────────────────────────────
-const CSV_TEMPLATE = `name,ic,gender,age,edu_level,class_grade,class_name,email,phoneNumber,ethnicity
-Ahmad Bin Ali,010101012345,MALE,13,sekolah menengah,Tingkatan 1,Amanah,ahmad@example.com,0123456789
-Siti Binti Bakar,020202023456,FEMALE,9,sekolah rendah,Darjah 3,Cerdas,,
+const CSV_TEMPLATE = `name,ic,gender,age,edu_level,class_grade,class_name,email,phoneNumber,ethnicity,ppki
+Ahmad Bin Ali,010101012345,MALE,13,sekolah menengah,Tingkatan 1,Amanah,ahmad@example.com,0123456789,MELAYU,
+Siti Binti Bakar,020202023456,FEMALE,9,sekolah rendah,Darjah 3,Cerdas,,,CINA,Y
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -506,7 +506,7 @@ const EDU_MAP: Record<string, EduLevel> = {
 type RawRow = {
   name: string; ic: string; gender: string; age: string;
   edu_level: string; class_grade: string; class_name: string;
-  email: string; phoneNumber: string; ethnicity: string;
+  email: string; phoneNumber: string; ethnicity: string; ppki: string;
   _issues: string[];
 };
 
@@ -514,7 +514,7 @@ type CleanRow = {
   name: string; ic: string | null; gender: Gender; age: number | null;
   eduLevel: EduLevel; classGrade: string | null; className: string | null;
   email: string | null; phoneNumber: string | null;
-  ethnicity: Ethnicity | null; contingentId: string;
+  ethnicity: Ethnicity | null; ppki: boolean; contingentId: string;
 };
 
 function parseCsv(text: string): RawRow[] {
@@ -534,13 +534,14 @@ function parseCsv(text: string): RawRow[] {
     const email       = get("email");
     const phoneNumber = get("phonenumber") || get("phone_number") || get("phone");
     const ethnicity   = get("ethnicity") || get("bangsa") || get("etnik");
+    const ppki        = get("ppki") || get("berkeperluan_khas") || get("oku");
     const issues: string[] = [];
     if (!name) issues.push("name");
     const gNorm = gender.toUpperCase();
     if (gNorm !== "MALE" && gNorm !== "FEMALE") issues.push("gender");
     const ednorm = edu_level.toLowerCase().trim();
     if (!EDU_MAP[ednorm] && !["kindergarten","primary","secondary","youth"].includes(ednorm)) issues.push("edu_level");
-    return { name, ic, gender, age, edu_level, class_grade, class_name, email, phoneNumber, ethnicity, _issues: issues };
+    return { name, ic, gender, age, edu_level, class_grade, class_name, email, phoneNumber, ethnicity, ppki, _issues: issues };
   });
 }
 
@@ -574,6 +575,7 @@ function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
       email:       r.email        || null,
       phoneNumber: r.phoneNumber  || null,
       ethnicity,
+      ppki:        r.ppki.trim().length > 0,
       contingentId,
     };
   });
@@ -588,7 +590,7 @@ function PreviewTable({ rows }: { rows: CleanRow[]; isAi?: boolean }) {
   const headers = [
     t("bulk.colName"), t("bulk.colIc"), t("bulk.colGender"),
     t("bulk.colAge"), t("bulk.colLevel"), t("bulk.colGrade"),
-    t("bulk.colClass"), t("bulk.colEmail"),
+    t("bulk.colClass"), t("bulk.colEmail"), "Ethnicity", "PPKI",
   ];
   return (
     <div className="overflow-x-auto rounded-lg border text-xs dark:border-zinc-700">
@@ -615,6 +617,12 @@ function PreviewTable({ rows }: { rows: CleanRow[]; isAi?: boolean }) {
               <td className="px-3 py-2">{row.classGrade ?? "–"}</td>
               <td className="px-3 py-2">{row.className ?? "–"}</td>
               <td className="px-3 py-2 text-zinc-400">{row.email ?? "–"}</td>
+              <td className="px-3 py-2 text-zinc-500">{row.ethnicity ?? "–"}</td>
+              <td className="px-3 py-2 text-center">
+                {row.ppki
+                  ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">✓</span>
+                  : <span className="text-zinc-300">–</span>}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -649,6 +657,7 @@ function BulkUploadDialog({
   const [confirming, setConfirming] = useState(false);
   const [importCount, setImportCount] = useState(0);
   const [error, setError]           = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -656,9 +665,7 @@ function BulkUploadDialog({
     setRawRows([]); setCleanRows([]); setAiErrors([]); setError("");
   }
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function processFile(file: File) {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -670,6 +677,23 @@ function BulkUploadDialog({
       setStep("raw");
     };
     reader.readAsText(file);
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setError("Please drop a .csv file");
+      return;
+    }
+    processFile(file);
   }
 
   async function handleAiClean() {
@@ -716,8 +740,8 @@ function BulkUploadDialog({
 
   return (
     <Dialog open={open} onOpenChange={() => { reset(); onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col mx-4 sm:mx-auto">
+        <DialogHeader className="pb-1">
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-4 w-4" />
             {t("bulk.title")}
@@ -725,10 +749,10 @@ function BulkUploadDialog({
           <DialogDescription>{t("bulk.desc")}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 text-xs text-zinc-400 px-1">
+        <div className="flex items-center gap-2 text-xs text-zinc-400 px-0.5 pb-1">
           {(["upload","raw","ai","done"] as BulkStep[]).map((s, i) => (
             <span key={s} className="flex items-center gap-2">
-              {i > 0 && <span>›</span>}
+              {i > 0 && <span className="text-zinc-300">›</span>}
               <span className={step === s ? "text-[#085782] font-semibold dark:text-blue-400" : ""}>
                 {s === "upload" ? t("bulk.stepUpload") : s === "raw" ? t("bulk.stepPreview") : s === "ai" ? t("bulk.stepAiClean") : t("bulk.stepDone")}
               </span>
@@ -736,7 +760,7 @@ function BulkUploadDialog({
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-2">
+        <div className="flex-1 overflow-y-auto space-y-4 py-2 px-1">
 
           {step === "upload" && (
             <>
@@ -750,14 +774,35 @@ function BulkUploadDialog({
                 </div>
               )}
               <div
-                className="border-2 border-dashed border-zinc-200 rounded-xl p-10 text-center cursor-pointer hover:border-[#085782]/50 transition-colors dark:border-zinc-700 dark:hover:border-blue-500/50"
+                className={`border-2 border-dashed rounded-xl py-12 px-6 text-center cursor-pointer transition-all select-none ${
+                  isDragging
+                    ? "border-[#085782] bg-blue-50 dark:bg-blue-950/20 dark:border-blue-500 scale-[1.01]"
+                    : "border-zinc-200 hover:border-[#085782]/50 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:border-blue-500/50 dark:hover:bg-zinc-800/30"
+                }`}
                 onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false);
+                }}
+                onDrop={handleDrop}
               >
-                <Upload className="h-8 w-8 mx-auto text-zinc-300 mb-3" />
-                <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{t("bulk.clickToChoose")}</p>
-                <p className="text-xs text-zinc-400 mt-1">{t("bulk.noServerCall")}</p>
+                <Upload className={`h-9 w-9 mx-auto mb-3 transition-colors ${isDragging ? "text-[#085782]" : "text-zinc-300"}`} />
+                {isDragging ? (
+                  <p className="text-sm font-semibold text-[#085782]">Drop your CSV file here</p>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{t("bulk.clickToChoose")}</p>
+                    <p className="text-xs text-zinc-400 mt-1">or drag and drop a .csv file</p>
+                  </>
+                )}
                 <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
               </div>
+              {error && (
+                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />{error}
+                </div>
+              )}
               <Button variant="outline" size="sm" className="gap-2"
                 onClick={() => {
                   const a = document.createElement("a");
@@ -825,7 +870,7 @@ function BulkUploadDialog({
           )}
         </div>
 
-        <DialogFooter className="pt-2 flex-wrap gap-2">
+        <DialogFooter className="pt-3 flex-wrap gap-2 border-t dark:border-zinc-800">
           {step === "upload" && (
             <Button variant="outline" onClick={onClose}>{t("bulk.cancelBtn")}</Button>
           )}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { Gender, EduLevel } from "@prisma/client";
+import { Gender, EduLevel, Ethnicity } from "@prisma/client";
 
 // ── POST /api/v2/manager/participants/bulk-confirm ───────────────────────────
 // Body: { rows: ParsedRow[], contingentId: string }
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!contingentIds.includes(contingentId))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
-  type ParsedRow = { name: string; ic?: string; email?: string; phoneNumber?: string; gender: Gender; age?: number; eduLevel: EduLevel; classGrade?: string; className?: string };
+  type ParsedRow = { name: string; ic?: string; email?: string; phoneNumber?: string; gender: Gender; age?: number; eduLevel: EduLevel; classGrade?: string; className?: string; ethnicity?: string; ppki?: boolean };
   const created = await db.participant.createMany({
     data: rows.map((r: ParsedRow) => ({
       name:        r.name,
@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
       eduLevel:    r.eduLevel    as EduLevel,
       classGrade:  r.classGrade  ?? null,
       className:   r.className   ?? null,
+      ethnicity:   (r.ethnicity  ?? null) as Ethnicity | null,
+      ppki:        r.ppki        ?? false,
       contingentId,
     })),
     skipDuplicates: true,

@@ -94,6 +94,24 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ...contingent, stateName, stateCode, zoneName });
 }
 
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+
+  const existing = await db.contingent.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Teams have no cascade on contingent delete — delete them first (cascades TeamMembers + TeamTrainers)
+  await db.$transaction([
+    db.team.deleteMany({ where: { contingentId: id } }),
+    db.contingent.delete({ where: { id } }),
+  ]);
+
+  return NextResponse.json({ deleted: true });
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

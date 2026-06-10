@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Users, UserCheck, Trophy,
   Search, Pencil, ChevronLeft, ChevronRight,
-  School as SchoolIcon, Building2, MapPin, Loader2, X, Check,
+  School as SchoolIcon, Building2, MapPin, Loader2, X, Check, Trash2, AlertTriangle,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -1072,6 +1072,105 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
   );
 }
 
+// ─── Delete confirmation dialog ───────────────────────────────────────────────
+
+function DeleteContingentDialog({
+  open, name, contingentId, onClose, onDeleted,
+}: {
+  open: boolean;
+  name: string;
+  contingentId: string;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [code,     setCode]     = useState("");
+  const [input,    setInput]    = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error,    setError]    = useState("");
+
+  useEffect(() => {
+    if (open) { setCode(genCode()); setInput(""); setError(""); }
+  }, [open]);
+
+  async function handleDelete() {
+    if (input !== code) return;
+    setDeleting(true); setError("");
+    try {
+      const res = await fetch(`/api/v2/organizer/contingents/${contingentId}`, { method: "DELETE" });
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Delete failed"); }
+      onDeleted();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !deleting) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <Trash2 className="h-5 w-5" /> Delete Contingent
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:bg-amber-950/20 dark:border-amber-800">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-semibold">This action cannot be undone.</p>
+              <p>All data associated with <span className="font-semibold">{name}</span> will be permanently deleted:</p>
+              <ul className="list-disc list-inside text-xs mt-1 space-y-0.5 text-amber-700 dark:text-amber-400">
+                <li>All manager accounts linked to this contingent</li>
+                <li>All participants and their sessions</li>
+                <li>All trainers</li>
+                <li>All teams and team memberships</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">Type the confirmation code below to enable delete:</p>
+            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-4 py-3 text-center">
+              <p className="text-2xl font-mono font-bold tracking-[0.35em] text-red-600 select-all">{code}</p>
+            </div>
+            <input
+              type="text"
+              autoComplete="off"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-mono tracking-[0.3em] text-center uppercase focus:outline-none focus:ring-2 focus:ring-red-400"
+              placeholder={code.split("").map(() => "_").join(" ")}
+              value={input}
+              onChange={(e) => setInput(e.target.value.toUpperCase().slice(0, 5))}
+              disabled={deleting}
+              onKeyDown={(e) => { if (e.key === "Enter" && input === code) handleDelete(); }}
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={deleting}>Cancel</Button>
+          <Button
+            variant="destructive"
+            disabled={input !== code || deleting}
+            onClick={handleDelete}
+            className="gap-1.5"
+          >
+            {deleting
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting…</>
+              : <><Trash2 className="h-4 w-4" /> Delete Contingent</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function ContingentOrgDetailClient({ contingentId }: { contingentId: string }) {
@@ -1079,6 +1178,7 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
   const [detail, setDetail]   = useState<ContingentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState<Tab>("Details");
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // short-name inline edit
   const [editingShortName, setEditingShortName] = useState(false);
@@ -1172,10 +1272,19 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
           </div>
           {detail.shortName && <p className="text-sm text-zinc-400 mt-0.5">{detail.shortName}</p>}
         </div>
-        <div className="hidden sm:flex items-center gap-4 text-sm">
-          <span className="flex items-center gap-1.5 text-zinc-500"><Users className="h-4 w-4" /> {detail.managers.length}</span>
-          <span className="flex items-center gap-1.5 text-zinc-500"><UserCheck className="h-4 w-4" /> {detail._count.participants}</span>
-          <span className="flex items-center gap-1.5 text-zinc-500"><Trophy className="h-4 w-4" /> {detail.teams.length}</span>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-4 text-sm">
+            <span className="flex items-center gap-1.5 text-zinc-500"><Users className="h-4 w-4" /> {detail.managers.length}</span>
+            <span className="flex items-center gap-1.5 text-zinc-500"><UserCheck className="h-4 w-4" /> {detail._count.participants}</span>
+            <span className="flex items-center gap-1.5 text-zinc-500"><Trophy className="h-4 w-4" /> {detail.teams.length}</span>
+          </div>
+          <button
+            onClick={() => setDeleteOpen(true)}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+            title="Delete contingent"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
@@ -1286,6 +1395,14 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
 
       {/* ── Participants ── */}
       {tab === "Participants" && <ParticipantsTab contingentId={contingentId} />}
+
+      <DeleteContingentDialog
+        open={deleteOpen}
+        name={detail.name}
+        contingentId={contingentId}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => router.push("/organizer/contingents")}
+      />
     </div>
   );
 }

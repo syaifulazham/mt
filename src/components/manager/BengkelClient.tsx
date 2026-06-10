@@ -12,6 +12,15 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+type CourseInfo = {
+  courseId: string;
+  title: string;
+  thumbnail: string | null;
+  slug: string;
+  competitionName: string;
+  enrolled: boolean;
+};
+
 type Team = {
   id: string;
   name: string;
@@ -52,8 +61,39 @@ function CopyBtn({ text }: { text: string }) {
 // ── Manager account section ────────────────────────────────────────────────────
 
 type ManagerAccountStatus =
-  | { registered: true;  username: string; loginUrl: string; loginCount: number; lastLoginAt: string | null }
-  | { registered: false; username: string; loginUrl: string };
+  | { registered: true;  username: string; loginUrl: string; loginCount: number; lastLoginAt: string | null; courses: CourseInfo[] }
+  | { registered: false; username: string; loginUrl: string; courses: CourseInfo[] };
+
+function CourseCard({ course }: { course: CourseInfo }) {
+  return (
+    <div className="relative rounded-lg border bg-zinc-50 dark:bg-zinc-800/50 dark:border-zinc-700 overflow-hidden flex flex-col">
+      {course.thumbnail ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={course.thumbnail} alt={course.title} className="w-full h-24 object-cover" />
+      ) : (
+        <div className="w-full h-24 bg-gradient-to-br from-blue-100 to-indigo-200 dark:from-blue-900/40 dark:to-indigo-900/40 flex items-center justify-center">
+          <BookOpen className="h-8 w-8 text-blue-400" />
+        </div>
+      )}
+      {course.enrolled && (
+        <div className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+          <CheckCircle2 className="h-2.5 w-2.5" /> Enrolled
+        </div>
+      )}
+      {!course.enrolled && (
+        <div className="absolute top-2 right-2 bg-zinc-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+          Not enrolled
+        </div>
+      )}
+      <div className="p-2.5 flex-1 flex flex-col gap-0.5">
+        <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 line-clamp-2 leading-tight">
+          {course.title}
+        </p>
+        <p className="text-[10px] text-zinc-400 truncate">{course.competitionName}</p>
+      </div>
+    </div>
+  );
+}
 
 function ManagerAccountSection() {
   const [status,      setStatus]      = useState<ManagerAccountStatus | null>(null);
@@ -63,12 +103,16 @@ function ManagerAccountSection() {
   const [newCreds,    setNewCreds]    = useState<{ username: string; password: string; loginUrl: string } | null>(null);
   const [err,         setErr]         = useState("");
 
+  async function reloadStatus() {
+    try {
+      const res = await fetch("/api/v2/manager/lms/account");
+      const j   = await res.json();
+      if (j.registered !== undefined) setStatus(j);
+    } catch { /* ignore */ }
+  }
+
   useEffect(() => {
-    fetch("/api/v2/manager/lms/account")
-      .then(r => r.json())
-      .then(j => setStatus(j.registered !== undefined ? j : null))
-      .catch(() => setStatus(null))
-      .finally(() => setLoading(false));
+    reloadStatus().finally(() => setLoading(false));
   }, []);
 
   async function createAccount() {
@@ -78,7 +122,8 @@ function ManagerAccountSection() {
       const j   = await res.json();
       if (!res.ok) throw new Error(j.error ?? "Failed");
       setNewCreds(j);
-      setStatus({ registered: true, username: j.username, loginUrl: j.loginUrl, loginCount: 0, lastLoginAt: null });
+      // Re-fetch full status (includes courses) after account creation
+      await reloadStatus();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally { setCreating(false); }
@@ -91,10 +136,14 @@ function ManagerAccountSection() {
       const j   = await res.json();
       if (!res.ok) throw new Error(j.error ?? "Failed");
       window.open(j.loginUrl, "_blank", "noopener,noreferrer");
+      // Reload so newly enrolled courses show as enrolled
+      await reloadStatus();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally { setSigningIn(false); }
   }
+
+  const courses = status?.courses ?? [];
 
   return (
     <>
@@ -104,7 +153,7 @@ function ManagerAccountSection() {
           <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Your Bengkel MT Account</span>
         </div>
 
-        <div className="px-4 py-4">
+        <div className="px-4 py-4 space-y-4">
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-zinc-400">
               <Loader2 className="h-4 w-4 animate-spin" /> Checking account…
@@ -154,10 +203,25 @@ function ManagerAccountSection() {
               </Button>
             </div>
           )}
+
           {err && (
-            <p className="flex items-center gap-1.5 text-xs text-red-600 mt-2">
+            <p className="flex items-center gap-1.5 text-xs text-red-600">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />{err}
             </p>
+          )}
+
+          {/* Courses grid */}
+          {!loading && courses.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-2">
+                Your Courses ({courses.filter(c => c.enrolled).length}/{courses.length} enrolled)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {courses.map(course => (
+                  <CourseCard key={course.courseId} course={course} />
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>

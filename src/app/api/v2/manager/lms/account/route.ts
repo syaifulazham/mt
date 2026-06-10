@@ -19,12 +19,77 @@ function emailToUsername(email: string): string {
     .padEnd(3, "x");
 }
 
-// EPTIMEDU_PUBLIC_URL is the browser-accessible URL for eptim-edu.
-// Falls back to EPTIMEDU_BASE_URL if not set (works when both are the same).
 const PUBLIC_URL = process.env.EPTIMEDU_PUBLIC_URL ?? process.env.EPTIMEDU_BASE_URL ?? "";
 const LOGIN_URL  = `${PUBLIC_URL}/auth/login`;
 
-/** GET — check whether this manager has an eptim-edu account */
+// ── Course list helper ────────────────────────────────────────────────────────
+
+export type CourseInfo = {
+  courseId: string;
+  title: string;
+  thumbnail: string | null;
+  slug: string;
+  competitionName: string;
+  enrolled: boolean;
+};
+
+export async function getManagerCourseList(
+  contingentIds: string[],
+  username: string | null,
+): Promise<CourseInfo[]> {
+  if (contingentIds.length === 0) return [];
+
+  const competitions = await db.competition.findMany({
+    where: {
+      eptimEduCourseId: { not: null },
+      teams: { some: { contingentId: { in: contingentIds } } },
+    },
+    select: { id: true, name: true, eptimEduCourseId: true },
+  });
+  if (competitions.length === 0) return [];
+
+  const [coursesResult, enrolResult] = await Promise.allSettled([
+    eptimEdu.courses(),
+    username
+      ? eptimEdu.getUserEnrolments(username)
+      : Promise.resolve({ enrolments: [] }),
+  ]);
+
+  const courseMap = new Map<string, { title: string; thumbnail: string | null; slug: string }>();
+  if (coursesResult.status === "fulfilled") {
+    for (const c of coursesResult.value?.courses ?? []) {
+      courseMap.set(c.id, { title: c.title, thumbnail: c.thumbnail ?? null, slug: c.slug ?? "" });
+    }
+  }
+
+  const enrolledIds = new Set<string>();
+  if (enrolResult.status === "fulfilled") {
+    for (const e of enrolResult.value?.enrolments ?? []) {
+      enrolledIds.add(e.courseId);
+    }
+  }
+
+  const seen = new Set<string>();
+  const result: CourseInfo[] = [];
+  for (const comp of competitions) {
+    const courseId = comp.eptimEduCourseId!;
+    if (seen.has(courseId)) continue;
+    seen.add(courseId);
+    const course = courseMap.get(courseId);
+    result.push({
+      courseId,
+      title:           course?.title    ?? `Course ${courseId}`,
+      thumbnail:       course?.thumbnail ?? null,
+      slug:            course?.slug      ?? "",
+      competitionName: comp.name,
+      enrolled:        enrolledIds.has(courseId),
+    });
+  }
+  return result;
+}
+
+// ── GET — check account status + courses ─────────────────────────────────────
+
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -32,56 +97,54 @@ export async function GET() {
   if (!eptimEduConfigured())
     return NextResponse.json({ error: "EPTIMEDU_NOT_CONFIGURED" }, { status: 503 });
 
-  const manager = await db.managerProfile.findUnique({ where: { clerkUserId: userId } });
+  const manager = await db.managerProfile.findUnique({
+    where: { clerkUserId: userId },
+    include: { contingentManagers: { select: { contingentId: true } } },
+  });
   if (!manager) return NextResponse.json({ error: "PROFILE_NOT_FOUND" }, { status: 404 });
 
-  const username = emailToUsername(manager.email);
+  const username      = emailToUsername(manager.email);
+  const contingentIds = manager.contingentManagers.map((cm) => cm.contingentId);
 
-  // Check DB first; fall back to live API check if no lmsUserId stored yet
   if (manager.lmsUserId) {
-    try {
-      const result = await eptimEdu.userExists(username);
-      const user   = result?.user ?? null;
-      return NextResponse.json({
-        registered: true,
-        username,
-        loginUrl:   LOGIN_URL,
-        loginCount: user?.loginCount ?? 0,
-        lastLoginAt: user?.lastLoginAt ?? null,
-      });
-    } catch {
-      return NextResponse.json({
-        registered: true,
-        username,
-        loginUrl:   LOGIN_URL,
-        loginCount: 0,
-        lastLoginAt: null,
-      });
-    }
+    const [userRes, coursesRes] = await Promise.allSettled([
+      eptimEdu.userExists(username),
+      getManagerCourseList(contingentIds, username),
+    ]);
+    const user    = userRes.status    === "fulfilled" ? (userRes.value?.user    ?? null) : null;
+    const courses = coursesRes.status === "fulfilled" ?  coursesRes.value               : [];
+    return NextResponse.json({
+      registered: true, username, loginUrl: LOGIN_URL,
+      loginCount:  user?.loginCount  ?? 0,
+      lastLoginAt: user?.lastLoginAt ?? null,
+      courses,
+    });
   }
 
-  // No lmsUserId — check live
+  // No lmsUserId — check live whether it already exists
+  const courses = await getManagerCourseList(contingentIds, null).catch(() => []);
+
   try {
     const result = await eptimEdu.userExists(username);
     if (result?.exists) {
       await db.managerProfile.update({
         where: { clerkUserId: userId },
-        data: { lmsUserId: result.user.id },
+        data:  { lmsUserId: result.user.id },
       });
       return NextResponse.json({
-        registered: true,
-        username,
-        loginUrl:   LOGIN_URL,
-        loginCount: result.user?.loginCount ?? 0,
+        registered: true, username, loginUrl: LOGIN_URL,
+        loginCount:  result.user?.loginCount  ?? 0,
         lastLoginAt: result.user?.lastLoginAt ?? null,
+        courses: await getManagerCourseList(contingentIds, username).catch(() => courses),
       });
     }
   } catch { /* ignore */ }
 
-  return NextResponse.json({ registered: false, username, loginUrl: LOGIN_URL });
+  return NextResponse.json({ registered: false, username, loginUrl: LOGIN_URL, courses });
 }
 
-/** POST — create an eptim-edu account for this manager */
+// ── POST — create account ─────────────────────────────────────────────────────
+
 export async function POST() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -101,28 +164,20 @@ export async function POST() {
     let finalPassword = password;
 
     if (check?.exists) {
-      // Username already exists — reuse the account
       lmsUserId     = check.user.id;
       finalPassword = manager.lmsPassword ?? password;
     } else {
-      // Try creating with the real email; if that email is already taken in
-      // eptim-edu (409), fall back to creating without an email so the username
-      // is still provisioned (username-based login skips email verification).
       let created: { id: string };
       try {
         created = await eptimEdu.createUser({
-          username,
-          password,
-          name:  manager.name,
-          email: manager.email,
+          username, password, name: manager.name, email: manager.email,
         });
       } catch (emailErr: unknown) {
         const errMsg = emailErr instanceof Error ? emailErr.message : "";
         if (errMsg.toLowerCase().includes("email")) {
-          // Email already registered under a different account — create without email
           created = await eptimEdu.createUser({ username, password, name: manager.name });
         } else {
-          throw emailErr; // rethrow non-email errors
+          throw emailErr;
         }
       }
       lmsUserId = created.id;
@@ -130,7 +185,7 @@ export async function POST() {
 
     await db.managerProfile.update({
       where: { clerkUserId: userId },
-      data: { lmsUserId, lmsPassword: finalPassword },
+      data:  { lmsUserId, lmsPassword: finalPassword },
     });
 
     return NextResponse.json({ username, password: finalPassword, loginUrl: LOGIN_URL });
