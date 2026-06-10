@@ -112,9 +112,7 @@ function ManagerAccountSection() {
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    reloadStatus().finally(() => setLoading(false));
-  }, []);
+  useEffect(() => { reloadStatus().finally(() => setLoading(false)); }, []);
 
   async function createAccount() {
     setCreating(true); setErr("");
