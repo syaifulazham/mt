@@ -1083,14 +1083,10 @@ function DeleteContingentDialog({
   onClose: () => void;
   onDeleted: () => void;
 }) {
-  const [code,     setCode]     = useState("");
+  const [code]                  = useState(() => genCode());
   const [input,    setInput]    = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error,    setError]    = useState("");
-
-  useEffect(() => {
-    if (open) { setCode(genCode()); setInput(""); setError(""); }
-  }, [open]);
 
   async function handleDelete() {
     if (input !== code) return;
@@ -1397,6 +1393,7 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
       {tab === "Participants" && <ParticipantsTab contingentId={contingentId} />}
 
       <DeleteContingentDialog
+        key={String(deleteOpen)}
         open={deleteOpen}
         name={detail.name}
         contingentId={contingentId}
