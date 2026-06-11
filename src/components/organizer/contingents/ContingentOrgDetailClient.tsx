@@ -477,6 +477,115 @@ function InstitutionCard({
   );
 }
 
+// ─── Remove manager dialog ────────────────────────────────────────────────────
+
+function RemoveManagerDialog({
+  open, member, contingentId, onClose, onRemoved,
+}: {
+  open: boolean;
+  member: ManagerMember | null;
+  contingentId: string;
+  onClose: () => void;
+  onRemoved: (managers: ManagerMember[]) => void;
+}) {
+  const [code,     setCodeState] = useState(() => genCode());
+  const [input,    setInput]     = useState("");
+  const [note,     setNote]      = useState("");
+  const [removing, setRemoving]  = useState(false);
+  const [error,    setError]     = useState("");
+
+  // Reset on each open via key (see usage below)
+
+  async function handleRemove() {
+    if (!member || input !== code) return;
+    setRemoving(true); setError("");
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/contingents/${contingentId}/managers/${member.id}`,
+        { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) },
+      );
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Remove failed");
+      onRemoved(j.managers);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Remove failed");
+      setRemoving(false);
+    }
+  }
+
+  if (!member) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !removing) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <Trash2 className="h-5 w-5" /> Remove Manager
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:bg-amber-950/20 dark:border-amber-800">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-300">
+              <p>This will remove <span className="font-semibold">{member.manager.name}</span> from this contingent. Their participant and team data will remain.</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Note (optional)</label>
+            <textarea
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Reason for removal…"
+              disabled={removing}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-zinc-400"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">Type the confirmation code to enable remove:</p>
+            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 px-4 py-3 text-center">
+              <p className="text-2xl font-mono font-bold tracking-[0.35em] text-red-600 select-all">{code}</p>
+            </div>
+            <input
+              type="text"
+              autoComplete="off"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-mono tracking-[0.3em] text-center uppercase focus:outline-none focus:ring-2 focus:ring-red-400"
+              placeholder={code.split("").map(() => "_").join(" ")}
+              value={input}
+              onChange={(e) => setInput(e.target.value.toUpperCase().slice(0, 5))}
+              disabled={removing}
+              onKeyDown={(e) => { if (e.key === "Enter" && input === code) handleRemove(); }}
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={removing}>Cancel</Button>
+          <Button
+            variant="destructive"
+            disabled={input !== code || removing}
+            onClick={handleRemove}
+            className="gap-1.5"
+          >
+            {removing
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Removing…</>
+              : <><Trash2 className="h-4 w-4" /> Remove Manager</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Managers Tab ────────────────────────────────────────────────────────────
 
 function ManagersTab({
@@ -489,7 +598,9 @@ function ManagersTab({
   onManagersUpdated: (m: ManagerMember[]) => void;
 }) {
   const [pendingTransfer, setPendingTransfer] = useState<PendingChange | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving,         setSaving]          = useState(false);
+  const [removeTarget,   setRemoveTarget]    = useState<ManagerMember | null>(null);
+  const [removeKey,      setRemoveKey]       = useState(0);
 
   const coManagers = managers.filter((m) => m.role !== "OWNER");
 
@@ -541,18 +652,30 @@ function ManagersTab({
                 </td>
                 <td className="px-4 py-3 text-xs text-zinc-400">{new Date(m.createdAt).toLocaleDateString("en-MY")}</td>
                 <td className="px-4 py-3">
-                  {m.role !== "OWNER" && coManagers.length > 0 && (
-                    <button
-                      onClick={() => setPendingTransfer({
-                        label: `Transfer Primary Manager role to "${m.manager.name}".\n\nThe roles will be swapped — the current Primary Manager becomes a Co-Manager.`,
-                        body: { newOwnerId: m.id },
-                      })}
-                      disabled={saving}
-                      title="Make Primary Manager"
-                      className="text-zinc-300 hover:text-indigo-600 transition-colors disabled:opacity-40"
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
+                  {m.role !== "OWNER" && (
+                    <div className="flex items-center gap-1.5">
+                      {coManagers.length > 0 && (
+                        <button
+                          onClick={() => setPendingTransfer({
+                            label: `Transfer Primary Manager role to "${m.manager.name}".\n\nThe roles will be swapped — the current Primary Manager becomes a Co-Manager.`,
+                            body: { newOwnerId: m.id },
+                          })}
+                          disabled={saving}
+                          title="Make Primary Manager"
+                          className="text-zinc-300 hover:text-indigo-600 transition-colors disabled:opacity-40"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setRemoveTarget(m); setRemoveKey((k) => k + 1); }}
+                        disabled={saving}
+                        title="Remove manager"
+                        className="text-zinc-300 hover:text-red-600 transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -584,6 +707,15 @@ function ManagersTab({
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
         </div>
       )}
+
+      <RemoveManagerDialog
+        key={removeKey}
+        open={!!removeTarget}
+        member={removeTarget}
+        contingentId={contingentId}
+        onClose={() => setRemoveTarget(null)}
+        onRemoved={(updated) => { setRemoveTarget(null); onManagersUpdated(updated); }}
+      />
     </div>
   );
 }
