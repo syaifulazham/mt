@@ -103,11 +103,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const existing = await db.contingent.findUnique({ where: { id }, select: { id: true } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Teams have no cascade on contingent delete — delete them first (cascades TeamMembers + TeamTrainers)
-  await db.$transaction([
-    db.team.deleteMany({ where: { contingentId: id } }),
-    db.contingent.delete({ where: { id } }),
-  ]);
+  try {
+    // Teams have no cascade on contingent delete — delete them first (cascades TeamMembers + TeamTrainers)
+    await db.$transaction([
+      db.team.deleteMany({ where: { contingentId: id } }),
+      db.contingent.delete({ where: { id } }),
+    ]);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Delete failed";
+    console.error("[contingents DELETE]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
   return NextResponse.json({ deleted: true });
 }

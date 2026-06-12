@@ -504,9 +504,11 @@ function RemoveManagerDialog({
         `/api/v2/organizer/contingents/${contingentId}/managers/${member.id}`,
         { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) },
       );
-      const j = await res.json();
+      const text = await res.text();
+      let j: { error?: string; managers?: ManagerMember[] } = {};
+      try { j = JSON.parse(text); } catch { /* ignore */ }
       if (!res.ok) throw new Error(j.error ?? "Remove failed");
-      onRemoved(j.managers);
+      onRemoved(j.managers ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Remove failed");
       setRemoving(false);
@@ -1225,7 +1227,12 @@ function DeleteContingentDialog({
     setDeleting(true); setError("");
     try {
       const res = await fetch(`/api/v2/organizer/contingents/${contingentId}`, { method: "DELETE" });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Delete failed"); }
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = "Delete failed";
+        try { msg = JSON.parse(text)?.error ?? msg; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
       onDeleted();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Delete failed");
