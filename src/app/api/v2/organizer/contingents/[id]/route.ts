@@ -104,11 +104,28 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
-    // Teams have no cascade on contingent delete — delete them first (cascades TeamMembers + TeamTrainers)
-    await db.$transaction([
-      db.team.deleteMany({ where: { contingentId: id } }),
-      db.contingent.delete({ where: { id } }),
-    ]);
+    // Delete all children explicitly — DB-level cascades may not be applied on prod
+    await db.$transaction(async (tx) => {
+      const teams = await tx.team.findMany({ where: { contingentId: id }, select: { id: true } });
+      const teamIds = teams.map((t) => t.id);
+
+      if (teamIds.length) {
+        await tx.teamMember.deleteMany({ where: { teamId: { in: teamIds } } });
+        await tx.teamTrainer.deleteMany({ where: { teamId: { in: teamIds } } });
+      }
+
+      const participants = await tx.participant.findMany({ where: { contingentId: id }, select: { id: true } });
+      const participantIds = participants.map((p) => p.id);
+      if (participantIds.length) {
+        await tx.participantSession.deleteMany({ where: { participantId: { in: participantIds } } });
+      }
+
+      await tx.team.deleteMany({ where: { contingentId: id } });
+      await tx.contingentManager.deleteMany({ where: { contingentId: id } });
+      await tx.participant.deleteMany({ where: { contingentId: id } });
+      await tx.trainer.deleteMany({ where: { contingentId: id } });
+      await tx.contingent.delete({ where: { id } });
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Delete failed";
     console.error("[contingents DELETE]", msg);
