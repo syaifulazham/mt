@@ -108,7 +108,14 @@ export function SchoolsTab() {
       const method = editing ? "PATCH" : "POST";
       const body = { ...form, ppdCode: form.ppdCode || undefined, zoneId: form.zoneId || undefined, districtId: form.districtId || undefined };
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error === "CODE_TAKEN" ? "School code already exists." : j.error); }
+      if (!res.ok) {
+        const j = await res.json();
+        if (j.error === "CODE_TAKEN") {
+          const hint = j.existing?.name ? ` (existing: ${j.existing.name}${j.existing.isActive === false ? " — inactive" : ""})` : "";
+          throw new Error(`School code already exists.${hint}`);
+        }
+        throw new Error(j.error ?? "Failed");
+      }
       setFormOpen(false);
       load();
     } catch (e: unknown) {

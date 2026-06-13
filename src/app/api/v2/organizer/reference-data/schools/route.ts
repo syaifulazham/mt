@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { SchoolLevel, SchoolCategory } from "@prisma/client";
+import { SchoolLevel, SchoolCategory, Prisma } from "@prisma/client";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 const PAGE_SIZE = 20;
@@ -61,11 +61,22 @@ export async function POST(req: NextRequest) {
   if (!name?.trim() || !code?.trim() || !stateId || !level || !category)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
 
+  const normalizedCode = code.trim().toUpperCase();
+
+  // Explicit pre-check so we can surface exact conflict details
+  const existing = await db.school.findFirst({
+    where: { code: normalizedCode },
+    select: { id: true, name: true, isActive: true },
+  });
+  if (existing) {
+    return NextResponse.json({ error: "CODE_TAKEN", existing }, { status: 409 });
+  }
+
   try {
     const school = await db.school.create({
       data: {
         name:     name.trim(),
-        code:     code.trim().toUpperCase(),
+        code:     normalizedCode,
         ppdCode:  ppdCode?.trim() || undefined,
         stateId,
         zoneId:     zoneId     || undefined,
@@ -75,7 +86,12 @@ export async function POST(req: NextRequest) {
       },
     });
     return NextResponse.json({ data: school }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "CODE_TAKEN" }, { status: 409 });
+  } catch (e: unknown) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return NextResponse.json({ error: "CODE_TAKEN" }, { status: 409 });
+    }
+    console.error("[school POST]", e);
+    const msg = e instanceof Error ? e.message : "CREATE_FAILED";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
