@@ -26,7 +26,34 @@ type School = {
 };
 
 const LEVELS = ["PRIMARY", "SECONDARY", "SPECIAL"];
-const CATEGORIES = ["KEBANGSAAN", "KEBANGSAAN_CINA", "KEBANGSAAN_TAMIL", "AGAMA", "TEKNIK", "SPORT", "PRIVATE", "LAIN_LAIN"];
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: "SEKOLAH_KEBANGSAAN",                      label: "Sekolah Kebangsaan" },
+  { value: "SEKOLAH_MENENGAH_KEBANGSAAN",             label: "Sekolah Menengah Kebangsaan" },
+  { value: "SEKOLAH_JENIS_KEBANGSAAN_CINA",           label: "Sekolah Jenis Kebangsaan Cina" },
+  { value: "SEKOLAH_JENIS_KEBANGSAAN_TAMIL",          label: "Sekolah Jenis Kebangsaan Tamil" },
+  { value: "SEKOLAH_MENENGAH_KEBANGSAAN_AGAMA",       label: "Sekolah Menengah Kebangsaan Agama" },
+  { value: "SEKOLAH_MENENGAH_AGAMA_BANTUAN_KERAJAAN", label: "Sekolah Menengah Agama Bantuan Kerajaan" },
+  { value: "SEKOLAH_RENDAH_AGAMA_BANTUAN_KERAJAAN",   label: "Sekolah Rendah Agama Bantuan Kerajaan" },
+  { value: "SEKOLAH_MENENGAH_AGAMA",                  label: "Sekolah Menengah Agama" },
+  { value: "SEKOLAH_RENDAH_AGAMA",                    label: "Sekolah Rendah Agama" },
+  { value: "SEKOLAH_KEBANGSAAN_TAHFIZ",               label: "Sekolah Kebangsaan Tahfiz" },
+  { value: "SEKOLAH_BERASRAMA_PENUH",                 label: "Sekolah Berasrama Penuh" },
+  { value: "MAKTAB_RENDAH_SAINS_MARA",                label: "Maktab Rendah Sains MARA" },
+  { value: "KOLEJ_VOKASIONAL",                        label: "Kolej Vokasional" },
+  { value: "SEKOLAH_MENENGAH_TEKNIK",                 label: "Sekolah Menengah Teknik" },
+  { value: "SEKOLAH_KEBANGSAAN_PENDIDIKAN_KHAS",      label: "Sekolah Kebangsaan Pendidikan Khas" },
+  { value: "SEKOLAH_MENENGAH_PENDIDIKAN_KHAS",        label: "Sekolah Menengah Pendidikan Khas" },
+  { value: "SEKOLAH_BIMBINGAN_JALINAN_KASIH",         label: "Sekolah Bimbingan Jalinan Kasih" },
+  { value: "SEKOLAH_MODEL_KHAS",                      label: "Sekolah Model Khas" },
+  { value: "SEKOLAH_SENI_MALAYSIA",                   label: "Sekolah Seni Malaysia" },
+  { value: "SEKOLAH_SUKAN_MALAYSIA",                  label: "Sekolah Sukan Malaysia" },
+  { value: "PUSAT_TINGKATAN_ENAM",                    label: "Pusat Tingkatan Enam" },
+  { value: "KOLEJ_TINGKATAN_ENAM",                    label: "Kolej Tingkatan Enam" },
+  { value: "SEKOLAH_ANTARABANGSA",                    label: "Sekolah Antarabangsa" },
+  { value: "SEKOLAH_MENENGAH_PERSENDIRIAN_CINA",      label: "Sekolah Menengah Persendirian Cina" },
+  { value: "SEKOLAH_MENENGAH_AKADEMIK",               label: "Sekolah Menengah Akademik" },
+  { value: "SEKOLAH_RENDAH_AKADEMIK",                 label: "Sekolah Rendah Akademik" },
+];
 
 const LEVEL_COLORS: Record<string, string> = {
   PRIMARY: "bg-blue-50 text-blue-700",
@@ -48,7 +75,7 @@ export function SchoolsTab() {
 
   const [formOpen, setFormOpen]   = useState(false);
   const [editing, setEditing]     = useState<School | null>(null);
-  const [form, setForm]           = useState({ name: "", code: "", ppdCode: "", stateId: "", zoneId: "", districtId: "", level: "PRIMARY", category: "KEBANGSAAN" });
+  const [form, setForm]           = useState({ name: "", code: "", ppdCode: "", stateId: "", zoneId: "", districtId: "", level: "PRIMARY", category: "SEKOLAH_KEBANGSAAN" });
   const [saving, setSaving]       = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -83,7 +110,7 @@ export function SchoolsTab() {
 
   function openAdd() {
     setEditing(null);
-    setForm({ name: "", code: "", ppdCode: "", stateId: stateFilter || "", zoneId: "", districtId: "", level: "PRIMARY", category: "KEBANGSAAN" });
+    setForm({ name: "", code: "", ppdCode: "", stateId: stateFilter || "", zoneId: "", districtId: "", level: "PRIMARY", category: "SEKOLAH_KEBANGSAAN" });
     setFormError("");
     setFormOpen(true);
   }
@@ -168,7 +195,7 @@ export function SchoolsTab() {
   }
 
   function downloadTemplate() {
-    const csv = "name,code,ppdCode,state,level,category\nSekolah Kebangsaan Contoh,SKC1234,,Selangor,PRIMARY,KEBANGSAAN";
+    const csv = "name,code,ppdCode,state,level,category\nSekolah Kebangsaan Contoh,SKC1234,,Selangor,PRIMARY,SEKOLAH_KEBANGSAAN";
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "schools_template.csv"; a.click();
@@ -218,7 +245,7 @@ export function SchoolsTab() {
                 <td className="px-3 py-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${LEVEL_COLORS[s.level] ?? ""}`}>{s.level}</span>
                 </td>
-                <td className="px-3 py-2 text-zinc-500 text-xs">{s.category.replace(/_/g, " ")}</td>
+                <td className="px-3 py-2 text-zinc-500 text-xs">{CATEGORIES.find(c => c.value === s.category)?.label ?? s.category.replace(/_/g, " ")}</td>
                 <td className="px-3 py-2 text-zinc-500">{s.state.name}</td>
                 <td className="px-3 py-2 text-center">{s.isActive ? <span className="text-green-600">✓</span> : <span className="text-zinc-300">—</span>}</td>
                 <td className="px-3 py-2">
@@ -261,7 +288,7 @@ export function SchoolsTab() {
             <div>
               <Label>Category</Label>
               <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
+                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             <div className="col-span-2">
