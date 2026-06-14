@@ -602,35 +602,128 @@ function BuiltinLogoPicker({ value, onChange }: { value: string; onChange: (v: s
   );
 }
 
+// ── Inline school picker (light-mode, for use inside dialogs) ─────────────────
+
+type SchoolOption = { id: string; name: string; code: string; stateName: string };
+
+function SchoolPicker({ value, onChange }: { value: SchoolOption | null; onChange: (v: SchoolOption | null) => void }) {
+  const [q,          setQ]          = useState("");
+  const [results,    setResults]    = useState<SchoolOption[]>([]);
+  const [searching,  setSearching]  = useState(false);
+  const [showList,   setShowList]   = useState(false);
+
+  async function doSearch() {
+    if (!q.trim()) return;
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/v2/reference/schools?q=${encodeURIComponent(q)}&limit=30`);
+      const j = await res.json();
+      setResults((j.data ?? []).map((s: { id: string; name: string; code: string; state?: { name: string } }) => ({
+        id: s.id, name: s.name, code: s.code, stateName: s.state?.name ?? "",
+      })));
+      setShowList(true);
+    } finally { setSearching(false); }
+  }
+
+  if (value) {
+    return (
+      <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
+        <div>
+          <p className="text-sm font-medium leading-tight">{value.name}</p>
+          <p className="text-xs text-zinc-400">{value.code} · {value.stateName}</p>
+        </div>
+        <button type="button" onClick={() => onChange(null)} className="ml-2 shrink-0 text-zinc-400 hover:text-zinc-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="flex gap-2">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); } }}
+          placeholder="Search school name…"
+        />
+        <Button type="button" variant="outline" size="icon" onClick={doSearch} disabled={searching || !q.trim()} className="shrink-0">
+          {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+        </Button>
+      </div>
+      {showList && results.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-white shadow-lg dark:bg-zinc-900 dark:border-zinc-700">
+          {results.map((s) => (
+            <button key={s.id} type="button"
+              onClick={() => { onChange(s); setShowList(false); setQ(""); setResults([]); }}
+              className="w-full px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            >
+              <p className="text-sm font-medium">{s.name}</p>
+              <p className="text-xs text-zinc-400">{s.code} · {s.stateName}</p>
+            </button>
+          ))}
+        </div>
+      )}
+      {showList && results.length === 0 && !searching && (
+        <p className="mt-1 text-xs text-zinc-400">No schools found. Try a different keyword.</p>
+      )}
+    </div>
+  );
+}
+
 // ── Create Dialog ─────────────────────────────────────────────────────────────
+
+const CONTINGENT_TYPES = [
+  { value: "SCHOOL",        label: "School" },
+  { value: "HIGHER",        label: "Higher Institution" },
+  { value: "INDEPENDENT",   label: "Independent Group" },
+  { value: "INTERNATIONAL", label: "International" },
+] as const;
 
 function CreateDialog({
   open,
   institutionType,
-  defaultName,
   onClose,
   onCreated,
 }: {
   open: boolean;
   institutionType: string;
-  defaultName: string;
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [name,      setName]      = useState(defaultName);
-  const [shortName, setShortName] = useState("");
-  const [logoUrl,   setLogoUrl]   = useState("builtin:shield");
-  const [stateId,   setStateId]   = useState("");
-  const [states,    setStates]    = useState<StateOption[]>([]);
-  const [saving,    setSaving]    = useState(false);
-  const [error,     setError]     = useState("");
+  const [selectedType,   setSelectedType]   = useState(institutionType);
+  const [selectedSchool, setSelectedSchool] = useState<SchoolOption | null>(null);
+  const [name,           setName]           = useState("");
+  const [shortName,      setShortName]      = useState("");
+  const [logoUrl,        setLogoUrl]        = useState("builtin:shield");
+  const [stateId,        setStateId]        = useState("");
+  const [states,         setStates]         = useState<StateOption[]>([]);
+  const [saving,         setSaving]         = useState(false);
+  const [error,          setError]          = useState("");
 
-  const needsState = institutionType === "INDEPENDENT" || institutionType === "INTERNATIONAL";
+  const needsState = selectedType === "INDEPENDENT" || selectedType === "INTERNATIONAL";
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      setSelectedType(institutionType);
+      setSelectedSchool(null);
+      setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function handleClose() {
-    setName(defaultName); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
+    setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
+    setSelectedType(institutionType); setSelectedSchool(null);
     onClose();
   }
+
+  // Auto-fill contingent name when a school is selected
+  useEffect(() => {
+    if (selectedType === "SCHOOL" && selectedSchool) setName(selectedSchool.name);
+  }, [selectedSchool, selectedType]);
 
   useEffect(() => {
     if (!needsState || states.length > 0) return;
@@ -641,16 +734,22 @@ function CreateDialog({
 
   async function handleCreate() {
     if (!name.trim()) { setError("Contingent name is required."); return; }
+    if (selectedType === "SCHOOL" && !selectedSchool) { setError("Please select a school."); return; }
     setSaving(true); setError("");
     try {
       const res = await fetch("/api/v2/manager/contingents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, shortName, logoUrl, stateId: stateId || undefined }),
+        body: JSON.stringify({
+          name, shortName, logoUrl,
+          contingentType: selectedType,
+          schoolId: selectedType === "SCHOOL" ? selectedSchool?.id : undefined,
+          stateId: stateId || undefined,
+        }),
       });
       const j = await res.json();
       if (res.status === 409 && j.error === "SCHOOL_HAS_CONTINGENT") {
-        setError("Your school already has a contingent. Use 'Join Existing' to request access.");
+        setError("This school already has a contingent. Use 'Join Existing' to request access.");
         return;
       }
       if (!res.ok) throw new Error(j.error ?? "Failed to create");
@@ -674,6 +773,38 @@ function CreateDialog({
         </DialogHeader>
 
         <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Contingent type selector */}
+          <div className="space-y-1.5">
+            <Label>Contingent Type</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {CONTINGENT_TYPES.map((t) => {
+                const active = selectedType === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => { setSelectedType(t.value); setStateId(""); setSelectedSchool(null); }}
+                    className={`rounded-md border px-3 py-2.5 text-sm text-left transition-all ${
+                      active
+                        ? "border-blue-500 bg-blue-50 text-blue-700 font-medium dark:bg-blue-950/30 dark:text-blue-300"
+                        : "border-zinc-200 text-zinc-700 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* School search when SCHOOL type selected */}
+          {selectedType === "SCHOOL" && (
+            <div className="space-y-1.5">
+              <Label>School <span className="text-red-500">*</span></Label>
+              <SchoolPicker value={selectedSchool} onChange={setSelectedSchool} />
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="cn-name">Contingent Name <span className="text-red-500">*</span></Label>
             <Input id="cn-name" value={name} onChange={(e) => setName(e.target.value)}
@@ -1224,7 +1355,6 @@ export function ContingentsClient({
         <CreateDialog
           open={createOpen}
           institutionType={institutionType}
-          defaultName={institutionName ?? ""}
           onClose={() => setCreateOpen(false)}
           onCreated={load}
         />

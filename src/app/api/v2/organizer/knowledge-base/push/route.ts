@@ -86,6 +86,7 @@ async function buildCompetitionMd(entityId: string) {
         orderBy: { createdAt: "asc" },
       },
       targetGroups: { include: { targetGroup: { select: { name: true, minAge: true, maxAge: true } } } },
+      docs: { orderBy: { uploadedAt: "asc" } },
       _count: { select: { teams: true } },
     },
   });
@@ -101,6 +102,21 @@ async function buildCompetitionMd(entityId: string) {
   const targetRows = comp.targetGroups
     .map(tg => `- ${tg.targetGroup.name}${tg.targetGroup.minAge ? ` (umur ${tg.targetGroup.minAge}–${tg.targetGroup.maxAge})` : ""}`)
     .join("\n");
+
+  const bengkelSection = comp.eptimEduCourseId
+    ? `## Bengkel MT / Kursus Pembelajaran
+
+**Kursus**: ${comp.eptimEduCourseTitle ?? comp.eptimEduCourseId}
+**ID Kursus**: \`${comp.eptimEduCourseId}\`
+
+Peserta dan pengurus pasukan boleh mengakses kursus ini melalui bahagian **Bengkel MT** dalam portal mereka. Sistem akan mendaftar masuk secara automatik.`
+    : "";
+
+  const docsSection = comp.docs.length
+    ? `## Kertas Kerja Konsep / Dokumen (${comp.docs.length})
+
+${comp.docs.map(d => `- [${d.name}](${d.url}) _(${d.size ? `${Math.round(d.size / 1024)} KB · ` : ""}dimuat naik ${fmt(d.uploadedAt)})_`).join("\n")}`
+    : "";
 
   const path = `competitions/${slugify(comp.name)}`;
   const content = `---
@@ -122,7 +138,8 @@ ${targetRows || "_Tiada kumpulan sasaran ditetapkan._"}
 ## Acara (${comp.eventCompetitions.length})
 
 ${eventTable}
-
+${bengkelSection ? `\n${bengkelSection}\n` : ""}
+${docsSection ? `\n${docsSection}\n` : ""}
 ## Statistik
 
 - Pasukan berdaftar: ${comp._count.teams}

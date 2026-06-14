@@ -10,7 +10,7 @@ const NAV = [
   { href: "/participant/competitions", icon: Trophy,        label: "Pertandingan" },
   { href: "/participant/bengkel",      icon: BookOpen,      label: "Bengkel" },
   { href: "/participant/certificates", icon: Award,         label: "Sijil" },
-  { href: "/participant/chat",         icon: MessageCircle, label: "Smart Chat" },
+  { href: "/participant/chat",         icon: MessageCircle, label: "AI Rimau" },
 ] as const;
 
 export function ParticipantMobileNav() {

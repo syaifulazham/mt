@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await getOrganizerSession();
@@ -11,17 +12,18 @@ export async function GET(req: NextRequest) {
   const page     = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "50", 10)));
 
-  const where = q
-    ? {
-        OR: [
-          { name:                { contains: q, mode: "insensitive" as const } },
-          { shortName:           { contains: q, mode: "insensitive" as const } },
-          { state:               { name: { contains: q, mode: "insensitive" as const } } },
-          { school:              { state: { name: { contains: q, mode: "insensitive" as const } } } },
-          { higherInstitution:   { state: { name: { contains: q, mode: "insensitive" as const } } } },
-        ],
-      }
-    : {};
+  const where: Prisma.ContingentWhereInput = {
+    status: { in: ["ACTIVE", "SUSPENDED"] },
+    ...(q && {
+      OR: [
+        { name:                { contains: q, mode: "insensitive" } },
+        { shortName:           { contains: q, mode: "insensitive" } },
+        { state:               { name: { contains: q, mode: "insensitive" } } },
+        { school:              { state: { name: { contains: q, mode: "insensitive" } } } },
+        { higherInstitution:   { state: { name: { contains: q, mode: "insensitive" } } } },
+      ],
+    }),
+  };
 
   const stateSelect = { select: { name: true, code: true } };
 

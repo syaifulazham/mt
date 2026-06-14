@@ -57,12 +57,16 @@ export async function POST(req: Request) {
   if (institutionType === "SCHOOL" && schoolId) {
     const existingContingent = await db.contingent.findUnique({
       where: { schoolId },
-      include: { managers: { where: { managerId: updated.id } } },
+      include: {
+        managers: { where: { managerId: updated.id } },
+        _count: { select: { managers: { where: { status: { in: ["ACTIVE", "PENDING"] } } } } },
+      },
     });
 
     if (existingContingent) {
       const existingLink = existingContingent.managers[0];
 
+      // This manager is already linked to the contingent
       if (existingLink) {
         return NextResponse.json({
           data: {
@@ -74,6 +78,15 @@ export async function POST(req: Request) {
         });
       }
 
+      // Orphaned contingent (all managers removed) — claim as owner
+      if (existingContingent._count.managers === 0) {
+        await db.contingentManager.create({
+          data: { contingentId: existingContingent.id, managerId: updated.id, role: "OWNER", status: "ACTIVE" },
+        });
+        return NextResponse.json({ data: { profileId: updated.id, contingentId: existingContingent.id } });
+      }
+
+      // Has active/pending managers — submit join request
       const joinRequest = await db.contingentManager.create({
         data: {
           contingentId:   existingContingent.id,

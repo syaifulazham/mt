@@ -17,25 +17,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ALREADY_IN_CONTINGENT" }, { status: 400 });
   }
 
-  const { name, shortName, logoUrl, stateId } = await req.json() as {
-    name?: string; shortName?: string; logoUrl?: string; stateId?: string;
+  const { name, shortName, logoUrl, stateId, schoolId: bodySchoolId, contingentType: requestedType } = await req.json() as {
+    name?: string; shortName?: string; logoUrl?: string; stateId?: string; schoolId?: string;
+    contingentType?: "SCHOOL" | "HIGHER" | "INDEPENDENT" | "INTERNATIONAL";
   };
   if (!name?.trim()) return NextResponse.json({ error: "MISSING_NAME" }, { status: 400 });
+
+  const resolvedType = requestedType ?? (
+    manager.schoolId ? "SCHOOL" :
+    manager.higherInstitutionId ? "HIGHER" :
+    manager.institutionType === "INTERNATIONAL" ? "INTERNATIONAL" : "INDEPENDENT"
+  );
 
   let contingentType: string;
   const linkData: Record<string, string> = {};
 
-  if (manager.schoolId) {
+  if (resolvedType === "SCHOOL") {
     contingentType = "SCHOOL";
-    const existing = await db.contingent.findUnique({ where: { schoolId: manager.schoolId } });
+    const schoolId = bodySchoolId ?? manager.schoolId;
+    if (!schoolId) return NextResponse.json({ error: "NO_SCHOOL_LINKED" }, { status: 400 });
+    const existing = await db.contingent.findUnique({
+      where: { schoolId },
+      include: { _count: { select: { managers: { where: { status: { in: ["ACTIVE", "PENDING"] } } } } } },
+    });
     if (existing) {
+      if (existing._count.managers === 0) {
+        // Orphaned contingent (all managers removed) — reclaim as owner
+        const cm = await db.contingentManager.create({
+          data: { contingentId: existing.id, managerId: manager.id, role: "OWNER", status: "ACTIVE" },
+        });
+        return NextResponse.json({ data: { ...existing, _reclaimed: true, managerId: cm.id } }, { status: 200 });
+      }
       return NextResponse.json({ error: "SCHOOL_HAS_CONTINGENT", contingentId: existing.id }, { status: 409 });
     }
-    linkData.schoolId = manager.schoolId;
-  } else if (manager.higherInstitutionId) {
+    linkData.schoolId = schoolId;
+  } else if (resolvedType === "HIGHER") {
     contingentType = "HIGHER";
+    if (!manager.higherInstitutionId) return NextResponse.json({ error: "NO_HIGHER_LINKED" }, { status: 400 });
     linkData.higherInstitutionId = manager.higherInstitutionId;
-  } else if (manager.institutionType === "INTERNATIONAL") {
+  } else if (resolvedType === "INTERNATIONAL") {
     contingentType = "INTERNATIONAL";
     if (stateId) linkData.stateId = stateId;
   } else {

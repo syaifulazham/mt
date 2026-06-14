@@ -1,17 +1,38 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { MessageCircle, Send, Trash2 } from "lucide-react";
+import { Send, Trash2 } from "lucide-react";
+
+// Sprite: 1369×439px — 5 poses side by side (same constants as AiRimauChat)
+const SPRITE_H = 130;
+const SPRITE_W = Math.round((1369 / 439) * SPRITE_H); // ≈ 405
+const FRAME_W  = SPRITE_W / 5;                        // ≈ 81
+const POSES    = 5;
+
+/** Renders one frame of the AI Rimau sprite sheet at the given scale. */
+function RimauSprite({ pose, scale }: { pose: number; scale: number }) {
+  const h  = Math.round(SPRITE_H * scale);
+  const w  = Math.round(SPRITE_W * scale);
+  const fw = Math.round(FRAME_W  * scale);
+  return (
+    <div
+      style={{
+        width:              fw,
+        height:             h,
+        backgroundImage:    "url('/ai-rimau/ai-rimau-5-pose-01.png')",
+        backgroundSize:     `${w}px ${h}px`,
+        backgroundPosition: `${-(pose * fw)}px 0`,
+        backgroundRepeat:   "no-repeat",
+        flexShrink:         0,
+      }}
+    />
+  );
+}
 
 type Message = {
   role: "user" | "assistant";
   content: string;
-};
-
-const WELCOME: Message = {
-  role: "assistant",
-  content:
-    "Halo! Saya Smart Chat Techlympics. Saya boleh membantu anda tentang pertandingan, jadual, pasukan, dan lain-lain. Apa yang boleh saya bantu?",
+  pose?: number; // fixed sprite pose for this assistant message
 };
 
 const QUICK_QUESTIONS = [
@@ -21,15 +42,26 @@ const QUICK_QUESTIONS = [
   "Siapa jurulatih saya?",
 ];
 
+function randomPose() { return Math.floor(Math.random() * POSES); }
+
 export function ChatClient() {
-  const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const [messages, setMessages] = useState<Message[]>(() => [
+    { role: "assistant", content: "Halo! Saya AI Rimau, pembantu pintar Techlympics. Saya boleh membantu anda tentang pertandingan, jadual, pasukan, dan lain-lain. Apa yang boleh saya bantu?", pose: randomPose() },
+  ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pose, setPose] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll whenever messages change or loading state changes
+  // Cycle sprite pose every 3 s
+  useEffect(() => {
+    const id = setInterval(() => setPose((p) => (p + 1) % POSES), 3000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-scroll on new message or loading
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
@@ -60,7 +92,7 @@ export function ChatClient() {
       }
 
       const { reply } = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: reply, pose: randomPose() }]);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Ralat tidak dijangka. Sila cuba lagi."
@@ -77,28 +109,43 @@ export function ChatClient() {
   }
 
   function handleClear() {
-    setMessages([WELCOME]);
+    setMessages([{ role: "assistant", content: "Halo! Saya AI Rimau, pembantu pintar Techlympics. Saya boleh membantu anda tentang pertandingan, jadual, pasukan, dan lain-lain. Apa yang boleh saya bantu?", pose: randomPose() }]);
     setInput("");
     setError(null);
     inputRef.current?.focus();
   }
 
+  // Avatar bubble: container clips to circle, sprite slightly larger so the
+  // character fills the frame (same translateY trick as AiRimauChat header mini)
+  const AVATAR_SCALE = 0.44; // h≈57px, fw≈36px — container clips to 36×36
+  const avatarFw = Math.round(FRAME_W * AVATAR_SCALE);
+  const avatarH  = Math.round(SPRITE_H * AVATAR_SCALE);
+
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">
-      {/* Clear button */}
-      <div className="flex justify-end mb-2">
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={messages.length <= 1}
-          className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Kosongkan
-        </button>
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-end gap-3 mb-3">
+        {/* Larger animated sprite for the header */}
+        <RimauSprite pose={pose} scale={0.6} />
+        <div className="pb-1">
+          <h1 className="text-xl font-bold leading-tight">AI Rimau</h1>
+          <p className="text-sm text-muted-foreground">Tanya apa sahaja tentang Techlympics</p>
+        </div>
+        {/* Clear button pushed to far right */}
+        <div className="ml-auto pb-1">
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={messages.length <= 1}
+            className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Kosongkan
+          </button>
+        </div>
       </div>
 
-      {/* Message area */}
+      {/* ── Message area ────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto space-y-3 py-4 pr-1">
         {messages.map((msg, i) =>
           msg.role === "user" ? (
@@ -109,8 +156,14 @@ export function ChatClient() {
             </div>
           ) : (
             <div key={i} className="flex items-start gap-2">
-              <div className="shrink-0 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-[#085782]/10 dark:bg-blue-950/40">
-                <MessageCircle className="h-4 w-4 text-[#085782] dark:text-blue-400" strokeWidth={1.8} />
+              {/* Avatar: clipped circle, fixed pose per message */}
+              <div
+                className="shrink-0 rounded-full bg-[#085782]/10 dark:bg-blue-950/40 overflow-hidden"
+                style={{ width: avatarFw, height: avatarFw }}
+              >
+                <div style={{ transform: "translateY(4px)" }}>
+                  <RimauSprite pose={msg.pose ?? 0} scale={AVATAR_SCALE} />
+                </div>
               </div>
               <div className="max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm whitespace-pre-wrap">
                 {msg.content}
@@ -122,8 +175,13 @@ export function ChatClient() {
         {/* Typing indicator */}
         {loading && (
           <div className="flex items-start gap-2">
-            <div className="shrink-0 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-[#085782]/10 dark:bg-blue-950/40">
-              <MessageCircle className="h-4 w-4 text-[#085782] dark:text-blue-400" strokeWidth={1.8} />
+            <div
+              className="shrink-0 rounded-full bg-[#085782]/10 dark:bg-blue-950/40 overflow-hidden"
+              style={{ width: avatarFw, height: avatarFw }}
+            >
+              <div style={{ transform: "translateY(4px)" }}>
+                <RimauSprite pose={pose} scale={AVATAR_SCALE} />
+              </div>
             </div>
             <div className="rounded-2xl rounded-tl-sm px-4 py-3 bg-zinc-100 dark:bg-zinc-800 shadow-sm">
               <span className="flex gap-1 items-center h-4">
@@ -163,7 +221,7 @@ export function ChatClient() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input row */}
+      {/* ── Input row ───────────────────────────────────────────────────────── */}
       <form
         onSubmit={handleSubmit}
         className="border-t dark:border-zinc-800 pt-3 flex gap-2"
