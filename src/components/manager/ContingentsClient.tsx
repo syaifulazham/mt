@@ -705,14 +705,8 @@ function CreateDialog({
   const needsState = selectedType === "INDEPENDENT" || selectedType === "INTERNATIONAL";
 
   // Reset form when dialog opens
-  useEffect(() => {
-    if (open) {
-      setSelectedType(institutionType);
-      setSelectedSchool(null);
-      setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (open) { setSelectedType(institutionType); setSelectedSchool(null); setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError(""); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleClose() {
     setName(""); setShortName(""); setLogoUrl("builtin:shield"); setStateId(""); setError("");
@@ -721,9 +715,8 @@ function CreateDialog({
   }
 
   // Auto-fill contingent name when a school is selected
-  useEffect(() => {
-    if (selectedType === "SCHOOL" && selectedSchool) setName(selectedSchool.name);
-  }, [selectedSchool, selectedType]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (selectedType === "SCHOOL" && selectedSchool) setName(selectedSchool.name); }, [selectedSchool, selectedType]);
 
   useEffect(() => {
     if (!needsState || states.length > 0) return;
