@@ -58,6 +58,8 @@ type EventCompetition = {
   picName: string | null;
   picContact: string | null;
   maxTeams: number;
+  eptimEduCourseId:    string | null;
+  eptimEduCourseTitle: string | null;
   competition: Competition;
 };
 
@@ -167,14 +169,16 @@ function genCode(len = 5) {
 
 function EptimEduLinkModal({
   open,
-  competition,
+  ec,
+  eventId,
   onClose,
   onSaved,
 }: {
   open: boolean;
-  competition: Competition | null;
+  ec: EventCompetition | null;
+  eventId: string;
   onClose: () => void;
-  onSaved: (competitionId: string, courseId: string | null, courseTitle: string | null) => void;
+  onSaved: (ecId: string, courseId: string | null, courseTitle: string | null) => void;
 }) {
   const [courses,    setCourses]    = useState<EduCourse[]>([]);
   const [filtered,   setFiltered]   = useState<EduCourse[]>([]);
@@ -188,7 +192,7 @@ function EptimEduLinkModal({
   useEffect(() => {
     if (!open) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedId(competition?.eptimEduCourseId ?? null);
+    setSelectedId(ec?.eptimEduCourseId ?? null);
     setQ(""); setError("");
     setLoading(true);
     fetch("/api/v2/organizer/eptimedu/courses")
@@ -209,11 +213,11 @@ function EptimEduLinkModal({
   useEffect(() => { setFiltered(q.trim() ? courses.filter(c => c.title.toLowerCase().includes(q.toLowerCase())) : courses); }, [q, courses]);
 
   async function handleSave() {
-    if (!competition) return;
+    if (!ec) return;
     setSaving(true); setError("");
     const chosen = selectedId ? courses.find(c => c.id === selectedId) ?? null : null;
     try {
-      const res = await fetch(`/api/v2/organizer/competitions/${competition.id}`, {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${ec.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -222,7 +226,7 @@ function EptimEduLinkModal({
         }),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Save failed"); }
-      onSaved(competition.id, chosen?.id ?? null, chosen?.title ?? null);
+      onSaved(ec.id, chosen?.id ?? null, chosen?.title ?? null);
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -403,25 +407,25 @@ function CompetitionCard({
           </div>
         )}
 
-        {/* EptimEdu course link */}
+        {/* EptimEdu course link (event-specific, independent of competition general course) */}
         {canWrite ? (
           <button
             type="button"
             onClick={onLinkCourse}
             className={`w-full flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
-              c.eptimEduCourseId
+              ec.eptimEduCourseId
                 ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
                 : "border-dashed border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600 dark:border-zinc-700"
             }`}
           >
             <BookOpen className="h-3 w-3 shrink-0" />
-            <span className="truncate">{c.eptimEduCourseTitle ?? "Link EptimEdu course…"}</span>
-            {c.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 ml-auto opacity-60" />}
+            <span className="truncate">{ec.eptimEduCourseTitle ?? "Link EptimEdu course…"}</span>
+            {ec.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 ml-auto opacity-60" />}
           </button>
-        ) : c.eptimEduCourseId ? (
+        ) : ec.eptimEduCourseId ? (
           <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
             <BookOpen className="h-3 w-3 shrink-0" />
-            <span className="truncate">{c.eptimEduCourseTitle}</span>
+            <span className="truncate">{ec.eptimEduCourseTitle}</span>
           </div>
         ) : null}
 
@@ -516,14 +520,14 @@ export function EventDetailClient({ slug, role }: { slug: string; role: Organize
   const [editCompError,  setEditCompError]  = useState("");
 
   // ── EptimEdu course link modal ──────────────────────────────────────────────
-  const [linkCourseTarget, setLinkCourseTarget] = useState<Competition | null>(null);
+  const [linkCourseTarget, setLinkCourseTarget] = useState<EventCompetition | null>(null);
 
-  function handleCourseSaved(competitionId: string, courseId: string | null, courseTitle: string | null) {
+  function handleCourseSaved(ecId: string, courseId: string | null, courseTitle: string | null) {
     setEvent(ev => ev ? {
       ...ev,
       eventCompetitions: ev.eventCompetitions.map(ec =>
-        ec.competition.id === competitionId
-          ? { ...ec, competition: { ...ec.competition, eptimEduCourseId: courseId, eptimEduCourseTitle: courseTitle } }
+        ec.id === ecId
+          ? { ...ec, eptimEduCourseId: courseId, eptimEduCourseTitle: courseTitle }
           : ec
       ),
     } : ev);
@@ -1052,7 +1056,7 @@ export function EventDetailClient({ slug, role }: { slug: string; role: Organize
                 canWrite={canWrite}
                 onEdit={() => openEditComp(ec)}
                 onDelete={() => openDeleteComp(ec)}
-                onLinkCourse={() => setLinkCourseTarget(ec.competition)}
+                onLinkCourse={() => setLinkCourseTarget(ec)}
               />
             ))}
           </div>
@@ -1385,7 +1389,8 @@ export function EventDetailClient({ slug, role }: { slug: string; role: Organize
       {/* ── EptimEdu Course Link Modal ─────────────────────────────────────── */}
       <EptimEduLinkModal
         open={!!linkCourseTarget}
-        competition={linkCourseTarget}
+        ec={linkCourseTarget}
+        eventId={event?.id ?? ""}
         onClose={() => setLinkCourseTarget(null)}
         onSaved={handleCourseSaved}
       />

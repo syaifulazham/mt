@@ -540,9 +540,11 @@ model EventCompetition {
   competitionId String
   picName       String?
   picContact    String?
-  maxTeams      Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  maxTeams            Int      @default(0)
+  eptimEduCourseId    String?
+  eptimEduCourseTitle String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   event       Event       @relation(fields: [eventId],       references: [id], onDelete: Cascade)
   competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)

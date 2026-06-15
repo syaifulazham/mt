@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id: eventId, ecId } = await params;
 
-  const { picName, picContact, maxTeams } = await req.json();
+  const { picName, picContact, maxTeams, eptimEduCourseId, eptimEduCourseTitle } = await req.json();
 
   const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId } });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -29,9 +29,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const updated = await db.eventCompetition.update({
     where: { id: ecId },
     data: {
-      ...(picName    !== undefined && { picName:    picName?.trim()    || null }),
-      ...(picContact !== undefined && { picContact: picContact?.trim() || null }),
-      ...(maxTeams   !== undefined && { maxTeams:   Number(maxTeams)   || 0    }),
+      ...(picName             !== undefined && { picName:             picName?.trim()    || null }),
+      ...(picContact          !== undefined && { picContact:          picContact?.trim() || null }),
+      ...(maxTeams            !== undefined && { maxTeams:            Number(maxTeams)   || 0    }),
+      ...(eptimEduCourseId    !== undefined && { eptimEduCourseId:    eptimEduCourseId    ?? null }),
+      ...(eptimEduCourseTitle !== undefined && { eptimEduCourseTitle: eptimEduCourseTitle ?? null }),
     },
     include: EC_INCLUDE,
   });

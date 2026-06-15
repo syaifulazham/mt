@@ -44,13 +44,13 @@ type ZoneOption  = { id: string; name: string };
 type EventCompLink = {
   id: string; competitionId: string;
   picName: string | null; picContact: string | null; maxTeams: number;
+  eptimEduCourseId:    string | null;
+  eptimEduCourseTitle: string | null;
   competition: {
     id: string; code: string; name: string;
     participationType: string; minTeamSize: number; maxTeamSize: number;
     targetGroups: { targetGroup: { id: string; name: string } }[];
     _count: { teams: number };
-    eptimEduCourseId:    string | null;
-    eptimEduCourseTitle: string | null;
   };
 };
 
@@ -361,13 +361,13 @@ function VenueSection({ event, canWrite, onSaved }: {
 // ── EptimEdu Course Link Modal ────────────────────────────────────────────────
 
 function EptimEduLinkModal({
-  open, competitionId, competitionName, currentCourseId, onClose, onSaved,
+  open, ecId, eventId, competitionName, currentCourseId, onClose, onSaved,
 }: {
   open: boolean;
-  competitionId: string | null;
+  ecId: string | null;
+  eventId: string;
   competitionName: string;
   currentCourseId: string | null;
-  currentCourseTitle: string | null;
   onClose: () => void;
   onSaved: (courseId: string | null, courseTitle: string | null) => void;
 }) {
@@ -397,11 +397,11 @@ function EptimEduLinkModal({
   useEffect(() => { setFiltered(q.trim() ? courses.filter(c => c.title.toLowerCase().includes(q.toLowerCase())) : courses); }, [q, courses]);
 
   async function handleSave() {
-    if (!competitionId) return;
+    if (!ecId) return;
     setSaving(true); setError("");
     const chosen = selectedId ? courses.find(c => c.id === selectedId) ?? null : null;
     try {
-      const res = await fetch(`/api/v2/organizer/competitions/${competitionId}`, {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${ecId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ eptimEduCourseId: chosen?.id ?? null, eptimEduCourseTitle: chosen?.title ?? null }),
@@ -621,18 +621,18 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
                     {canWrite ? (
                       <button type="button" onClick={() => setLinkCourseFor(link)}
                         className={`mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors w-fit ${
-                          link.competition.eptimEduCourseId
+                          link.eptimEduCourseId
                             ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
                             : "border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-400 hover:text-zinc-600"
                         }`}>
                         <BookOpen className="h-3 w-3 shrink-0" />
-                        <span className="truncate max-w-[160px]">{link.competition.eptimEduCourseTitle ?? "Pautan kursus EptimEdu…"}</span>
-                        {link.competition.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
+                        <span className="truncate max-w-[160px]">{link.eptimEduCourseTitle ?? "Pautan kursus EptimEdu…"}</span>
+                        {link.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
                       </button>
-                    ) : link.competition.eptimEduCourseId ? (
+                    ) : link.eptimEduCourseId ? (
                       <div className="mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 w-fit">
                         <BookOpen className="h-3 w-3 shrink-0" />
-                        <span className="truncate max-w-[160px]">{link.competition.eptimEduCourseTitle}</span>
+                        <span className="truncate max-w-[160px]">{link.eptimEduCourseTitle}</span>
                       </div>
                     ) : null}
                   </div>
@@ -737,15 +737,15 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
 
       <EptimEduLinkModal
         open={!!linkCourseFor}
-        competitionId={linkCourseFor?.competition.id ?? null}
+        ecId={linkCourseFor?.id ?? null}
+        eventId={eventId}
         competitionName={linkCourseFor?.competition.name ?? ""}
-        currentCourseId={linkCourseFor?.competition.eptimEduCourseId ?? null}
-        currentCourseTitle={linkCourseFor?.competition.eptimEduCourseTitle ?? null}
+        currentCourseId={linkCourseFor?.eptimEduCourseId ?? null}
         onClose={() => setLinkCourseFor(null)}
         onSaved={(courseId, courseTitle) => {
           setLinks(prev => prev.map(l =>
             l.id === linkCourseFor?.id
-              ? { ...l, competition: { ...l.competition, eptimEduCourseId: courseId, eptimEduCourseTitle: courseTitle } }
+              ? { ...l, eptimEduCourseId: courseId, eptimEduCourseTitle: courseTitle }
               : l
           ));
           setLinkCourseFor(null);
