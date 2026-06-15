@@ -406,7 +406,7 @@ function EptimEduLinkModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ eptimEduCourseId: chosen?.id ?? null, eptimEduCourseTitle: chosen?.title ?? null }),
       });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Gagal"); }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error ?? "Gagal menyimpan"); }
       onSaved(chosen?.id ?? null, chosen?.title ?? null);
       onClose();
     } catch (e: unknown) {

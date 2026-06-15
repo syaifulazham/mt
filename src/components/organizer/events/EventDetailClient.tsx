@@ -225,7 +225,7 @@ function EptimEduLinkModal({
           eptimEduCourseTitle: chosen?.title ?? null,
         }),
       });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Save failed"); }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error ?? "Gagal menyimpan"); }
       onSaved(ec.id, chosen?.id ?? null, chosen?.title ?? null);
       onClose();
     } catch (e: unknown) {
