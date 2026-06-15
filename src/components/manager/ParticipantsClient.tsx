@@ -494,6 +494,15 @@ function AddEditDialog({
 // Client-side CSV parser
 // ─────────────────────────────────────────────────────────────────────────────
 
+const GENDER_MAP: Record<string, Gender> = {
+  male: "MALE", lelaki: "MALE", l: "MALE", m: "MALE",
+  female: "FEMALE", perempuan: "FEMALE", wanita: "FEMALE", p: "FEMALE", f: "FEMALE",
+};
+
+function normalizeGender(raw: string): Gender | null {
+  return GENDER_MAP[raw.toLowerCase().trim()] ?? null;
+}
+
 const EDU_MAP: Record<string, EduLevel> = {
   kindergarten: "KINDERGARTEN", prasekolah: "KINDERGARTEN", tadika: "KINDERGARTEN",
   primary: "PRIMARY", rendah: "PRIMARY", "sekolah rendah": "PRIMARY",
@@ -537,8 +546,7 @@ function parseCsv(text: string): RawRow[] {
     const ppki        = get("ppki") || get("berkeperluan_khas") || get("oku");
     const issues: string[] = [];
     if (!name) issues.push("name");
-    const gNorm = gender.toUpperCase();
-    if (gNorm !== "MALE" && gNorm !== "FEMALE") issues.push("gender");
+    if (!normalizeGender(gender)) issues.push("gender");
     const ednorm = edu_level.toLowerCase().trim();
     if (!EDU_MAP[ednorm] && !["kindergarten","primary","secondary","youth"].includes(ednorm)) issues.push("edu_level");
     return { name, ic, gender, age, edu_level, class_grade, class_name, email, phoneNumber, ethnicity, ppki, _issues: issues };
@@ -557,8 +565,7 @@ const ETHNICITY_MAP: Record<string, Ethnicity> = {
 
 function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
   return rows.map((r) => {
-    const gNorm = r.gender.toUpperCase();
-    const gender: Gender = (gNorm === "FEMALE") ? "FEMALE" : "MALE";
+    const gender: Gender = normalizeGender(r.gender) ?? "MALE";
     const ednorm = r.edu_level.toLowerCase().trim();
     const eduLevel: EduLevel = EDU_MAP[ednorm] ?? "SECONDARY";
     const ethKey = r.ethnicity.toLowerCase().trim().replace(/\s+/g, "_");
