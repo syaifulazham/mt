@@ -32,9 +32,25 @@ export async function POST() {
   const username      = emailToUsername(manager.email);
   const contingentIds = manager.contingentManagers.map((cm) => cm.contingentId);
 
-  // ── Auto-enrol in any competition courses not yet enrolled ────────────────
-  if (contingentIds.length > 0) {
-    try {
+  // ── Auto-enrol in missing courses ────────────────────────────────────────
+  try {
+    const [enrolResult, catalogResult] = await Promise.all([
+      eptimEdu.getUserEnrolments(username).catch(() => ({ enrolments: [] })),
+      eptimEdu.courses().catch(() => ({ courses: [] })),
+    ]);
+
+    const enrolledIds = new Set<string>(
+      (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
+    );
+
+    // Enrol in all PUBLISHED org courses not yet enrolled
+    const publishedToEnrol = (catalogResult.courses ?? [])
+      .filter((c: { id: string; status: string }) => c.status === "PUBLISHED" && !enrolledIds.has(c.id))
+      .map((c: { id: string }) => c.id);
+
+    // Also enrol in competition INVITE_ONLY courses via team membership
+    const competitionCourseIds: string[] = [];
+    if (contingentIds.length > 0) {
       const competitions = await db.competition.findMany({
         where: {
           eptimEduCourseId: { not: null },
@@ -42,22 +58,17 @@ export async function POST() {
         },
         select: { eptimEduCourseId: true },
       });
-
-      if (competitions.length > 0) {
-        const enrolResult = await eptimEdu.getUserEnrolments(username).catch(() => ({ enrolments: [] }));
-        const enrolledIds = new Set<string>(
-          (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
-        );
-        const toEnrol = [...new Set(competitions.map((c) => c.eptimEduCourseId!))].filter(
-          (id) => !enrolledIds.has(id)
-        );
-        if (toEnrol.length > 0) {
-          await Promise.allSettled(toEnrol.map((courseId) => eptimEdu.enrol(username, courseId)));
-        }
-      }
-    } catch (e) {
-      console.error("[lms/account/signin] auto-enrol error:", e);
+      competitionCourseIds.push(
+        ...[...new Set(competitions.map((c) => c.eptimEduCourseId!))].filter((id) => !enrolledIds.has(id))
+      );
     }
+
+    const allToEnrol = [...new Set([...publishedToEnrol, ...competitionCourseIds])];
+    if (allToEnrol.length > 0) {
+      await Promise.allSettled(allToEnrol.map((courseId) => eptimEdu.enrol(username, courseId)));
+    }
+  } catch (e) {
+    console.error("[lms/account/signin] auto-enrol error:", e);
   }
 
   // ── Generate SSO token ────────────────────────────────────────────────────
