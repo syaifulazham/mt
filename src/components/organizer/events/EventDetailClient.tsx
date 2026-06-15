@@ -243,8 +243,8 @@ function EptimEduLinkModal({
             <BookOpen className="h-4 w-4 text-blue-500" />
             Link EptimEdu Course
           </DialogTitle>
-          {competition && (
-            <p className="text-xs text-zinc-400 mt-0.5 truncate">{competition.name}</p>
+          {ec && (
+            <p className="text-xs text-zinc-400 mt-0.5 truncate">{ec.competition.name}</p>
           )}
         </DialogHeader>
 
