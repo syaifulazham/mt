@@ -339,7 +339,7 @@ function TargetGroupsSection({ competition, canWrite, targetGroups, onSaved }: {
 
 // ── EptimEdu section ──────────────────────────────────────────────────────────
 
-type EduCourse = { id: string; title: string; totalMinutes: number };
+type EduCourse = { id: string; title: string; totalMinutes: number; status: string };
 
 function EptimEduSection({ competition, canWrite, onSaved }: {
   competition: CompetitionDetail; canWrite: boolean;
@@ -361,7 +361,7 @@ function EptimEduSection({ competition, canWrite, onSaved }: {
       .then(r => r.json())
       .then(j => {
         if (j.error === "EPTIMEDU_API_KEY not found") { setNoApiKey(true); return; }
-        setCourses(j.data ?? []);
+        setCourses((j.data ?? []).filter((c: EduCourse) => c.status !== "DRAFT"));
       })
       .catch(() => setErr("Failed to load courses"))
       .finally(() => setLoadingCrs(false));
@@ -408,7 +408,7 @@ function EptimEduSection({ competition, canWrite, onSaved }: {
               <option value="">— No course attached —</option>
               {courses.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.title}
+                  {c.title}{c.status === "INVITE_ONLY" ? " [Jemputan]" : " [Terbuka]"}
                 </option>
               ))}
             </select>
