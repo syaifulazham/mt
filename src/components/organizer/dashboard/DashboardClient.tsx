@@ -118,8 +118,7 @@ export function DashboardClient({ userName }: { userName: string }) {
 
   const { stats, charts } = data;
   const maxComp  = Math.max(...charts.byCompetition.map(c => c.count), 1);
-  const maxState = Math.max(...charts.byState.map(c => c.count), 1);
-  const maxZone  = Math.max(...charts.byZone.map(c => c.count), 1);
+const maxZone  = Math.max(...charts.byZone.map(c => c.count), 1);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-7">

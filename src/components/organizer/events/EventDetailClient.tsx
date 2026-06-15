@@ -187,6 +187,7 @@ function EptimEduLinkModal({
   // Load courses when modal opens
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedId(competition?.eptimEduCourseId ?? null);
     setQ(""); setError("");
     setLoading(true);

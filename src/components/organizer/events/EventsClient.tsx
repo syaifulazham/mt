@@ -79,17 +79,6 @@ const SCOPE_OPTIONS = [
 
 const STATUSES = ["DRAFT", "PUBLISHED", "ACTIVE", "COMPLETED", "CANCELLED"] as const;
 
-const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-zinc-100 text-zinc-600", PUBLISHED: "bg-blue-50 text-blue-700",
-  ACTIVE: "bg-green-50 text-green-700", COMPLETED: "bg-purple-50 text-purple-700",
-  CANCELLED: "bg-red-50 text-red-500",
-};
-
-const SCOPE_LABELS: Record<string, string> = {
-  NATIONAL: "National", STATE: "State", ZONE: "Zone", OPEN: "Open",
-  ONLINE_NATIONAL: "Online National", ONLINE_STATE: "Online State",
-  ONLINE_ZONE: "Online Zone", ONLINE_OPEN: "Online Open",
-};
 
 function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); }
 function fmtDate(d: string | null) {
@@ -372,7 +361,7 @@ function VenueSection({ event, canWrite, onSaved }: {
 // ── EptimEdu Course Link Modal ────────────────────────────────────────────────
 
 function EptimEduLinkModal({
-  open, competitionId, competitionName, currentCourseId, currentCourseTitle, onClose, onSaved,
+  open, competitionId, competitionName, currentCourseId, onClose, onSaved,
 }: {
   open: boolean;
   competitionId: string | null;
@@ -392,6 +381,7 @@ function EptimEduLinkModal({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedId(currentCourseId);
     setQ(""); setError("");
     setFetching(true);

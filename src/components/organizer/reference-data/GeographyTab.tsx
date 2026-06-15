@@ -131,7 +131,7 @@ function StatesPane() {
               <tr key={s.id} className="border-b last:border-0 hover:bg-zinc-50">
                 <td className="px-3 py-2 w-10">
                   {s.flagUrl
-                    ? <img src={s.flagUrl} alt={s.code} className="h-6 w-14 shrink-0 object-cover rounded-sm border border-zinc-200" />
+                    ? <img src={s.flagUrl} alt={s.code} className="h-6 w-14 shrink-0 object-cover rounded-sm border border-zinc-200" /> /* eslint-disable-line @next/next/no-img-element */
                     : <div className="h-6 w-14 shrink-0 rounded-sm bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[9px] text-zinc-400 font-mono">{s.code}</div>
                   }
                 </td>
@@ -174,7 +174,7 @@ function StatesPane() {
                 <Label>Flag Image</Label>
                 <div className="mt-1 flex items-center gap-3">
                   {flagUrl
-                    ? <img src={flagUrl} alt="flag" className="h-10 w-16 object-cover rounded border border-zinc-200" />
+                    ? <img src={flagUrl} alt="flag" className="h-10 w-16 object-cover rounded border border-zinc-200" /> /* eslint-disable-line @next/next/no-img-element */
                     : <div className="h-10 w-16 rounded border border-dashed border-zinc-300 bg-zinc-50 flex items-center justify-center text-xs text-zinc-400">No flag</div>
                   }
                   <input
@@ -312,7 +312,7 @@ function ZonesPane() {
   function togglePicker(id: string) {
     setPickerSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }
