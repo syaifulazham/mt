@@ -4,8 +4,11 @@ import { useState, useEffect, useCallback, lazy, Suspense, useRef } from "react"
 import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
-  ArrowLeft, Check, CalendarDays,
+  ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +49,14 @@ type EventCompLink = {
     participationType: string; minTeamSize: number; maxTeamSize: number;
     targetGroups: { targetGroup: { id: string; name: string } }[];
     _count: { teams: number };
+    eptimEduCourseId:    string | null;
+    eptimEduCourseTitle: string | null;
   };
+};
+
+type EduCourse = {
+  id: string; title: string; status: string; level: string | null;
+  instructor: string | null; enrolmentCount: number; totalMinutes: number;
 };
 
 type CompSearch = {
@@ -359,6 +369,128 @@ function VenueSection({ event, canWrite, onSaved }: {
   );
 }
 
+// ── EptimEdu Course Link Modal ────────────────────────────────────────────────
+
+function EptimEduLinkModal({
+  open, competitionId, competitionName, currentCourseId, currentCourseTitle, onClose, onSaved,
+}: {
+  open: boolean;
+  competitionId: string | null;
+  competitionName: string;
+  currentCourseId: string | null;
+  currentCourseTitle: string | null;
+  onClose: () => void;
+  onSaved: (courseId: string | null, courseTitle: string | null) => void;
+}) {
+  const [courses,    setCourses]    = useState<EduCourse[]>([]);
+  const [filtered,   setFiltered]   = useState<EduCourse[]>([]);
+  const [q,          setQ]          = useState("");
+  const [fetching,   setFetching]   = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedId(currentCourseId);
+    setQ(""); setError("");
+    setFetching(true);
+    fetch("/api/v2/organizer/eptimedu/courses")
+      .then(r => r.json())
+      .then(j => { if (j.error) { setError(j.error); return; } const inv = (j.data ?? []).filter((c: EduCourse) => c.status === "INVITE_ONLY"); setCourses(inv); setFiltered(inv); })
+      .catch(() => setError("Gagal memuatkan kursus"))
+      .finally(() => setFetching(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setFiltered(q.trim() ? courses.filter(c => c.title.toLowerCase().includes(q.toLowerCase())) : courses); }, [q, courses]);
+
+  async function handleSave() {
+    if (!competitionId) return;
+    setSaving(true); setError("");
+    const chosen = selectedId ? courses.find(c => c.id === selectedId) ?? null : null;
+    try {
+      const res = await fetch(`/api/v2/organizer/competitions/${competitionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eptimEduCourseId: chosen?.id ?? null, eptimEduCourseTitle: chosen?.title ?? null }),
+      });
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Gagal"); }
+      onSaved(chosen?.id ?? null, chosen?.title ?? null);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <BookOpen className="h-4 w-4 text-blue-500" />Pautan Kursus EptimEdu
+          </DialogTitle>
+          <p className="text-xs text-zinc-400 mt-0.5 truncate">{competitionName}</p>
+        </DialogHeader>
+
+        <div className="px-6 pt-4 pb-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cari kursus…"
+              className="w-full pl-8 pr-3 h-9 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+        </div>
+
+        <div className="px-6 pb-2 max-h-72 overflow-y-auto space-y-1.5">
+          {fetching && <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>}
+          {!fetching && error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />{error}
+            </div>
+          )}
+          {!fetching && !error && filtered.length === 0 && <p className="text-sm text-zinc-400 text-center py-6">Tiada kursus dijumpai.</p>}
+
+          {!fetching && !error && courses.length > 0 && (
+            <button type="button" onClick={() => setSelectedId(null)}
+              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${selectedId === null ? "border-blue-500 bg-blue-50" : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700"}`}>
+              <div className="flex items-center gap-2">
+                <Unlink className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                <span className="text-sm text-zinc-500 italic">Tiada kursus (nyahpautan)</span>
+              </div>
+            </button>
+          )}
+
+          {!fetching && filtered.map(course => (
+            <button key={course.id} type="button" onClick={() => setSelectedId(course.id)}
+              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${selectedId === course.id ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{course.title}</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    {course.instructor && <span>{course.instructor} · </span>}
+                    {course.totalMinutes > 0 && <span>{course.totalMinutes} min · </span>}
+                    <span>{course.enrolmentCount} peserta</span>
+                  </p>
+                </div>
+                {course.level && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 font-medium mt-0.5">{course.level}</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Batal</Button>
+          <Button onClick={handleSave} disabled={saving || fetching}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {selectedId ? "Pautan Kursus" : "Simpan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Competitions section ───────────────────────────────────────────────────────
 
 function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite: boolean }) {
@@ -379,7 +511,8 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
   const [picked,        setPicked]        = useState<CompSearch | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [deleteTarget, setDeleteTarget] = useState<EventCompLink | null>(null);
+  const [deleteTarget,   setDeleteTarget]   = useState<EventCompLink | null>(null);
+  const [linkCourseFor,  setLinkCourseFor]  = useState<EventCompLink | null>(null);
 
   const linksRef = useRef(links);
   useEffect(() => { linksRef.current = links; }, [links]);
@@ -494,6 +627,24 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
                       {link.maxTeams > 0 && <span>Maks {link.maxTeams} pasukan</span>}
                       <span className="text-zinc-300">{link.competition._count.teams} berdaftar</span>
                     </div>
+                    {/* EptimEdu course badge / link button */}
+                    {canWrite ? (
+                      <button type="button" onClick={() => setLinkCourseFor(link)}
+                        className={`mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors w-fit ${
+                          link.competition.eptimEduCourseId
+                            ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                            : "border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-400 hover:text-zinc-600"
+                        }`}>
+                        <BookOpen className="h-3 w-3 shrink-0" />
+                        <span className="truncate max-w-[160px]">{link.competition.eptimEduCourseTitle ?? "Pautan kursus EptimEdu…"}</span>
+                        {link.competition.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
+                      </button>
+                    ) : link.competition.eptimEduCourseId ? (
+                      <div className="mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 w-fit">
+                        <BookOpen className="h-3 w-3 shrink-0" />
+                        <span className="truncate max-w-[160px]">{link.competition.eptimEduCourseTitle}</span>
+                      </div>
+                    ) : null}
                   </div>
                   {canWrite && (
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">
@@ -592,6 +743,23 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
         onConfirm={handleDelete}
         title={`Tanggalkan "${deleteTarget?.competition.name}"?`}
         description="Pertandingan ini akan dibuang dari acara ini. Pasukan yang berdaftar mesti dibuang terlebih dahulu."
+      />
+
+      <EptimEduLinkModal
+        open={!!linkCourseFor}
+        competitionId={linkCourseFor?.competition.id ?? null}
+        competitionName={linkCourseFor?.competition.name ?? ""}
+        currentCourseId={linkCourseFor?.competition.eptimEduCourseId ?? null}
+        currentCourseTitle={linkCourseFor?.competition.eptimEduCourseTitle ?? null}
+        onClose={() => setLinkCourseFor(null)}
+        onSaved={(courseId, courseTitle) => {
+          setLinks(prev => prev.map(l =>
+            l.id === linkCourseFor?.id
+              ? { ...l, competition: { ...l.competition, eptimEduCourseId: courseId, eptimEduCourseTitle: courseTitle } }
+              : l
+          ));
+          setLinkCourseFor(null);
+        }}
       />
     </SectionCard>
   );

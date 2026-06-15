@@ -6,6 +6,7 @@ import {
   CalendarDays, MapPin, Trophy, User, Phone, Users,
   ChevronLeft, Loader2, Tag, Target, Pencil, Trash2,
   Plus, Search, Sparkles, Navigation, X, AlertCircle,
+  BookOpen, Link2, Unlink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,18 @@ type Competition = {
   theme: { id: string; name: string; color: string | null } | null;
   targetGroups: { targetGroup: TargetGroup }[];
   _count: { teams: number };
+  eptimEduCourseId:    string | null;
+  eptimEduCourseTitle: string | null;
+};
+
+type EduCourse = {
+  id: string;
+  title: string;
+  status: string;
+  level: string | null;
+  instructor: string | null;
+  enrolmentCount: number;
+  totalMinutes: number;
 };
 
 type EventCompetition = {
@@ -150,6 +163,175 @@ function genCode(len = 5) {
   return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
+// ── EptimEdu Course Link Modal ────────────────────────────────────────────────
+
+function EptimEduLinkModal({
+  open,
+  competition,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  competition: Competition | null;
+  onClose: () => void;
+  onSaved: (competitionId: string, courseId: string | null, courseTitle: string | null) => void;
+}) {
+  const [courses,    setCourses]    = useState<EduCourse[]>([]);
+  const [filtered,   setFiltered]   = useState<EduCourse[]>([]);
+  const [q,          setQ]          = useState("");
+  const [loading,    setLoading]    = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Load courses when modal opens
+  useEffect(() => {
+    if (!open) return;
+    setSelectedId(competition?.eptimEduCourseId ?? null);
+    setQ(""); setError("");
+    setLoading(true);
+    fetch("/api/v2/organizer/eptimedu/courses")
+      .then(r => r.json())
+      .then(j => {
+        if (j.error) { setError(j.error); return; }
+        const invOnly = (j.data ?? []).filter((c: EduCourse) => c.status === "INVITE_ONLY");
+        setCourses(invOnly);
+        setFiltered(invOnly);
+      })
+      .catch(() => setError("Failed to load courses"))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Client-side filter
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setFiltered(q.trim() ? courses.filter(c => c.title.toLowerCase().includes(q.toLowerCase())) : courses); }, [q, courses]);
+
+  async function handleSave() {
+    if (!competition) return;
+    setSaving(true); setError("");
+    const chosen = selectedId ? courses.find(c => c.id === selectedId) ?? null : null;
+    try {
+      const res = await fetch(`/api/v2/organizer/competitions/${competition.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eptimEduCourseId:    chosen?.id    ?? null,
+          eptimEduCourseTitle: chosen?.title ?? null,
+        }),
+      });
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Save failed"); }
+      onSaved(competition.id, chosen?.id ?? null, chosen?.title ?? null);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-0">
+          <DialogTitle className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-blue-500" />
+            Link EptimEdu Course
+          </DialogTitle>
+          {competition && (
+            <p className="text-xs text-zinc-400 mt-0.5 truncate">{competition.name}</p>
+          )}
+        </DialogHeader>
+
+        <div className="px-6 pt-4 pb-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search courses…"
+              className="w-full pl-8 pr-3 h-9 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        </div>
+
+        <div className="px-6 pb-2 max-h-72 overflow-y-auto space-y-1.5">
+          {loading && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />{error}
+            </div>
+          )}
+
+          {!loading && !error && filtered.length === 0 && (
+            <p className="text-sm text-zinc-400 text-center py-6">No courses found.</p>
+          )}
+
+          {/* "No course" option to unlink */}
+          {!loading && !error && courses.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedId(null)}
+              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                selectedId === null
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                  : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Unlink className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                <span className="text-sm text-zinc-500 italic">No course (unlink)</span>
+              </div>
+            </button>
+          )}
+
+          {!loading && filtered.map(course => (
+            <button
+              key={course.id}
+              type="button"
+              onClick={() => setSelectedId(course.id)}
+              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                selectedId === course.id
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                  : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{course.title}</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    {course.instructor && <span>{course.instructor} · </span>}
+                    {course.totalMinutes > 0 && <span>{course.totalMinutes} min · </span>}
+                    <span>{course.enrolmentCount} enrolled</span>
+                  </p>
+                </div>
+                {course.level && (
+                  <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 font-medium mt-0.5">
+                    {course.level}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || loading}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {selectedId ? "Link Course" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Competition Card ───────────────────────────────────────────────────────────
 
 function CompetitionCard({
@@ -157,11 +339,13 @@ function CompetitionCard({
   canWrite,
   onEdit,
   onDelete,
+  onLinkCourse,
 }: {
   ec: EventCompetition;
   canWrite: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onLinkCourse: () => void;
 }) {
   const c = ec.competition;
   const themeColor = c.theme?.color ?? "#6366f1";
@@ -217,6 +401,28 @@ function CompetitionCard({
             ))}
           </div>
         )}
+
+        {/* EptimEdu course link */}
+        {canWrite ? (
+          <button
+            type="button"
+            onClick={onLinkCourse}
+            className={`w-full flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+              c.eptimEduCourseId
+                ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                : "border-dashed border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600 dark:border-zinc-700"
+            }`}
+          >
+            <BookOpen className="h-3 w-3 shrink-0" />
+            <span className="truncate">{c.eptimEduCourseTitle ?? "Link EptimEdu course…"}</span>
+            {c.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 ml-auto opacity-60" />}
+          </button>
+        ) : c.eptimEduCourseId ? (
+          <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+            <BookOpen className="h-3 w-3 shrink-0" />
+            <span className="truncate">{c.eptimEduCourseTitle}</span>
+          </div>
+        ) : null}
 
         <div className="border-t mt-auto pt-3 space-y-1.5">
           {(ec.picName || ec.picContact) && (
@@ -307,6 +513,20 @@ export function EventDetailClient({ slug, role }: { slug: string; role: Organize
   const [editCompForm,   setEditCompForm]   = useState(EMPTY_EC);
   const [editCompSaving, setEditCompSaving] = useState(false);
   const [editCompError,  setEditCompError]  = useState("");
+
+  // ── EptimEdu course link modal ──────────────────────────────────────────────
+  const [linkCourseTarget, setLinkCourseTarget] = useState<Competition | null>(null);
+
+  function handleCourseSaved(competitionId: string, courseId: string | null, courseTitle: string | null) {
+    setEvent(ev => ev ? {
+      ...ev,
+      eventCompetitions: ev.eventCompetitions.map(ec =>
+        ec.competition.id === competitionId
+          ? { ...ec, competition: { ...ec.competition, eptimEduCourseId: courseId, eptimEduCourseTitle: courseTitle } }
+          : ec
+      ),
+    } : ev);
+  }
 
   // ── Venue map toggle ────────────────────────────────────────────────────────
   const [showVenueMap, setShowVenueMap] = useState(false);
@@ -831,6 +1051,7 @@ export function EventDetailClient({ slug, role }: { slug: string; role: Organize
                 canWrite={canWrite}
                 onEdit={() => openEditComp(ec)}
                 onDelete={() => openDeleteComp(ec)}
+                onLinkCourse={() => setLinkCourseTarget(ec.competition)}
               />
             ))}
           </div>
@@ -1159,6 +1380,14 @@ export function EventDetailClient({ slug, role }: { slug: string; role: Organize
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── EptimEdu Course Link Modal ─────────────────────────────────────── */}
+      <EptimEduLinkModal
+        open={!!linkCourseTarget}
+        competition={linkCourseTarget}
+        onClose={() => setLinkCourseTarget(null)}
+        onSaved={handleCourseSaved}
+      />
 
     </div>
   );
