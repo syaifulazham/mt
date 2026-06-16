@@ -68,36 +68,39 @@ Help the participant understand this competition — its rules, format, judging 
     systemInstruction: systemPrompt,
   });
 
-  // Build history. If a PDF was fetched, inject it as the first assistant context turn.
+  // Build history. Strip the client-side greeting (first assistant message) before
+  // passing to Gemini — Gemini requires history to start with a "user" turn.
   const userMessages = messages as { role: string; content: string }[];
-  const allButLast   = userMessages.slice(0, -1);
   const last         = userMessages[userMessages.length - 1];
 
-  const baseHistory = allButLast
-    .filter((_, i) => {
-      const firstUser = allButLast.findIndex(m => m.role === "user");
-      return i >= firstUser;
-    })
-    .map(m => ({
-      role:  m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+  const allButLast  = userMessages.slice(0, -1);
+  const firstUserIdx = allButLast.findIndex(m => m.role === "user");
+  // Only keep messages from the first real user turn onward (drop the greeting)
+  const baseHistory = firstUserIdx === -1
+    ? []
+    : allButLast.slice(firstUserIdx).map(m => ({
+        role:  m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
 
-  // Prepend PDF context as the very first exchange in history
-  const history = pdfPart && baseHistory.length === 0
-    ? [] // will be in the sendMessage call below
-    : baseHistory;
+  const chat = model.startChat({ history: baseHistory });
 
-  const chat = model.startChat({ history });
-
-  // For the first user message, include the PDF inline so Gemini reads it
+  // Include PDF on the very first user question (history is empty → this is question #1)
   const parts: ({ text: string } | { inlineData: { data: string; mimeType: string } })[] =
-    pdfPart && userMessages.length === 1
+    pdfPart && baseHistory.length === 0
       ? [pdfPart, { text: last.content }]
       : [{ text: last.content }];
 
-  const result = await chat.sendMessage(parts);
-  const reply  = result.response.text();
-
-  return NextResponse.json({ reply });
+  try {
+    const result = await chat.sendMessage(parts);
+    const reply  = result.response.text();
+    return NextResponse.json({ reply });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[competition-chat] Gemini error:", msg);
+    return NextResponse.json(
+      { error: "AI_ERROR", detail: msg.slice(0, 200) },
+      { status: 502 }
+    );
+  }
 }
