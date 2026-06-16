@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp, Loader2, Check, X, Sparkles, Upload, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTranslations } from "next-intl";
 
 type EduLevel  = "PRIMARY" | "SECONDARY" | "YOUTH";
 type Gender    = "MALE" | "FEMALE";
@@ -67,6 +68,7 @@ function ParticipantRow({
   suggestedIc?: string;
   onSaved: (id: string) => void;
 }) {
+  const t = useTranslations("dashboard.incompleteIc");
   const [edit, setEdit] = useState<RowEdit>({
     ic:         p.ic         ?? "",
     gender:     p.gender,
@@ -241,7 +243,7 @@ function ParticipantRow({
         ) : (
           <Button size="sm" disabled={!dirty} onClick={handleSave}
             className="h-6 px-2.5 text-[11px] bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-30">
-            Simpan
+            {t("save")}
           </Button>
         )}
       </td>
@@ -258,6 +260,7 @@ function AiRepairPanel({
   participants: Participant[];
   onSuggestions: (map: Record<string, string>) => void;
 }) {
+  const t = useTranslations("dashboard.incompleteIc");
   const [text,    setText]    = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
@@ -287,14 +290,14 @@ function AiRepairPanel({
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      if (!res.ok) throw new Error(json.error ?? t("extractError"));
       const suggestions: { participantId: string; ic: string }[] = json.suggestions ?? [];
       const map: Record<string, string> = {};
       for (const s of suggestions) map[s.participantId] = s.ic;
       setCount(suggestions.length);
       onSuggestions(map);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal mengekstrak");
+      setError(err instanceof Error ? err.message : t("extractError"));
     } finally {
       setLoading(false);
     }
@@ -304,19 +307,19 @@ function AiRepairPanel({
     <div className="border-t border-amber-200 dark:border-amber-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3 space-y-3">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-violet-500 shrink-0" />
-        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">AI IC Repair</span>
-        <span className="text-[11px] text-zinc-400">— tampal teks / CSV atau muat naik fail</span>
+        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">{t("aiPanelTitle")}</span>
+        <span className="text-[11px] text-zinc-400">{t("aiPanelHint")}</span>
       </div>
 
       <div className="flex items-center gap-2">
         <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
         <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px] gap-1.5" onClick={() => fileRef.current?.click()}>
-          <Upload className="h-3 w-3" /> Muat Naik Fail
+          <Upload className="h-3 w-3" /> {t("uploadBtn")}
         </Button>
         {text && (
           <span className="text-[11px] text-zinc-500 flex items-center gap-1">
             <FileText className="h-3 w-3" />
-            {text.length.toLocaleString()} aksara
+            {t("chars", { count: text.length.toLocaleString() })}
           </span>
         )}
       </div>
@@ -324,7 +327,7 @@ function AiRepairPanel({
       <textarea
         value={text}
         onChange={e => setText(e.target.value)}
-        placeholder="Tampal teks, CSV atau senarai nama+IC di sini..."
+        placeholder={t("textPlaceholder")}
         rows={4}
         className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs px-3 py-2 font-mono resize-y focus:outline-none focus:ring-1 focus:ring-violet-400 placeholder:text-zinc-400"
       />
@@ -337,13 +340,13 @@ function AiRepairPanel({
           className="h-7 px-3 text-[11px] bg-violet-600 hover:bg-violet-700 text-white gap-1.5"
         >
           {loading
-            ? <><Loader2 className="h-3 w-3 animate-spin" /> Mengekstrak…</>
-            : <><Sparkles className="h-3 w-3" /> Ekstrak &amp; Padankan IC</>
+            ? <><Loader2 className="h-3 w-3 animate-spin" /> {t("extracting")}</>
+            : <><Sparkles className="h-3 w-3" /> {t("extractBtn")}</>
           }
         </Button>
         {count !== null && (
           <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-            {count > 0 ? `✓ ${count} padanan dijumpai` : "Tiada padanan dijumpai"}
+            {count > 0 ? t("matchesFound", { count }) : t("noMatches")}
           </span>
         )}
         {error && <span className="text-[11px] text-red-500">{error}</span>}
@@ -351,7 +354,7 @@ function AiRepairPanel({
 
       {count !== null && count > 0 && (
         <p className="text-[11px] text-sky-600 dark:text-sky-400">
-          Baris biru = cadangan AI. Latar teal = jantina/gred diperoleh daripada IC. Klik <strong>Simpan</strong> untuk setiap baris.
+          {t("aiHint")}
         </p>
       )}
     </div>
@@ -361,6 +364,7 @@ function AiRepairPanel({
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function IncompleteIcAlert() {
+  const t = useTranslations("dashboard.incompleteIc");
   const [rows,        setRows]        = useState<Participant[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expanded,    setExpanded]    = useState(false);
@@ -395,15 +399,15 @@ export function IncompleteIcAlert() {
         <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-            {rows.length} peserta dengan IC belum dikemaskini
+            {t("title", { count: rows.length })}
             {suggestedCount > 0 && (
               <span className="ml-2 text-[11px] font-normal bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 px-1.5 py-0.5 rounded">
-                {suggestedCount} cadangan AI
+                {t("aiSuggestions", { count: suggestedCount })}
               </span>
             )}
           </p>
           <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-0.5">
-            Nombor IC mengandungi &apos;00000&apos; — sila kemaskini dengan IC sebenar.
+            {t("subtitle")}
           </p>
         </div>
         {expanded
@@ -416,7 +420,9 @@ export function IncompleteIcAlert() {
         <>
           <div className="border-t border-amber-200 dark:border-amber-700 px-4 py-2 flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/10">
             <span className="text-[11px] text-zinc-500">
-              IC yang sah (12 digit) akan auto-isi jantina &amp; gred. Latar <span className="text-sky-600 font-medium">biru</span> = cadangan AI, latar <span className="text-teal-600 font-medium">teal</span> = diperoleh daripada IC.
+              {t("hint")} {" "}
+              <span className="text-sky-600 font-medium">{t("hintBlue")}</span>{" "}{t("hintBlueSuffix")}{" "}
+              <span className="text-teal-600 font-medium">{t("hintTeal")}</span>{" "}{t("hintTealSuffix")}
             </span>
             <button
               type="button"
@@ -424,7 +430,7 @@ export function IncompleteIcAlert() {
               className="ml-4 flex items-center gap-1.5 text-[11px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 shrink-0"
             >
               <Sparkles className="h-3 w-3" />
-              {aiOpen ? "Tutup AI Repair" : "AI Repair"}
+              {aiOpen ? t("aiRepairOpen") : t("aiRepairClosed")}
             </button>
           </div>
 
@@ -436,11 +442,11 @@ export function IncompleteIcAlert() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-amber-100/70 dark:bg-amber-900/30">
-                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">Nama</th>
-                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">No. IC</th>
-                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">Gred</th>
-                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">Jantina</th>
-                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">Bangsa</th>
+                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{t("colName")}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{t("colIc")}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{t("colGrade")}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{t("colGender")}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-amber-800 dark:text-amber-300 whitespace-nowrap">{t("colRace")}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { DashboardContingentCard } from "@/components/manager/DashboardContingentCard";
 import { IncompleteIcAlert } from "@/components/manager/IncompleteIcAlert";
+import { MissingEthnicityAlert } from "@/components/manager/MissingEthnicityAlert";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -74,6 +75,7 @@ export default async function ManagerDashboardPage({
       </div>
 
       <IncompleteIcAlert />
+      <MissingEthnicityAlert />
 
       <div className="space-y-3">
         <h2 className="text-sm font-semibold">{t("contingentsHeading")}</h2>

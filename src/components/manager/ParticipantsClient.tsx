@@ -297,6 +297,11 @@ function AddEditDialog({
 
   async function handleSave() {
     if (!form.name.trim()) { setError(t("form.nameRequired")); return; }
+    const icDigits = form.ic.replace(/\D/g, "");
+    if (icDigits && /0{4,}$/.test(icDigits)) {
+      setError("Nombor IC tidak sah — IC tidak boleh berakhir dengan '0000'. Sila masukkan IC sebenar.");
+      return;
+    }
     setSaving(true); setError("");
     try {
       const url    = isEdit ? `/api/v2/manager/participants/${initial!.id}` : "/api/v2/manager/participants";
