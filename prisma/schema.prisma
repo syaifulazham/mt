@@ -328,6 +328,9 @@ enum Locality {
   BANDAR
   SUB_BANDAR
   LUAR_BANDAR
+  PEDALAMAN_1
+  PEDALAMAN_2
+  PEDALAMAN_3
 }
 
 enum ContingentType {

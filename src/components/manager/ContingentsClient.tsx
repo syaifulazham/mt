@@ -35,7 +35,7 @@ type PendingRequest = {
 
 type StateOption = { id: string; name: string };
 
-type Locality = "BANDAR" | "SUB_BANDAR" | "LUAR_BANDAR";
+type Locality = "BANDAR" | "SUB_BANDAR" | "LUAR_BANDAR" | "PEDALAMAN_1" | "PEDALAMAN_2" | "PEDALAMAN_3";
 
 type Contingent = {
   id: string;
@@ -405,11 +405,17 @@ function EditDialog({
               <option value="BANDAR">Bandar</option>
               <option value="SUB_BANDAR">Sub-Bandar</option>
               <option value="LUAR_BANDAR">Luar Bandar</option>
+              <option value="PEDALAMAN_1">Pedalaman 1</option>
+              <option value="PEDALAMAN_2">Pedalaman 2</option>
+              <option value="PEDALAMAN_3">Pedalaman 3</option>
             </select>
             <div className="rounded-md border border-zinc-100 bg-zinc-50 dark:bg-zinc-800/40 dark:border-zinc-700 px-3 py-2 space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
               <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Bandar</span> — {t("localityBandarDesc")}</p>
               <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Sub-Bandar</span> — {t("localitySubBandarDesc")}</p>
               <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Luar Bandar</span> — {t("localityLuarBandarDesc")}</p>
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Pedalaman 1</span> — {t("localityPedalaman1Desc")}</p>
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Pedalaman 2</span> — {t("localityPedalaman2Desc")}</p>
+              <p><span className="font-semibold text-zinc-700 dark:text-zinc-300">Pedalaman 3</span> — {t("localityPedalaman3Desc")}</p>
             </div>
           </div>
 
@@ -1076,6 +1082,9 @@ function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onS
           <option value="BANDAR">Bandar</option>
           <option value="SUB_BANDAR">Sub-Bandar</option>
           <option value="LUAR_BANDAR">Luar Bandar</option>
+          <option value="PEDALAMAN_1">Pedalaman 1</option>
+          <option value="PEDALAMAN_2">Pedalaman 2</option>
+          <option value="PEDALAMAN_3">Pedalaman 3</option>
         </select>
         <Button
           size="sm"

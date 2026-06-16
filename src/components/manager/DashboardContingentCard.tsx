@@ -12,7 +12,7 @@ import { Clock, LogOut, AlertCircle, Loader2, UserCheck, MapPin, Users, Dumbbell
 
 type Peer = { id: string; name: string; email: string };
 
-type Locality = "BANDAR" | "SUB_BANDAR" | "LUAR_BANDAR";
+type Locality = "BANDAR" | "SUB_BANDAR" | "LUAR_BANDAR" | "PEDALAMAN_1" | "PEDALAMAN_2" | "PEDALAMAN_3";
 
 type ContingentLink = {
   contingentId: string;
@@ -221,9 +221,12 @@ function LocalityReminder({ contingentId, onSaved }: { contingentId: string; onS
   }
 
   const LABELS: Record<Locality, string> = {
-    BANDAR: "Bandar",
-    SUB_BANDAR: "Sub-Bandar",
+    BANDAR:      "Bandar",
+    SUB_BANDAR:  "Sub-Bandar",
     LUAR_BANDAR: "Luar Bandar",
+    PEDALAMAN_1: "Pedalaman 1",
+    PEDALAMAN_2: "Pedalaman 2",
+    PEDALAMAN_3: "Pedalaman 3",
   };
 
   return (
