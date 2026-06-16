@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
+  ResponsiveContainer, Cell, PieChart, Pie, Legend,
 } from "recharts";
 import { Loader2, Users, Building2, UserCheck, Trophy, GraduationCap, BookOpen, Briefcase, School } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,13 @@ type ChartRow = { label: string; count: number };
 type CompRow  = { code: string; name: string; count: number };
 type DashData = {
   stats: Stats;
-  charts: { byGender: ChartRow[]; byZone: ChartRow[]; byState: ChartRow[]; byCompetition: CompRow[] };
+  charts: {
+    byGender: ChartRow[];
+    byEthnicity: ChartRow[];
+    byZone: ChartRow[];
+    byState: ChartRow[];
+    byCompetition: CompRow[];
+  };
 };
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -79,6 +85,19 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   );
 }
 
+// ── Pie tooltip ────────────────────────────────────────────────────────────────
+
+function PieTooltip({ active, payload }: { active?: boolean; payload?: {name: string; value: number; payload: {pct: number}}[] }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  return (
+    <div className="bg-white border border-zinc-200 rounded-lg shadow-lg px-3 py-2 text-sm">
+      <p className="font-medium text-zinc-800">{item.name}</p>
+      <p className="text-zinc-500 mt-0.5">{item.value.toLocaleString()} ({item.payload.pct}%)</p>
+    </div>
+  );
+}
+
 // ── Horizontal bar (custom, for competition list) ──────────────────────────────
 
 function HorizBar({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
@@ -117,8 +136,15 @@ export function DashboardClient({ userName }: { userName: string }) {
   if (!data) return null;
 
   const { stats, charts } = data;
-  const maxComp  = Math.max(...charts.byCompetition.map(c => c.count), 1);
-const maxZone  = Math.max(...charts.byZone.map(c => c.count), 1);
+  const maxComp = Math.max(...charts.byCompetition.map(c => c.count), 1);
+  const maxZone = Math.max(...charts.byZone.map(c => c.count), 1);
+
+  const ethTotal = charts.byEthnicity.reduce((s, e) => s + e.count, 0);
+  const ethPie = charts.byEthnicity.map(e => ({
+    name: e.label,
+    value: e.count,
+    pct: ethTotal > 0 ? Math.round((e.count / ethTotal) * 100) : 0,
+  }));
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-7">
@@ -156,7 +182,7 @@ const maxZone  = Math.max(...charts.byZone.map(c => c.count), 1);
             <BarChart data={charts.byGender} barSize={48} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#71717a" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} axisLine={false} tickLine={false} width={36} />
+              <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} axisLine={false} tickLine={false} width={48} />
               <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {charts.byGender.map((_, i) => (
@@ -179,6 +205,46 @@ const maxZone  = Math.max(...charts.byZone.map(c => c.count), 1);
           )}
         </ChartCard>
       </div>
+
+      {/* Chart: ethnicity */}
+      <ChartCard title="Participation by Race / Ethnicity">
+        {ethPie.length === 0 ? (
+          <p className="text-sm text-zinc-400 italic">No ethnicity data.</p>
+        ) : (
+          <div className="flex flex-col lg:flex-row items-center gap-6">
+            <ResponsiveContainer width="100%" height={220} className="lg:max-w-xs shrink-0">
+              <PieChart>
+                <Pie
+                  data={ethPie}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={90}
+                  innerRadius={48}
+                  paddingAngle={2}
+                >
+                  {ethPie.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<PieTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex-1 w-full space-y-0.5">
+              {charts.byEthnicity.map((e, i) => (
+                <HorizBar
+                  key={e.label}
+                  label={e.label}
+                  count={e.count}
+                  max={charts.byEthnicity[0]?.count ?? 1}
+                  color={COLORS[i % COLORS.length]}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </ChartCard>
 
       {/* Chart: state */}
       <ChartCard title="Participation by State">

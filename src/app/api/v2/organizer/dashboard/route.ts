@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
+const ETHNICITY_LABEL: Record<string, string> = {
+  MELAYU:                 "Melayu",
+  CINA:                   "Cina",
+  INDIA:                  "India",
+  ORANG_ASLI_SEMENANJUNG: "Orang Asli",
+  BUMIPUTRA_SABAH:        "Bumiputra Sabah",
+  BUMIPUTRA_SARAWAK:      "Bumiputra Sarawak",
+  LAIN_LAIN:              "Lain-lain",
+};
+
 export async function GET() {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -21,11 +31,9 @@ export async function GET() {
     db.participant.count(),
     db.contingent.count(),
     db.managerProfile.count({ where: { deletedAt: null } }),
-    // Primary school contingents: SCHOOL type linked to a PRIMARY school
     db.contingent.count({
       where: { contingentType: "SCHOOL", school: { level: "PRIMARY" } },
     }),
-    // Secondary school contingents: SCHOOL type linked to a SECONDARY school
     db.contingent.count({
       where: { contingentType: "SCHOOL", school: { level: "SECONDARY" } },
     }),
@@ -35,78 +43,40 @@ export async function GET() {
   ]);
 
   // ── Participation by competition ───────────────────────────────────────────
-  // For each competition fetch its target group school levels,
-  // then count eligible participants (eduLevel matches schoolLevel).
+  // A participant is eligible for a competition when their eduLevel (+ ppki flag)
+  // matches at least one targetGroup.  All breakdown charts (gender, zone, state,
+  // ethnicity) use the SAME eligibility logic so their totals tally with
+  // totalParticipation.
 
-  const competitions = await db.competition.findMany({
-    select: {
-      id: true, code: true, name: true,
-      targetGroups: {
-        include: { targetGroup: { select: { schoolLevel: true, ppki: true } } },
-      },
-    },
-  });
-
-  // All participants with eduLevel + ppki flag for eligibility counting
-  const allParticipants = await db.participant.findMany({
-    select: { id: true, eduLevel: true, ppki: true },
-  });
-
-  const byCompetition = competitions.map(comp => {
-    const count = allParticipants.filter(p =>
-      comp.targetGroups.some(tg => {
-        const tg_ = tg.targetGroup;
-        if (tg_.schoolLevel.toUpperCase() !== p.eduLevel.toUpperCase()) return false;
-        if (tg_.ppki && !p.ppki) return false;
-        return true;
-      })
-    ).length;
-    return { code: comp.code, name: comp.name, count };
-  }).sort((a, b) => b.count - a.count);
-
-  const totalParticipation = byCompetition.reduce((s, c) => s + c.count, 0);
-
-  // ── Participation by gender ────────────────────────────────────────────────
-
-  const genderGroups = await db.participant.groupBy({
-    by: ["gender"],
-    _count: { _all: true },
-  });
-  const byGender = genderGroups.map(g => ({
-    label: g.gender === "MALE" ? "Male" : "Female",
-    count: g._count._all,
-  }));
-
-  // ── Participation by zone & state ─────────────────────────────────────────
-  // For SCHOOL contingents the geographic data lives on the school.
-  // Zones are many-to-many with states via ZoneState; build a stateId→zoneName
-  // lookup so we can resolve the correct zone from the school's stateId.
-
-  // Use TeamMember (one row = one competition participation) so zone/state
-  // charts accumulate competition entries, not unique participant headcounts.
-  const [zoneStates, teamMembersByGeo] = await Promise.all([
-    db.zoneState.findMany({ include: { zone: { select: { name: true } } } }),
-    db.teamMember.findMany({
+  const [competitions, allParticipants, zoneStates] = await Promise.all([
+    db.competition.findMany({
       select: {
-        participant: {
+        id: true, code: true, name: true,
+        targetGroups: {
+          include: { targetGroup: { select: { schoolLevel: true, ppki: true } } },
+        },
+      },
+    }),
+    db.participant.findMany({
+      select: {
+        id: true, eduLevel: true, ppki: true,
+        gender: true, ethnicity: true,
+        contingent: {
           select: {
-            contingent: {
+            contingentType: true,
+            zone:  { select: { name: true } },
+            state: { select: { id: true, name: true } },
+            school: {
               select: {
-                contingentType: true,
                 zone:  { select: { name: true } },
                 state: { select: { id: true, name: true } },
-                school: {
-                  select: {
-                    zone:  { select: { name: true } },
-                    state: { select: { id: true, name: true } },
-                  },
-                },
               },
             },
           },
         },
       },
     }),
+    db.zoneState.findMany({ include: { zone: { select: { name: true } } } }),
   ]);
 
   // stateId → zone name (first zone wins if a state belongs to multiple zones)
@@ -115,32 +85,64 @@ export async function GET() {
     if (!stateToZone[zs.stateId]) stateToZone[zs.stateId] = zs.zone.name;
   }
 
-  const zoneMap:  Record<string, number> = {};
-  const stateMap: Record<string, number> = {};
+  // ── Single eligibility pass — all breakdowns tally with totalParticipation ─
 
-  for (const tm of teamMembersByGeo) {
-    const c = tm.participant.contingent;
-    if (!c) continue;
-    const isSchool = c.contingentType === "SCHOOL";
+  const compCounts:   Record<string, { code: string; name: string; count: number }> = {};
+  const genderMap:    Record<string, number> = {};
+  const zoneMap:      Record<string, number> = {};
+  const stateMap:     Record<string, number> = {};
+  const ethnicityMap: Record<string, number> = {};
 
-    const geoState = isSchool ? c.school?.state : c.state;
-    const geoZone  = isSchool ? c.school?.zone  : c.zone;
+  for (const comp of competitions) {
+    let compCount = 0;
+    for (const p of allParticipants) {
+      const eligible = comp.targetGroups.some(tg => {
+        const tg_ = tg.targetGroup;
+        if (tg_.schoolLevel.toUpperCase() !== p.eduLevel.toUpperCase()) return false;
+        if (tg_.ppki && !p.ppki) return false;
+        return true;
+      });
+      if (!eligible) continue;
 
-    const stateName = geoState?.name ?? "No State";
+      compCount++;
 
-    // Prefer the directly linked zone name; fall back to zone lookup via stateId
-    const zoneName = geoZone?.name
-      ?? (geoState?.id ? stateToZone[geoState.id] : undefined)
-      ?? "No Zone";
+      // Gender
+      const gLabel = p.gender === "MALE" ? "Male" : "Female";
+      genderMap[gLabel] = (genderMap[gLabel] ?? 0) + 1;
 
-    zoneMap[zoneName]   = (zoneMap[zoneName]   ?? 0) + 1;
-    stateMap[stateName] = (stateMap[stateName] ?? 0) + 1;
+      // Ethnicity
+      const ethKey   = p.ethnicity ?? "LAIN_LAIN";
+      const ethLabel = ETHNICITY_LABEL[ethKey] ?? ethKey;
+      ethnicityMap[ethLabel] = (ethnicityMap[ethLabel] ?? 0) + 1;
+
+      // Zone / State
+      const c = p.contingent;
+      if (c) {
+        const isSchool  = c.contingentType === "SCHOOL";
+        const geoState  = isSchool ? c.school?.state : c.state;
+        const geoZone   = isSchool ? c.school?.zone  : c.zone;
+        const stateName = geoState?.name ?? "No State";
+        const zoneName  = geoZone?.name
+          ?? (geoState?.id ? stateToZone[geoState.id] : undefined)
+          ?? "No Zone";
+        zoneMap[zoneName]   = (zoneMap[zoneName]   ?? 0) + 1;
+        stateMap[stateName] = (stateMap[stateName] ?? 0) + 1;
+      }
+    }
+    compCounts[comp.id] = { code: comp.code, name: comp.name, count: compCount };
   }
 
+  const byCompetition = Object.values(compCounts).sort((a, b) => b.count - a.count);
+  const totalParticipation = byCompetition.reduce((s, c) => s + c.count, 0);
+
+  const byGender = Object.entries(genderMap)
+    .map(([label, count]) => ({ label, count }));
+  const byEthnicity = Object.entries(ethnicityMap)
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
   const byZone = Object.entries(zoneMap)
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
-
   const byState = Object.entries(stateMap)
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
@@ -157,6 +159,6 @@ export async function GET() {
       independentContingents,
       internationalContingents,
     },
-    charts: { byGender, byZone, byState, byCompetition },
+    charts: { byGender, byEthnicity, byZone, byState, byCompetition },
   });
 }
