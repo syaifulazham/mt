@@ -92,9 +92,8 @@ function ParticipantRow({
   }, []);
 
   // Pre-fill from AI suggestion
-  useEffect(() => {
-    if (suggestedIc) applyIc(suggestedIc);
-  }, [suggestedIc, applyIc]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (suggestedIc) applyIc(suggestedIc); }, [suggestedIc, applyIc]);
 
   const gradeOpts = GRADE_OPTIONS[p.eduLevel] ?? [];
   const dirty =
