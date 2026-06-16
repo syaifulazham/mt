@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { X, FileText, ExternalLink, Send, Trash2, User, Users, CheckCircle2, ChevronLeft } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -143,8 +145,18 @@ function MiniChat({ comp }: { comp: Competition }) {
                   <RimauSprite pose={msg.pose ?? 0} scale={AVATAR_SCALE} />
                 </div>
               </div>
-              <div className="max-w-[85%] rounded-2xl rounded-tl-sm px-3 py-2 text-xs bg-zinc-800 text-zinc-100 shadow-sm whitespace-pre-wrap">
-                {msg.content}
+              <div className="max-w-[85%] rounded-2xl rounded-tl-sm px-3 py-2 text-xs bg-zinc-800 text-zinc-100 shadow-sm prose prose-invert prose-xs max-w-none
+                [&_p]:mb-1.5 [&_p:last-child]:mb-0
+                [&_ul]:my-1 [&_ul]:pl-4 [&_ul]:list-disc
+                [&_ol]:my-1 [&_ol]:pl-4 [&_ol]:list-decimal
+                [&_li]:mb-0.5
+                [&_strong]:font-semibold [&_strong]:text-white
+                [&_h1]:text-sm [&_h1]:font-bold [&_h1]:mt-2 [&_h1]:mb-1
+                [&_h2]:text-xs [&_h2]:font-bold [&_h2]:mt-2 [&_h2]:mb-1
+                [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5
+                [&_code]:bg-zinc-700 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px]
+                [&_hr]:border-zinc-700 [&_hr]:my-2">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
               </div>
             </div>
           )
