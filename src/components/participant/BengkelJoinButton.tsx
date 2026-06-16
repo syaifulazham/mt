@@ -1,14 +1,55 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { BookOpen, CheckCircle2, Loader2, AlertCircle, ExternalLink } from "lucide-react";
 
 type Props = {
   hasAccount: boolean;
-  lmsBaseUrl: string;
 };
 
-export function BengkelJoinButton({ hasAccount, lmsBaseUrl }: Props) {
+// ── Standalone SSO login button (used when account already exists) ────────────
+
+export function BengkelLoginButton() {
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  async function handleLogin() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res  = await fetch("/api/v2/participant/bengkel/signin", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Ralat.");
+      window.open(data.loginUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ralat rangkaian.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={handleLogin}
+        disabled={loading}
+        className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-60 text-sm font-medium px-4 py-2 transition-colors dark:text-zinc-100"
+      >
+        {loading
+          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          : <ExternalLink className="h-3.5 w-3.5" />}
+        Buka Eptim Education LMS
+      </button>
+      {error && (
+        <p className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />{error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function BengkelJoinButton({ hasAccount }: Props) {
   const [loading, setLoading]   = useState(false);
   const [result, setResult]     = useState<{ username: string; enrolled: number } | null>(null);
   const [error, setError]       = useState<string | null>(null);
@@ -44,17 +85,7 @@ export function BengkelJoinButton({ hasAccount, lmsBaseUrl }: Props) {
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           ID Pengguna LMS: <span className="font-mono font-semibold">{result.username}</span>
         </p>
-        {lmsBaseUrl && (
-          <a
-            href={lmsBaseUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 transition-colors"
-          >
-            <BookOpen className="h-4 w-4" />
-            Pergi ke Eptim Education LMS
-          </a>
-        )}
+        <BengkelLoginButton />
       </div>
     );
   }

@@ -2,9 +2,9 @@ import { redirect } from "next/navigation";
 import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
 import { eptimEdu, eptimEduConfigured } from "@/lib/eptimedu";
-import { BengkelJoinButton } from "@/components/participant/BengkelJoinButton";
+import { BengkelJoinButton, BengkelLoginButton } from "@/components/participant/BengkelJoinButton";
 import type { Metadata } from "next";
-import { BookOpen, Info, AlertTriangle, GraduationCap, ExternalLink } from "lucide-react";
+import { BookOpen, Info, AlertTriangle, GraduationCap } from "lucide-react";
 
 export const metadata: Metadata = { title: "Bengkel" };
 
@@ -19,7 +19,6 @@ export default async function BengkelPage() {
   if (!participant) redirect("/participant/sign-in");
 
   const configured = eptimEduConfigured();
-  const lmsBaseUrl = process.env.EPTIMEDU_BASE_URL ?? "";
 
   // Competitions that have an LMS course attached and match the participant
   const lmsCourseComps = configured
@@ -121,17 +120,7 @@ export default async function BengkelPage() {
                 <span className="text-zinc-500 dark:text-zinc-400">ID Pengguna:</span>
                 <span className="font-mono font-semibold dark:text-zinc-100">{lmsUser.username}</span>
               </div>
-              {lmsBaseUrl && (
-                <a
-                  href={lmsBaseUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-sm font-medium px-4 py-2 transition-colors dark:text-zinc-100"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Buka Eptim Education LMS
-                </a>
-              )}
+              <BengkelLoginButton />
             </div>
           ) : (
             <div className="space-y-3">
@@ -147,7 +136,7 @@ export default async function BengkelPage() {
             </div>
           )}
 
-          <BengkelJoinButton hasAccount={!!lmsUser} lmsBaseUrl={lmsBaseUrl} />
+          <BengkelJoinButton hasAccount={!!lmsUser} />
         </div>
       )}
 
