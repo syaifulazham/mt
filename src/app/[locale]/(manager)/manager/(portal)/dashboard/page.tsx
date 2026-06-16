@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { DashboardContingentCard } from "@/components/manager/DashboardContingentCard";
+import { IncompleteIcAlert } from "@/components/manager/IncompleteIcAlert";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -71,6 +72,8 @@ export default async function ManagerDashboardPage({
         <h1 className="text-xl font-bold dark:text-zinc-100">{t("title")}</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{t("subtitle")}</p>
       </div>
+
+      <IncompleteIcAlert />
 
       <div className="space-y-3">
         <h2 className="text-sm font-semibold">{t("contingentsHeading")}</h2>
