@@ -46,26 +46,40 @@ export default async function BengkelPage() {
       })
     : [];
 
-  // Check LMS account + fetch enrollments in parallel
+  // Fetch published course IDs from EptimEdu + check LMS account in parallel
   let lmsUser: { username: string } | null = null;
   let enrolledCourseIds = new Set<string>();
+  let publishedCourseIds = new Set<string>();
 
-  if (configured && participant.ic) {
-    const icDigits = participant.ic.replace(/\D/g, "");
-    try {
-      const check = await eptimEdu.userExists(icDigits);
-      if (check?.exists) {
-        lmsUser = { username: icDigits };
-        // Fetch actual enrollments so we can show accurate status
-        const enrolResult = await eptimEdu.getUserEnrolments(icDigits).catch(() => ({ enrolments: [] }));
-        enrolledCourseIds = new Set(
-          (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
-        );
+  if (configured) {
+    // Always fetch the published course list (no auth needed beyond API key)
+    const coursesResult = await eptimEdu.courses().catch(() => ({ courses: [] }));
+    for (const c of coursesResult.courses ?? []) {
+      if (c.status === "published") publishedCourseIds.add(c.id);
+    }
+
+    if (participant.ic) {
+      const icDigits = participant.ic.replace(/\D/g, "");
+      try {
+        const check = await eptimEdu.userExists(icDigits);
+        if (check?.exists) {
+          lmsUser = { username: icDigits };
+          // Fetch actual enrollments so we can show accurate status
+          const enrolResult = await eptimEdu.getUserEnrolments(icDigits).catch(() => ({ enrolments: [] }));
+          enrolledCourseIds = new Set(
+            (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
+          );
+        }
+      } catch {
+        // 404 or network error = no account, silently ignored
       }
-    } catch {
-      // 404 or network error = no account, silently ignored
     }
   }
+
+  // Only show courses that are published in EptimEdu
+  const visibleComps = lmsCourseComps.filter(
+    c => c.eptimEduCourseId && publishedCourseIds.has(c.eptimEduCourseId)
+  );
 
   const hasIc = !!participant.ic;
 
@@ -129,7 +143,7 @@ export default async function BengkelPage() {
                 <span className="text-zinc-500 dark:text-zinc-400">ID Pengguna:</span>
                 <span className="font-mono font-semibold dark:text-zinc-100">{lmsUser.username}</span>
               </div>
-              <BengkelLoginButton pendingCourses={lmsCourseComps
+              <BengkelLoginButton pendingCourses={visibleComps
                 .filter(c => c.eptimEduCourseId && !enrolledCourseIds.has(c.eptimEduCourseId))
                 .map(c => ({ courseId: c.eptimEduCourseId!, title: c.eptimEduCourseTitle ?? c.name }))} />
             </div>
@@ -152,7 +166,7 @@ export default async function BengkelPage() {
       )}
 
       {/* Available LMS courses */}
-      {configured && lmsCourseComps.length > 0 && (
+      {configured && visibleComps.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold dark:text-zinc-100 flex items-center gap-2">
@@ -161,13 +175,11 @@ export default async function BengkelPage() {
             </h2>
             {lmsUser && (
               <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                {enrolledCourseIds.size > 0
-                  ? `${lmsCourseComps.filter(c => enrolledCourseIds.has(c.eptimEduCourseId!)).length}/${lmsCourseComps.length} didaftar`
-                  : `0/${lmsCourseComps.length} didaftar`}
+                {`${visibleComps.filter(c => enrolledCourseIds.has(c.eptimEduCourseId!)).length}/${visibleComps.length} didaftar`}
               </span>
             )}
           </div>
-          {lmsCourseComps.map((comp) => {
+          {visibleComps.map((comp) => {
             const themeColor = comp.theme?.color ?? "#085782";
             const enrolled   = !!comp.eptimEduCourseId && enrolledCourseIds.has(comp.eptimEduCourseId);
             return (
@@ -204,7 +216,7 @@ export default async function BengkelPage() {
       )}
 
       {/* No LMS courses */}
-      {configured && lmsCourseComps.length === 0 && (
+      {configured && visibleComps.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-14 px-6 text-center">
           <div className="rounded-full bg-zinc-100 dark:bg-zinc-800 p-4">
             <BookOpen className="h-8 w-8 text-zinc-400 dark:text-zinc-500" strokeWidth={1.5} />
