@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { eptimEdu, eptimEduConfigured } from "@/lib/eptimedu";
 import { BengkelJoinButton, BengkelLoginButton } from "@/components/participant/BengkelJoinButton";
 import type { Metadata } from "next";
-import { BookOpen, Info, AlertTriangle, GraduationCap } from "lucide-react";
+import { BookOpen, Info, AlertTriangle, GraduationCap, CheckCircle2, Clock } from "lucide-react";
 
 export const metadata: Metadata = { title: "Bengkel" };
 
@@ -46,13 +46,22 @@ export default async function BengkelPage() {
       })
     : [];
 
-  // Check if participant already has an LMS account
+  // Check LMS account + fetch enrollments in parallel
   let lmsUser: { username: string } | null = null;
+  let enrolledCourseIds = new Set<string>();
+
   if (configured && participant.ic) {
     const icDigits = participant.ic.replace(/\D/g, "");
     try {
       const check = await eptimEdu.userExists(icDigits);
-      if (check?.exists) lmsUser = { username: icDigits };
+      if (check?.exists) {
+        lmsUser = { username: icDigits };
+        // Fetch actual enrollments so we can show accurate status
+        const enrolResult = await eptimEdu.getUserEnrolments(icDigits).catch(() => ({ enrolments: [] }));
+        enrolledCourseIds = new Set(
+          (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
+        );
+      }
     } catch {
       // 404 or network error = no account, silently ignored
     }
@@ -143,26 +152,48 @@ export default async function BengkelPage() {
       {/* Available LMS courses */}
       {configured && lmsCourseComps.length > 0 && (
         <div className="space-y-3">
-          <h2 className="font-semibold dark:text-zinc-100 flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-zinc-400" />
-            Kursus Tersedia
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold dark:text-zinc-100 flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-zinc-400" />
+              Kursus Tersedia
+            </h2>
+            {lmsUser && (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                {enrolledCourseIds.size > 0
+                  ? `${lmsCourseComps.filter(c => enrolledCourseIds.has(c.eptimEduCourseId!)).length}/${lmsCourseComps.length} didaftar`
+                  : `0/${lmsCourseComps.length} didaftar`}
+              </span>
+            )}
+          </div>
           {lmsCourseComps.map((comp) => {
             const themeColor = comp.theme?.color ?? "#085782";
+            const enrolled   = !!comp.eptimEduCourseId && enrolledCourseIds.has(comp.eptimEduCourseId);
             return (
               <div
                 key={comp.id}
                 className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex"
               >
                 <div className="w-1.5 shrink-0" style={{ backgroundColor: themeColor }} />
-                <div className="flex-1 px-4 py-3.5 space-y-0.5">
-                  <p className="text-sm font-semibold dark:text-zinc-100">
-                    {comp.eptimEduCourseTitle ?? "Kursus LMS"}
-                  </p>
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                    Pertandingan:{" "}
-                    <span className="font-mono">{comp.code}</span> — {comp.name}
-                  </p>
+                <div className="flex-1 px-4 py-3.5 flex items-center justify-between gap-3">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-sm font-semibold dark:text-zinc-100 truncate">
+                      {comp.eptimEduCourseTitle ?? "Kursus LMS"}
+                    </p>
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                      <span className="font-mono">{comp.code}</span> — {comp.name}
+                    </p>
+                  </div>
+                  {lmsUser && (
+                    enrolled ? (
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 px-2 py-0.5 text-[11px] font-medium">
+                        <CheckCircle2 className="h-3 w-3" /> Didaftar
+                      </span>
+                    ) : (
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-2 py-0.5 text-[11px]">
+                        <Clock className="h-3 w-3" /> Belum daftar
+                      </span>
+                    )
+                  )}
                 </div>
               </div>
             );
