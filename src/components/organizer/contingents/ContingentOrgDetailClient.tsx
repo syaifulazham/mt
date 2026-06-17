@@ -1076,7 +1076,88 @@ function EditParticipantDialog({
   );
 }
 
+// ─── Bulk remove dialog ───────────────────────────────────────────────────────
+
+function BulkRemoveParticipantsDialog({
+  open, contingentId, selectedIds, selectedNames, onClose, onRemoved,
+}: {
+  open: boolean;
+  contingentId: string;
+  selectedIds: string[];
+  selectedNames: string[];
+  onClose: () => void;
+  onRemoved: (deletedIds: string[]) => void;
+}) {
+  const [removing, setRemoving] = useState(false);
+  const [error,    setError]    = useState("");
+
+  async function handleRemove() {
+    setRemoving(true); setError("");
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/participants`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantIds: selectedIds }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Remove failed");
+      onRemoved(selectedIds);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Remove failed");
+      setRemoving(false);
+    }
+  }
+
+  const preview = selectedNames.slice(0, 5);
+  const overflow = selectedNames.length - preview.length;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !removing) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <Trash2 className="h-5 w-5" /> Remove {selectedIds.length} Participant{selectedIds.length !== 1 ? "s" : ""}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 space-y-1">
+              <p className="font-semibold">This action cannot be undone.</p>
+              <p>The following participant{selectedIds.length !== 1 ? "s" : ""} will be permanently removed from this contingent:</p>
+              <ul className="mt-1.5 space-y-0.5 text-xs text-amber-700">
+                {preview.map((name, i) => <li key={i} className="truncate">• {name}</li>)}
+                {overflow > 0 && <li className="text-amber-500">… and {overflow} more</li>}
+              </ul>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={removing}>Cancel</Button>
+          <Button variant="destructive" disabled={removing} onClick={handleRemove} className="gap-1.5">
+            {removing
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Removing…</>
+              : <><Trash2 className="h-4 w-4" /> Remove {selectedIds.length} Participant{selectedIds.length !== 1 ? "s" : ""}</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Participants Tab ─────────────────────────────────────────────────────────
+
+function incompleteIc(p: Participant) {
+  return !p.ic || p.ic.replace(/\D/g, "").length < 12;
+}
 
 function ParticipantsTab({ contingentId }: { contingentId: string }) {
   const [q, setQ]           = useState("");
@@ -1086,6 +1167,8 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
   const [result, setResult] = useState<ParticipantsPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Participant | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(async (q: string, p: number) => {
@@ -1103,16 +1186,50 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
   function handleInput(val: string) {
     setQ(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => { setSearch(val); setPage(1); }, 300);
+    debounceRef.current = setTimeout(() => { setSearch(val); setPage(1); setSelected(new Set()); }, 300);
   }
 
   function handleSaved(updated: Participant) {
     setResult((prev) => prev ? { ...prev, data: prev.data.map((p) => p.id === updated.id ? updated : p) } : prev);
   }
 
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  const pageIds = result?.data.map((p) => p.id) ?? [];
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const somePageSelected = pageIds.some((id) => selected.has(id));
+
+  function toggleSelectAll() {
+    if (allPageSelected) {
+      setSelected((prev) => { const next = new Set(prev); pageIds.forEach((id) => next.delete(id)); return next; });
+    } else {
+      setSelected((prev) => { const next = new Set(prev); pageIds.forEach((id) => next.add(id)); return next; });
+    }
+  }
+
+  function handleBulkRemoved(deletedIds: string[]) {
+    const deleted = new Set(deletedIds);
+    setResult((prev) => prev
+      ? { ...prev, total: prev.total - deletedIds.length, data: prev.data.filter((p) => !deleted.has(p.id)) }
+      : prev
+    );
+    setSelected(new Set());
+    setBulkRemoveOpen(false);
+  }
+
   const totalPages = result ? Math.max(1, Math.ceil(result.total / pageSize)) : 1;
   const rangeStart = (page - 1) * pageSize + 1;
   const rangeEnd   = result ? Math.min(page * pageSize, result.total) : 0;
+
+  const selectedNames = (result?.data ?? [])
+    .filter((p) => selected.has(p.id))
+    .map((p) => p.name);
 
   return (
     <div className="space-y-4">
@@ -1122,9 +1239,26 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
           <Input value={q} onChange={(e) => handleInput(e.target.value)}
             placeholder="Search name, IC, email, class…" className="pl-9" />
         </div>
+
+        {selected.size > 0 ? (
+          <button
+            onClick={() => setBulkRemoveOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 text-sm text-red-700 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Remove selected ({selected.size})
+          </button>
+        ) : null}
+
         <span className="text-sm text-zinc-400 ml-auto">
           {result ? `${result.total.toLocaleString()} participant${result.total !== 1 ? "s" : ""}` : ""}
         </span>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-2 text-xs text-amber-700">
+        <span className="inline-block h-3 w-3 rounded-sm bg-amber-100 border border-amber-300 shrink-0" />
+        Incomplete IC (fewer than 12 digits)
       </div>
 
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
@@ -1132,6 +1266,15 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
           <table className="w-full text-sm">
             <thead className="border-b bg-zinc-50">
               <tr>
+                <th className="pl-4 pr-2 py-2.5 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allPageSelected}
+                    ref={(el) => { if (el) el.indeterminate = somePageSelected && !allPageSelected; }}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-zinc-300 text-zinc-900 cursor-pointer"
+                  />
+                </th>
                 <th className="px-4 py-2.5 text-left font-medium text-zinc-600 w-8">#</th>
                 <th className="px-4 py-2.5 text-left font-medium text-zinc-600">Name</th>
                 <th className="px-4 py-2.5 text-left font-medium text-zinc-600">IC</th>
@@ -1145,36 +1288,64 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
             </thead>
             <tbody className="divide-y">
               {loading && !result ? (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-zinc-400">Loading…</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-zinc-400">Loading…</td></tr>
               ) : !result?.data.length ? (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-zinc-400">No participants found.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-zinc-400">No participants found.</td></tr>
               ) : (
-                result.data.map((p, i) => (
-                  <tr key={p.id} className="hover:bg-zinc-50">
-                    <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">{rangeStart + i}</td>
-                    <td className="px-4 py-2.5">
-                      <p className="font-medium text-zinc-900">{p.name}</p>
-                      {p.email && <p className="text-xs text-zinc-400">{p.email}</p>}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-500 font-mono">{p.ic ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-600">{p.gender}</td>
-                    <td className="px-4 py-2.5 text-xs tabular-nums text-zinc-600">{p.age ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-600">{p.eduLevel}</td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-600">
-                      {[p.classGrade, p.className].filter(Boolean).join(" · ") || "—"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {p.status === "ACTIVE"
-                        ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
-                        : <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-300 bg-zinc-50">{p.status}</Badge>}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <button onClick={() => setEditing(p)} className="text-zinc-400 hover:text-zinc-700 transition-colors">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                result.data.map((p, i) => {
+                  const incomplete = incompleteIc(p);
+                  const isSelected = selected.has(p.id);
+                  return (
+                    <tr
+                      key={p.id}
+                      className={`transition-colors ${
+                        isSelected
+                          ? incomplete ? "bg-amber-100" : "bg-blue-50"
+                          : incomplete ? "bg-amber-50 hover:bg-amber-100" : "hover:bg-zinc-50"
+                      }`}
+                    >
+                      <td className="pl-4 pr-2 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(p.id)}
+                          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">{rangeStart + i}</td>
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-zinc-900">{p.name}</p>
+                        {p.email && <p className="text-xs text-zinc-400">{p.email}</p>}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs">
+                        {p.ic
+                          ? <span className={incomplete ? "text-amber-700 font-semibold" : "text-zinc-500"}>{p.ic}</span>
+                          : <span className="text-amber-600 font-semibold italic">—</span>}
+                        {incomplete && (
+                          <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-100 border border-amber-300 px-1.5 py-0 text-[10px] text-amber-700 font-normal not-italic">
+                            {p.ic ? `${p.ic.replace(/\D/g, "").length}/12` : "missing"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-zinc-600">{p.gender}</td>
+                      <td className="px-4 py-2.5 text-xs tabular-nums text-zinc-600">{p.age ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-xs text-zinc-600">{p.eduLevel}</td>
+                      <td className="px-4 py-2.5 text-xs text-zinc-600">
+                        {[p.classGrade, p.className].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {p.status === "ACTIVE"
+                          ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
+                          : <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-300 bg-zinc-50">{p.status}</Badge>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <button onClick={() => setEditing(p)} className="text-zinc-400 hover:text-zinc-700 transition-colors">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1201,6 +1372,15 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
         key={editing?.id ?? "none"}
         contingentId={contingentId} participant={editing}
         open={!!editing} onClose={() => setEditing(null)} onSaved={handleSaved}
+      />
+
+      <BulkRemoveParticipantsDialog
+        open={bulkRemoveOpen}
+        contingentId={contingentId}
+        selectedIds={[...selected]}
+        selectedNames={selectedNames}
+        onClose={() => setBulkRemoveOpen(false)}
+        onRemoved={handleBulkRemoved}
       />
     </div>
   );

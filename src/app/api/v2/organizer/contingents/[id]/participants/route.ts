@@ -51,3 +51,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   return NextResponse.json({ total, page, pageSize, data });
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+  const ids: string[] = Array.isArray(body.participantIds) ? body.participantIds : [];
+  if (ids.length === 0) return NextResponse.json({ error: "No participant IDs provided" }, { status: 400 });
+
+  const result = await db.participant.deleteMany({
+    where: { id: { in: ids }, contingentId: id },
+  });
+
+  return NextResponse.json({ deleted: result.count });
+}
