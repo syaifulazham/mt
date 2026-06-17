@@ -49,7 +49,7 @@ export default async function BengkelPage() {
   // Fetch published course IDs from EptimEdu + check LMS account in parallel
   let lmsUser: { username: string } | null = null;
   let enrolledCourseIds = new Set<string>();
-  let publishedCourseIds = new Set<string>();
+  const publishedCourseIds = new Set<string>();
 
   if (configured) {
     // Always fetch the published course list (no auth needed beyond API key)
