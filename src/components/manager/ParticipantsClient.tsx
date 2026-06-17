@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import {
   Search, Upload, Download, Plus, Eye, EyeOff, Pencil, Trash2,
-  Loader2, CheckCircle2, AlertCircle, Sparkles,
+  Loader2, CheckCircle2, AlertCircle, AlertTriangle, Sparkles,
   MoreHorizontal, Users, BookOpen, GraduationCap, Zap, Accessibility,
   KeyRound, ShieldOff,
 } from "lucide-react";
@@ -1230,6 +1230,70 @@ function pagerPages(page: number, total: number): (number | "…")[] {
   return pages;
 }
 
+// ─── Delete participant dialog ────────────────────────────────────────────────
+
+function DeleteParticipantDialog({
+  participant, onClose, onDeleted,
+}: {
+  participant: Participant | null;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error,    setError]    = useState("");
+
+  async function handleDelete() {
+    if (!participant) return;
+    setDeleting(true); setError("");
+    try {
+      const res = await fetch(`/api/v2/manager/participants/${participant.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? "Delete failed");
+      }
+      onDeleted();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(false);
+    }
+  }
+
+  if (!participant) return null;
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v && !deleting) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-destructive flex items-center gap-2">
+            <Trash2 className="h-5 w-5" /> Delete Participant
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-3">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              Are you sure you want to delete <span className="font-semibold">{participant.name}</span>? This action cannot be undone.
+            </p>
+          </div>
+          {error && (
+            <p className="text-sm text-red-600 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+            </p>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={deleting}>Cancel</Button>
+          <Button variant="destructive" disabled={deleting} onClick={handleDelete} className="gap-1.5">
+            {deleting
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting…</>
+              : <><Trash2 className="h-4 w-4" /> Delete</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ParticipantsClient({ contingents }: { contingents: Contingent[] }) {
   const t = useTranslations("participants");
   const [tab, setTab]               = useState<EduLevel | "ALL">("ALL");
@@ -1247,6 +1311,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
   const [genPwOpen, setGenPwOpen]   = useState(false);
   const [singleGenTarget, setSingleGenTarget] = useState<Participant | null>(null);
   const [viewing, setViewing]       = useState<Participant | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Participant | null>(null);
 
   // ── Header action menu ──────────────────────────────────────────────────
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -1611,7 +1676,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
                       hasPassword={p.hasPassword}
                       onView={() => setViewing(p)}
                       onEdit={() => setEditing(p)}
-                      onDelete={() => {/* TODO */}}
+                      onDelete={() => setDeleteTarget(p)}
                       onGenPassword={() => setSingleGenTarget(p)}
                     />
                   </div>
@@ -1694,6 +1759,13 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
         onClose={() => setSingleGenTarget(null)}
         onSaved={fetchParticipants}
       />
+      {deleteTarget && (
+        <DeleteParticipantDialog
+          participant={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => { setDeleteTarget(null); fetchParticipants(); }}
+        />
+      )}
 
       {/* ── Bulk delete confirmation dialog ─────────── */}
       <Dialog open={bulkDeleteOpen} onOpenChange={(v) => { if (!bulkDeleting) setBulkDeleteOpen(v); }}>
