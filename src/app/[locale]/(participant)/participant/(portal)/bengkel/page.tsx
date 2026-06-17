@@ -129,7 +129,9 @@ export default async function BengkelPage() {
                 <span className="text-zinc-500 dark:text-zinc-400">ID Pengguna:</span>
                 <span className="font-mono font-semibold dark:text-zinc-100">{lmsUser.username}</span>
               </div>
-              <BengkelLoginButton />
+              <BengkelLoginButton pendingCourses={lmsCourseComps
+                .filter(c => c.eptimEduCourseId && !enrolledCourseIds.has(c.eptimEduCourseId))
+                .map(c => ({ courseId: c.eptimEduCourseId!, title: c.eptimEduCourseTitle ?? c.name }))} />
             </div>
           ) : (
             <div className="space-y-3">
