@@ -7,9 +7,8 @@ export async function POST() {
   const session = await getParticipantSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!eptimEduConfigured()) {
+  if (!eptimEduConfigured())
     return NextResponse.json({ error: "LMS_NOT_CONFIGURED" }, { status: 503 });
-  }
 
   const participant = await db.participant.findUnique({
     where: { id: session.participantId },
@@ -17,32 +16,37 @@ export async function POST() {
   });
   if (!participant) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
-  if (!participant.ic) {
+  if (!participant.ic)
     return NextResponse.json({ error: "NO_IC" }, { status: 422 });
-  }
 
-  const icDigits  = participant.ic.replace(/\D/g, "");
-  const username  = icDigits;
-  const password  = participant.name.trim().slice(0, 2).toLowerCase() + icDigits.slice(0, 6);
+  const icDigits = participant.ic.replace(/\D/g, "");
+  const username = icDigits;
+  const password = participant.name.trim().slice(0, 2).toLowerCase() + icDigits.slice(0, 6);
 
   // Create LMS account if it doesn't exist
   let created = false;
   try {
-    const check = await eptimEdu.userExists(username);
-    if (!check?.exists) {
+    let exists = false;
+    try {
+      const check = await eptimEdu.userExists(username);
+      exists = !!check?.exists;
+    } catch (e: unknown) {
+      // Some LMS implementations return 404 for non-existent users
+      if ((e as { status?: number }).status !== 404) throw e;
+      exists = false;
+    }
+
+    if (!exists) {
       await eptimEdu.createUser({ username, password, name: participant.name });
       created = true;
     }
   } catch (e: unknown) {
-    if ((e as { status?: number }).status === 404) {
-      await eptimEdu.createUser({ username, password, name: participant.name });
-      created = true;
-    } else {
-      throw e;
-    }
+    const msg = e instanceof Error ? e.message : "LMS account creation failed";
+    console.error("[bengkel/join] account error:", msg, { username });
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 
-  // Enroll in all matching competitions' LMS courses
+  // Enroll in competition LMS courses matching the participant's target group
   const competitions = await db.competition.findMany({
     where: {
       eptimEduCourseId: { not: null },
@@ -55,20 +59,24 @@ export async function POST() {
         },
       },
     },
-    select: { eptimEduCourseId: true, name: true },
+    select: { eptimEduCourseId: true },
   });
 
+  const courseIds = [...new Set(competitions.map(c => c.eptimEduCourseId!))];
   let enrolled = 0;
-  for (const comp of competitions) {
-    if (!comp.eptimEduCourseId) continue;
-    try {
-      await eptimEdu.enrol(username, comp.eptimEduCourseId);
-      enrolled++;
-    } catch (e: unknown) {
-      // 409 = already enrolled, ignore
-      if ((e as { status?: number }).status !== 409) throw e;
-    }
-  }
+  await Promise.allSettled(
+    courseIds.map(async courseId => {
+      try {
+        await eptimEdu.enrol(username, courseId);
+        enrolled++;
+      } catch (e: unknown) {
+        // 409 = already enrolled — expected and harmless
+        if ((e as { status?: number }).status !== 409) {
+          console.warn("[bengkel/join] enrol error for course", courseId, e instanceof Error ? e.message : e);
+        }
+      }
+    })
+  );
 
   return NextResponse.json({ username, created, enrolled });
 }
