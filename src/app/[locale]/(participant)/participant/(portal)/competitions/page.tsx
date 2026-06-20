@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import type { Metadata } from "next";
 import { CompetitionsClient } from "@/components/participant/CompetitionsClient";
 
+const droneEnabled = !!process.env.EPTIMDRONE_API_KEY;
+
 export const metadata: Metadata = { title: "Pertandingan" };
 
 export default async function CompetitionsPage() {
@@ -50,11 +52,12 @@ export default async function CompetitionsPage() {
     venue:              comp.venue,
     startDate:          comp.startDate?.toISOString() ?? null,
     endDate:            comp.endDate?.toISOString()   ?? null,
-    eptimEduCourseTitle: comp.eptimEduCourseTitle,
-    hasPpki:            comp.targetGroups.some(tg => tg.targetGroup.ppki),
-    enrolled:           enrolledIds.has(comp.id),
-    theme:              comp.theme,
-    docs:               comp.docs,
+    eptimEduCourseTitle:    comp.eptimEduCourseTitle,
+    thirdPartyIntegration:  droneEnabled ? (comp.thirdPartyIntegration ?? "none") : "none",
+    hasPpki:                comp.targetGroups.some(tg => tg.targetGroup.ppki),
+    enrolled:               enrolledIds.has(comp.id),
+    theme:                  comp.theme,
+    docs:                   comp.docs,
   }));
 
   return (

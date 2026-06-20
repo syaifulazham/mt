@@ -13,6 +13,7 @@ import {
   Users,
   GraduationCap,
   Swords,
+  CalendarDays,
   BookOpen,
   Award,
   Grid3X3,
@@ -157,6 +158,7 @@ export function MobileManagerNav({ hasContingent }: { hasContingent: boolean }) 
   const secondary = [
     { href: "/manager/profile",      icon: User,          label: t("profile"),      color: "bg-violet-500", gated: false },
     { href: "/manager/trainers",     icon: GraduationCap, label: t("trainers"),     color: "bg-teal-500",   gated: true  },
+    { href: "/manager/events",       icon: CalendarDays,  label: t("events"),       color: "bg-sky-500",    gated: true  },
     { href: "/manager/lms",          icon: BookOpen,      label: t("lms"),          color: "bg-amber-500",  gated: true  },
     { href: "/manager/certificates", icon: Award,         label: t("certificates"), color: "bg-pink-500",   gated: true  },
   ];

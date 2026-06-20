@@ -38,6 +38,12 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: "asc" },
       },
+      teamEvents: {
+        include: {
+          event: { select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      },
     },
     orderBy: [{ competitionId: "asc" }, { name: "asc" }],
   });

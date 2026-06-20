@@ -13,8 +13,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const event = await db.event.findUnique({
     where: { id },
     include: {
-      state: { select: { id: true, name: true } },
-      zone:  { select: { id: true, name: true } },
+      state:             { select: { id: true, name: true } },
+      zone:              { select: { id: true, name: true } },
+      prerequisiteEvent: { select: { id: true, name: true, slug: true, status: true } },
       eventCompetitions: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -44,6 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     name, slug, description, scope, stateId, zoneId,
     venue, address, city, latitude, longitude,
     startDate, endDate, registrationStart, registrationEnd, status,
+    prerequisiteEventId,
   } = await req.json();
 
   try {
@@ -66,6 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(registrationStart !== undefined && { registrationStart: registrationStart ? new Date(registrationStart) : null }),
         ...(registrationEnd   !== undefined && { registrationEnd:   registrationEnd   ? new Date(registrationEnd)   : null }),
         ...(status      && { status }),
+        ...(prerequisiteEventId !== undefined && { prerequisiteEventId: prerequisiteEventId || null }),
       },
     });
     return NextResponse.json({ data: event });

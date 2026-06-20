@@ -50,3 +50,5 @@ next-env.d.ts
 .env.production.local
 
 SERVER_SETUP.mddata/
+
+public/uploads/states/

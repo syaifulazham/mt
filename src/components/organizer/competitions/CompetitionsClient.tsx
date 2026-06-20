@@ -31,6 +31,7 @@ type CompetitionDetail = CompetitionListItem & {
   maxParticipantsPerContingent: number; maxTotalParticipants: number;
   eptimEduCourseId: string | null;
   eptimEduCourseTitle: string | null;
+  thirdPartyIntegration: string | null;
   eventCompetitions: LinkedEventRow[];
   docs: CompetitionDoc[];
   _count: { teams: number };
@@ -622,9 +623,96 @@ function LinkedEventsSection({ competition }: { competition: CompetitionDetail }
   );
 }
 
+// ── Third-party integrations section ─────────────────────────────────────────
+
+type AvailableIntegrations = { drone: boolean; fc1: boolean };
+
+const INTEGRATIONS = [
+  { value: "none",       label: "None",        desc: "No third-party integration",              key: null          },
+  { value: "eptim-drone", label: "Eptim Drone", desc: "Integrate with Eptim Drone platform",     key: "drone"       },
+  { value: "eptim-fc1",  label: "Eptim FC-1",  desc: "Integrate with Eptim FC-1 platform",      key: "fc1"         },
+] as const;
+
+function ThirdPartySection({
+  competition, canWrite, availableIntegrations, onSaved,
+}: {
+  competition: CompetitionDetail;
+  canWrite: boolean;
+  availableIntegrations: AvailableIntegrations;
+  onSaved: (u: Partial<CompetitionDetail>) => void;
+}) {
+  const [value,  setValue]  = useState(competition.thirdPartyIntegration ?? "none");
+  const [dirty,  setDirty]  = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err,    setErr]    = useState("");
+
+  async function save() {
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/competitions/${competition.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thirdPartyIntegration: value }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Gagal");
+      onSaved({ thirdPartyIntegration: value });
+      setDirty(false);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal menyimpan."); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <SectionCard title="Third Party Integrations" action={canWrite && <SaveBtn dirty={dirty} saving={saving} onSave={save} />}>
+      <div className="space-y-2">
+        {INTEGRATIONS.map((opt) => {
+          const available = opt.key === null || availableIntegrations[opt.key];
+          const checked   = value === opt.value;
+          return (
+            <label
+              key={opt.value}
+              className={`flex items-start gap-3 rounded-lg border px-4 py-3 transition-colors cursor-pointer ${
+                !available        ? "opacity-40 cursor-not-allowed border-zinc-200 bg-zinc-50" :
+                checked           ? "border-blue-400 bg-blue-50"
+                                  : "border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50"
+              }`}
+            >
+              <input
+                type="radio"
+                name={`integration-${competition.id}`}
+                value={opt.value}
+                checked={checked}
+                disabled={!available || !canWrite}
+                onChange={() => { setValue(opt.value); setDirty(true); }}
+                className="mt-0.5 accent-blue-600"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-zinc-800">{opt.label}</span>
+                  {opt.key && !available && (
+                    <span className="inline-flex items-center rounded-full bg-zinc-100 border border-zinc-200 px-2 py-0 text-[10px] text-zinc-500 font-mono">
+                      {opt.key === "drone" ? "EPTIMDRONE_API_KEY" : "EPTIMFC1_API_KEY"} not set
+                    </span>
+                  )}
+                  {opt.key && available && (
+                    <span className="inline-flex items-center rounded-full bg-green-50 border border-green-200 px-2 py-0 text-[10px] text-green-700">
+                      configured
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-500 mt-0.5">{opt.desc}</p>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+      {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+    </SectionCard>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function CompetitionsClient({ role }: { role: OrganizerRole }) {
+export function CompetitionsClient({ role, availableIntegrations }: { role: OrganizerRole; availableIntegrations: AvailableIntegrations }) {
   const canWrite = ["SUPER_ADMIN", "ADMIN"].includes(role);
 
   const [competitions, setCompetitions] = useState<CompetitionListItem[]>([]);
@@ -1074,8 +1162,9 @@ export function CompetitionsClient({ role }: { role: OrganizerRole }) {
             <BasicInfoSection    competition={selected} canWrite={canWrite} themes={themes}        onSaved={handleSectionSaved} />
             <ParticipationSection competition={selected} canWrite={canWrite}                        onSaved={handleSectionSaved} />
             <TargetGroupsSection competition={selected} canWrite={canWrite} targetGroups={targetGroups} onSaved={handleSectionSaved} />
-            <EptimEduSection     competition={selected} canWrite={canWrite}                        onSaved={handleSectionSaved} />
-            <ConceptPaperSection competition={selected} canWrite={canWrite}                        onDocsChanged={(docs) => handleSectionSaved({ docs })} />
+            <EptimEduSection      competition={selected} canWrite={canWrite}                        onSaved={handleSectionSaved} />
+            <ThirdPartySection    competition={selected} canWrite={canWrite} availableIntegrations={availableIntegrations} onSaved={handleSectionSaved} />
+            <ConceptPaperSection  competition={selected} canWrite={canWrite}                        onDocsChanged={(docs) => handleSectionSaved({ docs })} />
             <LinkedEventsSection competition={selected} />
           </div>
         )}

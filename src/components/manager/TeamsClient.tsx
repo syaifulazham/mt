@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Plus, Pencil, Trash2, Users, Loader2, X, UserPlus, UserMinus,
   ChevronDown, ChevronRight, Trophy, AlertCircle, UserCheck, Link2Off,
-  Mail, Check,
+  Mail, Check, CalendarDays, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +45,18 @@ type TrainerRef = { id: string; name: string; phoneNumber: string | null };
 
 type TeamTrainer = { id: string; trainerId: string; trainer: TrainerRef };
 
+type EventRef = {
+  id: string; name: string; slug: string;
+  status: string; scope: string;
+  startDate: string | null; endDate: string | null;
+  venue?: string | null;
+  description?: string | null;
+};
+
+type TeamEventEntry = { id: string; eventId: string; event: EventRef };
+
+type EligibleEvent = EventRef & { venue: string | null; description: string | null };
+
 type Team = {
   id: string;
   name: string;
@@ -56,6 +68,7 @@ type Team = {
   competition: { id: string; name: string; code: string; maxTeamSize: number; minTeamSize: number; eptimEduCourseId: string | null };
   members: TeamMember[];
   trainers: TeamTrainer[];
+  teamEvents: TeamEventEntry[];
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -645,6 +658,7 @@ function TeamCard({
   onRemoveMember,
   onEditTrainers,
   onUpdated,
+  onJoinEvent,
 }: {
   team: Team;
   onRename: (team: Team) => void;
@@ -653,6 +667,7 @@ function TeamCard({
   onRemoveMember: (team: Team, memberId: string) => void;
   onEditTrainers: (team: Team) => void;
   onUpdated: (team: Team) => void;
+  onJoinEvent: (team: Team) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isFull = team.members.length >= team.competition.maxTeamSize;
@@ -742,7 +757,7 @@ function TeamCard({
       {/* Email row */}
       <TeamEmailRow team={team} onUpdated={onUpdated} />
 
-      {/* Trainer footer — always visible */}
+      {/* Trainer footer */}
       <div className="bg-zinc-50 px-4 py-2.5 flex items-center gap-2 flex-wrap dark:bg-zinc-800/50">
         <UserCheck className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
         {team.trainers.length === 0 ? (
@@ -764,7 +779,171 @@ function TeamCard({
           {team.trainers.length === 0 ? "Assign" : "Edit"}
         </button>
       </div>
+
+      {/* Event footer */}
+      <div className="border-t px-4 py-2.5 flex items-center gap-2 flex-wrap">
+        <CalendarDays className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+        {team.teamEvents.length === 0 ? (
+          <span className="text-xs text-zinc-400 italic">No events joined</span>
+        ) : (
+          team.teamEvents.map((te) => (
+            <span
+              key={te.id}
+              className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100 font-medium"
+            >
+              {te.event.name}
+            </span>
+          ))
+        )}
+        <button
+          className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 hover:underline shrink-0"
+          onClick={() => onJoinEvent(team)}
+        >
+          + Join
+        </button>
+      </div>
     </div>
+  );
+}
+
+// ── Join Event Dialog ─────────────────────────────────────────────────────────
+
+function JoinEventDialog({
+  team,
+  onClose,
+  onJoined,
+}: {
+  team: Team | null;
+  onClose: () => void;
+  onJoined: (updated: TeamEventEntry) => void;
+}) {
+  const [events, setEvents]   = useState<EligibleEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [joining, setJoining] = useState<string | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const loadEvents = useCallback((teamId: string) => {
+    setEvents([]);
+    setError(null);
+    setLoading(true);
+    fetch(`/api/v2/manager/teams/${teamId}/events`)
+      .then(r => r.json())
+      .then(j => setEvents(j.data ?? []))
+      .catch(() => setError("Gagal memuatkan senarai acara"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (team) loadEvents(team.id); }, [team, loadEvents]);
+
+  async function handleJoin(eventId: string) {
+    if (!team) return;
+    setJoining(eventId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v2/manager/teams/${team.id}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      onJoined(j.data as TeamEventEntry);
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal menyertai acara");
+    } finally {
+      setJoining(null);
+    }
+  }
+
+  const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
+    PUBLISHED:  { label: "Published",   cls: "bg-blue-50 text-blue-700 border-blue-100" },
+    REG_OPEN:   { label: "Open",        cls: "bg-green-50 text-green-700 border-green-100" },
+    REG_CLOSED: { label: "Reg. Closed", cls: "bg-orange-50 text-orange-700 border-orange-100" },
+    ONGOING:    { label: "Ongoing",     cls: "bg-purple-50 text-purple-700 border-purple-100" },
+  };
+
+  function fmtDate(d: string | null) {
+    if (!d) return null;
+    return new Date(d).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  return (
+    <Dialog open={!!team} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Sertai Acara</DialogTitle>
+          <DialogDescription>
+            Pilih acara untuk pasukan <span className="font-medium text-foreground">{team?.name}</span>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+          {loading && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            </div>
+          )}
+
+          {!loading && events.length === 0 && !error && (
+            <div className="text-center py-8 text-sm text-zinc-400">
+              Tiada acara tersedia untuk disertai
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-500 py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />{error}
+            </div>
+          )}
+
+          {events.map(ev => {
+            const st = STATUS_LABEL[ev.status] ?? { label: ev.status, cls: "bg-zinc-100 text-zinc-600" };
+            const isJoining = joining === ev.id;
+            return (
+              <div key={ev.id} className="flex items-start gap-3 rounded-lg border p-3 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium truncate">{ev.name}</p>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium shrink-0 ${st.cls}`}>
+                      {st.label}
+                    </span>
+                  </div>
+                  {ev.description && (
+                    <p className="text-[11px] text-zinc-500 mt-0.5 line-clamp-2">{ev.description}</p>
+                  )}
+                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    {(ev.startDate || ev.endDate) && (
+                      <span className="flex items-center gap-1 text-[11px] text-zinc-400">
+                        <CalendarDays className="h-3 w-3" />
+                        {fmtDate(ev.startDate)}{ev.endDate && ev.endDate !== ev.startDate ? ` – ${fmtDate(ev.endDate)}` : ""}
+                      </span>
+                    )}
+                    {ev.venue && (
+                      <span className="flex items-center gap-1 text-[11px] text-zinc-400 truncate">
+                        <MapPin className="h-3 w-3 shrink-0" />{ev.venue}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  size="sm" className="shrink-0 h-7 text-xs"
+                  disabled={!!joining}
+                  onClick={() => handleJoin(ev.id)}
+                >
+                  {isJoining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Join"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Tutup</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -820,11 +999,12 @@ export function TeamsClient({ contingents }: { contingents: Contingent[] }) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [createOpen, setCreateOpen]       = useState(false);
-  const [renaming, setRenaming]           = useState<Team | null>(null);
-  const [deleting, setDeleting]           = useState<Team | null>(null);
-  const [addingMember, setAddingMember]   = useState<Team | null>(null);
+  const [createOpen, setCreateOpen]           = useState(false);
+  const [renaming, setRenaming]               = useState<Team | null>(null);
+  const [deleting, setDeleting]               = useState<Team | null>(null);
+  const [addingMember, setAddingMember]       = useState<Team | null>(null);
   const [editingTrainers, setEditingTrainers] = useState<Team | null>(null);
+  const [joiningEvent, setJoiningEvent]       = useState<Team | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -933,6 +1113,7 @@ export function TeamsClient({ contingents }: { contingents: Contingent[] }) {
                       onRemoveMember={removeMember}
                       onEditTrainers={setEditingTrainers}
                       onUpdated={patchTeam}
+                      onJoinEvent={setJoiningEvent}
                     />
                   ))}
                 </div>
@@ -965,6 +1146,15 @@ export function TeamsClient({ contingents }: { contingents: Contingent[] }) {
         team={editingTrainers}
         onClose={() => setEditingTrainers(null)}
         onUpdated={(updated) => { patchTeam(updated); setEditingTrainers(updated); }}
+      />
+      <JoinEventDialog
+        team={joiningEvent}
+        onClose={() => setJoiningEvent(null)}
+        onJoined={(newEntry) => {
+          if (!joiningEvent) return;
+          patchTeam({ ...joiningEvent, teamEvents: [...joiningEvent.teamEvents, newEntry] });
+          setJoiningEvent(prev => prev ? { ...prev, teamEvents: [...prev.teamEvents, newEntry] } : null);
+        }}
       />
     </div>
   );

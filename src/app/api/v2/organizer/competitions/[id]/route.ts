@@ -40,6 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     maxParticipantsPerContingent, maxTotalParticipants,
     targetGroupIds,
     eptimEduCourseId, eptimEduCourseTitle,
+    thirdPartyIntegration,
   } = await req.json();
 
   try {
@@ -65,8 +66,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(maxTeamSize !== undefined   && { maxTeamSize:                  Number(maxTeamSize)  }),
           ...(maxParticipantsPerContingent !== undefined && { maxParticipantsPerContingent: Number(maxParticipantsPerContingent) }),
           ...(maxTotalParticipants !== undefined         && { maxTotalParticipants:         Number(maxTotalParticipants)         }),
-          ...(eptimEduCourseId    !== undefined && { eptimEduCourseId:    eptimEduCourseId    || null }),
-          ...(eptimEduCourseTitle !== undefined && { eptimEduCourseTitle: eptimEduCourseTitle || null }),
+          ...(eptimEduCourseId       !== undefined && { eptimEduCourseId:    eptimEduCourseId    || null }),
+          ...(eptimEduCourseTitle    !== undefined && { eptimEduCourseTitle: eptimEduCourseTitle || null }),
+          ...(thirdPartyIntegration  !== undefined && { thirdPartyIntegration: thirdPartyIntegration || "none" }),
         },
         include: {
           targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },

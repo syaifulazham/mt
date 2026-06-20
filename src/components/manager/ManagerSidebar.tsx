@@ -11,6 +11,7 @@ import {
   Users,
   GraduationCap,
   Swords,
+  CalendarDays,
   BookOpen,
   Award,
   Lock,
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/manager/participants", icon: Users,         key: "participants", gated: true  },
   { href: "/manager/trainers",     icon: GraduationCap, key: "trainers",     gated: true  },
   { href: "/manager/teams",        icon: Swords,        key: "teams",        gated: true  },
+  { href: "/manager/events",       icon: CalendarDays,  key: "events",       gated: true  },
   { href: "/manager/lms",          icon: BookOpen,      key: "lms",          gated: true  },
   { href: "/manager/certificates", icon: Award,         key: "certificates", gated: true  },
 ] as const;

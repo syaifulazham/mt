@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, FileText, ExternalLink, Send, Trash2, User, Users, CheckCircle2, ChevronLeft } from "lucide-react";
+import { X, FileText, ExternalLink, Send, Trash2, User, Users, CheckCircle2, ChevronLeft, Loader2, AlertTriangle, Plane } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -13,6 +13,7 @@ type Competition = {
   participationType: string;
   venue: string | null; startDate: string | null; endDate: string | null;
   eptimEduCourseTitle: string | null;
+  thirdPartyIntegration: string | null;
   hasPpki: boolean; enrolled: boolean;
   theme: { name: string; color: string | null } | null;
   docs: Doc[];
@@ -216,6 +217,165 @@ function MiniChat({ comp }: { comp: Competition }) {
   );
 }
 
+// ── Eptim Drone Panel ──────────────────────────────────────────────────────────
+
+type DroneStatus = {
+  sectorExists: boolean | null;
+  userExists:   boolean | null;
+  registered:   boolean;
+  contingentId: string;
+  contingentName: string;
+  icDigits: string;
+};
+
+function EptimDronePanel({ comp }: { comp: Competition }) {
+  const [status,  setStatus]  = useState<DroneStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy,    setBusy]    = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/v2/participant/drone/status");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setStatus(json as DroneStatus);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ralat tak dijangka");
+    } finally {
+      setLoading(false);
+    }
+  }, [comp.id]);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, [load]);
+
+  async function handleRegister() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/v2/participant/drone/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competitionId: comp.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Pendaftaran gagal");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSignin() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/v2/participant/drone/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competitionId: comp.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      const { accessToken, appUrl } = json as { accessToken: string; appUrl: string };
+      if (appUrl) {
+        const sep = appUrl.includes("?") ? "&" : "?";
+        window.open(`${appUrl}${sep}access_token=${accessToken}`, "_blank", "noopener,noreferrer");
+      } else {
+        // EPTIMDRONE_APP_URL not configured — copy token to clipboard as fallback
+        await navigator.clipboard.writeText(accessToken).catch(() => {});
+        setError(`EPTIMDRONE_APP_URL not set. Token copied to clipboard: ${accessToken.slice(0, 20)}…`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Log masuk gagal");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-4 my-3 rounded-xl border border-sky-800/40 bg-sky-950/20 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-sky-900/30 border-b border-sky-800/30">
+        <Plane className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+        <span className="text-xs font-semibold text-sky-300">Eptim Drone</span>
+      </div>
+
+      <div className="px-3 py-3">
+        {loading && (
+          <div className="flex items-center gap-2 text-zinc-400 text-xs py-1">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Memeriksa status…
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="flex items-start gap-2 text-xs text-red-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && status && (
+          <div className="space-y-2.5">
+            {/* Status row */}
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="rounded-lg bg-zinc-900 px-2.5 py-2">
+                <p className="text-zinc-500 mb-0.5">Sektor (Kontinjen)</p>
+                <p className={`font-medium ${status.sectorExists ? "text-green-400" : "text-amber-400"}`}>
+                  {status.sectorExists === null ? "—" : status.sectorExists ? "Berdaftar" : "Belum daftar"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-zinc-900 px-2.5 py-2">
+                <p className="text-zinc-500 mb-0.5">Pengguna (IC)</p>
+                <p className={`font-medium ${status.userExists ? "text-green-400" : "text-amber-400"}`}>
+                  {status.userExists === null ? "—" : status.userExists ? "Berdaftar" : "Belum daftar"}
+                </p>
+              </div>
+            </div>
+
+            {/* Action */}
+            {!status.registered && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleRegister}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-sky-700 hover:bg-sky-600 disabled:opacity-50 text-white text-xs font-medium py-2 transition-colors"
+              >
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plane className="h-3.5 w-3.5" />}
+                Daftar ke Eptim Drone
+              </button>
+            )}
+
+            {status.registered && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleSignin}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium py-2 transition-colors"
+              >
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                Log Masuk ke Eptim Drone
+              </button>
+            )}
+
+            {error && (
+              <p className="text-[11px] text-red-400 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3 shrink-0" /> {error}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Competition detail sheet ───────────────────────────────────────────────────
 
 function CompetitionSheet({ comp, onClose }: { comp: Competition; onClose: () => void }) {
@@ -298,6 +458,10 @@ function CompetitionSheet({ comp, onClose }: { comp: Competition; onClose: () =>
 
           {tab === "doc" && (
             <div className="flex flex-col flex-1 min-h-0">
+              {comp.thirdPartyIntegration === "eptim-drone" && (
+                <EptimDronePanel comp={comp} />
+              )}
+
               {comp.docs.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 text-zinc-500 p-8">
                   <FileText className="h-10 w-10 opacity-30" />

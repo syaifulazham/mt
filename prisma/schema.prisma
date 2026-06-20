@@ -380,8 +380,9 @@ model Participant {
   updatedAt   DateTime      @updatedAt
 
   contingent  Contingent    @relation(fields: [contingentId], references: [id], onDelete: Cascade)
-  teamMembers TeamMember[]
-  sessions    ParticipantSession[]
+  teamMembers  TeamMember[]
+  sessions     ParticipantSession[]
+  droneAccesses DroneAccess[]
 
   @@index([contingentId])
   @@map("contestants")
@@ -462,29 +463,33 @@ model Theme {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Event {
-  id                String      @id @default(cuid())
-  name              String
-  slug              String      @unique
-  description       String?
-  scope             EventScope  @default(NATIONAL)
-  stateId           String?
-  zoneId            String?
-  venue             String?
-  address           String?
-  city              String?
-  latitude          Float?
-  longitude         Float?
-  startDate         DateTime?
-  endDate           DateTime?
-  registrationStart DateTime?
-  registrationEnd   DateTime?
-  status            EventStatus @default(DRAFT)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id                  String      @id @default(cuid())
+  name                String
+  slug                String      @unique
+  description         String?
+  scope               EventScope  @default(NATIONAL)
+  stateId             String?
+  zoneId              String?
+  venue               String?
+  address             String?
+  city                String?
+  latitude            Float?
+  longitude           Float?
+  startDate           DateTime?
+  endDate             DateTime?
+  registrationStart   DateTime?
+  registrationEnd     DateTime?
+  status              EventStatus @default(DRAFT)
+  prerequisiteEventId String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
-  state             State?             @relation(fields: [stateId], references: [id])
-  zone              Zone?              @relation(fields: [zoneId], references: [id])
-  eventCompetitions EventCompetition[]
+  state               State?             @relation(fields: [stateId], references: [id])
+  zone                Zone?              @relation(fields: [zoneId], references: [id])
+  prerequisiteEvent   Event?             @relation("EventPrerequisite", fields: [prerequisiteEventId], references: [id])
+  dependentEvents     Event[]            @relation("EventPrerequisite")
+  eventCompetitions   EventCompetition[]
+  teamEvents          TeamEvent[]
 
   @@map("events")
 }
@@ -509,6 +514,7 @@ model Competition {
   judgingType                 JudgingType         @default(PERCENTAGE)
   eptimEduCourseId            String?
   eptimEduCourseTitle         String?
+  thirdPartyIntegration       String?             @default("none")
   createdAt                   DateTime            @default(now())
   updatedAt                   DateTime            @updatedAt
 
@@ -633,6 +639,7 @@ model Team {
   contingent  Contingent  @relation(fields: [contingentId], references: [id])
   members     TeamMember[]
   trainers    TeamTrainer[]
+  teamEvents  TeamEvent[]
 
   @@map("teams")
 }
@@ -808,6 +815,19 @@ model NewsArticle {
   @@map("news_articles")
 }
 
+model TeamEvent {
+  id        String   @id @default(cuid())
+  teamId    String
+  eventId   String
+  createdAt DateTime @default(now())
+
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, eventId])
+  @@map("team_events")
+}
+
 model Announcement {
   id          String    @id @default(cuid())
   title       String
@@ -819,4 +839,20 @@ model Announcement {
   updatedAt   DateTime  @updatedAt
 
   @@map("announcements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THIRD-PARTY INTEGRATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DroneAccess {
+  id            String      @id @default(cuid())
+  participantId String      @unique
+  droneUserId   String
+  dronePassword String
+  createdAt     DateTime    @default(now())
+
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@map("drone_access")
 }

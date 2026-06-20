@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, lazy, Suspense, useRef } from "react"
 import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
-  ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle,
+  ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -29,6 +29,8 @@ type EventListItem = {
   zone:  { id: string; name: string } | null;
 };
 
+type PrerequisiteEvent = { id: string; name: string; slug: string; status: string };
+
 type EventDetail = EventListItem & {
   description: string | null;
   stateId: string | null; zoneId: string | null;
@@ -36,6 +38,8 @@ type EventDetail = EventListItem & {
   venue: string | null; address: string | null; city: string | null;
   latitude: number | null; longitude: number | null;
   registrationStart: string | null; registrationEnd: string | null;
+  prerequisiteEventId: string | null;
+  prerequisiteEvent: PrerequisiteEvent | null;
 };
 
 type StateOption = { id: string; name: string };
@@ -482,6 +486,184 @@ function EptimEduLinkModal({
 }
 
 // ── Competitions section ───────────────────────────────────────────────────────
+
+// ── Prerequisite Event section ────────────────────────────────────────────────
+
+const STATUS_CLS: Record<string, string> = {
+  DRAFT:      "bg-zinc-100 text-zinc-500",
+  PUBLISHED:  "bg-blue-50 text-blue-700",
+  REG_OPEN:   "bg-green-50 text-green-700",
+  REG_CLOSED: "bg-orange-50 text-orange-700",
+  ONGOING:    "bg-purple-50 text-purple-700",
+  COMPLETED:  "bg-zinc-100 text-zinc-400",
+};
+
+function PrerequisitePickerModal({
+  open, excludeId, onClose, onSelect,
+}: {
+  open: boolean; excludeId: string;
+  onClose: () => void;
+  onSelect: (ev: EventListItem) => void;
+}) {
+  const [search,    setSearch]    = useState("");
+  const [results,   setResults]   = useState<EventListItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!open) { setSearch(""); setResults([]); return; }
+    setTimeout(() => inputRef.current?.focus(), 80);
+  }, [open]);
+
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) { setResults([]); return; }
+    const t = setTimeout(() => {
+      setSearching(true);
+      fetch(`/api/v2/organizer/events?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(j => setResults((j.data ?? []).filter((e: EventListItem) => e.id !== excludeId)))
+        .catch(() => {})
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search, excludeId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Pilih Acara Prasyarat</DialogTitle>
+        </DialogHeader>
+
+        {/* Search input */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
+          <input
+            ref={inputRef}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Cari nama acara…"
+            className="w-full h-9 rounded-lg border border-input bg-background pl-9 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-zinc-400" />}
+        </div>
+
+        {/* Results */}
+        <div className="min-h-[160px] max-h-80 overflow-y-auto rounded-lg border divide-y">
+          {!search.trim() && (
+            <div className="flex items-center justify-center h-32 text-sm text-zinc-400">
+              Taip nama acara untuk mencari
+            </div>
+          )}
+          {search.trim() && !searching && results.length === 0 && (
+            <div className="flex items-center justify-center h-32 text-sm text-zinc-400">
+              Tiada acara dijumpai
+            </div>
+          )}
+          {results.map(ev => (
+            <button key={ev.id} type="button"
+              className="w-full text-left px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 transition-colors"
+              onClick={() => { onSelect(ev); onClose(); }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{ev.name}</p>
+                <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{ev.slug}</p>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[ev.status] ?? "bg-zinc-100 text-zinc-500"}`}>
+                {ev.status}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PrerequisiteSection({ event, canWrite, onSaved }: {
+  event: EventDetail; canWrite: boolean;
+  onSaved: (u: Partial<EventDetail>) => void;
+}) {
+  const [selected, setSelected] = useState<PrerequisiteEvent | null>(event.prerequisiteEvent ?? null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [dirty,  setDirty]  = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err,    setErr]    = useState("");
+
+  async function save() {
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prerequisiteEventId: selected?.id ?? null }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved({ prerequisiteEventId: selected?.id ?? null, prerequisiteEvent: selected });
+      setDirty(false);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <>
+      <SectionCard
+        title="Acara Prasyarat"
+        action={canWrite && <SaveBtn dirty={dirty} saving={saving} onSave={save} />}
+      >
+        <p className="text-xs text-zinc-500">
+          Tetapkan acara yang mesti disertai terlebih dahulu sebelum peserta boleh mendaftar ke acara ini.
+        </p>
+
+        {selected ? (
+          <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <GitMerge className="h-4 w-4 text-amber-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{selected.name}</p>
+              <p className="text-[11px] text-zinc-500 font-mono">{selected.slug}</p>
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[selected.status] ?? "bg-zinc-100 text-zinc-500"}`}>
+              {selected.status}
+            </span>
+            {canWrite && (
+              <button type="button"
+                onClick={() => { setSelected(null); setDirty(true); }}
+                className="shrink-0 text-zinc-400 hover:text-red-500 transition-colors"
+                title="Buang prasyarat"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-400 italic">Tiada prasyarat ditetapkan.</p>
+        )}
+
+        {canWrite && (
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setPickerOpen(true)}>
+            <Search className="h-3.5 w-3.5" />
+            {selected ? "Tukar acara prasyarat" : "Pilih acara prasyarat"}
+          </Button>
+        )}
+
+        {err && <p className="text-xs text-red-500">{err}</p>}
+      </SectionCard>
+
+      <PrerequisitePickerModal
+        open={pickerOpen}
+        excludeId={event.id}
+        onClose={() => setPickerOpen(false)}
+        onSelect={ev => { setSelected(ev); setDirty(true); }}
+      />
+    </>
+  );
+}
 
 function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite: boolean }) {
   const [links,   setLinks]   = useState<EventCompLink[]>([]);
@@ -1020,7 +1202,8 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
             </div>
             <InfoSection       event={selected} canWrite={canWrite} states={states} zones={zones} onSaved={handleSectionSaved} />
             <DatesSection      event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
-            <VenueSection      event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
+            <VenueSection        event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
+            <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} />
           </div>
         )}

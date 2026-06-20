@@ -16,6 +16,12 @@ const TEAM_INCLUDE = {
     },
     orderBy: { createdAt: "asc" as const },
   },
+  teamEvents: {
+    include: {
+      event: { select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
 };
 
 async function resolveTeam(userId: string, teamId: string) {
