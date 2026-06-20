@@ -328,8 +328,9 @@ export function ManagerEventsClient({ contingents: _contingents }: Props) {
     }
   }, []);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, []);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function handleRemoveTeam(eventId: string, teamId: string) {
     setEvents((prev) =>

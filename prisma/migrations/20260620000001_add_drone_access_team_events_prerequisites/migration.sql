@@ -28,9 +28,9 @@ CREATE UNIQUE INDEX "drone_access_participantId_key" ON "drone_access"("particip
 -- CreateIndex: TeamEvent unique [teamId, eventId]
 CREATE UNIQUE INDEX "team_events_teamId_eventId_key" ON "team_events"("teamId", "eventId");
 
--- AddForeignKey: DroneAccess → participants
+-- AddForeignKey: DroneAccess → contestants (Participant maps to "contestants")
 ALTER TABLE "drone_access" ADD CONSTRAINT "drone_access_participantId_fkey"
-    FOREIGN KEY ("participantId") REFERENCES "participants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    FOREIGN KEY ("participantId") REFERENCES "contestants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey: TeamEvent → teams
 ALTER TABLE "team_events" ADD CONSTRAINT "team_events_teamId_fkey"
