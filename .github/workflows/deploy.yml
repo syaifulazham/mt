@@ -163,12 +163,16 @@ jobs:
               -t mt:latest .
 
             echo "── Migrating database ──"
-            # Resolve any previously failed migration before re-applying
-            docker run --rm \
-              --network host \
-              --env-file /opt/mt/.env.production \
-              mt-migrator:latest \
-              node_modules/.bin/prisma migrate resolve --rolled-back 20260520000000_add_missing_tables_and_columns 2>/dev/null || true
+            # Resolve any previously failed migrations before re-applying
+            for migration in \
+              20260520000000_add_missing_tables_and_columns \
+              20260620000001_add_drone_access_team_events_prerequisites; do
+              docker run --rm \
+                --network host \
+                --env-file /opt/mt/.env.production \
+                mt-migrator:latest \
+                node_modules/.bin/prisma migrate resolve --rolled-back "$migration" 2>/dev/null || true
+            done
             docker run --rm \
               --network host \
               --env-file /opt/mt/.env.production \
