@@ -81,7 +81,10 @@ export async function POST(req: NextRequest) {
   if (!contingentIds.includes(contingentId))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
-  const competition = await db.competition.findUnique({ where: { id: competitionId } });
+  const competition = await db.competition.findUnique({
+    where: { id: competitionId },
+    select: { id: true, participationType: true },
+  });
   if (!competition) return NextResponse.json({ error: "COMPETITION_NOT_FOUND" }, { status: 404 });
   if (competition.participationType !== "TEAM")
     return NextResponse.json({ error: "NOT_A_TEAM_COMPETITION" }, { status: 400 });
@@ -89,9 +92,18 @@ export async function POST(req: NextRequest) {
   const team = await db.team.create({
     data: { name: name.trim(), competitionId, contingentId },
     include: {
-      competition: { select: { id: true, name: true, code: true, maxTeamSize: true, minTeamSize: true } },
-      members: true,
+      competition: { select: { id: true, name: true, code: true, maxTeamSize: true, minTeamSize: true, eptimEduCourseId: true } },
+      members: {
+        include: {
+          participant: { select: { id: true, name: true, gender: true, eduLevel: true } },
+        },
+      },
       trainers: { include: { trainer: { select: { id: true, name: true, phoneNumber: true } } } },
+      teamEvents: {
+        include: {
+          event: { select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true } },
+        },
+      },
     },
   });
 
