@@ -19,6 +19,9 @@ CREATE TABLE "team_events" (
     CONSTRAINT "team_events_pkey" PRIMARY KEY ("id")
 );
 
+-- AlterTable: Competition — add thirdPartyIntegration (was added via db push, never migrated)
+ALTER TABLE "competitions" ADD COLUMN IF NOT EXISTS "thirdPartyIntegration" TEXT NOT NULL DEFAULT 'none';
+
 -- AlterTable: Event — add prerequisiteEventId self-relation
 ALTER TABLE "events" ADD COLUMN "prerequisiteEventId" TEXT;
 
