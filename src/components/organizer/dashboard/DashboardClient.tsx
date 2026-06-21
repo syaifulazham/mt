@@ -136,7 +136,6 @@ export function DashboardClient({ userName }: { userName: string }) {
   if (!data) return null;
 
   const { stats, charts } = data;
-  const maxComp = Math.max(...charts.byCompetition.map(c => c.count), 1);
   const maxZone = Math.max(...charts.byZone.map(c => c.count), 1);
 
   const ethTotal = charts.byEthnicity.reduce((s, e) => s + e.count, 0);
@@ -267,24 +266,6 @@ export function DashboardClient({ userName }: { userName: string }) {
         )}
       </ChartCard>
 
-      {/* Chart: competition */}
-      <ChartCard title="Participation by Competition">
-        {charts.byCompetition.length === 0 ? (
-          <p className="text-sm text-zinc-400 italic">No competitions found.</p>
-        ) : (
-          <div className="space-y-0.5">
-            {charts.byCompetition.map((c, i) => (
-              <HorizBar
-                key={c.code}
-                label={`${c.code} — ${c.name}`}
-                count={c.count}
-                max={maxComp}
-                color={COLORS[i % COLORS.length]}
-              />
-            ))}
-          </div>
-        )}
-      </ChartCard>
 
     </div>
   );
