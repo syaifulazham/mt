@@ -55,6 +55,6 @@ export async function POST() {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
     console.error("[bengkel/signin POST] eptim-edu error:", msg, { icDigits });
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg }, { status: 422 });
   }
 }

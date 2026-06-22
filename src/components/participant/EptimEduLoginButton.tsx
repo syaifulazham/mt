@@ -13,7 +13,9 @@ export function EptimEduLoginButton() {
     setError("");
     try {
       const res = await fetch("/api/v2/participant/bengkel/signin", { method: "POST" });
-      const json = await res.json();
+      const text = await res.text();
+      let json: { loginUrl?: string; error?: string } = {};
+      try { json = JSON.parse(text); } catch { throw new Error("Ralat sambungan — sila cuba lagi"); }
       if (!res.ok) throw new Error(json.error ?? "Gagal log masuk");
       window.open(json.loginUrl, "_blank", "noopener,noreferrer");
     } catch (e) {
