@@ -12,6 +12,7 @@ import {
   UserCheck,
   Gavel,
   Database,
+  DatabaseBackup,
   LogOut,
   ChevronRight,
   ChevronDown,
@@ -60,6 +61,7 @@ const NAV: NavItem[] = [
   },
   { label: "Smart Chat",     href: "/organizer/smart-chat",     icon: BotMessageSquare },
   { label: "Knowledge Base", href: "/organizer/knowledge-base", icon: BookMarked },
+  { label: "DB Backups",     href: "/organizer/backups",        icon: DatabaseBackup, roles: ["SUPER_ADMIN"] },
 ];
 
 export function Sidebar({ userName, role }: { userName: string; role: OrganizerRole }) {
