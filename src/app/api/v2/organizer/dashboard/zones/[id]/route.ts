@@ -21,14 +21,8 @@ export async function GET(
 
   const { id } = await params;
 
-  const zoneOR = [
-    { zoneId: id },
-    { school: { zoneId: id } },
-  ];
-
-  const [zone, participants, totalContingents, totalManagers,
-    primaryContingents, secondaryContingents, higherContingents,
-    independentContingents, internationalContingents] = await Promise.all([
+  // Resolve zone's state IDs first — contingents use stateId, not zoneId
+  const [zone, zoneStateRows] = await Promise.all([
     db.zone.findUnique({
       where: { id },
       include: {
@@ -37,6 +31,21 @@ export async function GET(
         },
       },
     }),
+    db.zoneState.findMany({ where: { zoneId: id }, select: { stateId: true } }),
+  ]);
+
+  if (!zone) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+  const stateIds = zoneStateRows.map((r) => r.stateId);
+
+  const zoneOR = [
+    { stateId: { in: stateIds } },
+    { school: { stateId: { in: stateIds } } },
+  ];
+
+  const [participants, totalContingents, totalManagers,
+    primaryContingents, secondaryContingents, higherContingents,
+    independentContingents, internationalContingents] = await Promise.all([
     db.participant.findMany({
       where: { contingent: { OR: zoneOR } },
       select: {
@@ -66,8 +75,6 @@ export async function GET(
     db.contingent.count({ where: { OR: zoneOR, contingentType: "INDEPENDENT"   } }),
     db.contingent.count({ where: { OR: zoneOR, contingentType: "INTERNATIONAL" } }),
   ]);
-
-  if (!zone) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   // Build stateId → name map from the zone's states
   const stateIdToName: Record<string, string> = {};
