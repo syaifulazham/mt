@@ -29,8 +29,11 @@ export const eptimEdu = {
   createUser: (data: { username: string; password: string; name?: string; email?: string }) =>
     req("/api/v1/users", { method: "POST", body: JSON.stringify(data) }),
 
-  enrol: (username: string, courseId: string) =>
-    req("/api/v1/enrolments", { method: "POST", body: JSON.stringify({ username, courseId }) }),
+  enrol: (username: string, courseId: string, opts?: { force?: boolean }) =>
+    req("/api/v1/enrolments", {
+      method: "POST",
+      body: JSON.stringify({ username, courseId, ...(opts ?? {}) }),
+    }),
 
   getUserEnrolments: (username: string) =>
     req(`/api/v1/users/${encodeURIComponent(username)}/enrolments`),

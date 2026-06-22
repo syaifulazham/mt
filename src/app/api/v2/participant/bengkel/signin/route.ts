@@ -18,9 +18,11 @@ function emailToUsername(email: string): string {
  * POST { teamId, eventId? }
  *
  * 1. Verify caller is a member of the team.
- * 2. If eventId is given, look up the EventCompetition row to find the
- *    course for this specific event and enrol the team (best-effort).
- * 3. Generate an SSO login URL for the team's EptimEdu account.
+ * 2. Resolve the courseId: EventCompetition.eptimEduCourseId first,
+ *    fall back to Competition.eptimEduCourseId.
+ * 3. Enrol the team's EptimEdu account in that course (force=true to bypass
+ *    invite-only restrictions). HTTP 409 = already enrolled = OK.
+ * 4. Generate and return an SSO login URL.
  */
 export async function POST(req: NextRequest) {
   const session = await getParticipantSession();
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
   const { teamId, eventId } = body;
   if (!teamId) return NextResponse.json({ error: "MISSING_TEAM_ID" }, { status: 400 });
 
-  // Verify membership
+  // Verify membership and load team credentials
   const membership = await db.teamMember.findFirst({
     where: { teamId, participantId: session.participantId },
     include: {
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
 
   const username = emailToUsername(team.email);
 
-  // Resolve course to enrol in (event-specific first, fall back to competition-level)
+  // Resolve courseId: event-specific first, then competition-level fallback
   let courseId: string | null = null;
   if (eventId) {
     const ec = await db.eventCompetition.findUnique({
@@ -73,22 +75,32 @@ export async function POST(req: NextRequest) {
     courseId = team.competition.eptimEduCourseId ?? null;
   }
 
-  // Enrol team in the resolved course (best-effort — ignore "already enrolled")
+  // Enrol team in the course (force=true bypasses invite-only restrictions)
   if (courseId) {
     try {
-      await eptimEdu.enrol(username, courseId);
-    } catch {
-      // Non-fatal — proceed to SSO token
+      await eptimEdu.enrol(username, courseId, { force: true });
+    } catch (e: unknown) {
+      const httpStatus = (e as { status?: number }).status;
+      if (httpStatus === 409) {
+        // 409 = already enrolled — treat as success, proceed
+      } else {
+        const msg = e instanceof Error ? e.message : "EptimEdu enrolment failed";
+        console.error("[bengkel/signin POST] enrol error:", msg, { username, courseId, eventId });
+        return NextResponse.json(
+          { error: `Gagal mendaftar kursus: ${msg}` },
+          { status: 422 },
+        );
+      }
     }
   }
 
   // Generate SSO token
   try {
     const result = await eptimEdu.createSsoToken(username);
-    return NextResponse.json({ loginUrl: result.loginUrl });
+    return NextResponse.json({ loginUrl: result.loginUrl, enrolled: !!courseId });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
-    console.error("[bengkel/signin POST] eptim-edu error:", msg, { username, teamId, eventId });
+    console.error("[bengkel/signin POST] sso error:", msg, { username, teamId, eventId });
     return NextResponse.json({ error: msg }, { status: 422 });
   }
 }
