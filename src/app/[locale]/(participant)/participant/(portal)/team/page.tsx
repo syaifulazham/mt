@@ -197,7 +197,7 @@ export default async function TeamPage() {
               {comp.eptimEduCourseId && (
                 <div className="pt-1">
                   <div className="border-t border-zinc-100 dark:border-zinc-800 mb-3" />
-                  <EptimEduLoginButton />
+                  <EptimEduLoginButton teamId={team.id} />
                 </div>
               )}
             </div>

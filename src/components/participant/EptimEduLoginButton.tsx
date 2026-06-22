@@ -4,7 +4,7 @@ import { useState } from "react";
 import { BookOpen, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function EptimEduLoginButton() {
+export function EptimEduLoginButton({ teamId }: { teamId: string }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
 
@@ -12,7 +12,11 @@ export function EptimEduLoginButton() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/v2/participant/bengkel/signin", { method: "POST" });
+      const res = await fetch("/api/v2/participant/bengkel/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId }),
+      });
       const text = await res.text();
       let json: { loginUrl?: string; error?: string } = {};
       try { json = JSON.parse(text); } catch { throw new Error("Ralat sambungan — sila cuba lagi"); }
