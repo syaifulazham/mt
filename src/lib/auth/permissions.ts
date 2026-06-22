@@ -16,27 +16,23 @@ const PERMISSION_MAP: Record<string, Partial<Record<OrganizerRole, "write" | "re
     SUPER_ADMIN: "write",
     ADMIN: "write",
     OPERATOR: "write",
-    VIEWER: "read",
   },
   "/organizer/competitions": {
     SUPER_ADMIN: "write",
     ADMIN: "write",
     OPERATOR: "write",
-    VIEWER: "read",
   },
   "/organizer/participation": {
     SUPER_ADMIN: "write",
     ADMIN: "write",
     OPERATOR: "write",
     PARTICIPANTS_MANAGER: "write",
-    VIEWER: "read",
   },
   "/organizer/judging": {
     SUPER_ADMIN: "write",
     ADMIN: "write",
     OPERATOR: "write",
     JUDGE_COORDINATOR: "write",
-    VIEWER: "read",
   },
   "/organizer/system": {
     SUPER_ADMIN: "write",
@@ -52,15 +48,28 @@ const PERMISSION_MAP: Record<string, Partial<Record<OrganizerRole, "write" | "re
   },
 };
 
+// Paths a VIEWER may visit in addition to dashboard (utility/auth pages)
+const VIEWER_ALLOWED: string[] = [
+  "/organizer/dashboard",
+  "/organizer/profile",
+  "/organizer/totp",
+  "/organizer/change-password",
+];
+
 export function canAccess(
   role: OrganizerRole,
   pathname: string,
   method = "GET"
 ): boolean {
+  // VIEWER is restricted to dashboard and essential account pages only
+  if (role === "VIEWER") {
+    return VIEWER_ALLOWED.some((p) => pathname.startsWith(p));
+  }
+
   const entry = Object.entries(PERMISSION_MAP).find(([prefix]) =>
     pathname.startsWith(prefix)
   );
-  if (!entry) return true; // Unlisted paths allowed (auth middleware handles session check)
+  if (!entry) return true; // Unlisted paths allowed for non-VIEWER roles
 
   const [, roleMap] = entry;
   const access = roleMap[role];

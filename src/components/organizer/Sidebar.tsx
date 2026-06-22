@@ -90,7 +90,9 @@ export function Sidebar({ userName, role }: { userName: string; role: OrganizerR
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {NAV.filter((item) => !item.roles || item.roles.includes(role)).map((item) => {
+        {NAV
+          .filter((item) => role === "VIEWER" ? item.href === "/organizer/dashboard" : (!item.roles || item.roles.includes(role)))
+          .map((item) => {
           const Icon = item.icon;
 
           // ── Parent with sub-items ───────────────────────────────────────
