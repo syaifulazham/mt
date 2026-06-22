@@ -3,6 +3,7 @@ import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
 import type { Metadata } from "next";
 import { Swords, Users, User2, Phone, MapPin, Calendar } from "lucide-react";
+import { EptimEduLoginButton } from "@/components/participant/EptimEduLoginButton";
 
 export const metadata: Metadata = { title: "Pasukan Saya" };
 
@@ -35,6 +36,7 @@ export default async function TeamPage() {
               venue: true,
               startDate: true,
               endDate: true,
+              eptimEduCourseId: true,
               theme: { select: { name: true, color: true } },
             },
           },
@@ -188,6 +190,14 @@ export default async function TeamPage() {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {/* EptimEdu login — only if competition has a linked course */}
+              {comp.eptimEduCourseId && (
+                <div className="pt-1">
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 mb-3" />
+                  <EptimEduLoginButton />
                 </div>
               )}
             </div>
