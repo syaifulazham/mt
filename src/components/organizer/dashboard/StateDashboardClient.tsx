@@ -269,18 +269,19 @@ export function StateDashboardClient() {
         if (json.data?.length) setSelectedId(json.data[0].id);
       })
       .finally(() => setStatesLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load detail whenever selected state changes
   useEffect(() => {
     if (selectedId === null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDetailLoading(true);
     setDetail(null);
     fetch(`/api/v2/organizer/dashboard/states/${selectedId}`)
       .then(r => r.json())
       .then((json: StateDetail) => setDetail(json))
       .finally(() => setDetailLoading(false));
-  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   return (
     <div className="flex h-full min-h-[70vh]">
