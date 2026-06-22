@@ -26,20 +26,28 @@ export async function GET(
     { school: { stateId: id } },
   ];
 
-  const [state, participants, totalContingents, totalManagers,
+  const [state, competitions, participants, totalContingents, totalManagers,
     primaryContingents, secondaryContingents, higherContingents,
     independentContingents, internationalContingents] = await Promise.all([
     db.state.findUnique({ where: { id } }),
+    db.competition.findMany({
+      select: {
+        id: true,
+        targetGroups: {
+          include: { targetGroup: { select: { schoolLevel: true, ppki: true } } },
+        },
+      },
+    }),
     db.participant.findMany({
       where: { contingent: { OR: stateOR } },
       select: {
+        eduLevel: true,
+        ppki: true,
         gender: true,
         ethnicity: true,
         contingent: {
           select: {
             contingentType: true,
-            stateId: true,
-            schoolId: true,
             school: {
               select: {
                 ppdCode: true,
@@ -68,39 +76,45 @@ export async function GET(
 
   if (!state) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
-  const totalParticipation = participants.length;
-
-  // ── Chart: byGender ─────────────────────────────────────────────────────────
-  const genderMap: Record<string, number> = {};
-  for (const p of participants) {
-    const label = p.gender === "MALE" ? "Male" : "Female";
-    genderMap[label] = (genderMap[label] ?? 0) + 1;
-  }
-  const byGender = Object.entries(genderMap).map(([label, count]) => ({ label, count }));
-
-  // ── Chart: byEthnicity ───────────────────────────────────────────────────────
+  // Count participations (participant × eligible competition) with breakdowns
+  const genderMap:    Record<string, number> = {};
   const ethnicityMap: Record<string, number> = {};
-  for (const p of participants) {
-    const key   = p.ethnicity ?? "LAIN_LAIN";
-    const label = ETHNICITY_LABEL[key] ?? key;
-    ethnicityMap[label] = (ethnicityMap[label] ?? 0) + 1;
+  const ppdMap:       Record<string, number> = {};
+  let totalParticipation = 0;
+
+  for (const comp of competitions) {
+    for (const p of participants) {
+      const eligible = comp.targetGroups.some((tg) => {
+        const t = tg.targetGroup;
+        if (t.schoolLevel.toUpperCase() !== p.eduLevel.toUpperCase()) return false;
+        if (t.ppki && !p.ppki) return false;
+        return true;
+      });
+      if (!eligible) continue;
+
+      totalParticipation++;
+
+      const gLabel = p.gender === "MALE" ? "Male" : "Female";
+      genderMap[gLabel] = (genderMap[gLabel] ?? 0) + 1;
+
+      const ethKey   = p.ethnicity ?? "LAIN_LAIN";
+      const ethLabel = ETHNICITY_LABEL[ethKey] ?? ethKey;
+      ethnicityMap[ethLabel] = (ethnicityMap[ethLabel] ?? 0) + 1;
+
+      if (p.contingent.contingentType === "SCHOOL") {
+        const ppdLabel =
+          p.contingent.school?.district?.name ??
+          p.contingent.school?.ppdCode ??
+          "Tiada PPD";
+        ppdMap[ppdLabel] = (ppdMap[ppdLabel] ?? 0) + 1;
+      }
+    }
   }
+
+  const byGender = Object.entries(genderMap).map(([label, count]) => ({ label, count }));
   const byEthnicity = Object.entries(ethnicityMap)
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
-
-  // ── Chart: byPpd ─────────────────────────────────────────────────────────────
-  // Only school-linked participants contribute to PPD breakdown
-  const ppdMap: Record<string, number> = {};
-  for (const p of participants) {
-    const c = p.contingent;
-    if (c.contingentType !== "SCHOOL") continue;
-    const ppdLabel =
-      c.school?.district?.name ??
-      c.school?.ppdCode ??
-      "Tiada PPD";
-    ppdMap[ppdLabel] = (ppdMap[ppdLabel] ?? 0) + 1;
-  }
   const byPpd = Object.entries(ppdMap)
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
