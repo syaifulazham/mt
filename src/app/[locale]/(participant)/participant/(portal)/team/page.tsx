@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
 import type { Metadata } from "next";
-import { Swords, Users, User2, Phone, MapPin, Calendar } from "lucide-react";
+import { Swords, Users, User2, Phone, MapPin, Calendar, CalendarDays } from "lucide-react";
 import { EptimEduLoginButton } from "@/components/participant/EptimEduLoginButton";
 
 export const metadata: Metadata = { title: "Pasukan Saya" };
@@ -50,6 +50,27 @@ export default async function TeamPage() {
               trainer: { select: { name: true, phoneNumber: true } },
             },
           },
+          teamEvents: {
+            include: {
+              event: {
+                select: {
+                  id: true,
+                  name: true,
+                  startDate: true,
+                  endDate: true,
+                  status: true,
+                  eventCompetitions: {
+                    select: {
+                      competitionId: true,
+                      eptimEduCourseId: true,
+                      eptimEduCourseTitle: true,
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: { createdAt: "asc" },
+          },
         },
       },
     },
@@ -82,8 +103,9 @@ export default async function TeamPage() {
 
       {/* Team cards */}
       {memberships.map(({ team }) => {
-        const comp = team.competition;
-        const themeColor = comp.theme?.color ?? "#085782";
+        const comp        = team.competition;
+        const themeColor  = comp.theme?.color ?? "#085782";
+        const competitionId = team.competitionId;
 
         return (
           <div
@@ -193,11 +215,40 @@ export default async function TeamPage() {
                 </div>
               )}
 
-              {/* EptimEdu login — only if competition has a linked course */}
-              {comp.eptimEduCourseId && (
-                <div className="pt-1">
+              {/* Joined Events with per-event Bengkel MT button */}
+              {team.teamEvents.length > 0 && (
+                <div>
                   <div className="border-t border-zinc-100 dark:border-zinc-800 mb-3" />
-                  <EptimEduLoginButton teamId={team.id} />
+                  <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Acara Disertai
+                  </p>
+                  <div className="space-y-2">
+                    {team.teamEvents.map(({ event }) => {
+                      const ec = event.eventCompetitions.find(
+                        (e) => e.competitionId === competitionId,
+                      );
+                      const courseId = ec?.eptimEduCourseId ?? comp.eptimEduCourseId ?? null;
+                      return (
+                        <div
+                          key={event.id}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700/50 px-3 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium dark:text-zinc-200 truncate">
+                              {event.name}
+                            </p>
+                            <p className="text-xs text-zinc-400">
+                              {formatDateRange(event.startDate, event.endDate)}
+                            </p>
+                          </div>
+                          {courseId && (
+                            <EptimEduLoginButton teamId={team.id} eventId={event.id} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
