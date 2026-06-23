@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, lazy, Suspense, useRef } from "react"
 import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
-  ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge,
+  ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -1187,13 +1187,23 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
                       <p className="text-[10px] text-zinc-400 mt-0.5">{fmtDate(ev.startDate)}</p>
                     )}
                   </div>
-                  {canWrite && !isArchived && (
-                    <button onClick={e => { e.stopPropagation(); setArchiveTarget(ev); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 mr-2 self-center rounded hover:bg-amber-50 shrink-0 transition-opacity"
-                      title="Arkib acara ini">
-                      <Trash2 className="h-3 w-3 text-amber-500" />
-                    </button>
-                  )}
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 mr-1.5 self-center transition-opacity">
+                    <a
+                      href={`/organizer/events/${ev.slug}/manage`}
+                      onClick={e => e.stopPropagation()}
+                      className="p-1 rounded hover:bg-blue-50"
+                      title="Uruskan acara"
+                    >
+                      <Settings className="h-3 w-3 text-blue-400" />
+                    </a>
+                    {canWrite && !isArchived && (
+                      <button onClick={e => { e.stopPropagation(); setArchiveTarget(ev); }}
+                        className="p-1 rounded hover:bg-amber-50"
+                        title="Arkib acara ini">
+                        <Trash2 className="h-3 w-3 text-amber-500" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             }
