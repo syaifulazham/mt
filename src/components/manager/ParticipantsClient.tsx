@@ -529,6 +529,7 @@ type CleanRow = {
   eduLevel: EduLevel; classGrade: string | null; className: string | null;
   email: string | null; phoneNumber: string | null;
   ethnicity: Ethnicity | null; ppki: boolean; contingentId: string;
+  _icShort: boolean;
 };
 
 function parseCsv(text: string): RawRow[] {
@@ -570,25 +571,29 @@ const ETHNICITY_MAP: Record<string, Ethnicity> = {
 
 function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
   return rows.map((r) => {
-    const gender: Gender = normalizeGender(r.gender) ?? "MALE";
-    const ednorm = r.edu_level.toLowerCase().trim();
-    const eduLevel: EduLevel = EDU_MAP[ednorm] ?? "SECONDARY";
+    const csvGender: Gender = normalizeGender(r.gender) ?? "MALE";
+    const digits   = (r.ic ?? "").replace(/\D/g, "");
+    const icShort  = digits.length < 12;
+    const icData   = icShort ? {} : parseIcData(r.ic);
+    const ednorm   = r.edu_level.toLowerCase().trim();
+    const csvEduLevel: EduLevel = EDU_MAP[ednorm] ?? "SECONDARY";
     const ethKey = r.ethnicity.toLowerCase().trim().replace(/\s+/g, "_");
     const ethnicity: Ethnicity | null =
       (ETHNICITY_MAP[ethKey] ?? ETHNICITY_MAP[r.ethnicity.toLowerCase().trim()]) ?? null;
     return {
       name:        r.name || "(no name)",
       ic:          r.ic  || null,
-      gender,
-      age:         r.age ? Number(r.age) : null,
-      eduLevel,
-      classGrade:  r.class_grade  || null,
+      gender:      icData.gender  ?? csvGender,
+      age:         icData.age     ?? (r.age ? Number(r.age) : null),
+      eduLevel:    icData.eduLevel ?? csvEduLevel,
+      classGrade:  icData.classGrade ?? (r.class_grade || null),
       className:   r.class_name   || null,
       email:       r.email        || null,
       phoneNumber: r.phoneNumber  || null,
       ethnicity,
       ppki:        r.ppki.trim().length > 0,
       contingentId,
+      _icShort:    icShort,
     };
   });
 }
@@ -597,7 +602,7 @@ function rawToClean(rows: RawRow[], contingentId: string): CleanRow[] {
 // Preview table (must be top-level to satisfy react-hooks/static-components)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PreviewTable({ rows }: { rows: CleanRow[]; isAi?: boolean }) {
+function PreviewTable({ rows, icDuplicates }: { rows: CleanRow[]; isAi?: boolean; icDuplicates?: Set<string> }) {
   const t = useTranslations("participants");
   const headers = [
     t("bulk.colName"), t("bulk.colIc"), t("bulk.colGender"),
@@ -615,28 +620,43 @@ function PreviewTable({ rows }: { rows: CleanRow[]; isAi?: boolean }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="border-t hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40">
-              <td className="px-3 py-2 font-medium">{row.name}</td>
-              <td className="px-3 py-2 text-zinc-400">{row.ic ?? "–"}</td>
-              <td className="px-3 py-2">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${GENDER_COLOR[row.gender]}`}>
-                  {row.gender}
-                </span>
-              </td>
-              <td className="px-3 py-2">{row.age ?? "–"}</td>
-              <td className="px-3 py-2">{row.eduLevel}</td>
-              <td className="px-3 py-2">{row.classGrade ?? "–"}</td>
-              <td className="px-3 py-2">{row.className ?? "–"}</td>
-              <td className="px-3 py-2 text-zinc-400">{row.email ?? "–"}</td>
-              <td className="px-3 py-2 text-zinc-500">{row.ethnicity ?? "–"}</td>
-              <td className="px-3 py-2 text-center">
-                {row.ppki
-                  ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">✓</span>
-                  : <span className="text-zinc-300">–</span>}
-              </td>
-            </tr>
-          ))}
+          {rows.map((row, i) => {
+            const normIc = (row.ic ?? "").replace(/\D/g, "");
+            const isDup  = normIc.length === 12 && (icDuplicates?.has(normIc) ?? false);
+            const rowBg  = row._icShort
+              ? "border-t bg-red-50 dark:bg-red-950/30"
+              : isDup
+              ? "border-t bg-yellow-50 dark:bg-yellow-950/30"
+              : "border-t hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40";
+            return (
+              <tr key={i} className={rowBg}>
+                <td className="px-3 py-2 font-medium">{row.name}</td>
+                <td className="px-3 py-2">
+                  <span className={row._icShort ? "text-red-600 font-mono" : isDup ? "text-amber-600 font-mono" : "text-zinc-400"}>
+                    {row.ic ?? "–"}
+                  </span>
+                  {row._icShort && <span className="ml-1 text-[9px] bg-red-100 text-red-600 px-1 rounded">short</span>}
+                  {isDup        && <span className="ml-1 text-[9px] bg-yellow-100 text-yellow-700 px-1 rounded">dup</span>}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${GENDER_COLOR[row.gender]}`}>
+                    {row.gender}
+                  </span>
+                </td>
+                <td className="px-3 py-2">{row.age ?? "–"}</td>
+                <td className="px-3 py-2">{row.eduLevel}</td>
+                <td className="px-3 py-2">{row.classGrade ?? "–"}</td>
+                <td className="px-3 py-2">{row.className ?? "–"}</td>
+                <td className="px-3 py-2 text-zinc-400">{row.email ?? "–"}</td>
+                <td className="px-3 py-2 text-zinc-500">{row.ethnicity ?? "–"}</td>
+                <td className="px-3 py-2 text-center">
+                  {row.ppki
+                    ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200">✓</span>
+                    : <span className="text-zinc-300">–</span>}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -670,11 +690,32 @@ function BulkUploadDialog({
   const [importCount, setImportCount] = useState(0);
   const [error, setError]           = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [icDuplicates, setIcDuplicates] = useState<Set<string>>(new Set());
+  const [checkingDups, setCheckingDups] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setStep("upload"); setCsvText(""); setFileName("");
     setRawRows([]); setCleanRows([]); setAiErrors([]); setError("");
+    setIcDuplicates(new Set()); setCheckingDups(false);
+  }
+
+  async function checkIcDuplicates(rows: CleanRow[]) {
+    const ics = rows.map(r => (r.ic ?? "").replace(/\D/g, "")).filter(s => s.length === 12);
+    setIcDuplicates(new Set());
+    if (ics.length === 0) return;
+    setCheckingDups(true);
+    try {
+      const res = await fetch("/api/v2/manager/participants/check-ics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ics }),
+      });
+      const j = await res.json();
+      setIcDuplicates(new Set(j.existing ?? []));
+    } catch { /* non-critical */ } finally {
+      setCheckingDups(false);
+    }
   }
 
   function processFile(file: File) {
@@ -685,8 +726,10 @@ function BulkUploadDialog({
       setCsvText(text);
       const parsed = parseCsv(text);
       setRawRows(parsed);
-      setCleanRows(rawToClean(parsed, contingentId));
+      const clean = rawToClean(parsed, contingentId);
+      setCleanRows(clean);
       setStep("raw");
+      void checkIcDuplicates(clean);
     };
     reader.readAsText(file);
   }
@@ -718,9 +761,14 @@ function BulkUploadDialog({
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? "AI parse failed");
-      setCleanRows(j.data);
+      const aiRows: CleanRow[] = (j.data as CleanRow[]).map(r => ({
+        ...r,
+        _icShort: (r.ic ?? "").replace(/\D/g, "").length < 12,
+      }));
+      setCleanRows(aiRows);
       setAiErrors(j.errors ?? []);
       setStep("ai");
+      void checkIcDuplicates(aiRows);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -729,12 +777,17 @@ function BulkUploadDialog({
   }
 
   async function handleConfirm(rows: CleanRow[]) {
+    const validRows = rows.filter(r => {
+      if (r._icShort) return false;
+      const norm = (r.ic ?? "").replace(/\D/g, "");
+      return !(norm.length === 12 && icDuplicates.has(norm));
+    });
     setConfirming(true); setError("");
     try {
       const res = await fetch("/api/v2/manager/participants/bulk-confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows, contingentId }),
+        body: JSON.stringify({ rows: validRows, contingentId }),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Import failed"); }
       const j = await res.json();
@@ -746,6 +799,14 @@ function BulkUploadDialog({
     } finally {
       setConfirming(false);
     }
+  }
+
+  function validCount(rows: CleanRow[]) {
+    return rows.filter(r => {
+      if (r._icShort) return false;
+      const norm = (r.ic ?? "").replace(/\D/g, "");
+      return !(norm.length === 12 && icDuplicates.has(norm));
+    }).length;
   }
 
   const issueCount = rawRows.filter((r) => r._issues.length > 0).length;
@@ -826,50 +887,106 @@ function BulkUploadDialog({
             </>
           )}
 
-          {step === "raw" && (
-            <>
-              <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
-                issueCount > 0 ? "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400" : "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400"
-              }`}>
-                {issueCount > 0
-                  ? <AlertCircle className="h-4 w-4 shrink-0" />
-                  : <CheckCircle2 className="h-4 w-4 shrink-0" />}
-                <span>
-                  {t("bulk.rowsLoaded", { count: rawRows.length, file: fileName })}
+          {step === "raw" && (() => {
+            const shortCount = cleanRows.filter(r => r._icShort).length;
+            const dupCount   = cleanRows.filter(r => {
+              const norm = (r.ic ?? "").replace(/\D/g, "");
+              return norm.length === 12 && icDuplicates.has(norm);
+            }).length;
+            return (
+              <>
+                <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
+                  issueCount > 0 ? "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400" : "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400"
+                }`}>
                   {issueCount > 0
-                    ? ` ${issueCount !== 1 ? t("bulk.issuesFoundPlural", { count: issueCount }) : t("bulk.issuesFound", { count: issueCount })}`
-                    : ` ${t("bulk.allClean")}`}
-                </span>
-              </div>
-              <PreviewTable rows={cleanRows} />
-              {error && (
-                <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{error}
+                    ? <AlertCircle className="h-4 w-4 shrink-0" />
+                    : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                  <span>
+                    {t("bulk.rowsLoaded", { count: rawRows.length, file: fileName })}
+                    {issueCount > 0
+                      ? ` ${issueCount !== 1 ? t("bulk.issuesFoundPlural", { count: issueCount }) : t("bulk.issuesFound", { count: issueCount })}`
+                      : ` ${t("bulk.allClean")}`}
+                  </span>
                 </div>
-              )}
-            </>
-          )}
+                {checkingDups && (
+                  <div className="flex items-center gap-2 text-xs text-zinc-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking for duplicate ICs…
+                  </div>
+                )}
+                {!checkingDups && (shortCount > 0 || dupCount > 0) && (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {shortCount > 0 && (
+                      <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-50 text-red-700 border border-red-100">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-red-400 shrink-0" />
+                        {shortCount} incomplete IC — will not import
+                      </span>
+                    )}
+                    {dupCount > 0 && (
+                      <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-50 text-yellow-700 border border-yellow-100">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-400 shrink-0" />
+                        {dupCount} duplicate IC — will not import
+                      </span>
+                    )}
+                  </div>
+                )}
+                <PreviewTable rows={cleanRows} icDuplicates={icDuplicates} />
+                {error && (
+                  <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{error}
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
-          {step === "ai" && (
-            <>
-              <div className="flex items-center gap-2 rounded-lg bg-violet-50 p-3 text-sm text-violet-700 dark:bg-violet-950/20 dark:text-violet-400">
-                <Sparkles className="h-4 w-4 shrink-0" />
-                {cleanRows.length !== 1 ? t("bulk.aiCleanedPlural", { count: cleanRows.length }) : t("bulk.aiCleaned", { count: cleanRows.length })}
-              </div>
-              {aiErrors.length > 0 && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-1 dark:bg-amber-950/20 dark:border-amber-800">
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">{t("bulk.excludedTitle")}</p>
-                  {aiErrors.map((e, i) => <p key={i} className="text-xs text-amber-600 dark:text-amber-500">{e}</p>)}
+          {step === "ai" && (() => {
+            const shortCount = cleanRows.filter(r => r._icShort).length;
+            const dupCount   = cleanRows.filter(r => {
+              const norm = (r.ic ?? "").replace(/\D/g, "");
+              return norm.length === 12 && icDuplicates.has(norm);
+            }).length;
+            return (
+              <>
+                <div className="flex items-center gap-2 rounded-lg bg-violet-50 p-3 text-sm text-violet-700 dark:bg-violet-950/20 dark:text-violet-400">
+                  <Sparkles className="h-4 w-4 shrink-0" />
+                  {cleanRows.length !== 1 ? t("bulk.aiCleanedPlural", { count: cleanRows.length }) : t("bulk.aiCleaned", { count: cleanRows.length })}
                 </div>
-              )}
-              <PreviewTable rows={cleanRows} isAi />
-              {error && (
-                <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{error}
-                </div>
-              )}
-            </>
-          )}
+                {aiErrors.length > 0 && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-1 dark:bg-amber-950/20 dark:border-amber-800">
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">{t("bulk.excludedTitle")}</p>
+                    {aiErrors.map((e, i) => <p key={i} className="text-xs text-amber-600 dark:text-amber-500">{e}</p>)}
+                  </div>
+                )}
+                {checkingDups && (
+                  <div className="flex items-center gap-2 text-xs text-zinc-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking for duplicate ICs…
+                  </div>
+                )}
+                {!checkingDups && (shortCount > 0 || dupCount > 0) && (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {shortCount > 0 && (
+                      <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-50 text-red-700 border border-red-100">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-red-400 shrink-0" />
+                        {shortCount} incomplete IC — will not import
+                      </span>
+                    )}
+                    {dupCount > 0 && (
+                      <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-50 text-yellow-700 border border-yellow-100">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-400 shrink-0" />
+                        {dupCount} duplicate IC — will not import
+                      </span>
+                    )}
+                  </div>
+                )}
+                <PreviewTable rows={cleanRows} isAi icDuplicates={icDuplicates} />
+                {error && (
+                  <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{error}
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {step === "done" && (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
@@ -895,10 +1012,10 @@ function BulkUploadDialog({
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("bulk.cleaning")}</>
                   : <><Sparkles className="h-4 w-4 text-violet-500" /> {t("bulk.cleanWithAi")}</>}
               </Button>
-              <Button onClick={() => handleConfirm(cleanRows)} disabled={confirming || cleanRows.length === 0} className="gap-2">
+              <Button onClick={() => handleConfirm(cleanRows)} disabled={confirming || validCount(cleanRows) === 0} className="gap-2">
                 {confirming
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("bulk.importing")}</>
-                  : t("bulk.importAsIs", { count: cleanRows.length })}
+                  : t("bulk.importAsIs", { count: validCount(cleanRows) })}
               </Button>
             </>
           )}
@@ -906,10 +1023,10 @@ function BulkUploadDialog({
           {step === "ai" && (
             <>
               <Button variant="outline" onClick={() => setStep("raw")}>{t("bulk.backBtn")}</Button>
-              <Button onClick={() => handleConfirm(cleanRows)} disabled={confirming || cleanRows.length === 0} className="gap-2">
+              <Button onClick={() => handleConfirm(cleanRows)} disabled={confirming || validCount(cleanRows) === 0} className="gap-2">
                 {confirming
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("bulk.importing")}</>
-                  : t("bulk.importCleaned", { count: cleanRows.length })}
+                  : t("bulk.importCleaned", { count: validCount(cleanRows) })}
               </Button>
             </>
           )}
