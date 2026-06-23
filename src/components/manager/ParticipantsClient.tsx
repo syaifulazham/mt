@@ -754,14 +754,16 @@ function BulkUploadDialog({
   async function handleAiClean() {
     setCleaning(true); setError(""); setAiErrors([]);
     try {
-      const res = await fetch("/api/v2/manager/participants/bulk", {
+      const res  = await fetch("/api/v2/manager/participants/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csvText, contingentId }),
       });
-      const j = await res.json();
+      const text = await res.text();
+      let j: { data?: CleanRow[]; errors?: string[]; error?: string } = {};
+      try { j = JSON.parse(text); } catch { throw new Error("Server error — check console"); }
       if (!res.ok) throw new Error(j.error ?? "AI parse failed");
-      const aiRows: CleanRow[] = (j.data as CleanRow[]).map(r => ({
+      const aiRows: CleanRow[] = ((j.data ?? []) as CleanRow[]).map(r => ({
         ...r,
         _icShort: (r.ic ?? "").replace(/\D/g, "").length < 12,
       }));
