@@ -3,7 +3,9 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// ── GET — list participants whose IC ends with 00000 ───────────────────────────
+// ── GET — list participants with fewer than 12 IC digit characters ─────────────
+// Catches: placeholder ICs ending in 00000, scientific notation from Excel
+// (e.g. "1.80303E+11" has only 8 digit chars), and genuinely short ICs.
 
 export async function GET() {
   const { userId } = await auth();
@@ -18,17 +20,19 @@ export async function GET() {
   const contingentIds = manager.contingentManagers.map(c => c.contingentId);
   if (contingentIds.length === 0) return NextResponse.json({ data: [] });
 
-  const participants = await db.participant.findMany({
-    where: {
-      contingentId: { in: contingentIds },
-      ic: { endsWith: "00000" },
-    },
-    select: {
-      id: true, name: true, ic: true,
-      gender: true, eduLevel: true, classGrade: true, ethnicity: true,
-    },
-    orderBy: [{ classGrade: "asc" }, { name: "asc" }],
-  });
+  // Use raw SQL: flag any IC where the count of digit characters is < 12
+  const participants = await db.$queryRaw<
+    { id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null; ethnicity: string | null }[]
+  >`
+    SELECT id, name, ic, gender, "eduLevel", "classGrade", ethnicity
+    FROM participants
+    WHERE "contingentId" = ANY(${contingentIds}::text[])
+      AND (
+        ic IS NULL
+        OR LENGTH(REGEXP_REPLACE(ic, '[^0-9]', '', 'g')) < 12
+      )
+    ORDER BY "classGrade" ASC, name ASC
+  `;
 
   return NextResponse.json({ data: participants });
 }
