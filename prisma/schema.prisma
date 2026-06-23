@@ -640,6 +640,7 @@ model Team {
   members     TeamMember[]
   trainers    TeamTrainer[]
   teamEvents  TeamEvent[]
+  droneAccess TeamDroneAccess?
 
   @@map("teams")
 }
@@ -855,4 +856,16 @@ model DroneAccess {
   participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@map("drone_access")
+}
+
+model TeamDroneAccess {
+  id            String   @id @default(cuid())
+  teamId        String   @unique
+  droneUserId   String
+  dronePassword String
+  createdAt     DateTime @default(now())
+
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("team_drone_access")
 }
