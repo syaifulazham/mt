@@ -11,14 +11,16 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { searchParams } = req.nextUrl;
-  const q        = searchParams.get("q") ?? "";
-  const status   = searchParams.get("status") ?? undefined;
-  const scope    = searchParams.get("scope") ?? undefined;
-  const page     = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
-  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? String(PAGE_SIZE), 10)));
+  const q         = searchParams.get("q") ?? "";
+  const status    = searchParams.get("status") ?? undefined;
+  const notStatus = searchParams.get("notStatus") ?? undefined;
+  const scope     = searchParams.get("scope") ?? undefined;
+  const page      = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+  const pageSize  = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? String(PAGE_SIZE), 10)));
 
   const where: Prisma.EventWhereInput = {
-    ...(status && { status: status as Prisma.EnumEventStatusFilter }),
+    ...(status    && { status: status    as Prisma.EnumEventStatusFilter }),
+    ...(!status && notStatus && { status: { not: notStatus as Prisma.EnumEventStatusFilter } }),
     ...(scope  && { scope:  scope  as Prisma.EnumEventScopeFilter  }),
     ...(q && {
       OR: [

@@ -81,7 +81,7 @@ const SCOPE_OPTIONS = [
   { value: "ONLINE_OPEN",     label: "Online Open",     needsState: false, needsZone: false },
 ] as const;
 
-const STATUSES = ["DRAFT", "PUBLISHED", "ACTIVE", "COMPLETED", "CANCELLED"] as const;
+const STATUSES = ["DRAFT", "PUBLISHED", "ACTIVE", "COMPLETED", "CANCELLED", "ARCHIVE"] as const;
 
 
 function slugify(s: string) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); }
@@ -946,7 +946,10 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
   const [total,   setTotal]   = useState(0);
   const [page,    setPage]    = useState(1);
   const [q,       setQ]       = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter,  setStatusFilter]  = useState("");
+  const [showArchive,   setShowArchive]   = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<EventListItem | null>(null);
+  const [archiving,     setArchiving]     = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [selected,      setSelected]      = useState<EventDetail | null>(null);
@@ -975,12 +978,13 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
     try {
       const p = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE), q });
       if (statusFilter) p.set("status", statusFilter);
+      else if (!showArchive) p.set("notStatus", "ARCHIVE");
       const res = await fetch(`/api/v2/organizer/events?${p}`);
       const j   = await res.json();
       setEvents(j.data ?? []);
       setTotal(j.total ?? 0);
     } finally { setLoading(false); }
-  }, [page, q, statusFilter]);
+  }, [page, q, statusFilter, showArchive]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
@@ -1017,16 +1021,26 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
     finally { setCreating(false); }
   }
 
-  async function deleteEvent(item: EventListItem) {
-    if (!confirm(`Padam "${item.name}"?`)) return;
-    const res = await fetch(`/api/v2/organizer/events/${item.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      alert(j.error === "HAS_COMPETITIONS" ? "Padam semua pertandingan terlebih dahulu." : "Gagal memadam.");
-      return;
+  async function handleArchive() {
+    if (!archiveTarget) return;
+    setArchiving(true);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${archiveTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ARCHIVE" }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error ?? "Gagal mengarkib.");
+        return;
+      }
+      if (selected?.id === archiveTarget.id) setSelected(null);
+      setArchiveTarget(null);
+      load();
+    } finally {
+      setArchiving(false);
     }
-    if (selected?.id === item.id) setSelected(null);
-    load();
   }
 
   function handleSectionSaved(updated: Partial<EventDetail>) {
@@ -1129,6 +1143,15 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
             <option value="">Semua status</option>
             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showArchive}
+              onChange={e => { setShowArchive(e.target.checked); setPage(1); }}
+              className="h-3 w-3 accent-zinc-500"
+            />
+            <span className="text-[10px] text-zinc-500">Tunjuk arkib</span>
+          </label>
         </div>
 
         <div className="flex-1 overflow-y-auto py-1">
@@ -1136,33 +1159,59 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
             <p className="text-xs text-zinc-400 px-4 py-3">Memuatkan…</p>
           ) : events.length === 0 ? (
             <p className="text-xs text-zinc-400 px-4 py-3">Tiada acara ditemui.</p>
-          ) : events.map(ev => {
-            const isOnline = ev.scope.startsWith("ONLINE");
+          ) : (() => {
+            const active   = events.filter(ev => ev.status !== "ARCHIVE");
+            const archived = events.filter(ev => ev.status === "ARCHIVE");
+
+            function renderRow(ev: EventListItem) {
+              const isOnline    = ev.scope.startsWith("ONLINE");
+              const isArchived  = ev.status === "ARCHIVE";
+              return (
+                <div key={ev.id}
+                  className={cn(
+                    "group flex cursor-pointer border-b last:border-0 transition-colors",
+                    isArchived
+                      ? selected?.id === ev.id ? "bg-zinc-200" : "hover:bg-zinc-100 opacity-60"
+                      : selected?.id === ev.id ? "bg-blue-50" : "hover:bg-zinc-50"
+                  )}
+                  onClick={() => selectEvent(ev)}
+                >
+                  <div className="w-2.5 shrink-0 self-stretch"
+                    style={{ background: isArchived ? "#a1a1aa" : isOnline ? "#7c3aed" : "#0ea5e9" }} />
+                  <div className="flex-1 min-w-0 px-3 py-2.5">
+                    <p className={cn("text-xs font-medium truncate",
+                      isArchived ? "text-zinc-400 line-through" :
+                      selected?.id === ev.id ? "text-blue-700" : "text-zinc-800"
+                    )}>{ev.name}</p>
+                    {ev.startDate && (
+                      <p className="text-[10px] text-zinc-400 mt-0.5">{fmtDate(ev.startDate)}</p>
+                    )}
+                  </div>
+                  {canWrite && !isArchived && (
+                    <button onClick={e => { e.stopPropagation(); setArchiveTarget(ev); }}
+                      className="opacity-0 group-hover:opacity-100 p-1 mr-2 self-center rounded hover:bg-amber-50 shrink-0 transition-opacity"
+                      title="Arkib acara ini">
+                      <Trash2 className="h-3 w-3 text-amber-500" />
+                    </button>
+                  )}
+                </div>
+              );
+            }
+
             return (
-            <div key={ev.id}
-              className={cn(
-                "group flex cursor-pointer border-b last:border-0 transition-colors",
-                selected?.id === ev.id ? "bg-blue-50" : "hover:bg-zinc-50"
-              )}
-              onClick={() => selectEvent(ev)}
-            >
-              <div className="w-2.5 shrink-0 self-stretch"
-                style={{ background: isOnline ? "#7c3aed" : "#0ea5e9" }} />
-              <div className="flex-1 min-w-0 px-3 py-2.5">
-                <p className={cn("text-xs font-medium truncate", selected?.id === ev.id ? "text-blue-700" : "text-zinc-800")}>{ev.name}</p>
-                {ev.startDate && (
-                  <p className="text-[10px] text-zinc-400 mt-0.5">{fmtDate(ev.startDate)}</p>
+              <>
+                {active.map(renderRow)}
+                {archived.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 border-t border-b bg-zinc-100 flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Arkib ({archived.length})</span>
+                    </div>
+                    {archived.map(renderRow)}
+                  </>
                 )}
-              </div>
-              {canWrite && (
-                <button onClick={e => { e.stopPropagation(); deleteEvent(ev); }}
-                  className="opacity-0 group-hover:opacity-100 p-1 mr-2 self-center rounded hover:bg-red-50 shrink-0 transition-opacity">
-                  <Trash2 className="h-3 w-3 text-red-400" />
-                </button>
-              )}
-            </div>
+              </>
             );
-          })}
+          })()}
         </div>
 
         {pages > 1 && (
@@ -1208,6 +1257,24 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
           </div>
         )}
       </main>
+
+      <Dialog open={!!archiveTarget} onOpenChange={v => { if (!v) setArchiveTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Arkib acara ini?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-zinc-600 px-1">
+            <span className="font-medium">{archiveTarget?.name}</span> akan ditetapkan sebagai <span className="font-mono text-xs bg-zinc-100 px-1 rounded">ARCHIVE</span> dan disembunyikan daripada senarai. Ia boleh dipulihkan dengan menukar status semula.
+          </p>
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setArchiveTarget(null)} disabled={archiving}>Batal</Button>
+            <Button size="sm" onClick={handleArchive} disabled={archiving} className="bg-amber-600 hover:bg-amber-500 text-white gap-1.5">
+              {archiving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Ya, Arkib
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

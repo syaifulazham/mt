@@ -605,6 +605,7 @@ enum EventStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  ARCHIVE
 }
 
 enum ParticipationType {
