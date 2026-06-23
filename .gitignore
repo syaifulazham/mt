@@ -49,6 +49,10 @@ next-env.d.ts
 .env.test.local
 .env.production.local
 
-SERVER_SETUP.mddata/
+SERVER_SETUP.md
+data/
+*.db
+*.db-shm
+*.db-wal
 
 public/uploads/states/
