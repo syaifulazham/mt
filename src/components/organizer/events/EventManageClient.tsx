@@ -18,6 +18,7 @@ type Module = {
   color: string;
   bg: string;
   border: string;
+  href?: string;
 };
 
 const MODULES: Module[] = [
@@ -28,6 +29,7 @@ const MODULES: Module[] = [
     color: "text-blue-600",
     bg: "bg-blue-50",
     border: "border-blue-100",
+    href: "preregistration",
   },
   {
     icon: Users,
@@ -115,11 +117,8 @@ export function EventManageClient({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {MODULES.map((mod) => {
           const Icon = mod.icon;
-          return (
-            <div
-              key={mod.title}
-              className={`relative rounded-xl border ${mod.border} bg-white p-5 flex flex-col gap-3 opacity-75`}
-            >
+          const inner = (
+            <>
               <div className={`w-10 h-10 rounded-lg ${mod.bg} flex items-center justify-center`}>
                 <Icon className={`h-5 w-5 ${mod.color}`} />
               </div>
@@ -128,10 +127,33 @@ export function EventManageClient({
                 <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{mod.description}</p>
               </div>
               <div className="absolute top-3 right-3">
-                <span className="text-[9px] font-semibold uppercase tracking-wider bg-zinc-100 text-zinc-400 px-2 py-0.5 rounded-full">
-                  Akan Datang
-                </span>
+                {mod.href ? (
+                  <span className="text-[9px] font-semibold uppercase tracking-wider bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                    Buka
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-semibold uppercase tracking-wider bg-zinc-100 text-zinc-400 px-2 py-0.5 rounded-full">
+                    Akan Datang
+                  </span>
+                )}
               </div>
+            </>
+          );
+
+          return mod.href ? (
+            <Link
+              key={mod.title}
+              href={`/organizer/events/${event.slug}/manage/${mod.href}`}
+              className={`relative rounded-xl border ${mod.border} bg-white p-5 flex flex-col gap-3 hover:shadow-md transition-shadow`}
+            >
+              {inner}
+            </Link>
+          ) : (
+            <div
+              key={mod.title}
+              className={`relative rounded-xl border ${mod.border} bg-white p-5 flex flex-col gap-3 opacity-75`}
+            >
+              {inner}
             </div>
           );
         })}
