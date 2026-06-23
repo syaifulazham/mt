@@ -244,9 +244,14 @@ export default async function TeamPage() {
                               {formatDateRange(event.startDate, event.endDate)}
                             </p>
                           </div>
-                          {courseId && (
-                            <EptimEduLoginButton teamId={team.id} eventId={event.id} />
-                          )}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {courseId && (
+                              <EptimEduLoginButton teamId={team.id} eventId={event.id} />
+                            )}
+                            {comp.thirdPartyIntegration === "eptim-drone" && (
+                              <EptimDroneTeamButton teamId={team.id} />
+                            )}
+                          </div>
                         </div>
                       );
                     })}

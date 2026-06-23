@@ -25,6 +25,7 @@ import {
   Megaphone,
   Map,
   Building2,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
@@ -62,6 +63,7 @@ const NAV: NavItem[] = [
   { label: "Smart Chat",     href: "/organizer/smart-chat",     icon: BotMessageSquare },
   { label: "Knowledge Base", href: "/organizer/knowledge-base", icon: BookMarked },
   { label: "DB Backups",     href: "/organizer/backups",        icon: DatabaseBackup, roles: ["SUPER_ADMIN"] },
+  { label: "Data Watch",     href: "/organizer/data-watch",     icon: ShieldAlert,    roles: ["SUPER_ADMIN", "ADMIN"] },
 ];
 
 export function Sidebar({ userName, role }: { userName: string; role: OrganizerRole }) {
