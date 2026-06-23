@@ -11,7 +11,7 @@ const GRADE_CTE = Prisma.sql`
   WITH ic_clean AS (
     SELECT id, name, ic, "classGrade", "contingentId",
            REGEXP_REPLACE(ic, '[^0-9]', '', 'g') AS ic_digits
-    FROM   participants
+    FROM   contestants
     WHERE  LENGTH(REGEXP_REPLACE(ic, '[^0-9]', '', 'g')) = 12
   ),
   with_age AS (
@@ -43,33 +43,38 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(Number(req.nextUrl.searchParams.get("limit")  ?? 10), 100);
   const offset = Number(req.nextUrl.searchParams.get("offset") ?? 0);
 
-  const [rows, countResult] = await Promise.all([
-    db.$queryRaw<{
-      id: string; name: string; ic: string;
-      classGrade: string | null; age: number; expectedGrade: string;
-      contingentName: string;
-    }[]>`
-      ${GRADE_CTE}
-      SELECT w.id, w.name, w.ic,
-             w."classGrade", w.age::int,
-             w.expected_grade AS "expectedGrade",
-             c.name           AS "contingentName"
-      FROM   with_expected w
-      JOIN   contingents c ON w."contingentId" = c.id
-      WHERE  w.expected_grade IS NOT NULL
-        AND  (w."classGrade" IS DISTINCT FROM w.expected_grade)
-      ORDER  BY w.age ASC, w.name ASC
-      LIMIT  ${Prisma.raw(String(limit))}
-      OFFSET ${Prisma.raw(String(offset))}
-    `,
-    db.$queryRaw<{ count: bigint }[]>`
-      ${GRADE_CTE}
-      SELECT COUNT(*)::bigint AS count
-      FROM   with_expected
-      WHERE  expected_grade IS NOT NULL
-        AND  ("classGrade" IS DISTINCT FROM expected_grade)
-    `,
-  ]);
+  try {
+    const [rows, countResult] = await Promise.all([
+      db.$queryRaw<{
+        id: string; name: string; ic: string;
+        classGrade: string | null; age: number; expectedGrade: string;
+        contingentName: string;
+      }[]>`
+        ${GRADE_CTE}
+        SELECT w.id, w.name, w.ic,
+               w."classGrade", w.age::int,
+               w.expected_grade AS "expectedGrade",
+               c.name           AS "contingentName"
+        FROM   with_expected w
+        JOIN   contingents c ON w."contingentId" = c.id
+        WHERE  w.expected_grade IS NOT NULL
+          AND  (w."classGrade" IS DISTINCT FROM w.expected_grade)
+        ORDER  BY w.age ASC, w.name ASC
+        LIMIT  ${Prisma.raw(String(limit))}
+        OFFSET ${Prisma.raw(String(offset))}
+      `,
+      db.$queryRaw<{ count: bigint }[]>`
+        ${GRADE_CTE}
+        SELECT COUNT(*)::bigint AS count
+        FROM   with_expected
+        WHERE  expected_grade IS NOT NULL
+          AND  ("classGrade" IS DISTINCT FROM expected_grade)
+      `,
+    ]);
 
-  return NextResponse.json({ data: rows, total: Number(countResult[0]?.count ?? 0) });
+    return NextResponse.json({ data: rows, total: Number(countResult[0]?.count ?? 0) });
+  } catch (err) {
+    console.error("[data-watch/wrong-grade]", err);
+    return NextResponse.json({ error: String(err) }, { status: 422 });
+  }
 }

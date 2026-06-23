@@ -10,23 +10,28 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(Number(req.nextUrl.searchParams.get("limit")  ?? 10), 100);
   const offset = Number(req.nextUrl.searchParams.get("offset") ?? 0);
 
-  const [rows, countResult] = await Promise.all([
-    db.$queryRaw<{ id: string; name: string; ic: string | null; contingentName: string }[]>`
-      SELECT p.id, p.name, p.ic, c.name AS "contingentName"
-      FROM participants p
-      JOIN contingents c ON p."contingentId" = c.id
-      WHERE p.ic IS NULL
-         OR LENGTH(REGEXP_REPLACE(p.ic, '[^0-9]', '', 'g')) < 12
-      ORDER BY p."createdAt" DESC
-      LIMIT ${Prisma.raw(String(limit))} OFFSET ${Prisma.raw(String(offset))}
-    `,
-    db.$queryRaw<{ count: bigint }[]>`
-      SELECT COUNT(*)::bigint AS count
-      FROM participants
-      WHERE ic IS NULL
-         OR LENGTH(REGEXP_REPLACE(ic, '[^0-9]', '', 'g')) < 12
-    `,
-  ]);
+  try {
+    const [rows, countResult] = await Promise.all([
+      db.$queryRaw<{ id: string; name: string; ic: string | null; contingentName: string }[]>`
+        SELECT p.id, p.name, p.ic, c.name AS "contingentName"
+        FROM contestants p
+        JOIN contingents c ON p."contingentId" = c.id
+        WHERE p.ic IS NULL
+           OR LENGTH(REGEXP_REPLACE(p.ic, '[^0-9]', '', 'g')) < 12
+        ORDER BY p."createdAt" DESC
+        LIMIT ${Prisma.raw(String(limit))} OFFSET ${Prisma.raw(String(offset))}
+      `,
+      db.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS count
+        FROM contestants
+        WHERE ic IS NULL
+           OR LENGTH(REGEXP_REPLACE(ic, '[^0-9]', '', 'g')) < 12
+      `,
+    ]);
 
-  return NextResponse.json({ data: rows, total: Number(countResult[0]?.count ?? 0) });
+    return NextResponse.json({ data: rows, total: Number(countResult[0]?.count ?? 0) });
+  } catch (err) {
+    console.error("[data-watch/incomplete-ic]", err);
+    return NextResponse.json({ error: String(err) }, { status: 422 });
+  }
 }

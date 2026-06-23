@@ -25,7 +25,7 @@ export async function GET() {
     { id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null; ethnicity: string | null }[]
   >`
     SELECT id, name, ic, gender, "eduLevel", "classGrade", ethnicity
-    FROM participants
+    FROM contestants
     WHERE "contingentId" = ANY(${contingentIds}::text[])
       AND (
         ic IS NULL

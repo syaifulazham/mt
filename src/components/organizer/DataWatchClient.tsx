@@ -27,7 +27,8 @@ function IncompleteIcSection() {
     setLoading(true);
     try {
       const res  = await fetch(`/api/v2/organizer/data-watch/incomplete-ic?limit=${lim}`);
-      const json = await res.json();
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
       setRows(json.data  ?? []);
       setTotal(json.total ?? 0);
     } finally {
@@ -153,7 +154,8 @@ function WrongGradeSection() {
     setLoading(true);
     try {
       const res  = await fetch(`/api/v2/organizer/data-watch/wrong-grade?limit=${lim}`);
-      const json = await res.json();
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
       setRows(json.data  ?? []);
       setTotal(json.total ?? 0);
     } finally {

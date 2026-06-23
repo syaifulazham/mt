@@ -13,7 +13,7 @@ export default async function DataWatchPage() {
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <div className="space-y-4">
+      <div className="p-6 max-w-5xl mx-auto space-y-4">
         <div>
           <h1 className="text-xl font-bold text-zinc-900">Data Watch</h1>
           <p className="text-sm text-zinc-500">Monitor and repair data quality issues in participant records.</p>
