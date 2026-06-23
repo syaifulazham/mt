@@ -33,7 +33,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     if (!res.ok) {
       throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
     }
-    throw Object.assign(new Error(`Drone API returned non-JSON (${res.status}): ${preview}`), { status: 502 });
+    throw Object.assign(new Error(`Drone API returned non-JSON (${res.status}): ${preview}`), { status: 422 });
   }
 
   if (!res.ok) {

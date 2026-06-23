@@ -231,27 +231,21 @@ export default async function TeamPage() {
                         (e) => e.competitionId === competitionId,
                       );
                       const courseId = ec?.eptimEduCourseId ?? comp.eptimEduCourseId ?? null;
-                      const hasDrone = comp.thirdPartyIntegration === "eptim-drone";
                       return (
                         <div
                           key={event.id}
-                          className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700/50 px-3 py-2.5"
+                          className="flex items-center justify-between gap-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700/50 px-3 py-2.5"
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium dark:text-zinc-200 truncate">
-                                {event.name}
-                              </p>
-                              <p className="text-xs text-zinc-400">
-                                {formatDateRange(event.startDate, event.endDate)}
-                              </p>
-                            </div>
-                            {courseId && (
-                              <EptimEduLoginButton teamId={team.id} eventId={event.id} />
-                            )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium dark:text-zinc-200 truncate">
+                              {event.name}
+                            </p>
+                            <p className="text-xs text-zinc-400">
+                              {formatDateRange(event.startDate, event.endDate)}
+                            </p>
                           </div>
-                          {hasDrone && (
-                            <EptimDroneTeamButton teamId={team.id} />
+                          {courseId && (
+                            <EptimEduLoginButton teamId={team.id} eventId={event.id} />
                           )}
                         </div>
                       );

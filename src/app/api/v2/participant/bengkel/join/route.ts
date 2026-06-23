@@ -43,7 +43,7 @@ export async function POST() {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "LMS account creation failed";
     console.error("[bengkel/join] account error:", msg, { username });
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg }, { status: 422 });
   }
 
   // Enroll in competition LMS courses matching the participant's target group

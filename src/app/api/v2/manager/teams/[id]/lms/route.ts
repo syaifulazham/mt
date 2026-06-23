@@ -126,6 +126,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ data: { username, password, enrolled } });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg }, { status: 422 });
   }
 }

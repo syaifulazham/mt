@@ -54,7 +54,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const status = (e as { status?: number }).status;
     if (status !== 409) {
       const msg = e instanceof Error ? e.message : "EptimEdu API error";
-      return NextResponse.json({ error: msg }, { status: 502 });
+      return NextResponse.json({ error: msg }, { status: 422 });
     }
     // 409 = already enrolled in EptimEdu — sync our flag and treat as success
   }

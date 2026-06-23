@@ -31,6 +31,6 @@ export async function POST(req: NextRequest) {
     if ((e as { status?: number }).status === 409)
       return NextResponse.json({ ok: true, courseId, alreadyEnrolled: true });
     const msg = e instanceof Error ? e.message : "Enrolment failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg }, { status: 422 });
   }
 }

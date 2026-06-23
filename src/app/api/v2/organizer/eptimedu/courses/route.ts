@@ -14,6 +14,6 @@ export async function GET() {
     return NextResponse.json({ data: data.courses ?? [], total: data.total ?? 0 });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg }, { status: 422 });
   }
 }

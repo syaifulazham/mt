@@ -100,7 +100,7 @@ Help the participant understand this competition — its rules, format, judging 
     console.error("[competition-chat] Gemini error:", msg);
     return NextResponse.json(
       { error: "AI_ERROR", detail: msg.slice(0, 200) },
-      { status: 502 }
+      { status: 422 }
     );
   }
 }

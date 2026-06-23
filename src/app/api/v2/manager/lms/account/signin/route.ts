@@ -78,6 +78,6 @@ export async function POST() {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
     console.error("[lms/account/signin POST] eptim-edu error:", msg, { username });
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg }, { status: 422 });
   }
 }
