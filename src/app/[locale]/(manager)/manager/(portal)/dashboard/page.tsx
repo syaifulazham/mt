@@ -32,6 +32,9 @@ export default async function ManagerDashboardPage({
                 zone:  { select: { name: true } },
                 state: { select: { name: true, flagUrl: true, zoneStates: { include: { zone: { select: { name: true } } }, take: 1 } } },
               }},
+              higherInstitution: { select: {
+                state: { select: { name: true, flagUrl: true, zoneStates: { include: { zone: { select: { name: true } } }, take: 1 } } },
+              }},
               zone:  { select: { name: true } },
               state: { select: { name: true, flagUrl: true, zoneStates: { include: { zone: { select: { name: true } } }, take: 1 } } },
             },
@@ -59,12 +62,23 @@ export default async function ManagerDashboardPage({
     zoneName: (
       cm.contingent.school?.zone?.name ??
       cm.contingent.school?.state?.zoneStates?.[0]?.zone?.name ??
+      cm.contingent.higherInstitution?.state?.zoneStates?.[0]?.zone?.name ??
       cm.contingent.zone?.name ??
       cm.contingent.state?.zoneStates?.[0]?.zone?.name ??
       null
     ),
-    stateName: cm.contingent.school?.state?.name ?? cm.contingent.state?.name ?? null,
-    stateFlagUrl: cm.contingent.school?.state?.flagUrl ?? cm.contingent.state?.flagUrl ?? null,
+    stateName: (
+      cm.contingent.school?.state?.name ??
+      cm.contingent.higherInstitution?.state?.name ??
+      cm.contingent.state?.name ??
+      null
+    ),
+    stateFlagUrl: (
+      cm.contingent.school?.state?.flagUrl ??
+      cm.contingent.higherInstitution?.state?.flagUrl ??
+      cm.contingent.state?.flagUrl ??
+      null
+    ),
   }));
 
   return (
