@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Pencil, Upload, Loader2, AlertCircle, Users, CheckCircle2,
   ImagePlus, Bell, Check, X, Clock, UserCircle2, MapPin,
-  Plus, Search, UserPlus,
+  Plus, Search, UserPlus, Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1039,6 +1039,199 @@ function JoinDialog({
   );
 }
 
+// ── Logo Upload Modal ─────────────────────────────────────────────────────────
+
+function LogoUploadModal({
+  open,
+  contingentId,
+  currentLogoUrl,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  contingentId: string;
+  currentLogoUrl: string | null;
+  onClose: () => void;
+  onSaved: (url: string) => void;
+}) {
+  const [selected,    setSelected]    = useState<string | null>(currentLogoUrl);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl,  setPreviewUrl]  = useState<string | null>(null);
+  const [dragOver,    setDragOver]    = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    if (open) { setSelected(currentLogoUrl); setPendingFile(null); setPreviewUrl(null); setUploadError(""); }
+  }, [open, currentLogoUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function acceptFile(file: File) {
+    if (!file.type.startsWith("image/")) return;
+    setPreviewUrl(URL.createObjectURL(file));
+    setPendingFile(file);
+    setSelected(null);
+  }
+
+  function handleDragOver(e: React.DragEvent) { e.preventDefault(); setDragOver(true); }
+  function handleDragLeave()                   { setDragOver(false); }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) acceptFile(f);
+  }
+
+  async function handleSave() {
+    setSaving(true); setUploadError("");
+    try {
+      let logoUrl: string;
+      if (pendingFile) {
+        const fd = new FormData();
+        fd.append("file", pendingFile);
+        const res = await fetch(`/api/v2/manager/contingents/${contingentId}/logo`, { method: "POST", body: fd });
+        const j   = await res.json();
+        if (!res.ok) throw new Error(j.error ?? "Upload failed");
+        logoUrl = j.url;
+      } else if (selected) {
+        const res = await fetch(`/api/v2/manager/contingents/${contingentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ logoUrl: selected }),
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error ?? "Save failed");
+        logoUrl = selected;
+      } else {
+        return;
+      }
+      onSaved(logoUrl);
+      onClose();
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const currentBuiltin = (!pendingFile && selected?.startsWith("builtin:"))
+    ? selected.replace("builtin:", "") as BuiltinId
+    : null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-0">
+          <DialogTitle>Change Logo</DialogTitle>
+          <DialogDescription className="text-xs text-zinc-400 mt-0.5">
+            Choose a built-in icon or upload your own image.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Built-in grid */}
+          <div>
+            <p className="text-xs font-medium text-zinc-500 mb-2">Built-in icons</p>
+            <div className="grid grid-cols-6 gap-2">
+              {BUILTIN_LOGOS.map((l) => {
+                const isSelected = currentBuiltin === l.id;
+                return (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => { setPendingFile(null); setPreviewUrl(null); setSelected(`builtin:${l.id}`); }}
+                    className={`relative rounded-xl border-2 p-1.5 flex items-center justify-center transition-all ${
+                      isSelected
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                        : "border-zinc-200 hover:border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
+                    }`}
+                  >
+                    <ContingentLogo logoUrl={`builtin:${l.id}`} size={32} />
+                    {isSelected && (
+                      <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-blue-500 flex items-center justify-center">
+                        <CheckCircle2 className="h-3 w-3 text-white" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Drag-and-drop zone */}
+          <div>
+            <p className="text-xs font-medium text-zinc-500 mb-2">Upload custom image</p>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileRef.current?.click()}
+              className={`rounded-xl border-2 border-dashed cursor-pointer transition-colors p-5 flex flex-col items-center gap-3 ${
+                dragOver
+                  ? "border-blue-400 bg-blue-50 dark:bg-blue-950/20"
+                  : pendingFile
+                  ? "border-green-400 bg-green-50 dark:bg-green-950/20"
+                  : "border-zinc-200 hover:border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/40 hover:bg-zinc-100"
+              }`}
+            >
+              {previewUrl ? (
+                <div className="flex items-center gap-3 w-full" onClick={(e) => e.stopPropagation()}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={previewUrl} alt="Preview" className="h-16 w-16 object-contain rounded-lg border shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Ready to upload</p>
+                    <p className="text-xs text-zinc-400 truncate">{pendingFile?.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setPendingFile(null); setPreviewUrl(null); setSelected(currentLogoUrl); }}
+                      className="text-xs text-red-500 hover:underline mt-1"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-full bg-zinc-200 dark:bg-zinc-700 p-3">
+                    <ImagePlus className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                      {dragOver ? "Drop image here" : "Drag & drop or click to browse"}
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-0.5">PNG, JPG, WebP, SVG</p>
+                  </div>
+                </>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) acceptFile(f); }}
+              />
+            </div>
+          </div>
+
+          {uploadError && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />{uploadError}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 pb-5 gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || (!selected && !pendingFile)}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {pendingFile ? "Upload & Save" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Contingent Card ───────────────────────────────────────────────────────────
 
 const ROLE_COLOR: Record<string, string> = {
@@ -1110,6 +1303,23 @@ function ContingentCard({
 }) {
   const t = useTranslations("contingents");
 
+  // Optimistic local display state
+  const [displayName,    setDisplayName]    = useState(contingent.name);
+  const [displayLogoUrl, setDisplayLogoUrl] = useState(contingent.logoUrl);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setDisplayName(contingent.name); }, [contingent.name]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setDisplayLogoUrl(contingent.logoUrl); }, [contingent.logoUrl]);
+
+  // Inline name edit
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput,   setNameInput]   = useState(contingent.name);
+  const [nameSaving,  setNameSaving]  = useState(false);
+
+  // Logo modal
+  const [logoModalOpen, setLogoModalOpen] = useState(false);
+
   const institution =
     contingent.school?.name ??
     contingent.higherInstitution?.name ??
@@ -1117,21 +1327,91 @@ function ContingentCard({
     "—";
 
   const isPending = contingent.managerStatus === "PENDING";
+  const canEdit   = !isPending;
+
+  async function handleSaveName() {
+    const trimmed = nameInput.trim();
+    if (!trimmed || trimmed === displayName) { setEditingName(false); return; }
+    setNameSaving(true);
+    try {
+      const res = await fetch(`/api/v2/manager/contingents/${contingent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (!res.ok) throw new Error();
+      setDisplayName(trimmed);
+      setEditingName(false);
+      onRefresh();
+    } catch {
+      setEditingName(false);
+      setNameInput(displayName);
+    } finally {
+      setNameSaving(false);
+    }
+  }
 
   return (
     <div className={`rounded-xl border bg-white shadow-sm p-5 dark:bg-zinc-900 dark:border-zinc-800 ${isPending ? "border-amber-300 dark:border-amber-700" : ""}`}>
       <div className="flex items-start gap-4">
-        <ContingentLogo logoUrl={contingent.logoUrl} size={64} />
+
+        {/* Logo — click to change (OWNER only) */}
+        <div
+          className={`relative group/logo shrink-0 ${canEdit ? "cursor-pointer" : ""}`}
+          onClick={() => { if (canEdit) setLogoModalOpen(true); }}
+        >
+          <ContingentLogo logoUrl={displayLogoUrl} size={64} />
+          {canEdit && (
+            <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity">
+              <Camera className="h-5 w-5 text-white" />
+            </div>
+          )}
+        </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-bold text-base leading-tight truncate">{contingent.name}</h2>
-                {contingent.shortName && (
-                  <span className="text-xs text-zinc-400 font-mono">({contingent.shortName})</span>
-                )}
-              </div>
+            <div className="min-w-0 flex-1">
+              {/* Inline name edit */}
+              {editingName ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    className="h-7 text-sm font-bold"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")  handleSaveName();
+                      if (e.key === "Escape") { setEditingName(false); setNameInput(displayName); }
+                    }}
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    disabled={nameSaving}
+                    className="p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-50"
+                  >
+                    {nameSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  </button>
+                  <button
+                    onClick={() => { setEditingName(false); setNameInput(displayName); }}
+                    className="p-1 rounded text-zinc-400 hover:bg-zinc-100"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  className={`flex items-center gap-1.5 group/name ${canEdit ? "cursor-text" : ""}`}
+                  onClick={() => { if (canEdit) { setNameInput(displayName); setEditingName(true); } }}
+                >
+                  <h2 className="font-bold text-base leading-tight truncate">{displayName}</h2>
+                  {contingent.shortName && (
+                    <span className="text-xs text-zinc-400 font-mono shrink-0">({contingent.shortName})</span>
+                  )}
+                  {canEdit && (
+                    <Pencil className="h-3 w-3 shrink-0 text-zinc-300 group-hover/name:text-zinc-500 transition-colors" />
+                  )}
+                </div>
+              )}
               <p className="text-xs text-zinc-500 mt-0.5 dark:text-zinc-400">{institution}</p>
             </div>
             {!isPending && (
@@ -1230,6 +1510,14 @@ function ContingentCard({
           )}
         </>
       )}
+
+      <LogoUploadModal
+        open={logoModalOpen}
+        contingentId={contingent.id}
+        currentLogoUrl={displayLogoUrl}
+        onClose={() => setLogoModalOpen(false)}
+        onSaved={(url) => { setDisplayLogoUrl(url); onRefresh(); }}
+      />
     </div>
   );
 }
