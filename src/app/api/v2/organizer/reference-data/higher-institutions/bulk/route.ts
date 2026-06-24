@@ -4,6 +4,20 @@ import { db } from "@/lib/db";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
+// Common short-form aliases that Gemini returns vs. full names stored in the DB
+const STATE_ALIASES: Record<string, string> = {
+  "KUALA LUMPUR":            "WILAYAH PERSEKUTUAN KUALA LUMPUR",
+  "WP KUALA LUMPUR":         "WILAYAH PERSEKUTUAN KUALA LUMPUR",
+  "WPKL":                    "WILAYAH PERSEKUTUAN KUALA LUMPUR",
+  "FEDERAL TERRITORY OF KUALA LUMPUR": "WILAYAH PERSEKUTUAN KUALA LUMPUR",
+  "LABUAN":                  "WILAYAH PERSEKUTUAN LABUAN",
+  "WP LABUAN":               "WILAYAH PERSEKUTUAN LABUAN",
+  "PUTRAJAYA":               "WILAYAH PERSEKUTUAN PUTRAJAYA",
+  "WP PUTRAJAYA":            "WILAYAH PERSEKUTUAN PUTRAJAYA",
+  "PENANG":                  "PULAU PINANG",
+  "GEORGE TOWN":             "PULAU PINANG",
+};
+
 export async function POST(req: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -24,7 +38,8 @@ export async function POST(req: NextRequest) {
     const name       = row.name?.trim();
     const code       = row.code?.trim().toUpperCase() || undefined;
     const stateRaw   = row.state?.trim().toUpperCase();
-    const stateId    = stateRaw ? (stateByName[stateRaw] ?? stateByCode[stateRaw]) : undefined;
+    const stateResolved = stateRaw ? (STATE_ALIASES[stateRaw] ?? stateRaw) : undefined;
+    const stateId    = stateResolved ? (stateByName[stateResolved] ?? stateByCode[stateResolved]) : undefined;
     const heiType    = row.type === "BRANCH" ? "BRANCH" : "HQ";
     const parentCode = row.parentCode?.trim().toUpperCase() || undefined;
     const sector     = row.sector ?? undefined;

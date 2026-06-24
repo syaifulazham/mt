@@ -282,7 +282,99 @@ GET /challenges
 
 ---
 
-### 7. Results by Sector Users
+### 7. Get Challenge Results (Leaderboard)
+
+Returns ranked results (best score per user) for a specific challenge. Sorted by score descending.
+
+```
+GET /challenges/{challenge_id}/results
+```
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `limit` | Max results to return (default 500, max 1000) |
+| `offset` | Skip this many results for pagination (default 0) |
+
+**Response (200):**
+
+```json
+{
+  "challenge_id": "uuid-challenge-1",
+  "challenge_name": "Level 1 - Basic Flight",
+  "challenge_mode": "automation",
+  "total": 42,
+  "limit": 500,
+  "offset": 0,
+  "results": [
+    {
+      "user_id": "uuid-1",
+      "full_name": "Ahmad Razif",
+      "email": "pilot@school.edu",
+      "pilot_handle": "razif_ace",
+      "sector_custom_id": "SMK-TM-2026",
+      "sector_name": "SMK Taman Melawati",
+      "best_score": 95,
+      "max_score": 100,
+      "elapsed_seconds": 38.2,
+      "completed_at": "2026-06-18T14:30:00.000Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+- `404` - Challenge not found in this event
+
+---
+
+### 8. Get All Event Results
+
+Returns the best scores for all participants across all (or filtered) challenges in the event. Sorted by challenge name, then score descending.
+
+```
+GET /results
+```
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `challenge_id` | Optional - filter to a specific challenge |
+| `limit` | Max results to return (default 500, max 1000) |
+| `offset` | Skip this many results for pagination (default 0) |
+
+**Response (200):**
+
+```json
+{
+  "event_id": "uuid-of-event",
+  "total": 120,
+  "limit": 500,
+  "offset": 0,
+  "results": [
+    {
+      "user_id": "uuid-1",
+      "full_name": "Ahmad Razif",
+      "email": "pilot@school.edu",
+      "pilot_handle": "razif_ace",
+      "sector_custom_id": "SMK-TM-2026",
+      "sector_name": "SMK Taman Melawati",
+      "challenge_id": "uuid-challenge-1",
+      "challenge_name": "Level 1 - Basic Flight",
+      "best_score": 95,
+      "max_score": 100,
+      "elapsed_seconds": 38.2,
+      "completed_at": "2026-06-18T14:30:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### 9. Results by Sector Users
 
 Returns the best scores for all users in a sector across the event's challenges.
 
@@ -323,7 +415,7 @@ Results are sorted by challenge name, then by best score (descending).
 
 ---
 
-### 8. Check Sector Availability
+### 10. Check Sector Availability
 
 Check if a sector `custom_id` is available (not already used) within the event.
 
@@ -344,7 +436,7 @@ Returns `"available": false` if a sector with that `custom_id` already exists in
 
 ---
 
-### 9. Check User ID Availability
+### 11. Check User ID Availability
 
 Check if a `userid` is available (not already registered).
 
@@ -435,7 +527,15 @@ curl -X POST "$BASE/auth/token" \
 curl -X GET "$BASE/challenges?status=published" \
   -H "X-API-Key: $API_KEY"
 
-# 6. Check results after competition
+# 6. Check results for a specific challenge (leaderboard)
+curl -X GET "$BASE/challenges/CHALLENGE_UUID/results" \
+  -H "X-API-Key: $API_KEY"
+
+# 7. Check all event results
+curl -X GET "$BASE/results" \
+  -H "X-API-Key: $API_KEY"
+
+# 8. Check results for a specific sector
 curl -X GET "$BASE/sectors/SMK-TM-2026/results" \
   -H "X-API-Key: $API_KEY"
 ```
