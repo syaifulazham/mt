@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { logError } from "@/lib/appLogger";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -98,7 +99,7 @@ Return ONLY a valid JSON array. No markdown fences, no explanation.`;
 
     return NextResponse.json({ data: deduped, count: deduped.length, skipped: existingCodes.size });
   } catch (e) {
-    console.error("AI HEI fetch failed:", e);
+    logError("ai-fetch/higher-institutions", e);
     return NextResponse.json({ error: "AI_FAILED", detail: String(e) }, { status: 422 });
   }
 }

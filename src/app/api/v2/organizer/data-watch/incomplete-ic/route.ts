@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { logError } from "@/lib/appLogger";
 
 export async function GET(req: NextRequest) {
   const session = await getOrganizerSession();
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ data: rows, total: Number(countResult[0]?.count ?? 0) });
   } catch (err) {
-    console.error("[data-watch/incomplete-ic]", err);
+    logError("data-watch/incomplete-ic", err);
     return NextResponse.json({ error: String(err) }, { status: 422 });
   }
 }

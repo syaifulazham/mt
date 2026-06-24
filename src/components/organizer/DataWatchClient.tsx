@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, RefreshCw, Wrench, ChevronDown, ChevronUp, Loader2, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, RefreshCw, Wrench, ChevronDown, ChevronUp, Loader2, CheckCircle2, ScrollText, Trash2 } from "lucide-react";
+
+type LogEntry = {
+  ts: string;
+  level: "error" | "warn" | "info";
+  source: string;
+  message: string;
+  detail?: string;
+};
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -311,6 +319,143 @@ function WrongGradeSection() {
   );
 }
 
+// ── Section 3: Error Log Watcher ─────────────────────────────────────────────
+
+const LEVEL_STYLES: Record<string, { badge: string; row: string }> = {
+  error: { badge: "bg-red-100 text-red-700",    row: "bg-red-50/40" },
+  warn:  { badge: "bg-amber-100 text-amber-700", row: "bg-amber-50/30" },
+  info:  { badge: "bg-blue-100 text-blue-600",   row: "" },
+};
+
+function ErrorLogSection() {
+  const [entries,  setEntries]  = useState<LogEntry[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [clearing, setClearing] = useState(false);
+  const [levelFilter, setLevelFilter] = useState<string>("");
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const sp = new URLSearchParams({ limit: "200" });
+      if (levelFilter) sp.set("level", levelFilter);
+      const res  = await fetch(`/api/v2/organizer/data-watch/error-logs?${sp}`);
+      const text = await res.text();
+      const json = JSON.parse(text);
+      setEntries(json.data ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [levelFilter]);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, [load]);
+
+  async function handleClear() {
+    if (!confirm("Clear all error log entries?")) return;
+    setClearing(true);
+    try {
+      await fetch("/api/v2/organizer/data-watch/error-logs", { method: "DELETE" });
+      setEntries([]);
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  const counts = entries.reduce<Record<string, number>>((acc, e) => {
+    acc[e.level] = (acc[e.level] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
+        <div className="flex items-center gap-2.5">
+          <ScrollText className="h-4 w-4 text-zinc-500 shrink-0" />
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Error Log Watcher</h2>
+            <p className="text-xs text-zinc-500">Recent application errors from API routes (newest first)</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Level summary pills */}
+          {(["error", "warn", "info"] as const).map((lvl) => counts[lvl] ? (
+            <button
+              key={lvl}
+              onClick={() => setLevelFilter(levelFilter === lvl ? "" : lvl)}
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border transition-opacity ${
+                LEVEL_STYLES[lvl].badge
+              } ${levelFilter && levelFilter !== lvl ? "opacity-40" : ""}`}
+            >
+              {counts[lvl]} {lvl}
+            </button>
+          ) : null)}
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+          {entries.length > 0 && (
+            <button
+              onClick={handleClear}
+              disabled={clearing}
+              className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Body */}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-zinc-300" />
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="flex items-center gap-2 px-5 py-8 text-sm text-zinc-400 justify-center">
+          <CheckCircle2 className="h-4 w-4 text-green-400" />
+          No log entries{levelFilter ? ` at level "${levelFilter}"` : ""}.
+        </div>
+      ) : (
+        <div className="divide-y divide-zinc-100 text-xs font-mono">
+          {entries.map((e, i) => (
+            <div
+              key={i}
+              className={`${LEVEL_STYLES[e.level]?.row ?? ""} cursor-pointer`}
+              onClick={() => setExpanded(expanded === i ? null : i)}
+            >
+              <div className="flex items-start gap-3 px-4 py-2.5">
+                <span className="shrink-0 mt-0.5 text-[10px] text-zinc-400 tabular-nums w-36">
+                  {new Date(e.ts).toLocaleString("ms-MY", { dateStyle: "short", timeStyle: "medium" })}
+                </span>
+                <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${LEVEL_STYLES[e.level]?.badge ?? ""}`}>
+                  {e.level.toUpperCase()}
+                </span>
+                <span className="shrink-0 text-zinc-400 w-40 truncate">{e.source}</span>
+                <span className="text-zinc-700 truncate flex-1">{e.message}</span>
+                {e.detail && <ChevronDown className={`h-3 w-3 text-zinc-400 shrink-0 transition-transform ${expanded === i ? "rotate-180" : ""}`} />}
+              </div>
+              {expanded === i && e.detail && (
+                <div className="px-4 pb-3 pt-0">
+                  <pre className="text-[11px] text-zinc-500 bg-zinc-50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                    {e.detail}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export function DataWatchClient() {
@@ -318,6 +463,7 @@ export function DataWatchClient() {
     <div className="space-y-6">
       <IncompleteIcSection />
       <WrongGradeSection />
+      <ErrorLogSection />
     </div>
   );
 }
