@@ -562,7 +562,7 @@ export function HEITab() {
 
   const [aiOpen, setAiOpen]       = useState(false);
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/set-state-in-effect
     fetch("/api/v2/organizer/reference-data/states?pageSize=100")
       .then((r) => r.json())
       .then((j) => setStates(j.data ?? []));

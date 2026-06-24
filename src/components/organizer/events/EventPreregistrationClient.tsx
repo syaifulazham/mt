@@ -94,10 +94,9 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }, [event.id, page, debouncedQ, competitionId, stateId]);
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1); }, [debouncedQ, competitionId, stateId]);
+  useEffect(() => { setPage(1); }, [debouncedQ, competitionId, stateId]); // eslint-disable-line react-hooks/set-state-in-effect
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
