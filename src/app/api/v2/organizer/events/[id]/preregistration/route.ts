@@ -34,11 +34,34 @@ export async function GET(
   const pageSize      = Math.min(200, Math.max(1, parseInt(searchParams.get("pageSize") ?? String(PAGE_SIZE), 10)));
 
   try {
-    const baseConditions = Prisma.sql`
-      ec."eventId" = ${eventId}
+    // Filters applied in WHERE (after the mandatory team_events + event_competitions JOINs)
+    const extraConditions = Prisma.sql`
       ${competitionId ? Prisma.sql`AND c.id = ${competitionId}` : Prisma.empty}
-      ${stateId ? Prisma.sql`AND COALESCE(s.id, sch_state.id) = ${stateId}` : Prisma.empty}
-      ${q ? Prisma.sql`AND (p.name ILIKE ${"%" + q + "%"} OR t.name ILIKE ${"%" + q + "%"})` : Prisma.empty}
+      ${stateId
+        ? Prisma.sql`AND COALESCE(s.id, sch_state.id, hi_state.id) = ${stateId}`
+        : Prisma.empty}
+      ${q
+        ? Prisma.sql`AND (p.name ILIKE ${"%" + q + "%"} OR t.name ILIKE ${"%" + q + "%"})`
+        : Prisma.empty}
+    `;
+
+    // Common FROM … JOIN block
+    // • team_events JOIN ensures only teams that actually JOINED this event are included
+    // • event_competitions JOIN ensures the team's competition is offered in this event
+    // • higherInstitution path handles HIGHER-type contingents for state resolution
+    const fromJoins = Prisma.sql`
+      FROM team_members tm
+      JOIN contestants          p          ON p.id   = tm."contestantId"
+      JOIN teams                t          ON t.id   = tm."teamId"
+      JOIN team_events          te         ON te."teamId"  = t.id  AND te."eventId" = ${eventId}
+      JOIN competitions         c          ON c.id   = t."competitionId"
+      JOIN event_competitions   ec         ON ec."competitionId" = c.id AND ec."eventId" = ${eventId}
+      LEFT JOIN contingents     cont       ON cont.id = t."contingentId"
+      LEFT JOIN states          s          ON s.id   = cont."stateId"
+      LEFT JOIN schools         sch        ON sch.id = cont."schoolId"
+      LEFT JOIN states          sch_state  ON sch_state.id = sch."stateId"
+      LEFT JOIN higher_institutions hi     ON hi.id  = cont."higherInstitutionId"
+      LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
     `;
 
     const [rows, countRows] = await Promise.all([
@@ -48,35 +71,19 @@ export async function GET(
           p.name,
           p."classGrade",
           p."eduLevel",
-          c.code        AS "competitionCode",
-          c.name        AS "competitionName",
-          t.name        AS "teamName",
-          COALESCE(s.name, sch_state.name) AS "stateName"
-        FROM team_members tm
-        JOIN contestants        p          ON p.id  = tm."contestantId"
-        JOIN teams              t          ON t.id  = tm."teamId"
-        JOIN competitions       c          ON c.id  = t."competitionId"
-        JOIN event_competitions ec         ON ec."competitionId" = c.id
-        LEFT JOIN contingents   cont       ON cont.id = p."contingentId"
-        LEFT JOIN states        s          ON s.id    = cont."stateId"
-        LEFT JOIN schools       sch        ON sch.id  = cont."schoolId"
-        LEFT JOIN states        sch_state  ON sch_state.id = sch."stateId"
-        WHERE ${baseConditions}
+          c.code  AS "competitionCode",
+          c.name  AS "competitionName",
+          t.name  AS "teamName",
+          COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName"
+        ${fromJoins}
+        WHERE 1=1 ${extraConditions}
         ORDER BY c.code, t.name, p.name
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `,
       db.$queryRaw<CountRow[]>`
         SELECT COUNT(*) AS total
-        FROM team_members tm
-        JOIN contestants        p          ON p.id  = tm."contestantId"
-        JOIN teams              t          ON t.id  = tm."teamId"
-        JOIN competitions       c          ON c.id  = t."competitionId"
-        JOIN event_competitions ec         ON ec."competitionId" = c.id
-        LEFT JOIN contingents   cont       ON cont.id = p."contingentId"
-        LEFT JOIN states        s          ON s.id    = cont."stateId"
-        LEFT JOIN schools       sch        ON sch.id  = cont."schoolId"
-        LEFT JOIN states        sch_state  ON sch_state.id = sch."stateId"
-        WHERE ${baseConditions}
+        ${fromJoins}
+        WHERE 1=1 ${extraConditions}
       `,
     ]);
 
