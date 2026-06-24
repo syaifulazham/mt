@@ -76,11 +76,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Email already used by another team." }, { status: 409 });
   }
 
+  // If email is changing, check whether it differs from the current value
+  const currentTeam = result.team;
+  const newEmail = email !== undefined ? (email?.trim() || null) : undefined;
+  const emailChanged = newEmail !== undefined && newEmail !== currentTeam.email;
+
   const updated = await db.team.update({
     where: { id },
     data: {
-      ...(name  !== undefined && { name:  name.trim()      }),
-      ...(email !== undefined && { email: email?.trim() || null }),
+      ...(name      !== undefined && { name: name.trim() }),
+      ...(newEmail  !== undefined && { email: newEmail }),
+      // Reset LMS registration whenever the team email changes
+      ...(emailChanged && {
+        lmsUserId:        null,
+        lmsPassword:      null,
+        lmsCourseEnrolled: false,
+      }),
     },
     include: TEAM_INCLUDE,
   });
