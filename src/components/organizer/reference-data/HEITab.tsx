@@ -88,6 +88,7 @@ function AiFetchDialog({
   const [selected, setSelected]       = useState<Set<number>>(new Set());
   const [filter, setFilter]           = useState<"ALL" | "HQ" | "BRANCH">("ALL");
   const [sectorFilter, setSectorFilter] = useState<"ALL" | "PUBLIC" | "PRIVATE" | "FOREIGN_BRANCH">("ALL");
+  const [existenceFilter, setExistenceFilter] = useState<"ALL" | "NEW" | "EXISTS">("ALL");
   const [searchQ, setSearchQ]         = useState("");
   const [importing, setImporting]     = useState(false);
   const [importResult, setImportResult] = useState<{ created: number; skipped: { name: string; reason: string }[] } | null>(null);
@@ -95,35 +96,72 @@ function AiFetchDialog({
   const [editingIdx, setEditingIdx]   = useState<number | null>(null);
   const [editBuf, setEditBuf]         = useState<Partial<AiHEI>>({});
   const [extraPrompt, setExtraPrompt] = useState("");
+  const [matching, setMatching]           = useState(false);
+  const [matchProgress, setMatchProgress] = useState(0);
+  const [existingMatches, setExistingMatches] = useState<Set<number>>(new Set());
 
   function reset() {
     setFetching(false); setResults([]); setSelected(new Set());
-    setFilter("ALL"); setSectorFilter("ALL"); setSearchQ("");
+    setFilter("ALL"); setSectorFilter("ALL"); setExistenceFilter("ALL"); setSearchQ("");
     setImporting(false); setImportResult(null); setError("");
     setEditingIdx(null); setExtraPrompt("");
+    setMatching(false); setMatchProgress(0); setExistingMatches(new Set());
   }
 
   async function handleFetch() {
-    setFetching(true); setError(""); setResults([]); setSelected(new Set()); setImportResult(null);
+    setFetching(true); setError(""); setResults([]); setSelected(new Set());
+    setImportResult(null); setExistingMatches(new Set()); setMatching(false); setMatchProgress(0);
+
+    let newResults: AiHEI[] = [];
+    let dbNames: string[]   = [];
+
     try {
-      const res = await fetch("/api/v2/organizer/reference-data/higher-institutions/ai-fetch", {
+      const res  = await fetch("/api/v2/organizer/reference-data/higher-institutions/ai-fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ extraPrompt: extraPrompt.trim() || undefined }),
       });
       const text = await res.text();
-      let j: { data?: AiHEI[]; error?: string; detail?: string };
+      let j: { data?: AiHEI[]; existingNames?: string[]; error?: string; detail?: string };
       try { j = JSON.parse(text); } catch { throw new Error(text.slice(0, 120)); }
       if (!res.ok) throw new Error(j.detail ? `${j.error}: ${j.detail}` : (j.error ?? "AI fetch failed"));
-      setResults(j.data ?? []);
-      // Select all HQ by default
-      const defaultSelected = new Set<number>();
-      (j.data as AiHEI[]).forEach((inst, i) => { if (inst.type === "HQ") defaultSelected.add(i); });
-      setSelected(defaultSelected);
+      newResults = j.data ?? [];
+      dbNames    = j.existingNames ?? [];
+      setResults(newResults);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to fetch from AI");
-    } finally {
       setFetching(false);
+      return;
+    }
+
+    setFetching(false);
+
+    // ── Name-match pass with progress ─────────────────────────────────────────
+    if (dbNames.length > 0 && newResults.length > 0) {
+      setMatching(true);
+      setMatchProgress(0);
+      const nameSet = new Set(dbNames.map((n) => n.toUpperCase()));
+      const matched = new Set<number>();
+      const BATCH   = 40;
+
+      for (let start = 0; start < newResults.length; start += BATCH) {
+        const end = Math.min(start + BATCH, newResults.length);
+        for (let i = start; i < end; i++) {
+          if (nameSet.has(newResults[i].name.toUpperCase())) matched.add(i);
+        }
+        setMatchProgress(Math.round((end / newResults.length) * 100));
+        await new Promise<void>((r) => setTimeout(r, 16));
+      }
+
+      setExistingMatches(matched);
+      const defaultSelected = new Set<number>();
+      newResults.forEach((inst, i) => { if (inst.type === "HQ" && !matched.has(i)) defaultSelected.add(i); });
+      setSelected(defaultSelected);
+      setMatching(false);
+    } else {
+      const defaultSelected = new Set<number>();
+      newResults.forEach((inst, i) => { if (inst.type === "HQ") defaultSelected.add(i); });
+      setSelected(defaultSelected);
     }
   }
 
@@ -161,9 +199,11 @@ function AiFetchDialog({
 
   const visible = results
     .map((r, i) => ({ r, i }))
-    .filter(({ r }) => {
+    .filter(({ r, i }) => {
       if (filter !== "ALL" && r.type !== filter) return false;
       if (sectorFilter !== "ALL" && r.sector !== sectorFilter) return false;
+      if (existenceFilter === "NEW"    &&  existingMatches.has(i)) return false;
+      if (existenceFilter === "EXISTS" && !existingMatches.has(i)) return false;
       if (searchQ && !r.name.toLowerCase().includes(searchQ.toLowerCase()) &&
           !r.code.toLowerCase().includes(searchQ.toLowerCase())) return false;
       return true;
@@ -246,7 +286,7 @@ function AiFetchDialog({
               : <><Sparkles className="h-4 w-4" /> {results.length > 0 ? "Re-search" : "Search with Gemini"}</>}
           </Button>
 
-          {results.length > 0 && (
+          {results.length > 0 && !matching && (
             <div className="flex items-center gap-3 text-sm text-zinc-500 flex-wrap">
               <span className="font-medium text-zinc-700">{results.length} institutions found</span>
               <span className="text-zinc-300">|</span>
@@ -254,6 +294,25 @@ function AiFetchDialog({
               <span className="flex items-center gap-1"><GitBranch className="h-3.5 w-3.5" /> {branchCount} Branch</span>
               <span className="text-zinc-300">|</span>
               <span className="text-violet-600 font-medium">{selectedCount} selected</span>
+              {existingMatches.size > 0 && (
+                <>
+                  <span className="text-zinc-300">|</span>
+                  <span className="text-amber-600 font-medium">{existingMatches.size} already in DB</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {matching && (
+            <div className="flex items-center gap-2 text-sm text-violet-600">
+              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+              <span>Checking database… {matchProgress}%</span>
+              <div className="w-28 h-1.5 bg-zinc-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-violet-500 rounded-full transition-all duration-100"
+                  style={{ width: `${matchProgress}%` }}
+                />
+              </div>
             </div>
           )}
 
@@ -309,6 +368,23 @@ function AiFetchDialog({
                 </button>
               ))}
             </div>
+
+            {/* Existence filter — only when matching has completed and found duplicates */}
+            {existingMatches.size > 0 && (
+              <div className="flex gap-1 rounded-md bg-zinc-100 p-0.5">
+                {(["ALL", "NEW", "EXISTS"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setExistenceFilter(f)}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      existenceFilter === f ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+                    }`}
+                  >
+                    {f === "ALL" ? "All" : f === "NEW" ? `New (${results.length - existingMatches.size})` : `In DB (${existingMatches.size})`}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="relative flex-1 min-w-40">
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400" />
@@ -377,13 +453,14 @@ function AiFetchDialog({
               </thead>
               <tbody>
                 {visible.map(({ r, i }) => {
-                  const isEditing = editingIdx === i;
-                  const isChecked = selected.has(i);
+                  const isEditing  = editingIdx === i;
+                  const isChecked  = selected.has(i);
+                  const alreadyInDb = existingMatches.has(i);
                   return (
                     <tr
                       key={i}
                       className={`border-b last:border-0 transition-colors ${
-                        isChecked ? "bg-violet-50/40" : "hover:bg-zinc-50"
+                        alreadyInDb ? "bg-amber-50/40 opacity-60" : isChecked ? "bg-violet-50/40" : "hover:bg-zinc-50"
                       } ${r.type === "BRANCH" ? "opacity-90" : ""}`}
                     >
                       <td className="px-3 py-2 text-center">
@@ -413,8 +490,13 @@ function AiFetchDialog({
                             className="h-7 text-xs"
                           />
                         ) : (
-                          <span className={`text-xs ${r.type === "BRANCH" ? "text-zinc-600 pl-3 border-l-2 border-zinc-200" : "font-medium text-zinc-800"}`}>
+                          <span className={`text-xs inline-flex items-center gap-1.5 ${r.type === "BRANCH" ? "text-zinc-600 pl-3 border-l-2 border-zinc-200" : "font-medium text-zinc-800"}`}>
                             {r.name}
+                            {alreadyInDb && (
+                              <span className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 shrink-0">
+                                In DB
+                              </span>
+                            )}
                           </span>
                         )}
                       </td>

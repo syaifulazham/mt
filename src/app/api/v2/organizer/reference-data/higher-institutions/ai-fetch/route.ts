@@ -23,9 +23,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const extraPrompt: string = body?.extraPrompt ?? "";
 
-  // Fetch existing HEI codes so Gemini results can be filtered
-  const existingHEIs = await db.higherInstitution.findMany({ select: { code: true } });
+  // Fetch existing HEI codes and names for filtering + client-side duplicate marking
+  const existingHEIs = await db.higherInstitution.findMany({ select: { code: true, name: true } });
   const existingCodes = new Set(existingHEIs.map((h) => (h.code ?? "").toUpperCase()).filter(Boolean));
+  const existingNames = existingHEIs.map((h) => h.name);
 
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
@@ -97,7 +98,7 @@ Return ONLY a valid JSON array. No markdown fences, no explanation.`;
       return aKey.localeCompare(bKey) || a.code.localeCompare(b.code);
     });
 
-    return NextResponse.json({ data: deduped, count: deduped.length, skipped: existingCodes.size });
+    return NextResponse.json({ data: deduped, count: deduped.length, skipped: existingCodes.size, existingNames });
   } catch (e) {
     logError("ai-fetch/higher-institutions", e);
     return NextResponse.json({ error: "AI_FAILED", detail: String(e) }, { status: 422 });
