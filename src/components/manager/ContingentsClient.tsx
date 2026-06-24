@@ -1062,9 +1062,8 @@ function LogoUploadModal({
   const [uploadError, setUploadError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
-    if (open) { setSelected(currentLogoUrl); setPendingFile(null); setPreviewUrl(null); setUploadError(""); }
+    if (open) { setSelected(currentLogoUrl); setPendingFile(null); setPreviewUrl(null); setUploadError(""); } // eslint-disable-line react-hooks/set-state-in-effect
   }, [open, currentLogoUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function acceptFile(file: File) {
@@ -1477,6 +1476,11 @@ function ContingentCard({
                 </p>
               </div>
             </div>
+          )}
+
+          {/* Locality reminder — show when locality not yet set for OWNER */}
+          {contingent.managerRole === "OWNER" && !contingent.locality && (
+            <LocalityReminder contingentId={contingent.id} onSaved={onRefresh} />
           )}
 
           {/* Stats row */}
