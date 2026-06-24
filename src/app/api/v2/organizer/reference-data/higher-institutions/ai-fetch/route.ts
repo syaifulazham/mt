@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -20,6 +21,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const extraPrompt: string = body?.extraPrompt ?? "";
+
+  // Fetch existing HEI codes so Gemini results can be filtered
+  const existingHEIs = await db.higherInstitution.findMany({ select: { code: true } });
+  const existingCodes = new Set(existingHEIs.map((h) => (h.code ?? "").toUpperCase()).filter(Boolean));
 
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
@@ -72,12 +77,14 @@ Return ONLY a valid JSON array. No markdown fences, no explanation.`;
 
     const institutions: AiHEI[] = JSON.parse(raw);
 
-    // Deduplicate by code (keep first occurrence)
+    // Deduplicate by code (keep first occurrence) and exclude already-imported HEIs
     const seen = new Set<string>();
     const deduped = institutions.filter((inst) => {
       const key = inst.code?.toUpperCase() ?? inst.name.toUpperCase();
       if (seen.has(key)) return false;
       seen.add(key);
+      // Skip if already in the database
+      if (existingCodes.has(key)) return false;
       return true;
     });
 
@@ -89,9 +96,9 @@ Return ONLY a valid JSON array. No markdown fences, no explanation.`;
       return aKey.localeCompare(bKey) || a.code.localeCompare(b.code);
     });
 
-    return NextResponse.json({ data: deduped, count: deduped.length });
+    return NextResponse.json({ data: deduped, count: deduped.length, skipped: existingCodes.size });
   } catch (e) {
     console.error("AI HEI fetch failed:", e);
-    return NextResponse.json({ error: "AI_FAILED", detail: String(e) }, { status: 500 });
+    return NextResponse.json({ error: "AI_FAILED", detail: String(e) }, { status: 422 });
   }
 }

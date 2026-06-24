@@ -111,7 +111,9 @@ function AiFetchDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ extraPrompt: extraPrompt.trim() || undefined }),
       });
-      const j = await res.json();
+      const text = await res.text();
+      let j: { data?: AiHEI[]; error?: string; detail?: string };
+      try { j = JSON.parse(text); } catch { throw new Error(text.slice(0, 120)); }
       if (!res.ok) throw new Error(j.detail ? `${j.error}: ${j.detail}` : (j.error ?? "AI fetch failed"));
       setResults(j.data ?? []);
       // Select all HQ by default
