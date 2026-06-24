@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
+import * as argon2 from "argon2";
+import { randomBytes } from "crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getOrganizerSession } from "@/lib/auth/session";
 
+function generateRenewalPassword(): string {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 8 }, () => chars[randomBytes(1)[0] % chars.length]).join("");
+}
+
 const patchSchema = z.object({
   role: z.enum(["SUPER_ADMIN", "ADMIN", "OPERATOR", "PARTICIPANTS_MANAGER", "JUDGE_COORDINATOR", "VIEWER"]).optional(),
   isActive: z.boolean().optional(),
+  renewPassword: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -39,9 +47,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Cannot deactivate your own account" } }, { status: 403 });
   }
 
+  // Password renewal — SUPER_ADMIN only, not self
+  if (parsed.data.renewPassword) {
+    if (session.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Only SUPER_ADMIN can renew passwords" } }, { status: 403 });
+    }
+    if (id === session.id) {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Cannot renew your own password via this action" } }, { status: 403 });
+    }
+    const newPassword = generateRenewalPassword();
+    const passwordHash = await argon2.hash(newPassword);
+    await db.organizerUser.update({
+      where: { id },
+      data: { passwordHash, forcePasswordChange: true },
+    });
+    return NextResponse.json({ data: { newPassword } });
+  }
+
+  const { renewPassword: _, ...updateData } = parsed.data;
   const updated = await db.organizerUser.update({
     where: { id },
-    data: parsed.data,
+    data: updateData,
     select: { id: true, email: true, name: true, role: true, isActive: true },
   });
 
