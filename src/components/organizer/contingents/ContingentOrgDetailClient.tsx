@@ -6,6 +6,7 @@ import {
   ArrowLeft, Users, UserCheck, Trophy,
   Search, Pencil, ChevronLeft, ChevronRight,
   School as SchoolIcon, Building2, MapPin, Loader2, X, Check, Trash2, AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -590,6 +591,97 @@ function RemoveManagerDialog({
 
 // ─── Managers Tab ────────────────────────────────────────────────────────────
 
+const MANAGER_STATUSES = ["ACTIVE", "PENDING", "REJECTED"] as const;
+
+const STATUS_BADGE: Record<string, string> = {
+  ACTIVE:   "text-green-700 border-green-300 bg-green-50",
+  PENDING:  "text-amber-700 border-amber-300 bg-amber-50",
+  REJECTED: "text-red-700 border-red-300 bg-red-50",
+};
+
+const statusLabel = (s: string) =>
+  s.charAt(0) + s.slice(1).toLowerCase();
+
+/** Inline dropdown letting an organizer change a manager's status. */
+function ManagerStatusChanger({
+  contingentId,
+  member,
+  onUpdated,
+}: {
+  contingentId: string;
+  member: ManagerMember;
+  onUpdated: (m: ManagerMember[]) => void;
+}) {
+  const [open,   setOpen]   = useState(false);
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  async function change(status: string) {
+    setOpen(false);
+    if (status === member.status) return;
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/contingents/${contingentId}/managers/${member.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        },
+      );
+      const json = await res.json();
+      if (res.ok) onUpdated(json.managers ?? []);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const badgeClass = STATUS_BADGE[member.status] ?? "text-zinc-500";
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={saving}
+        title="Change status"
+        className="disabled:opacity-40"
+      >
+        <Badge variant="outline" className={`text-xs gap-1 cursor-pointer ${badgeClass}`}>
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : statusLabel(member.status)}
+          <ChevronDown className="h-3 w-3 opacity-60" />
+        </Badge>
+      </button>
+      {open && (
+        <div className="absolute left-0 z-20 mt-1 w-32 rounded-md border bg-white py-1 shadow-lg">
+          {MANAGER_STATUSES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => change(s)}
+              className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-zinc-50 ${
+                s === member.status ? "font-semibold text-zinc-900" : "text-zinc-600"
+              }`}
+            >
+              {statusLabel(s)}
+              {s === member.status && <Check className="h-3.5 w-3.5 text-indigo-600" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ManagersTab({
   contingentId,
   managers,
@@ -648,9 +740,11 @@ function ManagersTab({
                     : <Badge variant="outline" className="text-xs text-blue-700 border-blue-200 bg-blue-50">Co-Manager</Badge>}
                 </td>
                 <td className="px-4 py-3">
-                  {m.status === "ACTIVE"
-                    ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
-                    : <Badge variant="outline" className="text-xs text-zinc-500">{m.status}</Badge>}
+                  <ManagerStatusChanger
+                    contingentId={contingentId}
+                    member={m}
+                    onUpdated={onManagersUpdated}
+                  />
                 </td>
                 <td className="px-4 py-3 text-xs text-zinc-400">{new Date(m.createdAt).toLocaleDateString("en-MY")}</td>
                 <td className="px-4 py-3">
