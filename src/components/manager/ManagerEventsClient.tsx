@@ -90,16 +90,16 @@ function AddTeamDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg p-6">
         <DialogHeader>
           <DialogTitle>Tambah Pasukan ke {event.name}</DialogTitle>
         </DialogHeader>
         {event.eligibleTeams.length === 0 ? (
           <p className="text-sm text-zinc-500 py-4 text-center">Tiada pasukan yang layak untuk acara ini.</p>
         ) : (
-          <ul className="divide-y max-h-80 overflow-y-auto">
+          <ul className="divide-y max-h-80 overflow-y-auto px-1">
             {event.eligibleTeams.map((team) => (
-              <li key={team.id} className="flex items-center gap-3 py-3">
+              <li key={team.id} className="flex items-center gap-3 py-3 px-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{team.name}</p>
                   <p className="text-xs text-zinc-400 truncate">
