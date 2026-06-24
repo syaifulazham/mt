@@ -115,6 +115,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const eligible = await filterByLocation(events, team.effectiveStateId);
 
   // Strip internal fields before returning
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const data = eligible.map(({ stateId: _s, zoneId: _z, ...rest }) => rest);
 
   return NextResponse.json({ data });
