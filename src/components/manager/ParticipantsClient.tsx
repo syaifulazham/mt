@@ -1102,7 +1102,7 @@ function RowMenu({ name, hasPassword, onView, onEdit, onDelete, onGenPassword }:
 // Generate Passwords — bulk dialog
 // ─────────────────────────────────────────────────────────────────────────────
 
-type GenResult = { id: string; name: string; initialPassword: string };
+type GenResult = { id: string; name: string; initialPassword: string; eduLevel?: string; classGrade?: string | null };
 
 function GeneratePasswordsDialog({ open, onClose, onSaved }: {
   open: boolean; onClose: () => void; onSaved: () => void;
@@ -1112,32 +1112,76 @@ function GeneratePasswordsDialog({ open, onClose, onSaved }: {
   const [mode, setMode] = useState<"skip" | "reset">("skip");
   const [results, setResults] = useState<GenResult[]>([]);
   const [skipped, setSkipped] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [total, setTotal] = useState(0);
 
-  function reset() { setStep("options"); setMode("skip"); setResults([]); setSkipped(0); }
+  function reset() {
+    setStep("options"); setMode("skip"); setResults([]); setSkipped(0);
+    setProgress(0); setTotal(0);
+  }
 
   async function run() {
     setStep("working");
+    setProgress(0);
+    setTotal(0);
     try {
       const res = await fetch("/api/v2/manager/participants/generate-passwords", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
-      const j = await res.json();
-      setResults(j.data ?? []);
-      setSkipped(j.skipped ?? 0);
-      setStep("done");
-      onSaved();
+
+      // Fallback for empty-result fast path (non-streaming 200)
+      const ct = res.headers.get("Content-Type") ?? "";
+      if (!ct.includes("x-ndjson")) {
+        const j = await res.json();
+        setResults(j.data ?? []);
+        setSkipped(j.skipped ?? 0);
+        setStep("done");
+        onSaved();
+        return;
+      }
+
+      if (!res.body) { setStep("options"); return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop()!;
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line) as {
+            type: string; total?: number; processed?: number;
+            data?: GenResult[]; skipped?: number;
+          };
+          if (msg.type === "total")    { setTotal(msg.total ?? 0); }
+          if (msg.type === "progress") { setProgress(msg.processed ?? 0); setTotal(msg.total ?? 0); }
+          if (msg.type === "done")     {
+            setResults(msg.data ?? []);
+            setSkipped(msg.skipped ?? 0);
+            setStep("done");
+            onSaved();
+          }
+        }
+      }
     } catch {
       setStep("options");
     }
   }
 
   function downloadCsv() {
-    const header = "Name,Initial Password,Note";
-    const rows = results.map(r =>
-      `"${r.name.replace(/"/g, '""')}","${r.initialPassword}","Use your IC number as User ID"`
-    );
+    const header = "Name,Initial Password,Grade";
+    const rows = results.map(r => {
+      const grade = (r.eduLevel === "PRIMARY" || r.eduLevel === "SECONDARY")
+        ? (r.classGrade ?? "")
+        : "";
+      return `"${r.name.replace(/"/g, '""')}","${r.initialPassword}","${grade}"`;
+    });
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url  = URL.createObjectURL(blob);
@@ -1184,7 +1228,19 @@ function GeneratePasswordsDialog({ open, onClose, onSaved }: {
         {step === "working" && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-            <p className="text-sm text-zinc-500">{t("genPw.working")}</p>
+            <p className="text-sm text-zinc-500">
+              {total > 0
+                ? `${t("genPw.working")} ${progress} / ${total}`
+                : t("genPw.working")}
+            </p>
+            {total > 0 && (
+              <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((progress / total) * 100)}%` }}
+                />
+              </div>
+            )}
           </div>
         )}
 
