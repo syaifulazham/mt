@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { writeFile, mkdir } from "fs/promises";
-import { join, extname } from "path";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
+import { extname } from "path";
 import { db } from "@/lib/db";
 
-const MAX_SIZE     = 2 * 1024 * 1024; // 2 MB
-const ALLOWED      = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
-const UPLOAD_DIR   = join(process.cwd(), "public", "uploads", "contingents");
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId:     process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+  },
+});
+
+const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
+const ALLOWED  = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
 
 // ── POST /api/v2/manager/contingents/[id]/logo  ───────────────────────────────
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,17 +36,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
 
-  if (!file)                      return NextResponse.json({ error: "NO_FILE" },       { status: 400 });
+  if (!file)                       return NextResponse.json({ error: "NO_FILE" },        { status: 400 });
   if (!ALLOWED.includes(file.type)) return NextResponse.json({ error: "INVALID_TYPE" }, { status: 400 });
   if (file.size > MAX_SIZE)         return NextResponse.json({ error: "FILE_TOO_LARGE" }, { status: 400 });
 
-  const ext      = extname(file.name) || ".png";
-  const filename = `${randomUUID()}${ext}`;
+  const ext     = extname(file.name) || ".png";
+  const key     = `contingents/${id}/${randomUUID()}${ext}`;
+  const buf     = Buffer.from(await file.arrayBuffer());
+  const bucket  = process.env.R2_BUCKET_NAME!;
+  const baseUrl = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
 
-  await mkdir(UPLOAD_DIR, { recursive: true });
-  await writeFile(join(UPLOAD_DIR, filename), Buffer.from(await file.arrayBuffer()));
+  await r2.send(new PutObjectCommand({
+    Bucket:      bucket,
+    Key:         key,
+    Body:        buf,
+    ContentType: file.type,
+  }));
 
-  const logoUrl = `/uploads/contingents/${filename}`;
+  const logoUrl = `${baseUrl}/${key}`;
 
   await db.contingent.update({ where: { id }, data: { logoUrl } });
 
