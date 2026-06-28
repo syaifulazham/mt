@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2, ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
 
 type Participant = {
   id: string;
@@ -201,6 +202,18 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     byState: StateStat[];
   } | null>(null);
   const [statsLoading, setStatsLoading]   = useState(false);
+  const [exporting, setExporting]         = useState<"xlsx" | "docx" | null>(null);
+
+  async function handleExport(format: "xlsx" | "docx") {
+    if (!stats) return;
+    setExporting(format);
+    try {
+      if (format === "xlsx") exportXlsx(event.name, event.slug, stats);
+      else                   await exportDocx(event.name, event.slug, stats);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   // Debounce search input
   useEffect(() => {
@@ -289,16 +302,42 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
 
       {/* Stats panel */}
       <div className="rounded-xl border border-zinc-200 overflow-hidden">
-        <button
-          onClick={() => setStatsOpen((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-zinc-50 hover:bg-zinc-100 transition-colors text-sm font-semibold text-zinc-700"
-        >
-          <span className="flex items-center gap-2">
+        <div className="flex items-center bg-zinc-50 border-b border-zinc-200">
+          <button
+            onClick={() => setStatsOpen((v) => !v)}
+            className="flex-1 flex items-center gap-2 px-4 py-3 hover:bg-zinc-100 transition-colors text-sm font-semibold text-zinc-700 text-left"
+          >
             <BarChart2 className="h-4 w-4 text-blue-500" />
             Statistik Penyertaan
-          </span>
-          {statsOpen ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
-        </button>
+            {statsOpen ? <ChevronUp className="h-4 w-4 text-zinc-400 ml-auto" /> : <ChevronDown className="h-4 w-4 text-zinc-400 ml-auto" />}
+          </button>
+          {stats && !statsLoading && (
+            <div className="flex items-center gap-1.5 px-3 border-l border-zinc-200">
+              <button
+                onClick={() => handleExport("xlsx")}
+                disabled={exporting !== null}
+                title="Muat turun Excel (.xlsx)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition-colors border border-emerald-200"
+              >
+                {exporting === "xlsx"
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                Excel
+              </button>
+              <button
+                onClick={() => handleExport("docx")}
+                disabled={exporting !== null}
+                title="Muat turun Word (.docx)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors border border-blue-200"
+              >
+                {exporting === "docx"
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <FileText className="h-3.5 w-3.5" />}
+                Word
+              </button>
+            </div>
+          )}
+        </div>
 
         {statsOpen && (
           <div className="p-4 space-y-4 bg-zinc-50/30">
