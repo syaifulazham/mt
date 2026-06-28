@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Search, ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2, ChevronDown, ChevronUp } from "lucide-react";
 
 type Participant = {
   id: string;
@@ -27,7 +27,157 @@ type EventSummary = {
   slug: string;
 };
 
+type StatsSummary = {
+  schoolContingents: number;
+  primarySchools:    number;
+  secondarySchools:  number;
+  teams:             number;
+  participants:      number;
+  male:              number;
+  female:            number;
+};
+
+type GradeStat = { eduLevel: string; classGrade: string; count: number };
+
+type StateStat = {
+  stateName:         string;
+  schoolContingents: number;
+  primarySchools:    number;
+  secondarySchools:  number;
+  teams:             number;
+  participants:      number;
+  male:              number;
+  female:            number;
+};
+
 const PAGE_SIZE = 50;
+
+// ── Stats panel ──────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub }: { label: string; value: number; sub?: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-100 bg-white px-4 py-3">
+      <p className="text-xs text-zinc-400 mb-0.5">{label}</p>
+      <p className="text-2xl font-bold text-zinc-900 tabular-nums">{value.toLocaleString()}</p>
+      {sub && <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+function GenderBar({ male, female }: { male: number; female: number }) {
+  const total = male + female;
+  if (total === 0) return null;
+  const mp = Math.round((male / total) * 100);
+  const fp = 100 - mp;
+  return (
+    <div className="rounded-xl border border-zinc-100 bg-white px-4 py-3">
+      <p className="text-xs text-zinc-400 mb-2">Jantina</p>
+      <div className="flex rounded-full overflow-hidden h-4 text-xs font-semibold">
+        <div className="bg-blue-400 flex items-center justify-center text-white" style={{ width: `${mp}%` }}>
+          {mp > 8 ? `L ${mp}%` : ""}
+        </div>
+        <div className="bg-pink-400 flex items-center justify-center text-white" style={{ width: `${fp}%` }}>
+          {fp > 8 ? `P ${fp}%` : ""}
+        </div>
+      </div>
+      <div className="flex justify-between text-xs text-zinc-500 mt-1.5">
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-400" /> Lelaki {male.toLocaleString()}</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-pink-400" /> Perempuan {female.toLocaleString()}</span>
+      </div>
+    </div>
+  );
+}
+
+function GradeTable({ rows }: { rows: GradeStat[] }) {
+  const primary   = rows.filter((r) => r.eduLevel === "PRIMARY");
+  const secondary = rows.filter((r) => r.eduLevel === "SECONDARY");
+  const youth     = rows.filter((r) => r.eduLevel === "YOUTH");
+
+  const Section = ({ title, color, items }: { title: string; color: string; items: GradeStat[] }) =>
+    items.length === 0 ? null : (
+      <div>
+        <p className={`text-xs font-semibold mb-1 ${color}`}>{title}</p>
+        <div className="space-y-0.5">
+          {items.map((g) => {
+            const max = Math.max(...items.map((i) => i.count));
+            return (
+              <div key={g.classGrade} className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500 w-28 shrink-0">{g.classGrade}</span>
+                <div className="flex-1 bg-zinc-100 rounded-full h-2 overflow-hidden">
+                  <div className="bg-blue-400 h-2 rounded-full" style={{ width: `${Math.round((g.count / max) * 100)}%` }} />
+                </div>
+                <span className="text-xs tabular-nums text-zinc-600 w-8 text-right">{g.count}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="rounded-xl border border-zinc-100 bg-white px-4 py-3 space-y-4">
+      <p className="text-xs text-zinc-400">Peserta mengikut Gred</p>
+      <Section title="Sekolah Rendah (Darjah)" color="text-emerald-600" items={primary} />
+      <Section title="Sekolah Menengah (Tingkatan)" color="text-violet-600" items={secondary} />
+      <Section title="Belia / Lain" color="text-orange-600" items={youth} />
+    </div>
+  );
+}
+
+function StateTable({ rows }: { rows: StateStat[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-zinc-100 bg-white overflow-hidden">
+      <div className="px-4 py-3 border-b border-zinc-100">
+        <p className="text-xs text-zinc-400">Pecahan mengikut Negeri</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-zinc-50 border-b border-zinc-100">
+              <th className="text-left px-3 py-2 font-semibold text-zinc-500">Negeri</th>
+              <th className="text-right px-3 py-2 font-semibold text-zinc-500">Konting.</th>
+              <th className="text-right px-3 py-2 font-semibold text-zinc-500">Rendah</th>
+              <th className="text-right px-3 py-2 font-semibold text-zinc-500">Menengah</th>
+              <th className="text-right px-3 py-2 font-semibold text-zinc-500">Pasukan</th>
+              <th className="text-right px-3 py-2 font-semibold text-zinc-500">Peserta</th>
+              <th className="text-right px-3 py-2 font-semibold text-blue-500">L</th>
+              <th className="text-right px-3 py-2 font-semibold text-pink-500">P</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={r.stateName} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}>
+                <td className="px-3 py-2 font-medium text-zinc-700">{r.stateName}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-zinc-600">{r.schoolContingents}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{r.primarySchools}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-violet-700">{r.secondarySchools}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-zinc-600">{r.teams}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-zinc-800">{r.participants}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-blue-600">{r.male}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-pink-600">{r.female}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-zinc-200 bg-zinc-50 font-semibold">
+              <td className="px-3 py-2 text-zinc-600">Jumlah</td>
+              <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{rows.reduce((s, r) => s + r.schoolContingents, 0)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{rows.reduce((s, r) => s + r.primarySchools, 0)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-violet-700">{rows.reduce((s, r) => s + r.secondarySchools, 0)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{rows.reduce((s, r) => s + r.teams, 0)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-zinc-900">{rows.reduce((s, r) => s + r.participants, 0)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-blue-700">{rows.reduce((s, r) => s + r.male, 0)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-pink-700">{rows.reduce((s, r) => s + r.female, 0)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [rows, setRows]               = useState<Participant[]>([]);
@@ -44,13 +194,22 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [states, setStates]             = useState<{ id: string; name: string }[]>([]);
 
+  // Stats panel
+  const [statsOpen, setStatsOpen]         = useState(true);
+  const [stats, setStats]                 = useState<{
+    summary: StatsSummary;
+    byGrade: GradeStat[];
+    byState: StateStat[];
+  } | null>(null);
+  const [statsLoading, setStatsLoading]   = useState(false);
+
   // Debounce search input
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
     return () => clearTimeout(t);
   }, [q]);
 
-  // Load competitions for this event (returns EventCompetition[] with nested competition)
+  // Load competitions for this event
   useEffect(() => {
     fetch(`/api/v2/organizer/events/${event.id}/competitions`)
       .then((r) => r.json())
@@ -68,6 +227,16 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       .then((d) => setStates(d.data ?? []))
       .catch(() => {});
   }, []);
+
+  // Load stats once
+  useEffect(() => {
+    setStatsLoading(true);
+    fetch(`/api/v2/organizer/events/${event.id}/preregistration/stats`)
+      .then((r) => r.json())
+      .then((d) => setStats(d))
+      .catch(() => {})
+      .finally(() => setStatsLoading(false));
+  }, [event.id]); // eslint-disable-line react-hooks/set-state-in-effect
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,6 +286,50 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
           </h1>
           <p className="text-sm text-zinc-400">{event.name}</p>
         </div>
+      </div>
+
+      {/* Stats panel */}
+      <div className="rounded-xl border border-zinc-200 overflow-hidden">
+        <button
+          onClick={() => setStatsOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-zinc-50 hover:bg-zinc-100 transition-colors text-sm font-semibold text-zinc-700"
+        >
+          <span className="flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-blue-500" />
+            Statistik Penyertaan
+          </span>
+          {statsOpen ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
+        </button>
+
+        {statsOpen && (
+          <div className="p-4 space-y-4 bg-zinc-50/30">
+            {statsLoading || !stats ? (
+              <p className="text-sm text-zinc-400 text-center py-4">Memuatkan statistik…</p>
+            ) : (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                  <StatCard label="Kontingen Sekolah"   value={stats.summary.schoolContingents} />
+                  <StatCard label="Sekolah Rendah"      value={stats.summary.primarySchools} />
+                  <StatCard label="Sekolah Menengah"    value={stats.summary.secondarySchools} />
+                  <StatCard label="Pasukan"             value={stats.summary.teams} />
+                  <StatCard label="Peserta"             value={stats.summary.participants} />
+                  <StatCard label="Lelaki"              value={stats.summary.male} />
+                  <StatCard label="Perempuan"           value={stats.summary.female} />
+                </div>
+
+                {/* Gender bar + Grade distribution */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <GenderBar male={stats.summary.male} female={stats.summary.female} />
+                  <GradeTable rows={stats.byGrade} />
+                </div>
+
+                {/* State breakdown */}
+                <StateTable rows={stats.byState} />
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Filters */}
