@@ -187,7 +187,7 @@ export async function exportDocx(eventName: string, slug: string, s: StatsPayloa
   });
 
   // ── Grade table ───────────────────────────────────────────────────────────
-  type GradeGroup = { heading: string; color: typeof GREY; items: GradeStat[] };
+  type GradeGroup = { heading: string; color: string; items: GradeStat[] };
   const gradeGroups: GradeGroup[] = [
     { heading: "Sekolah Rendah (Darjah)", color: GREY, items: s.byGrade.filter((g) => g.eduLevel === "PRIMARY") },
     { heading: "Sekolah Menengah (Tingkatan)", color: GREY, items: s.byGrade.filter((g) => g.eduLevel === "SECONDARY") },
