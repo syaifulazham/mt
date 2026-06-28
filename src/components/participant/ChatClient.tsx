@@ -119,7 +119,6 @@ export function ChatClient() {
   // character fills the frame (same translateY trick as AiRimauChat header mini)
   const AVATAR_SCALE = 0.44; // h≈57px, fw≈36px — container clips to 36×36
   const avatarFw = Math.round(FRAME_W * AVATAR_SCALE);
-  const avatarH  = Math.round(SPRITE_H * AVATAR_SCALE);
 
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">

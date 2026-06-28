@@ -5,7 +5,6 @@ import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, Uploa
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DeleteDialog } from "./DeleteDialog";
 

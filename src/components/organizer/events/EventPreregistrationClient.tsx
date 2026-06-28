@@ -88,38 +88,37 @@ function GenderBar({ male, female }: { male: number; female: number }) {
   );
 }
 
+function GradeSection({ title, color, items }: { title: string; color: string; items: GradeStat[] }) {
+  if (items.length === 0) return null;
+  const max = Math.max(...items.map((i) => i.count));
+  return (
+    <div>
+      <p className={`text-xs font-semibold mb-1 ${color}`}>{title}</p>
+      <div className="space-y-0.5">
+        {items.map((g) => (
+          <div key={g.classGrade} className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500 w-28 shrink-0">{g.classGrade}</span>
+            <div className="flex-1 bg-zinc-100 rounded-full h-2 overflow-hidden">
+              <div className="bg-blue-400 h-2 rounded-full" style={{ width: `${Math.round((g.count / max) * 100)}%` }} />
+            </div>
+            <span className="text-xs tabular-nums text-zinc-600 w-8 text-right">{g.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function GradeTable({ rows }: { rows: GradeStat[] }) {
   const primary   = rows.filter((r) => r.eduLevel === "PRIMARY");
   const secondary = rows.filter((r) => r.eduLevel === "SECONDARY");
   const youth     = rows.filter((r) => r.eduLevel === "YOUTH");
-
-  const Section = ({ title, color, items }: { title: string; color: string; items: GradeStat[] }) =>
-    items.length === 0 ? null : (
-      <div>
-        <p className={`text-xs font-semibold mb-1 ${color}`}>{title}</p>
-        <div className="space-y-0.5">
-          {items.map((g) => {
-            const max = Math.max(...items.map((i) => i.count));
-            return (
-              <div key={g.classGrade} className="flex items-center gap-2">
-                <span className="text-xs text-zinc-500 w-28 shrink-0">{g.classGrade}</span>
-                <div className="flex-1 bg-zinc-100 rounded-full h-2 overflow-hidden">
-                  <div className="bg-blue-400 h-2 rounded-full" style={{ width: `${Math.round((g.count / max) * 100)}%` }} />
-                </div>
-                <span className="text-xs tabular-nums text-zinc-600 w-8 text-right">{g.count}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-
   return (
     <div className="rounded-xl border border-zinc-100 bg-white px-4 py-3 space-y-4">
       <p className="text-xs text-zinc-400">Peserta mengikut Gred</p>
-      <Section title="Sekolah Rendah (Darjah)" color="text-emerald-600" items={primary} />
-      <Section title="Sekolah Menengah (Tingkatan)" color="text-violet-600" items={secondary} />
-      <Section title="Belia / Lain" color="text-orange-600" items={youth} />
+      <GradeSection title="Sekolah Rendah (Darjah)" color="text-emerald-600" items={primary} />
+      <GradeSection title="Sekolah Menengah (Tingkatan)" color="text-violet-600" items={secondary} />
+      <GradeSection title="Belia / Lain" color="text-orange-600" items={youth} />
     </div>
   );
 }
@@ -230,13 +229,13 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
 
   // Load stats once
   useEffect(() => {
-    setStatsLoading(true);
+    setStatsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
     fetch(`/api/v2/organizer/events/${event.id}/preregistration/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d))
       .catch(() => {})
       .finally(() => setStatsLoading(false));
-  }, [event.id]); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [event.id]);
 
   const load = useCallback(async () => {
     setLoading(true);

@@ -895,7 +895,7 @@ function Welcome({ onSuggest }: { onSuggest: (s: string) => void }) {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-export function SmartChatClient({ role }: { role: OrganizerRole }) {
+export function SmartChatClient({ role: _role }: { role: OrganizerRole }) {
   const [messages,  setMessages]  = useState<ChatMsg[]>([]);
   const [input,     setInput]     = useState("");
   const [sending,   setSending]   = useState(false);

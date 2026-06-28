@@ -4,12 +4,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight,
   Loader2, Upload, Download, Sparkles, Check, X,
-  Building2, GitBranch, Globe, Building,
+  Building2, GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { PushKbButton } from "./PushKbButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DeleteDialog } from "./DeleteDialog";
@@ -177,7 +176,7 @@ function AiFetchDialog({
   function toggle(i: number) {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
+      if (next.has(i)) { next.delete(i); } else { next.add(i); }
       return next;
     });
   }
@@ -646,7 +645,7 @@ export function HEITab() {
 
   const [aiOpen, setAiOpen]       = useState(false);
 
-  useEffect(() => { // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => {
     fetch("/api/v2/organizer/reference-data/states?pageSize=100")
       .then((r) => r.json())
       .then((j) => setStates(j.data ?? []));
