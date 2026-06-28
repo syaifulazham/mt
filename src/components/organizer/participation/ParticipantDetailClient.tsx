@@ -24,9 +24,10 @@ type ParticipantDetail = {
 };
 
 const EDU_INFO: Record<string, { label: string; bg: string; text: string; Icon: React.ElementType }> = {
-  PRIMARY:   { label: "Primary",   bg: "bg-emerald-100", text: "text-emerald-700", Icon: BookOpen      },
-  SECONDARY: { label: "Secondary", bg: "bg-blue-100",    text: "text-blue-700",    Icon: GraduationCap },
-  YOUTH:     { label: "Youth",     bg: "bg-purple-100",  text: "text-purple-600",  Icon: Baby          },
+  KINDERGARTEN: { label: "Kindergarten",    bg: "bg-yellow-100", text: "text-yellow-700", Icon: Baby          },
+  PRIMARY:      { label: "Primary School",  bg: "bg-emerald-100", text: "text-emerald-700", Icon: BookOpen    },
+  SECONDARY:    { label: "Secondary School", bg: "bg-blue-100",   text: "text-blue-700",    Icon: GraduationCap },
+  YOUTH:        { label: "Youth / Belia",   bg: "bg-purple-100", text: "text-purple-600",  Icon: Baby          },
 };
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {

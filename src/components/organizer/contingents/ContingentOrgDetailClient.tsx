@@ -108,10 +108,11 @@ const TYPE_COLOR: Record<string, string> = {
   INDEPENDENT:   "bg-amber-50 text-amber-700 border-amber-200",
   INTERNATIONAL: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
-const EDU_OPTIONS = [
-  "PRASEKOLAH","TAHUN1","TAHUN2","TAHUN3","TAHUN4","TAHUN5","TAHUN6",
-  "TINGKATAN1","TINGKATAN2","TINGKATAN3","TINGKATAN4","TINGKATAN5","TINGKATAN6",
-  "MATRIKULASI","DIPLOMA","DEGREE","MASTERS","PHD","OTHER",
+const EDU_OPTIONS: { value: string; label: string }[] = [
+  { value: "KINDERGARTEN", label: "Kindergarten" },
+  { value: "PRIMARY",      label: "Primary School" },
+  { value: "SECONDARY",    label: "Secondary School" },
+  { value: "YOUTH",        label: "Youth / Belia" },
 ];
 
 function Dl({ label, value }: { label: string; value: React.ReactNode }) {
@@ -1073,7 +1074,7 @@ function EditParticipantDialog({
           status: participant.status, ppki: participant.ppki,
         }
       : { name: "", ic: "", email: "", phoneNumber: "", gender: "MALE", age: null,
-          eduLevel: "TINGKATAN1", classGrade: "", className: "", status: "ACTIVE", ppki: false }
+          eduLevel: "SECONDARY", classGrade: "", className: "", status: "ACTIVE", ppki: false }
   );
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
@@ -1135,7 +1136,7 @@ function EditParticipantDialog({
           <div>
             <Label>Education Level *</Label>
             <select value={form.eduLevel} onChange={(e) => setForm((p) => ({ ...p, eduLevel: e.target.value }))} className={selCls}>
-              {EDU_OPTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
+              {EDU_OPTIONS.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
             </select>
           </div>
           <div>
