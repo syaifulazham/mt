@@ -555,11 +555,25 @@ model EventCompetition {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  event       Event       @relation(fields: [eventId],       references: [id], onDelete: Cascade)
-  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  event              Event                              @relation(fields: [eventId],       references: [id], onDelete: Cascade)
+  competition        Competition                        @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  judgingTemplates   EventCompetitionJudgingTemplate[]
 
   @@unique([eventId, competitionId])
   @@map("event_competitions")
+}
+
+model EventCompetitionJudgingTemplate {
+  id                 String   @id @default(cuid())
+  eventCompetitionId String
+  judgingTemplateId  String
+  createdAt          DateTime @default(now())
+
+  eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+  judgingTemplate  JudgingTemplate  @relation(fields: [judgingTemplateId],  references: [id], onDelete: Cascade)
+
+  @@unique([eventCompetitionId, judgingTemplateId])
+  @@map("event_competition_judging_templates")
 }
 
 model CompetitionTargetGroup {
@@ -713,7 +727,8 @@ model JudgingTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  criterions JudgingCriterion[]
+  criterions        JudgingCriterion[]
+  eventCompetitions EventCompetitionJudgingTemplate[]
 
   @@map("judging_templates")
 }
