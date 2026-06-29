@@ -8,8 +8,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
+
+function genConfirmCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -409,6 +415,38 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
   const [headerSaving, setHeaderSaving] = useState(false);
   const [headerErr, setHeaderErr] = useState("");
 
+  // Delete template confirmation dialog
+  const [deleteTarget,    setDeleteTarget]    = useState<TemplateListItem | null>(null);
+  const [deleteCode,      setDeleteCode]      = useState("");
+  const [deleteConfirm,   setDeleteConfirm]   = useState("");
+  const [deleting,        setDeleting]        = useState(false);
+
+  function openDeleteDialog(t: TemplateListItem) {
+    setDeleteTarget(t);
+    setDeleteCode(genConfirmCode());
+    setDeleteConfirm("");
+  }
+
+  function closeDeleteDialog() {
+    setDeleteTarget(null);
+    setDeleteCode("");
+    setDeleteConfirm("");
+    setDeleting(false);
+  }
+
+  async function confirmDeleteTemplate() {
+    if (!deleteTarget || deleteConfirm !== deleteCode) return;
+    setDeleting(true);
+    try {
+      await fetch(`/api/v2/organizer/judging/templates/${deleteTarget.id}`, { method: "DELETE" });
+      if (selected?.id === deleteTarget.id) setSelected(null);
+      await load();
+      closeDeleteDialog();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   // Adding criterion
   const [addingCriterion, setAddingCriterion] = useState(false);
 
@@ -472,12 +510,6 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
     finally { setHeaderSaving(false); }
   }
 
-  async function deleteTemplate(t: TemplateListItem) {
-    if (!confirm(`Padam template "${t.name}"?`)) return;
-    await fetch(`/api/v2/organizer/judging/templates/${t.id}`, { method: "DELETE" });
-    if (selected?.id === t.id) setSelected(null);
-    await load();
-  }
 
   async function addCriterion() {
     if (!selected) return;
@@ -607,7 +639,7 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
                 </div>
                 {canWrite && (
                   <button
-                    onClick={e => { e.stopPropagation(); deleteTemplate(t); }}
+                    onClick={e => { e.stopPropagation(); openDeleteDialog(t); }}
                     className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 shrink-0 mt-0.5 transition-opacity"
                   >
                     <Trash2 className="h-3 w-3 text-red-400" />
@@ -753,6 +785,52 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
           </div>
         )}
       </main>
+
+      {/* Delete template confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) closeDeleteDialog(); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-4 w-4" /> Padam Template
+            </DialogTitle>
+            <DialogDescription>
+              Tindakan ini tidak boleh dibatalkan. Template{" "}
+              <span className="font-semibold text-zinc-800">&quot;{deleteTarget?.name}&quot;</span> dan
+              semua kriteria penilaiannya akan dipadam secara kekal.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-center">
+              <p className="text-xs text-red-500 mb-1">Taip kod berikut untuk mengesahkan:</p>
+              <p className="text-2xl font-bold tracking-[0.3em] text-red-700 font-mono select-all">
+                {deleteCode}
+              </p>
+            </div>
+            <Input
+              placeholder="Taip kod pengesahan di sini…"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value.toUpperCase())}
+              className="text-center font-mono tracking-widest"
+              autoComplete="off"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDeleteDialog} disabled={deleting}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteTemplate}
+              disabled={deleteConfirm !== deleteCode || deleting}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+              Padam Template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
