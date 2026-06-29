@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
+  Gavel, ChevronDown,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -66,6 +67,11 @@ type EduCourse = {
 type CompSearch = {
   id: string; code: string; name: string; participationType: string;
   targetGroups: { targetGroup: { id: string; name: string } }[];
+};
+
+type JudgingTemplateSummary = {
+  id: string; name: string; code: string; description: string | null;
+  _count: { criterions: number };
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -686,8 +692,23 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
   const [deleteTarget,   setDeleteTarget]   = useState<EventCompLink | null>(null);
   const [linkCourseFor,  setLinkCourseFor]  = useState<EventCompLink | null>(null);
 
+  // Judging templates (edit form only)
+  const [assignedTemplates,   setAssignedTemplates]   = useState<JudgingTemplateSummary[]>([]);
+  const [allTemplates,        setAllTemplates]        = useState<JudgingTemplateSummary[]>([]);
+  const [templatesLoading,    setTemplatesLoading]    = useState(false);
+  const [templatePickerOpen,  setTemplatePickerOpen]  = useState(false);
+  const [removingTemplateId,  setRemovingTemplateId]  = useState<string | null>(null);
+  const [assigningTemplateId, setAssigningTemplateId] = useState<string | null>(null);
+
   const linksRef = useRef(links);
   useEffect(() => { linksRef.current = links; }, [links]);
+
+  useEffect(() => {
+    if (!templatePickerOpen) return;
+    function handler() { setTemplatePickerOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [templatePickerOpen]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -723,11 +744,51 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
     searchComps("");
   }
 
-  function openEdit(link: EventCompLink) {
+  async function openEdit(link: EventCompLink) {
     setEditing(link); setPicked(link.competition);
     setPicName(link.picName ?? ""); setPicContact(link.picContact ?? "");
     setMaxTeams(link.maxTeams); setFormErr("");
+    setAssignedTemplates([]); setAllTemplates([]);
+    setTemplatePickerOpen(false);
     setView("form");
+    setTemplatesLoading(true);
+    try {
+      const [aRes, allRes] = await Promise.all([
+        fetch(`/api/v2/organizer/events/${eventId}/competitions/${link.id}/judging-templates`),
+        fetch("/api/v2/organizer/judging/templates"),
+      ]);
+      const [aJson, allJson] = await Promise.all([aRes.json(), allRes.json()]);
+      setAssignedTemplates(aJson.data ?? []);
+      setAllTemplates(allJson.templates ?? []);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }
+
+  async function assignTemplate(templateId: string, ecId: string) {
+    setAssigningTemplateId(templateId);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${eventId}/competitions/${ecId}/judging-templates`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ judgingTemplateId: templateId }) }
+      );
+      if (res.ok) {
+        const tpl = allTemplates.find(t => t.id === templateId);
+        if (tpl) setAssignedTemplates(prev => [...prev, tpl]);
+        setTemplatePickerOpen(false);
+      }
+    } finally { setAssigningTemplateId(null); }
+  }
+
+  async function removeTemplate(templateId: string, ecId: string) {
+    setRemovingTemplateId(templateId);
+    try {
+      await fetch(
+        `/api/v2/organizer/events/${eventId}/competitions/${ecId}/judging-templates/${templateId}`,
+        { method: "DELETE" }
+      );
+      setAssignedTemplates(prev => prev.filter(t => t.id !== templateId));
+    } finally { setRemovingTemplateId(null); }
   }
 
   async function handleSave() {
@@ -898,6 +959,95 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
             <Input type="number" min={0} value={maxTeams} onChange={e => setMaxTeams(parseInt(e.target.value) || 0)} className="mt-1 h-8 text-sm" />
             <p className="text-[10px] text-zinc-400 mt-1">0 = tanpa had</p>
           </div>
+
+          {/* Judging Templates — only visible when editing an existing link */}
+          {editing && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs flex items-center gap-1.5">
+                  <Gavel className="h-3.5 w-3.5 text-zinc-400" />Template Penghakiman
+                </Label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); setTemplatePickerOpen(v => !v); }}
+                    className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
+                  >
+                    <Plus className="h-3.5 w-3.5" />Tambah
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                  {templatePickerOpen && (
+                    <div
+                      className="absolute right-0 top-6 z-50 w-72 rounded-lg border bg-white shadow-lg overflow-hidden"
+                      onMouseDown={e => e.stopPropagation()}
+                    >
+                      <div className="px-3 py-2 border-b text-xs font-semibold text-zinc-500 bg-zinc-50">
+                        Template tersedia
+                      </div>
+                      <div className="max-h-56 overflow-y-auto">
+                        {allTemplates.filter(t => !assignedTemplates.some(a => a.id === t.id)).length === 0 ? (
+                          <p className="px-3 py-4 text-xs text-zinc-400 text-center">Semua template sudah ditetapkan.</p>
+                        ) : (
+                          allTemplates
+                            .filter(t => !assignedTemplates.some(a => a.id === t.id))
+                            .map(t => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => assignTemplate(t.id, editing.id)}
+                                disabled={assigningTemplateId === t.id}
+                                className="w-full text-left px-3 py-2.5 hover:bg-violet-50 border-b last:border-0 flex items-center gap-2"
+                              >
+                                {assigningTemplateId === t.id
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400 shrink-0" />
+                                  : <Gavel className="h-3.5 w-3.5 text-zinc-300 shrink-0" />
+                                }
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-zinc-800 truncate">{t.name}</p>
+                                  <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} kriteria</p>
+                                </div>
+                              </button>
+                            ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {templatesLoading ? (
+                <div className="flex items-center gap-2 py-2 text-xs text-zinc-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />Memuatkan template…
+                </div>
+              ) : assignedTemplates.length === 0 ? (
+                <p className="text-xs text-zinc-400 italic py-1">Tiada template ditetapkan.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {assignedTemplates.map(t => (
+                    <div key={t.id} className="flex items-center gap-2 rounded-md border border-violet-100 bg-violet-50 px-3 py-2">
+                      <Gavel className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-violet-800 truncate">{t.name}</p>
+                        <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} kriteria</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeTemplate(t.id, editing.id)}
+                        disabled={removingTemplateId === t.id}
+                        className="p-0.5 rounded hover:bg-violet-100 shrink-0"
+                      >
+                        {removingTemplateId === t.id
+                          ? <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+                          : <X className="h-3 w-3 text-violet-400" />
+                        }
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {formErr && <p className="text-xs text-red-500">{formErr}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setView("list")} className="h-8 text-xs">Batal</Button>
