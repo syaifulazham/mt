@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, lazy, Suspense, useRef } from "react"
 import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
-  ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings,
+  ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -1166,23 +1166,32 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
             function renderRow(ev: EventListItem) {
               const isOnline    = ev.scope.startsWith("ONLINE");
               const isArchived  = ev.status === "ARCHIVE";
+              const isPublished = ev.status === "PUBLISHED";
               return (
                 <div key={ev.id}
                   className={cn(
                     "group flex cursor-pointer border-b last:border-0 transition-colors",
                     isArchived
                       ? selected?.id === ev.id ? "bg-zinc-200" : "hover:bg-zinc-100 opacity-60"
-                      : selected?.id === ev.id ? "bg-blue-50" : "hover:bg-zinc-50"
+                      : isPublished
+                        ? selected?.id === ev.id ? "bg-emerald-100" : "bg-emerald-50/70 hover:bg-emerald-100"
+                        : selected?.id === ev.id ? "bg-blue-50" : "hover:bg-zinc-50"
                   )}
                   onClick={() => selectEvent(ev)}
                 >
                   <div className="w-2.5 shrink-0 self-stretch"
-                    style={{ background: isArchived ? "#a1a1aa" : isOnline ? "#7c3aed" : "#0ea5e9" }} />
+                    style={{ background: isArchived ? "#a1a1aa" : isPublished ? "#10b981" : isOnline ? "#7c3aed" : "#0ea5e9" }} />
                   <div className="flex-1 min-w-0 px-3 py-2.5">
-                    <p className={cn("text-xs font-medium truncate",
-                      isArchived ? "text-zinc-400 line-through" :
-                      selected?.id === ev.id ? "text-blue-700" : "text-zinc-800"
-                    )}>{ev.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      {isPublished && (
+                        <Globe2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                      )}
+                      <p className={cn("text-xs font-medium truncate",
+                        isArchived  ? "text-zinc-400 line-through" :
+                        isPublished ? "text-emerald-800" :
+                        selected?.id === ev.id ? "text-blue-700" : "text-zinc-800"
+                      )}>{ev.name}</p>
+                    </div>
                     {ev.startDate && (
                       <p className="text-[10px] text-zinc-400 mt-0.5">{fmtDate(ev.startDate)}</p>
                     )}
