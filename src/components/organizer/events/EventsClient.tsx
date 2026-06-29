@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, ChevronDown,
+  Gavel,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -703,12 +703,6 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
   const linksRef = useRef(links);
   useEffect(() => { linksRef.current = links; }, [links]);
 
-  useEffect(() => {
-    if (!templatePickerOpen) return;
-    function handler() { setTemplatePickerOpen(false); }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [templatePickerOpen]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -967,52 +961,13 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
                 <Label className="text-xs flex items-center gap-1.5">
                   <Gavel className="h-3.5 w-3.5 text-zinc-400" />Template Penghakiman
                 </Label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={e => { e.stopPropagation(); setTemplatePickerOpen(v => !v); }}
-                    className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
-                  >
-                    <Plus className="h-3.5 w-3.5" />Tambah
-                    <ChevronDown className="h-3 w-3" />
-                  </button>
-                  {templatePickerOpen && (
-                    <div
-                      className="absolute right-0 top-6 z-50 w-72 rounded-lg border bg-white shadow-lg overflow-hidden"
-                      onMouseDown={e => e.stopPropagation()}
-                    >
-                      <div className="px-3 py-2 border-b text-xs font-semibold text-zinc-500 bg-zinc-50">
-                        Template tersedia
-                      </div>
-                      <div className="max-h-56 overflow-y-auto">
-                        {allTemplates.filter(t => !assignedTemplates.some(a => a.id === t.id)).length === 0 ? (
-                          <p className="px-3 py-4 text-xs text-zinc-400 text-center">Semua template sudah ditetapkan.</p>
-                        ) : (
-                          allTemplates
-                            .filter(t => !assignedTemplates.some(a => a.id === t.id))
-                            .map(t => (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => assignTemplate(t.id, editing.id)}
-                                disabled={assigningTemplateId === t.id}
-                                className="w-full text-left px-3 py-2.5 hover:bg-violet-50 border-b last:border-0 flex items-center gap-2"
-                              >
-                                {assigningTemplateId === t.id
-                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400 shrink-0" />
-                                  : <Gavel className="h-3.5 w-3.5 text-zinc-300 shrink-0" />
-                                }
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-zinc-800 truncate">{t.name}</p>
-                                  <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} kriteria</p>
-                                </div>
-                              </button>
-                            ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setTemplatePickerOpen(true)}
+                  className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
+                >
+                  <Plus className="h-3.5 w-3.5" />Tambah
+                </button>
               </div>
 
               {templatesLoading ? (
@@ -1058,6 +1013,48 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
           </div>
         </div>
       )}
+
+      {/* Template picker modal */}
+      <Dialog open={templatePickerOpen} onOpenChange={open => { if (!open) setTemplatePickerOpen(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-violet-700">
+              <Gavel className="h-4 w-4" />Pilih Template Penghakiman
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto py-1 pr-1">
+            {allTemplates.filter(t => !assignedTemplates.some(a => a.id === t.id)).length === 0 ? (
+              <p className="text-sm text-zinc-400 text-center py-6">Semua template sudah ditetapkan.</p>
+            ) : (
+              allTemplates
+                .filter(t => !assignedTemplates.some(a => a.id === t.id))
+                .map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => editing && assignTemplate(t.id, editing.id)}
+                    disabled={assigningTemplateId === t.id}
+                    className="w-full text-left rounded-lg border border-zinc-200 hover:border-violet-300 hover:bg-violet-50 px-4 py-3 flex items-center gap-3 transition-colors disabled:opacity-60"
+                  >
+                    {assigningTemplateId === t.id
+                      ? <Loader2 className="h-4 w-4 animate-spin text-violet-400 shrink-0" />
+                      : <Gavel className="h-4 w-4 text-zinc-300 shrink-0" />
+                    }
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-zinc-800">{t.name}</p>
+                      <p className="text-xs text-zinc-400 font-mono mt-0.5">{t.code} · {t._count.criterions} kriteria</p>
+                      {t.description && <p className="text-xs text-zinc-400 mt-0.5 truncate">{t.description}</p>}
+                    </div>
+                    <Plus className="h-4 w-4 text-violet-400 shrink-0" />
+                  </button>
+                ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTemplatePickerOpen(false)}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DeleteDialog
         open={!!deleteTarget}
