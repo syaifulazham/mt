@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Plus, Trash2, Save, Loader2, ChevronUp, ChevronDown,
   Hash, Timer, ToggleLeft, CheckSquare, X, GripVertical,
+  Sparkles, Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -447,6 +448,49 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
     }
   }
 
+  // AI generate dialog
+  const [aiOpen,    setAiOpen]    = useState(false);
+  const [aiPrompt,  setAiPrompt]  = useState("");
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiErr,     setAiErr]     = useState("");
+
+  async function runAiGenerate() {
+    if (!aiPrompt.trim()) return;
+    setAiRunning(true); setAiErr("");
+    try {
+      const res = await fetch("/api/v2/organizer/judging/templates/ai-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: aiPrompt }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Ralat AI");
+      setTemplates(prev => [...prev, j.template].sort((a, b) => a.name.localeCompare(b.name)));
+      setAiOpen(false); setAiPrompt("");
+      selectTemplate(j.template);
+    } catch (e) {
+      setAiErr(e instanceof Error ? e.message : "Ralat tidak diketahui");
+    } finally {
+      setAiRunning(false);
+    }
+  }
+
+  // Replicate template
+  const [replicating, setReplicating] = useState<string | null>(null);
+
+  async function replicateTemplate(t: TemplateListItem) {
+    setReplicating(t.id);
+    try {
+      const res = await fetch(`/api/v2/organizer/judging/templates/${t.id}/replicate`, { method: "POST" });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error);
+      setTemplates(prev => [...prev, j.template].sort((a, b) => a.name.localeCompare(b.name)));
+      selectTemplate(j.template);
+    } finally {
+      setReplicating(null);
+    }
+  }
+
   // Adding criterion
   const [addingCriterion, setAddingCriterion] = useState(false);
 
@@ -458,7 +502,6 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
     setLoading(false);
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   async function selectTemplate(t: TemplateListItem) {
@@ -579,16 +622,25 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
 
       {/* ── Left: Template list ─────────────────────────────── */}
       <aside className="w-64 shrink-0 flex flex-col border-r bg-white">
-        <div className="px-4 py-3 border-b flex items-center gap-2">
+        <div className="px-4 py-3 border-b flex items-center gap-1.5">
           <span className="text-sm font-semibold flex-1">Judging Templates</span>
           {canWrite && (
-            <button
-              onClick={() => setNewOpen(v => !v)}
-              title="Template baharu"
-              className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+            <>
+              <button
+                onClick={() => { setAiOpen(true); setNewOpen(false); }}
+                title="Jana dengan AI"
+                className="h-6 w-6 flex items-center justify-center rounded hover:bg-violet-100 text-violet-500"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => { setNewOpen(v => !v); setAiOpen(false); }}
+                title="Template baharu"
+                className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </>
           )}
         </div>
 
@@ -638,12 +690,25 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
                   <p className="text-[10px] text-zinc-400 mt-0.5">{t._count.criterions} kriteria</p>
                 </div>
                 {canWrite && (
-                  <button
-                    onClick={e => { e.stopPropagation(); openDeleteDialog(t); }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 shrink-0 mt-0.5 transition-opacity"
-                  >
-                    <Trash2 className="h-3 w-3 text-red-400" />
-                  </button>
+                  <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+                    <button
+                      onClick={e => { e.stopPropagation(); replicateTemplate(t); }}
+                      disabled={replicating === t.id}
+                      title="Salin template"
+                      className="p-1 rounded hover:bg-violet-50"
+                    >
+                      {replicating === t.id
+                        ? <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+                        : <Copy className="h-3 w-3 text-violet-400" />
+                      }
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); openDeleteDialog(t); }}
+                      className="p-1 rounded hover:bg-red-50"
+                    >
+                      <Trash2 className="h-3 w-3 text-red-400" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))
@@ -785,6 +850,50 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
           </div>
         )}
       </main>
+
+      {/* AI generate dialog */}
+      <Dialog open={aiOpen} onOpenChange={(open) => { if (!open) { setAiOpen(false); setAiErr(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-violet-700">
+              <Sparkles className="h-4 w-4" /> Jana Template dengan AI
+            </DialogTitle>
+            <DialogDescription>
+              Terangkan pertandingan atau kategori anda. AI akan menjana template penilaian dengan kriteria yang sesuai.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <textarea
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              placeholder="cth. Pertandingan drone racing peringkat sekolah menengah. Peserta akan dinilai berdasarkan kelajuan, kawalan, dan ketepatan..."
+              rows={5}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-400"
+              disabled={aiRunning}
+            />
+            {aiErr && (
+              <p className="text-xs text-red-500 bg-red-50 rounded px-3 py-2">{aiErr}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAiOpen(false); setAiErr(""); }} disabled={aiRunning}>
+              Batal
+            </Button>
+            <Button
+              onClick={runAiGenerate}
+              disabled={!aiPrompt.trim() || aiRunning}
+              className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5"
+            >
+              {aiRunning
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Menjana...</>
+                : <><Sparkles className="h-4 w-4" /> Jana Template</>
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete template confirmation dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) closeDeleteDialog(); }}>
