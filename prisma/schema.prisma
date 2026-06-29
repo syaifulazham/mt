@@ -558,6 +558,7 @@ model EventCompetition {
   event              Event                              @relation(fields: [eventId],       references: [id], onDelete: Cascade)
   competition        Competition                        @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   judgingTemplates   EventCompetitionJudgingTemplate[]
+  judgingTasks       JudgingTask[]
 
   @@unique([eventId, competitionId])
   @@map("event_competitions")
@@ -712,6 +713,11 @@ model TeamTrainer {
 // JUDGING TEMPLATES
 // ─────────────────────────────────────────────────────────────────────────────
 
+enum JudgingTaskStatus {
+  ACTIVE
+  CLOSED
+}
+
 enum CriterionType {
   NUMBER
   TIME
@@ -729,8 +735,27 @@ model JudgingTemplate {
 
   criterions        JudgingCriterion[]
   eventCompetitions EventCompetitionJudgingTemplate[]
+  judgingTasks      JudgingTask[]
 
   @@map("judging_templates")
+}
+
+model JudgingTask {
+  id                 String            @id @default(cuid())
+  eventCompetitionId String
+  judgingTemplateId  String
+  routeSlug          String            @unique
+  passcode           String
+  label              String?
+  status             JudgingTaskStatus @default(ACTIVE)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+  judgingTemplate  JudgingTemplate  @relation(fields: [judgingTemplateId],  references: [id], onDelete: Cascade)
+
+  @@index([eventCompetitionId])
+  @@map("judging_tasks")
 }
 
 model JudgingCriterion {

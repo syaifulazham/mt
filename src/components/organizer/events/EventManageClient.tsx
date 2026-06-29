@@ -6,8 +6,10 @@ import {
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
+const ONLINE_SCOPES = ["ONLINE_NATIONAL", "ONLINE_STATE", "ONLINE_ZONE", "ONLINE_OPEN"];
+
 type EventSummary = {
-  id: string; name: string; slug: string; status: string;
+  id: string; name: string; slug: string; scope: string; status: string;
   startDate: Date | null; endDate: Date | null;
 };
 
@@ -54,6 +56,7 @@ const MODULES: Module[] = [
     color: "text-amber-600",
     bg: "bg-amber-50",
     border: "border-amber-100",
+    href: "judging",
   },
   {
     icon: Trophy,
@@ -87,6 +90,8 @@ export function EventManageClient({
 }) {
   const start = fmtDate(event.startDate);
   const end   = fmtDate(event.endDate);
+  const isOnline = ONLINE_SCOPES.includes(event.scope);
+  const modules = MODULES.filter(m => !(isOnline && m.title === "Log Kehadiran Peserta"));
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -115,7 +120,7 @@ export function EventManageClient({
 
       {/* Module grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {MODULES.map((mod) => {
+        {modules.map((mod) => {
           const Icon = mod.icon;
           const inner = (
             <>
