@@ -65,6 +65,7 @@ const MODULES: Module[] = [
     color: "text-rose-600",
     bg: "bg-rose-50",
     border: "border-rose-100",
+    href: "results",
   },
 ];
 

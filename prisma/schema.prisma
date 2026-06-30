@@ -491,6 +491,7 @@ model Event {
   dependentEvents     Event[]            @relation("EventPrerequisite")
   eventCompetitions   EventCompetition[]
   teamEvents          TeamEvent[]
+  resultsEndpoints    ResultsEndpoint[]
 
   @@map("events")
 }
@@ -813,6 +814,32 @@ model JudgingScore {
   @@unique([judgingTaskId, teamId, criterionId])
   @@index([judgingTaskId])
   @@map("judging_scores")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESULTS ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ResultsEndpointStatus {
+  ACTIVE
+  CLOSED
+}
+
+model ResultsEndpoint {
+  id             String                @id @default(cuid())
+  eventId        String
+  routeSlug      String                @unique
+  passcode       String?
+  label          String?
+  status         ResultsEndpointStatus @default(ACTIVE)
+  competitionIds String[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("results_endpoints")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
