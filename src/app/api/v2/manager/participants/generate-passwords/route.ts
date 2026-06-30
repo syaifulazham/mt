@@ -48,6 +48,20 @@ export async function POST(req: NextRequest) {
   if (participants.length === 0)
     return NextResponse.json({ data: [], skipped: 0 });
 
+  // Single participant — skip streaming, return plain JSON so the single-reset
+  // dialog can call res.json() without NDJSON parse errors.
+  if (participants.length === 1) {
+    const p = participants[0];
+    if (!p.ic) return NextResponse.json({ data: [], skipped: 1 });
+    const plain = generateInitialPassword(p.name, p.ic);
+    const hash  = await hashPassword(plain);
+    await db.participant.update({ where: { id: p.id }, data: { passwordHash: hash } });
+    return NextResponse.json({
+      data: [{ id: p.id, name: p.name, initialPassword: plain, eduLevel: p.eduLevel, classGrade: p.classGrade }],
+      skipped: 0,
+    });
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
