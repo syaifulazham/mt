@@ -280,7 +280,6 @@ export function JudgingTeamClient({ slug, teamId }: { slug: string; teamId: stri
         setStatus("ready");
       })
       .catch(() => { setErrorMsg("Ralat rangkaian."); setStatus("error"); });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, teamId]);
 
   function setField(criterionId: string, field: keyof DraftScore, value: unknown) {

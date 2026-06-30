@@ -185,15 +185,18 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
   const [passcode, setPasscode] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading,  setLoading]  = useState(false);
-  const [restoring, setRestoring] = useState(true); // true until we check sessionStorage
+  // Lazy init: restoring is true only when there's a stored passcode to verify
+  const [restoring, setRestoring] = useState(() =>
+    typeof window !== "undefined" && !!sessionStorage.getItem(`judging_pc_${slug}`)
+  );
   const [error,    setError]    = useState("");
   const [data,     setData]     = useState<BoardData | null>(null);
   const [scores,   setScores]   = useState<ScoreRow[]>([]);
 
-  // On mount: if a passcode is stored from a previous session, auto-verify
+  // On mount: auto-verify stored passcode — only runs when restoring starts true
   useEffect(() => {
     const stored = sessionStorage.getItem(`judging_pc_${slug}`);
-    if (!stored) { setRestoring(false); return; }
+    if (!stored) return; // restoring already false; nothing to do
     fetch(`/api/judging/${slug}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -206,7 +209,6 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
       })
       .catch(() => {})
       .finally(() => setRestoring(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   async function handleVerify() {
