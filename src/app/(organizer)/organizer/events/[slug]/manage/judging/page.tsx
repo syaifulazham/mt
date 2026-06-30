@@ -19,7 +19,12 @@ export default async function EventJudgingPage({ params }: { params: Promise<{ s
       id: true, name: true, slug: true, scope: true, status: true,
       eventCompetitions: {
         include: {
-          competition: { select: { id: true, name: true, code: true, participationType: true } },
+          competition: {
+            select: {
+              id: true, name: true, code: true, participationType: true,
+              targetGroups: { select: { targetGroup: { select: { schoolLevel: true } } } },
+            },
+          },
           judgingTemplates: {
             include: {
               judgingTemplate: {

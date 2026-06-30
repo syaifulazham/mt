@@ -24,6 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           competition: { select: { id: true, name: true, code: true, participationType: true } },
         },
       },
+      scores: true,
     },
   });
 
@@ -66,7 +67,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       name: task.judgingTemplate.name,
       code: task.judgingTemplate.code,
       description: task.judgingTemplate.description,
+      criterions: task.judgingTemplate.criterions.map(c => ({
+        id: c.id,
+        name: c.name,
+        order: c.order,
+        type: c.type,
+        maxScore: c.maxScore,
+        minScore: c.minScore,
+        maxTime: c.maxTime,
+        options: c.options.map(o => ({ id: o.id, label: o.label, weight: o.weight, order: o.order })),
+      })),
     },
+    scores: task.scores,
     isOnline,
     teams: teams.map(t => ({
       id: t.id,

@@ -652,12 +652,13 @@ model Team {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  competition Competition @relation(fields: [competitionId], references: [id])
-  contingent  Contingent  @relation(fields: [contingentId], references: [id])
-  members     TeamMember[]
-  trainers    TeamTrainer[]
-  teamEvents  TeamEvent[]
-  droneAccess TeamDroneAccess?
+  competition    Competition @relation(fields: [competitionId], references: [id])
+  contingent     Contingent  @relation(fields: [contingentId], references: [id])
+  members        TeamMember[]
+  trainers       TeamTrainer[]
+  teamEvents     TeamEvent[]
+  droneAccess    TeamDroneAccess?
+  judgingScores  JudgingScore[]
 
   @@map("teams")
 }
@@ -754,6 +755,7 @@ model JudgingTask {
 
   eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
   judgingTemplate  JudgingTemplate  @relation(fields: [judgingTemplateId],  references: [id], onDelete: Cascade)
+  scores           JudgingScore[]
 
   @@index([eventCompetitionId])
   @@map("judging_tasks")
@@ -774,6 +776,7 @@ model JudgingCriterion {
 
   template JudgingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   options  JudgingOption[]
+  scores   JudgingScore[]
 
   @@index([templateId])
   @@map("judging_criterions")
@@ -790,6 +793,26 @@ model JudgingOption {
 
   @@index([criterionId])
   @@map("judging_options")
+}
+
+model JudgingScore {
+  id            String   @id @default(cuid())
+  judgingTaskId String
+  teamId        String
+  criterionId   String
+  score         Float?   // NUMBER / SINGLE_OPTION / MULTIPLE_OPTION
+  timeSeconds   Int?     // TIME type
+  optionIds     String[] // selected option ids (for display)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  judgingTask JudgingTask      @relation(fields: [judgingTaskId], references: [id], onDelete: Cascade)
+  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  criterion   JudgingCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@unique([judgingTaskId, teamId, criterionId])
+  @@index([judgingTaskId])
+  @@map("judging_scores")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
