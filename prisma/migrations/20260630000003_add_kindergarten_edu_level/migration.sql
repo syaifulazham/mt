@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "EduLevel" ADD VALUE 'KINDERGARTEN';

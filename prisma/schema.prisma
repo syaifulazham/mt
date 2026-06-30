@@ -417,6 +417,7 @@ enum Gender {
 }
 
 enum EduLevel {
+  KINDERGARTEN
   PRIMARY
   SECONDARY
   YOUTH
