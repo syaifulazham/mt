@@ -77,7 +77,7 @@ export default async function EventReportsPage({ params }: { params: Promise<{ s
           LEFT JOIN higher_institutions hi     ON hi.id        = cont."higherInstitutionId"
           LEFT JOIN states           hi_state  ON hi_state.id  = hi."stateId"
           WHERE t."competitionId" IN (${Prisma.join(competitionIds)})
-          GROUP BY t."competitionId", COALESCE(s.name, sch_state.name, hi_state.name)
+          GROUP BY t."competitionId", COALESCE(s.name, sch_state.name, hi_state.name, 'Lain-lain')
           ORDER BY "stateName", t."competitionId"
         `,
       ])
