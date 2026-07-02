@@ -37,11 +37,9 @@ function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name
   const initials = name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
   if (logo && !err) {
-    return (
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={logo} alt={name} onError={() => setErr(true)}
-        className={cn(cls, "rounded-full object-cover border-2 border-white/20 shadow-lg")} />
-    );
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={logo} alt={name} onError={() => setErr(true)}
+      className={cn(cls, "rounded-full object-cover border-2 border-white/20 shadow-lg")} />;
   }
   return (
     <div className={cn(cls, "rounded-full bg-gradient-to-br from-white/20 to-white/5 border-2 border-white/20 flex items-center justify-center font-bold text-white shadow-lg")}>
