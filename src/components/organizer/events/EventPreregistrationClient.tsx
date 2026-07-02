@@ -1,19 +1,34 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2, ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import {
+  ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
+  ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2,
+} from "lucide-react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
 
 type Participant = {
   id: string;
   name: string;
+  contingentName: string | null;
   classGrade: string | null;
   eduLevel: string;
   competitionCode: string;
   competitionName: string;
   teamName: string;
   stateName: string | null;
+};
+
+type Team = {
+  id: string;
+  teamName: string;
+  contingentName: string | null;
+  stateName: string | null;
+  competitionCode: string;
+  competitionName: string;
+  members: number;
 };
 
 type Competition = {
@@ -55,35 +70,51 @@ const PAGE_SIZE = 50;
 
 // ── Stats panel ──────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, sub }: { label: string; value: number; sub?: string }) {
+function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-zinc-100 bg-white px-4 py-3">
       <p className="text-xs text-zinc-400 mb-0.5">{label}</p>
       <p className="text-2xl font-bold text-zinc-900 tabular-nums">{value.toLocaleString()}</p>
-      {sub && <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
 
-function GenderBar({ male, female }: { male: number; female: number }) {
+function GenderPie({ male, female }: { male: number; female: number }) {
   const total = male + female;
   if (total === 0) return null;
-  const mp = Math.round((male / total) * 100);
-  const fp = 100 - mp;
+  const data = [
+    { name: "Lelaki", value: male },
+    { name: "Perempuan", value: female },
+  ];
+  const mp = ((male / total) * 100).toFixed(1);
+  const fp = ((female / total) * 100).toFixed(1);
   return (
     <div className="rounded-xl border border-zinc-100 bg-white px-4 py-3">
-      <p className="text-xs text-zinc-400 mb-2">Jantina</p>
-      <div className="flex rounded-full overflow-hidden h-4 text-xs font-semibold">
-        <div className="bg-blue-400 flex items-center justify-center text-white" style={{ width: `${mp}%` }}>
-          {mp > 8 ? `L ${mp}%` : ""}
+      <p className="text-xs text-zinc-400 mb-1">Jantina</p>
+      <div className="flex items-center gap-4">
+        <ResponsiveContainer width={120} height={120}>
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" innerRadius={32} outerRadius={52} dataKey="value" startAngle={90} endAngle={-270}>
+              <Cell fill="#60a5fa" />
+              <Cell fill="#f472b6" />
+            </Pie>
+            <Tooltip formatter={(v: number) => v.toLocaleString("ms-MY")} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="space-y-2 text-xs text-zinc-600">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-full bg-blue-400 shrink-0" />
+            <span>Lelaki</span>
+            <span className="font-semibold ml-1">{male.toLocaleString()}</span>
+            <span className="text-zinc-400">({mp}%)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-full bg-pink-400 shrink-0" />
+            <span>Perempuan</span>
+            <span className="font-semibold ml-1">{female.toLocaleString()}</span>
+            <span className="text-zinc-400">({fp}%)</span>
+          </div>
         </div>
-        <div className="bg-pink-400 flex items-center justify-center text-white" style={{ width: `${fp}%` }}>
-          {fp > 8 ? `P ${fp}%` : ""}
-        </div>
-      </div>
-      <div className="flex justify-between text-xs text-zinc-500 mt-1.5">
-        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-400" /> Lelaki {male.toLocaleString()}</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-pink-400" /> Perempuan {female.toLocaleString()}</span>
       </div>
     </div>
   );
@@ -180,12 +211,26 @@ function StateTable({ rows }: { rows: StateStat[] }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function EventPreregistrationClient({ event }: { event: EventSummary }) {
-  const [rows, setRows]               = useState<Participant[]>([]);
-  const [total, setTotal]             = useState(0);
-  const [page, setPage]               = useState(1);
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState<string | null>(null);
+  // Participants state
+  const [rows, setRows]       = useState<Participant[]>([]);
+  const [total, setTotal]     = useState(0);
+  const [page, setPage]       = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
 
+  // Teams state
+  const [teams, setTeams]               = useState<Team[]>([]);
+  const [teamsTotal, setTeamsTotal]     = useState(0);
+  const [teamsPage, setTeamsPage]       = useState(1);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [teamsError, setTeamsError]     = useState<string | null>(null);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
+  const [unregistering, setUnregistering] = useState(false);
+
+  // List tab toggle
+  const [listTab, setListTab] = useState<"participants" | "teams">("participants");
+
+  // Filters (shared across tabs)
   const [q, setQ]                         = useState("");
   const [debouncedQ, setDebouncedQ]       = useState("");
   const [competitionId, setCompetitionId] = useState("");
@@ -195,14 +240,17 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [states, setStates]             = useState<{ id: string; name: string }[]>([]);
 
   // Stats panel
-  const [statsOpen, setStatsOpen]         = useState(true);
-  const [stats, setStats]                 = useState<{
+  const [statsOpen, setStatsOpen]       = useState(true);
+  const [stats, setStats]               = useState<{
     summary: StatsSummary;
     byGrade: GradeStat[];
     byState: StateStat[];
   } | null>(null);
-  const [statsLoading, setStatsLoading]   = useState(false);
-  const [exporting, setExporting]         = useState<"xlsx" | "docx" | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [exporting, setExporting]       = useState<"xlsx" | "docx" | null>(null);
+
+  // Select-all checkbox indeterminate ref (teams)
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   async function handleExport(format: "xlsx" | "docx") {
     if (!stats) return;
@@ -215,13 +263,13 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }
 
-  // Debounce search input
+  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
     return () => clearTimeout(t);
   }, [q]);
 
-  // Load competitions for this event
+  // Load competitions
   useEffect(() => {
     fetch(`/api/v2/organizer/events/${event.id}/competitions`)
       .then((r) => r.json())
@@ -240,9 +288,9 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       .catch(() => {});
   }, []);
 
-  // Load stats once
-  useEffect(() => {
-    setStatsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
+  // Load stats
+  const loadStats = useCallback(() => {
+    setStatsLoading(true);
     fetch(`/api/v2/organizer/events/${event.id}/preregistration/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d))
@@ -250,21 +298,20 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       .finally(() => setStatsLoading(false));
   }, [event.id]);
 
+  useEffect(() => { loadStats(); }, [loadStats]); // eslint-disable-line react-hooks/set-state-in-effect
+
+  // Load participants
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const sp = new URLSearchParams({
-        page: String(page),
-        pageSize: String(PAGE_SIZE),
-      });
+      const sp = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
       if (debouncedQ)    sp.set("q", debouncedQ);
       if (competitionId) sp.set("competitionId", competitionId);
       if (stateId)       sp.set("stateId", stateId);
 
       const res  = await fetch(`/api/v2/organizer/events/${event.id}/preregistration?${sp}`);
-      const text = await res.text();
-      const json = JSON.parse(text);
+      const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Ralat");
       setRows(json.data ?? []);
       setTotal(json.total ?? 0);
@@ -275,11 +322,81 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }, [event.id, page, debouncedQ, competitionId, stateId]);
 
+  // Load teams
+  const loadTeams = useCallback(async () => {
+    setTeamsLoading(true);
+    setTeamsError(null);
+    try {
+      const sp = new URLSearchParams({ page: String(teamsPage), pageSize: String(PAGE_SIZE) });
+      if (debouncedQ)    sp.set("q", debouncedQ);
+      if (competitionId) sp.set("competitionId", competitionId);
+      if (stateId)       sp.set("stateId", stateId);
+
+      const res  = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams?${sp}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      setTeams(json.data ?? []);
+      setTeamsTotal(json.total ?? 0);
+    } catch (e: unknown) {
+      setTeamsError(e instanceof Error ? e.message : "Ralat tidak diketahui");
+    } finally {
+      setTeamsLoading(false);
+    }
+  }, [event.id, teamsPage, debouncedQ, competitionId, stateId]);
+
+  // Reset pages on filter change
   useEffect(() => { setPage(1); }, [debouncedQ, competitionId, stateId]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { setTeamsPage(1); setSelectedTeamIds(new Set()); }, [debouncedQ, competitionId, stateId]); // eslint-disable-line react-hooks/set-state-in-effect
 
   useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { loadTeams(); }, [loadTeams]); // eslint-disable-line react-hooks/set-state-in-effect
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Update select-all indeterminate state
+  useEffect(() => {
+    if (!selectAllRef.current) return;
+    const allIds = teams.map(t => t.id);
+    const selectedCount = allIds.filter(id => selectedTeamIds.has(id)).length;
+    selectAllRef.current.indeterminate = selectedCount > 0 && selectedCount < allIds.length;
+    selectAllRef.current.checked = allIds.length > 0 && selectedCount === allIds.length;
+  }, [selectedTeamIds, teams]);
+
+  function toggleTeam(id: string) {
+    setSelectedTeamIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllTeams() {
+    const allIds = teams.map(t => t.id);
+    const allSelected = allIds.every(id => selectedTeamIds.has(id));
+    setSelectedTeamIds(allSelected ? new Set() : new Set(allIds));
+  }
+
+  async function handleUnregister() {
+    if (selectedTeamIds.size === 0) return;
+    if (!confirm(`Nyah-daftar ${selectedTeamIds.size} pasukan dari acara ini?`)) return;
+    setUnregistering(true);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamIds: [...selectedTeamIds] }),
+      });
+      if (!res.ok) throw new Error("Ralat");
+      setSelectedTeamIds(new Set());
+      loadTeams();
+      loadStats();
+    } catch {
+      alert("Gagal nyah-daftar. Sila cuba lagi.");
+    } finally {
+      setUnregistering(false);
+    }
+  }
+
+  const totalPages      = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const teamsTotalPages = Math.max(1, Math.ceil(teamsTotal / PAGE_SIZE));
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-5">
@@ -345,7 +462,6 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
               <p className="text-sm text-zinc-400 text-center py-4">Memuatkan statistik…</p>
             ) : (
               <>
-                {/* Summary cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                   <StatCard label="Kontingen Sekolah"   value={stats.summary.schoolContingents} />
                   <StatCard label="Sekolah Rendah"      value={stats.summary.primarySchools} />
@@ -356,18 +472,40 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                   <StatCard label="Perempuan"           value={stats.summary.female} />
                 </div>
 
-                {/* Gender bar + Grade distribution */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <GenderBar male={stats.summary.male} female={stats.summary.female} />
+                  <GenderPie male={stats.summary.male} female={stats.summary.female} />
                   <GradeTable rows={stats.byGrade} />
                 </div>
 
-                {/* State breakdown */}
                 <StateTable rows={stats.byState} />
               </>
             )}
           </div>
         )}
+      </div>
+
+      {/* Tab toggle */}
+      <div className="flex items-center gap-0 border border-zinc-200 rounded-lg overflow-hidden w-fit">
+        <button
+          onClick={() => setListTab("participants")}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            listTab === "participants"
+              ? "bg-blue-600 text-white"
+              : "bg-white text-zinc-600 hover:bg-zinc-50"
+          }`}
+        >
+          Peserta
+        </button>
+        <button
+          onClick={() => setListTab("teams")}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-l border-zinc-200 ${
+            listTab === "teams"
+              ? "bg-blue-600 text-white"
+              : "bg-white text-zinc-600 hover:bg-zinc-50"
+          }`}
+        >
+          Pasukan
+        </button>
       </div>
 
       {/* Filters */}
@@ -378,7 +516,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Cari nama peserta atau pasukan…"
+            placeholder={listTab === "participants" ? "Cari nama peserta atau pasukan…" : "Cari nama pasukan atau kontingen…"}
             className="w-full pl-8 pr-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
           />
         </div>
@@ -410,70 +548,154 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         )}
 
         <span className="text-xs text-zinc-400 ml-auto whitespace-nowrap">
-          {loading ? "Memuatkan…" : `${total} peserta`}
+          {listTab === "participants"
+            ? (loading ? "Memuatkan…" : `${total} peserta`)
+            : (teamsLoading ? "Memuatkan…" : `${teamsTotal} pasukan`)}
         </span>
+
+        {/* Bulk unregister (teams tab) */}
+        {listTab === "teams" && selectedTeamIds.size > 0 && (
+          <button
+            onClick={handleUnregister}
+            disabled={unregistering}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50 border border-red-200 transition-colors"
+          >
+            {unregistering
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Trash2 className="h-3.5 w-3.5" />}
+            Nyah-daftar {selectedTeamIds.size} pasukan
+          </button>
+        )}
       </div>
 
       {/* Error */}
-      {error && (
+      {(listTab === "participants" ? error : teamsError) && (
         <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-2">
-          {error}
+          {listTab === "participants" ? error : teamsError}
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-zinc-100">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-zinc-50 border-b border-zinc-100">
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">#</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Nama</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Gred</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pertandingan</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pasukan</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Negeri</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td>
+      {/* Participants table */}
+      {listTab === "participants" && (
+        <div className="overflow-x-auto rounded-xl border border-zinc-100">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-zinc-50 border-b border-zinc-100">
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">#</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Nama</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Kontingen</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pasukan</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Negeri</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pertandingan</th>
               </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td>
-              </tr>
-            ) : (
-              rows.map((row, i) => (
-                <tr key={row.id} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}>
-                  <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">
-                    {(page - 1) * PAGE_SIZE + i + 1}
-                  </td>
-                  <td className="px-4 py-2.5 font-medium text-zinc-900">{row.name}</td>
-                  <td className="px-4 py-2.5 text-zinc-600 text-xs">{row.classGrade ?? "–"}</td>
-                  <td className="px-4 py-2.5">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
-                        {row.competitionCode}
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={6} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
+              ) : (
+                rows.map((row, i) => (
+                  <tr key={row.id} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}>
+                    <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">
+                      {(page - 1) * PAGE_SIZE + i + 1}
+                    </td>
+                    <td className="px-4 py-2.5 font-medium text-zinc-900">{row.name}</td>
+                    <td className="px-4 py-2.5 text-zinc-600 text-xs">{row.contingentName ?? "–"}</td>
+                    <td className="px-4 py-2.5 text-zinc-600 text-xs">{row.teamName}</td>
+                    <td className="px-4 py-2.5 text-zinc-500 text-xs">{row.stateName ?? "–"}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                          {row.competitionCode}
+                        </span>
+                        <span className="text-zinc-600 text-xs">{row.competitionName}</span>
                       </span>
-                      <span className="text-zinc-600 text-xs">{row.competitionName}</span>
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-zinc-600 text-xs">{row.teamName}</td>
-                  <td className="px-4 py-2.5 text-zinc-500 text-xs">{row.stateName ?? "–"}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Teams table */}
+      {listTab === "teams" && (
+        <div className="overflow-x-auto rounded-xl border border-zinc-100">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-zinc-50 border-b border-zinc-100">
+                <th className="px-4 py-2.5 w-10">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    onChange={toggleAllTeams}
+                    className="h-3.5 w-3.5 rounded border-zinc-300 accent-blue-600 cursor-pointer"
+                  />
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">#</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Kontingen</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pasukan</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Negeri</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pertandingan</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Ahli</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teamsLoading ? (
+                <tr><td colSpan={7} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
+              ) : teams.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
+              ) : (
+                teams.map((team, i) => {
+                  const selected = selectedTeamIds.has(team.id);
+                  return (
+                    <tr
+                      key={team.id}
+                      onClick={() => toggleTeam(team.id)}
+                      className={`cursor-pointer transition-colors ${
+                        selected
+                          ? "bg-red-50/60"
+                          : i % 2 === 0 ? "bg-white hover:bg-zinc-50/60" : "bg-zinc-50/50 hover:bg-zinc-100/60"
+                      }`}
+                    >
+                      <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleTeam(team.id)}
+                          className="h-3.5 w-3.5 rounded border-zinc-300 accent-blue-600 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">
+                        {(teamsPage - 1) * PAGE_SIZE + i + 1}
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-600 text-xs">{team.contingentName ?? "–"}</td>
+                      <td className="px-4 py-2.5 font-medium text-zinc-900">{team.teamName}</td>
+                      <td className="px-4 py-2.5 text-zinc-500 text-xs">{team.stateName ?? "–"}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                            {team.competitionCode}
+                          </span>
+                          <span className="text-zinc-600 text-xs">{team.competitionName}</span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 text-xs">{team.members}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {listTab === "participants" && totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
-          <span className="text-zinc-400 text-xs">
-            Halaman {page} / {totalPages}
-          </span>
+          <span className="text-zinc-400 text-xs">Halaman {page} / {totalPages}</span>
           <div className="flex gap-1">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -485,6 +707,28 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-zinc-200 text-xs hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Seterusnya <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {listTab === "teams" && teamsTotalPages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-zinc-400 text-xs">Halaman {teamsPage} / {teamsTotalPages}</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setTeamsPage((p) => Math.max(1, p - 1))}
+              disabled={teamsPage === 1}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-zinc-200 text-xs hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Sebelum
+            </button>
+            <button
+              onClick={() => setTeamsPage((p) => Math.min(teamsTotalPages, p + 1))}
+              disabled={teamsPage === teamsTotalPages}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-zinc-200 text-xs hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Seterusnya <ChevronRight className="h-3.5 w-3.5" />
