@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 // ── Types (mirrored from JudgingBoardClient) ───────────────────────────────────
 
-type Member  = { name: string; gender: string; eduLevel: string };
+type Member  = { name: string; gender: string; eduLevel: string; age: number | null; classGrade: string | null; className: string | null };
 type COption = { id: string; label: string; weight: number; order: number };
 type Criterion = {
   id: string; name: string; order: number; type: string;
@@ -44,7 +44,6 @@ type DraftScore = {
   optionIds: string[];
 };
 
-const GENDER_LABEL: Record<string, string> = { MALE: "Lelaki", FEMALE: "Perempuan" };
 const EDU_LABEL: Record<string, string> = {
   PRIMARY: "Rendah", SECONDARY: "Menengah", YOUTH: "Belia", KINDERGARTEN: "Tadika",
 };
@@ -280,7 +279,7 @@ export function JudgingTeamClient({ slug, teamId }: { slug: string; teamId: stri
         setStatus("ready");
       })
       .catch(() => { setErrorMsg("Ralat rangkaian."); setStatus("error"); });
-  }, [slug, teamId]);
+  }, [slug, teamId, router]);
 
   function setField(criterionId: string, field: keyof DraftScore, value: unknown) {
     setDraft(d => ({ ...d, [criterionId]: { ...d[criterionId], [field]: value } }));
@@ -402,20 +401,41 @@ export function JudgingTeamClient({ slug, teamId }: { slug: string; teamId: stri
       {/* Member list */}
       {team.members.length > 0 && (
         <div className="max-w-2xl mx-auto px-4 py-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Users className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-            {team.members.map((m, i) => (
-              <span key={i} className="text-xs text-zinc-600 bg-white border rounded-full px-2.5 py-1 flex items-center gap-1.5">
-                <span className={cn(
-                  "w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold",
-                  m.gender === "MALE" ? "bg-sky-100 text-sky-700" : "bg-pink-100 text-pink-700"
-                )}>
-                  {m.gender === "MALE" ? "L" : "P"}
-                </span>
-                {m.name}
-                <span className="text-zinc-400">{EDU_LABEL[m.eduLevel] ?? m.eduLevel}</span>
-              </span>
-            ))}
+          <div className="flex items-center gap-1.5 mb-2">
+            <Users className="h-3.5 w-3.5 text-zinc-400" />
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Ahli Pasukan</span>
+          </div>
+          <div className="rounded-lg border overflow-hidden bg-white">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-zinc-50 border-b">
+                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Nama</th>
+                  <th className="px-3 py-2 text-center font-medium text-zinc-500 w-16">Umur</th>
+                  <th className="px-3 py-2 text-center font-medium text-zinc-500 w-20">Jantina</th>
+                  <th className="px-3 py-2 text-center font-medium text-zinc-500 w-32">Kelas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {team.members.map((m, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-zinc-50/60">
+                    <td className="px-3 py-2 font-medium text-zinc-800">{m.name}</td>
+                    <td className="px-3 py-2 text-center text-zinc-500">{m.age ?? "—"}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[10px] font-bold",
+                        m.gender === "MALE" ? "bg-sky-100 text-sky-700" : "bg-pink-100 text-pink-700"
+                      )}>
+                        {m.gender === "MALE" ? "Lelaki" : "Perempuan"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center text-zinc-500">
+                      {m.classGrade ?? "—"}
+                      {m.className && <span className="ml-1 text-zinc-400">· {m.className}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Gavel, Loader2, Eye, EyeOff, Users, Lock, Trophy, Tag,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, ClipboardPen, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,21 +135,21 @@ function TeamRow({
         )}
 
         {/* Status + action */}
-        <td className="px-3 py-2.5 text-center">
-          <div className="flex flex-col items-center gap-1.5">
-            <span className={cn(
-              "text-[10px] px-2 py-0.5 rounded-full font-medium",
-              scored ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-400"
-            )}>
-              {scored ? "Dinilai" : "Belum"}
-            </span>
-            <button
-              onClick={onJudge}
-              className="text-[10px] text-violet-600 hover:text-violet-800 underline font-medium"
-            >
-              {scored ? "Kemaskini" : "Nilai"}
-            </button>
-          </div>
+        <td className="px-3 py-2.5 text-right">
+          <button
+            onClick={onJudge}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+              scored
+                ? "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                : "bg-violet-600 text-white hover:bg-violet-700"
+            )}
+          >
+            {scored
+              ? <><RefreshCw className="h-3 w-3" /> Kemaskini</>
+              : <><ClipboardPen className="h-3 w-3" /> Nilai</>
+            }
+          </button>
         </td>
       </tr>
 
@@ -185,18 +185,17 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
   const [passcode, setPasscode] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading,  setLoading]  = useState(false);
-  // Lazy init: restoring is true only when there's a stored passcode to verify
-  const [restoring, setRestoring] = useState(() =>
-    typeof window !== "undefined" && !!sessionStorage.getItem(`judging_pc_${slug}`)
-  );
+  // Always false on server; effect sets true then resolves to avoid hydration mismatch
+  const [restoring, setRestoring] = useState(false);
   const [error,    setError]    = useState("");
   const [data,     setData]     = useState<BoardData | null>(null);
   const [scores,   setScores]   = useState<ScoreRow[]>([]);
 
-  // On mount: auto-verify stored passcode — only runs when restoring starts true
+  // On mount: check sessionStorage and auto-verify if a passcode is stored
   useEffect(() => {
     const stored = sessionStorage.getItem(`judging_pc_${slug}`);
-    if (!stored) return; // restoring already false; nothing to do
+    if (!stored) return;
+    setRestoring(true);
     fetch(`/api/judging/${slug}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

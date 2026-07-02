@@ -150,13 +150,14 @@ function IncompleteIcSection() {
 // ── Section 2: Wrong Grade ─────────────────────────────────────────────────────
 
 function WrongGradeSection() {
-  const [rows,      setRows]      = useState<GradeRow[]>([]);
-  const [total,     setTotal]     = useState(0);
-  const [loading,   setLoading]   = useState(true);
-  const [limit,     setLimit]     = useState(10);
-  const [repairing, setRepairing] = useState(false);
-  const [repaired,  setRepaired]  = useState<number | null>(null);
-  const [repairErr, setRepairErr] = useState<string | null>(null);
+  const [rows,        setRows]        = useState<GradeRow[]>([]);
+  const [total,       setTotal]       = useState(0);
+  const [loading,     setLoading]     = useState(true);
+  const [limit,       setLimit]       = useState(10);
+  const [repairing,   setRepairing]   = useState(false);
+  const [repaired,    setRepaired]    = useState<number | null>(null);
+  const [repairErr,   setRepairErr]   = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async (lim: number) => {
     setLoading(true);
@@ -174,15 +175,40 @@ function WrongGradeSection() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(limit); }, [load, limit]);
 
+  function toggleRow(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selectedIds.size === rows.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(rows.map(r => r.id)));
+    }
+  }
+
+  const allSelected = rows.length > 0 && selectedIds.size === rows.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < rows.length;
+
   async function handleRepair() {
     setRepairing(true);
     setRepaired(null);
     setRepairErr(null);
     try {
-      const res  = await fetch("/api/v2/organizer/data-watch/repair-grade", { method: "POST" });
+      const body = selectedIds.size > 0 ? { ids: [...selectedIds] } : {};
+      const res  = await fetch("/api/v2/organizer/data-watch/repair-grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       setRepaired(json.updated ?? 0);
+      setSelectedIds(new Set());
       await load(limit);
     } catch (e) {
       setRepairErr(e instanceof Error ? e.message : "Repair failed");
@@ -229,7 +255,9 @@ function WrongGradeSection() {
             >
               {repairing
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Repairing…</>
-                : <><Wrench className="h-3.5 w-3.5" /> Repair All</>}
+                : selectedIds.size > 0
+                  ? <><Wrench className="h-3.5 w-3.5" /> Repair {selectedIds.size} Selected</>
+                  : <><Wrench className="h-3.5 w-3.5" /> Repair All</>}
             </button>
           )}
         </div>
@@ -266,29 +294,60 @@ function WrongGradeSection() {
             <table className="w-full text-sm">
               <thead className="bg-zinc-50 border-b border-zinc-100">
                 <tr>
+                  <th className="px-4 py-2.5 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected; }}
+                      onChange={toggleAll}
+                      className="rounded border-zinc-300 cursor-pointer"
+                    />
+                  </th>
                   {["Name", "IC", "Age", "Current Grade", "Expected Grade", "Contingent"].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
-                {rows.map(r => (
-                  <tr key={r.id} className="hover:bg-zinc-50/60">
-                    <td className="px-4 py-2.5 font-medium text-zinc-900">{r.name}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-zinc-600">{r.ic}</td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-600">{r.age}</td>
-                    <td className="px-4 py-2.5 text-xs">
-                      <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700">{r.classGrade ?? "—"}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs">
-                      <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-700 font-medium">{r.expectedGrade}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-500">{r.contingentName}</td>
-                  </tr>
-                ))}
+                {rows.map(r => {
+                  const checked = selectedIds.has(r.id);
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`hover:bg-zinc-50/60 cursor-pointer ${checked ? "bg-orange-50/40" : ""}`}
+                      onClick={() => toggleRow(r.id)}
+                    >
+                      <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleRow(r.id)}
+                          className="rounded border-zinc-300 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-zinc-900">{r.name}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-zinc-600">{r.ic}</td>
+                      <td className="px-4 py-2.5 text-xs text-zinc-600">{r.age}</td>
+                      <td className="px-4 py-2.5 text-xs">
+                        <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700">{r.classGrade ?? "—"}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-700 font-medium">{r.expectedGrade}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-zinc-500">{r.contingentName}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+
+          {selectedIds.size > 0 && (
+            <div className="px-4 py-2 border-t border-orange-100 bg-orange-50/50 text-xs text-orange-700 flex items-center gap-1.5">
+              <Wrench className="h-3 w-3" />
+              {selectedIds.size} row{selectedIds.size !== 1 ? "s" : ""} selected — click &quot;Repair {selectedIds.size} Selected&quot; to fix only these records.
+            </div>
+          )}
 
           {total > rows.length && (
             <div className="px-4 py-3 border-t border-zinc-100 flex items-center justify-between">

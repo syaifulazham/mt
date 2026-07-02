@@ -80,10 +80,11 @@ function TaskRow({
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: "ACTIVE" | "CLOSED") => void;
 }) {
-  const [showPass, setShowPass] = useState(false);
-  const [copied,   setCopied]   = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [toggling, setToggling] = useState(false);
+  const [showPass,   setShowPass]   = useState(false);
+  const [copied,     setCopied]     = useState(false);
+  const [copiedPass, setCopiedPass] = useState(false);
+  const [deleting,   setDeleting]   = useState(false);
+  const [toggling,   setToggling]   = useState(false);
 
   const judgeUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/judging/${task.routeSlug}`;
 
@@ -91,6 +92,12 @@ function TaskRow({
     await navigator.clipboard.writeText(judgeUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleCopyPass() {
+    await navigator.clipboard.writeText(task.passcode);
+    setCopiedPass(true);
+    setTimeout(() => setCopiedPass(false), 2000);
   }
 
   async function handleDelete() {
@@ -143,12 +150,17 @@ function TaskRow({
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5">
-          <span className={cn(
-            "font-mono font-bold tracking-widest text-sm",
-            task.status === "ACTIVE" ? "text-violet-700" : "text-zinc-400"
-          )}>
-            {showPass ? task.passcode : "••••••"}
-          </span>
+          {showPass ? (
+            <button
+              onClick={handleCopyPass}
+              title="Salin passcode"
+              className="font-mono font-bold tracking-widest text-sm text-violet-700 hover:text-violet-500 transition-colors cursor-pointer"
+            >
+              {copiedPass ? <span className="text-green-600">Disalin!</span> : task.passcode}
+            </button>
+          ) : (
+            <span className="font-mono font-bold tracking-widest text-sm text-zinc-400">••••••</span>
+          )}
           <button onClick={() => setShowPass(v => !v)} className="p-0.5 rounded hover:bg-zinc-100 shrink-0">
             {showPass ? <EyeOff className="h-3.5 w-3.5 text-zinc-400" /> : <Eye className="h-3.5 w-3.5 text-zinc-400" />}
           </button>
@@ -478,7 +490,7 @@ export function EventJudgingClient({
               <Gavel className="h-4 w-4" /> Cipta Tugas Penghakiman
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 px-4">
             <div className="rounded-md bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-700">
               Template: <span className="font-semibold">{createFor?.template.name}</span>
             </div>

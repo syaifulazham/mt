@@ -38,6 +38,7 @@ function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name
 
   if (logo && !err) {
     return (
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={logo} alt={name} onError={() => setErr(true)}
         className={cn(cls, "rounded-full object-cover border-2 border-white/20 shadow-lg")} />
     );

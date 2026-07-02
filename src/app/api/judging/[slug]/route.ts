@@ -46,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     include: {
       contingent:  { select: { name: true, contingentType: true } },
       members: {
-        include: { participant: { select: { name: true, gender: true, eduLevel: true } } },
+        include: { participant: { select: { name: true, gender: true, eduLevel: true, age: true, classGrade: true, className: true } } },
         orderBy: { createdAt: "asc" },
       },
     },
@@ -90,6 +90,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         name: m.participant.name,
         gender: m.participant.gender,
         eduLevel: m.participant.eduLevel,
+        age: m.participant.age,
+        classGrade: m.participant.classGrade,
+        className: m.participant.className,
       })),
     })),
   });

@@ -91,7 +91,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       <EventResultsClient
         event={{ id: event.id, name: event.name, slug: event.slug, scope: event.scope }}
         competitionRankings={competitionRankings}
-        endpoints={event.resultsEndpoints}
+        endpoints={event.resultsEndpoints.map(ep => ({ ...ep, createdAt: ep.createdAt.toISOString() }))}
         canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
       />
     </OrganizerShell>

@@ -25,7 +25,7 @@ type CompetitionRanking = { id: string; name: string; code: string; rankings: Ra
 type Endpoint = {
   id: string; routeSlug: string; passcode: string | null;
   label: string | null; status: string; competitionIds: string[];
-  createdAt: Date;
+  createdAt: string;
 };
 
 type EventInfo = { id: string; name: string; slug: string; scope: string };
@@ -242,6 +242,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {r.contingentLogo
+                          // eslint-disable-next-line @next/next/no-img-element
                           ? <img src={r.contingentLogo} alt="" className="w-6 h-6 rounded-full object-cover border" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                           : <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500">
                               {r.contingentName.slice(0, 2).toUpperCase()}
@@ -309,13 +310,13 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
 
       {/* Create endpoint dialog */}
       <Dialog open={showCreate} onOpenChange={o => { if (!o) setShowCreate(false); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm w-[calc(100%-2rem)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-rose-700">
               <Globe className="h-4 w-4" /> Jana Pautan Keputusan
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 px-4">
             <div>
               <Label className="text-xs">Label (pilihan)</Label>
               <Input value={createLabel} onChange={e => setCreateLabel(e.target.value)}

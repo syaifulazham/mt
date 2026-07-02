@@ -65,7 +65,7 @@ export async function POST(
   }
 
   // 4. Determine which competitions to include
-  let targetCompetitionIds: string[] | null =
+  const targetCompetitionIds: string[] | null =
     endpoint.competitionIds.length > 0 ? endpoint.competitionIds : null;
 
   // Fetch all EventCompetitions for this event (filtered to targetCompetitionIds if set)

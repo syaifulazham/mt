@@ -1,8 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
-export async function POST() {
+function computeExpectedGrade(ic: string): string | null {
+  const digits = ic.replace(/\D/g, "");
+  if (digits.length !== 12) return null;
+  const yy = parseInt(digits.slice(0, 2), 10);
+  const currentYear = new Date().getFullYear();
+  const birthYear = yy <= currentYear % 100 ? 2000 + yy : 1900 + yy;
+  const age = currentYear - birthYear;
+  if (age >= 7  && age <= 12) return `Darjah ${age - 6}`;
+  if (age >= 13 && age <= 17) return `Tingkatan ${age - 12}`;
+  return null;
+}
+
+export async function POST(req: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
@@ -10,6 +22,29 @@ export async function POST() {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   try {
+    const body = await req.json().catch(() => ({}));
+    const ids: string[] | undefined = Array.isArray(body.ids) && body.ids.length > 0 ? body.ids : undefined;
+
+    // Selective repair: use Prisma per-record update for the given IDs
+    if (ids) {
+      const participants = await db.participant.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, ic: true, classGrade: true },
+      });
+
+      let updated = 0;
+      for (const p of participants) {
+        if (!p.ic) continue;
+        const expected = computeExpectedGrade(p.ic);
+        if (expected && expected !== p.classGrade) {
+          await db.participant.update({ where: { id: p.id }, data: { classGrade: expected } });
+          updated++;
+        }
+      }
+      return NextResponse.json({ updated });
+    }
+
+    // Repair all: raw SQL for efficiency
     const result = await db.$executeRaw`
       WITH ic_clean AS (
         SELECT id,
