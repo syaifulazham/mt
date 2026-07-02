@@ -3,12 +3,27 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   BarChart3, FileSpreadsheet, FileText, Loader2, RefreshCw,
-  Users, Trophy, Building2, AlertCircle,
+  Trophy, Building2, AlertCircle,
 } from "lucide-react";
 import { exportXlsx, exportDocx } from "@/lib/export/eventReportExport";
 import type { StatsPayload } from "@/lib/export/eventReportExport";
+import type { CompetitionEntry } from "@/app/(organizer)/organizer/events/[slug]/manage/reports/page";
 
-type Props = { eventId: string; eventName: string; slug: string };
+const LEVEL_ORDER = ["KINDERGARTEN", "PRIMARY", "SECONDARY", "YOUTH"] as const;
+const LEVEL_LABEL: Record<string, string> = {
+  KINDERGARTEN: "Tadika",
+  PRIMARY:      "Sekolah Rendah",
+  SECONDARY:    "Sekolah Menengah",
+  YOUTH:        "Belia",
+};
+const LEVEL_COLOR: Record<string, string> = {
+  KINDERGARTEN: "bg-yellow-50 text-yellow-700 border-yellow-100",
+  PRIMARY:      "bg-sky-50 text-sky-700 border-sky-100",
+  SECONDARY:    "bg-violet-50 text-violet-700 border-violet-100",
+  YOUTH:        "bg-emerald-50 text-emerald-700 border-emerald-100",
+};
+
+type Props = { eventId: string; eventName: string; slug: string; competitions: CompetitionEntry[] };
 
 function StatCard({ label, value, sub, color }: { label: string; value: number; sub?: string; color: string }) {
   return (
@@ -20,7 +35,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: number; 
   );
 }
 
-export function EventReportsClient({ eventId, eventName, slug }: Props) {
+export function EventReportsClient({ eventId, eventName, slug, competitions }: Props) {
   const [stats,         setStats]         = useState<StatsPayload | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState<string | null>(null);
@@ -218,34 +233,42 @@ export function EventReportsClient({ eventId, eventName, slug }: Props) {
             </section>
           )}
 
-          {/* By-grade table */}
-          {stats.byGrade.length > 0 && (
+          {/* Competitions by education level */}
+          {competitions.length > 0 && (
             <section className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-3 border-b border-zinc-100">
-                <Users className="h-4 w-4 text-zinc-400" />
-                <h3 className="text-sm font-semibold text-zinc-800">Mengikut Gred</h3>
+                <Trophy className="h-4 w-4 text-zinc-400" />
+                <h3 className="text-sm font-semibold text-zinc-800">Pertandingan Mengikut Tahap Pendidikan</h3>
+                <span className="ml-auto text-xs text-zinc-400">{competitions.length} pertandingan</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-zinc-50 border-b border-zinc-100">
-                    <tr>
-                      {["Tahap Pendidikan", "Gred / Kelas", "Bilangan Peserta"].map(h => (
-                        <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-50">
-                    {stats.byGrade.map((r, i) => (
-                      <tr key={i} className="hover:bg-zinc-50/60">
-                        <td className="px-4 py-2.5 text-xs text-zinc-500">
-                          {r.eduLevel === "PRIMARY" ? "Sekolah Rendah" : r.eduLevel === "SECONDARY" ? "Sekolah Menengah" : r.eduLevel === "YOUTH" ? "Belia" : r.eduLevel}
-                        </td>
-                        <td className="px-4 py-2.5 font-medium text-zinc-800">{r.classGrade}</td>
-                        <td className="px-4 py-2.5 text-zinc-700 font-semibold">{r.count.toLocaleString("ms-MY")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="divide-y divide-zinc-100">
+                {LEVEL_ORDER.map(level => {
+                  const group = competitions
+                    .filter(c => c.schoolLevels.includes(level))
+                    .sort((a, b) => a.code.localeCompare(b.code));
+                  if (!group.length) return null;
+                  return (
+                    <div key={level}>
+                      <div className={`px-5 py-2 border-b border-zinc-100`}>
+                        <span className={`inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full border ${LEVEL_COLOR[level]}`}>
+                          {LEVEL_LABEL[level]}
+                        </span>
+                      </div>
+                      <table className="w-full text-sm">
+                        <tbody className="divide-y divide-zinc-50">
+                          {group.map(c => (
+                            <tr key={c.id} className="hover:bg-zinc-50/40">
+                              <td className="px-5 py-2.5 w-28">
+                                <span className="font-mono text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{c.code}</span>
+                              </td>
+                              <td className="px-2 py-2.5 font-medium text-zinc-800 text-sm">{c.name}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}
