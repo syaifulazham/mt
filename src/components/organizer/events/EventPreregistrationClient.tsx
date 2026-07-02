@@ -98,7 +98,7 @@ function GenderPie({ male, female }: { male: number; female: number }) {
               <Cell fill="#60a5fa" />
               <Cell fill="#f472b6" />
             </Pie>
-            <Tooltip formatter={(v: number) => v.toLocaleString("ms-MY")} />
+            <Tooltip formatter={(v) => (typeof v === "number" ? v.toLocaleString("ms-MY") : String(v))} />
           </PieChart>
         </ResponsiveContainer>
         <div className="space-y-2 text-xs text-zinc-600">
