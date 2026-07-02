@@ -48,6 +48,7 @@ const MODULES: Module[] = [
     color: "text-violet-600",
     bg: "bg-violet-50",
     border: "border-violet-100",
+    href: "reports",
   },
   {
     icon: Gavel,
