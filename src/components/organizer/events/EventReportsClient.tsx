@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { exportXlsx, exportDocx } from "@/lib/export/eventReportExport";
 import type { StatsPayload } from "@/lib/export/eventReportExport";
-import type { CompetitionEntry } from "@/app/(organizer)/organizer/events/[slug]/manage/reports/page";
+import type { CompetitionEntry, CompetitionStateStat } from "@/app/(organizer)/organizer/events/[slug]/manage/reports/page";
 
 const LEVEL_ORDER = ["KINDERGARTEN", "PRIMARY", "SECONDARY", "YOUTH"] as const;
 const LEVEL_LABEL: Record<string, string> = {
@@ -23,7 +23,11 @@ const LEVEL_COLOR: Record<string, string> = {
   YOUTH:        "bg-emerald-50 text-emerald-700 border-emerald-100",
 };
 
-type Props = { eventId: string; eventName: string; slug: string; competitions: CompetitionEntry[] };
+type Props = {
+  eventId: string; eventName: string; slug: string;
+  competitions: CompetitionEntry[];
+  competitionStateStats: CompetitionStateStat[];
+};
 
 function StatCard({ label, value, sub, color }: { label: string; value: number; sub?: string; color: string }) {
   return (
@@ -35,7 +39,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: number; 
   );
 }
 
-export function EventReportsClient({ eventId, eventName, slug, competitions }: Props) {
+export function EventReportsClient({ eventId, eventName, slug, competitions, competitionStateStats }: Props) {
   const [stats,         setStats]         = useState<StatsPayload | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState<string | null>(null);
@@ -249,26 +253,109 @@ export function EventReportsClient({ eventId, eventName, slug, competitions }: P
                   if (!group.length) return null;
                   return (
                     <div key={level}>
-                      <div className={`px-5 py-2 border-b border-zinc-100`}>
+                      <div className="px-5 py-2 border-b border-zinc-100">
                         <span className={`inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full border ${LEVEL_COLOR[level]}`}>
                           {LEVEL_LABEL[level]}
                         </span>
                       </div>
                       <table className="w-full text-sm">
+                        <thead className="bg-zinc-50/60">
+                          <tr>
+                            <th className="px-5 py-2 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wide w-28">Kod</th>
+                            <th className="px-2 py-2 text-left text-xs font-semibold text-zinc-400 uppercase tracking-wide">Pertandingan</th>
+                            <th className="px-4 py-2 text-right text-xs font-semibold text-zinc-400 uppercase tracking-wide w-24">Pasukan</th>
+                            <th className="px-4 py-2 text-right text-xs font-semibold text-zinc-400 uppercase tracking-wide w-24">Peserta</th>
+                          </tr>
+                        </thead>
                         <tbody className="divide-y divide-zinc-50">
                           {group.map(c => (
                             <tr key={c.id} className="hover:bg-zinc-50/40">
-                              <td className="px-5 py-2.5 w-28">
+                              <td className="px-5 py-2.5">
                                 <span className="font-mono text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{c.code}</span>
                               </td>
-                              <td className="px-2 py-2.5 font-medium text-zinc-800 text-sm">{c.name}</td>
+                              <td className="px-2 py-2.5 font-medium text-zinc-800">{c.name}</td>
+                              <td className="px-4 py-2.5 text-right text-sm text-zinc-700">{c.teams.toLocaleString("ms-MY")}</td>
+                              <td className="px-4 py-2.5 text-right text-sm font-semibold text-violet-700">{c.participants.toLocaleString("ms-MY")}</td>
                             </tr>
                           ))}
                         </tbody>
+                        <tfoot className="border-t border-zinc-200 bg-zinc-50/60">
+                          <tr>
+                            <td colSpan={2} className="px-5 py-2 text-xs font-bold text-zinc-500">Jumlah</td>
+                            <td className="px-4 py-2 text-right text-xs font-bold text-zinc-700">
+                              {group.reduce((s, c) => s + c.teams, 0).toLocaleString("ms-MY")}
+                            </td>
+                            <td className="px-4 py-2 text-right text-xs font-bold text-violet-700">
+                              {group.reduce((s, c) => s + c.participants, 0).toLocaleString("ms-MY")}
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   );
                 })}
+              </div>
+            </section>
+          )}
+
+          {/* Competitions by state */}
+          {competitionStateStats.length > 0 && competitions.length > 0 && (
+            <section className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-zinc-100">
+                <Building2 className="h-4 w-4 text-zinc-400" />
+                <h3 className="text-sm font-semibold text-zinc-800">Pertandingan Mengikut Negeri</h3>
+              </div>
+              <div className="divide-y divide-zinc-100">
+                {(() => {
+                  // Build a map: stateName → competitionId[]
+                  const stateMap = new Map<string, CompetitionStateStat[]>();
+                  for (const r of competitionStateStats) {
+                    const arr = stateMap.get(r.stateName) ?? [];
+                    arr.push(r);
+                    stateMap.set(r.stateName, arr);
+                  }
+                  const compMap = new Map(competitions.map(c => [c.id, c]));
+                  return [...stateMap.entries()]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([stateName, rows]) => {
+                      const sorted = rows
+                        .map(r => ({ ...r, comp: compMap.get(r.competitionId) }))
+                        .filter(r => r.comp)
+                        .sort((a, b) => a.comp!.code.localeCompare(b.comp!.code));
+                      return (
+                        <div key={stateName}>
+                          <div className="px-5 py-2 border-b border-zinc-100 bg-zinc-50/60">
+                            <span className="text-xs font-semibold text-zinc-700 uppercase tracking-wide">{stateName}</span>
+                          </div>
+                          <table className="w-full text-sm">
+                            <tbody className="divide-y divide-zinc-50">
+                              {sorted.map((r, i) => (
+                                <tr key={i} className="hover:bg-zinc-50/40">
+                                  <td className="px-5 py-2.5 w-28">
+                                    <span className="font-mono text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{r.comp!.code}</span>
+                                  </td>
+                                  <td className="px-2 py-2.5 font-medium text-zinc-800">{r.comp!.name}</td>
+                                  <td className="px-4 py-2.5 text-right text-sm text-zinc-700 w-24">{r.teams.toLocaleString("ms-MY")}</td>
+                                  <td className="px-4 py-2.5 text-right text-sm font-semibold text-violet-700 w-24">{r.participants.toLocaleString("ms-MY")}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="border-t border-zinc-200 bg-zinc-50/60">
+                              <tr>
+                                <td colSpan={2} className="px-5 py-2 text-xs font-bold text-zinc-500">Jumlah</td>
+                                <td className="px-4 py-2 text-right text-xs font-bold text-zinc-700">
+                                  {sorted.reduce((s, r) => s + r.teams, 0).toLocaleString("ms-MY")}
+                                </td>
+                                <td className="px-4 py-2 text-right text-xs font-bold text-violet-700">
+                                  {sorted.reduce((s, r) => s + r.participants, 0).toLocaleString("ms-MY")}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      );
+                    });
+                })()}
               </div>
             </section>
           )}
