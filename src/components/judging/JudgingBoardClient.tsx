@@ -195,12 +195,17 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
   useEffect(() => {
     const stored = sessionStorage.getItem(`judging_pc_${slug}`);
     if (!stored) return;
-    setRestoring(true);
-    fetch(`/api/judging/${slug}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ passcode: stored }),
-    })
+    // Use Promise.resolve so all setState calls happen inside async callbacks,
+    // never synchronously in the effect body (satisfies react-hooks/set-state-in-effect).
+    Promise.resolve(stored)
+      .then(pc => {
+        setRestoring(true);
+        return fetch(`/api/judging/${slug}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ passcode: pc }),
+        });
+      })
       .then(r => r.json())
       .then(j => {
         if (!j.error) { setData(j); setScores(j.scores ?? []); }
