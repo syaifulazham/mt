@@ -9,6 +9,23 @@ import {
 export type { StatsPayload, StatsSummary, GradeStat, StateStat } from "./preregistrationStatsExport";
 import type { StatsPayload } from "./preregistrationStatsExport";
 
+export type CompetitionEntry = {
+  id: string; name: string; code: string; schoolLevels: string[];
+  teams: number; participants: number;
+};
+
+export type CompetitionStateStat = {
+  competitionId: string; stateName: string; teams: number; participants: number;
+};
+
+const LEVEL_ORDER = ["KINDERGARTEN", "PRIMARY", "SECONDARY", "YOUTH"];
+const LEVEL_LABEL: Record<string, string> = {
+  KINDERGARTEN: "Tadika",
+  PRIMARY:      "Sekolah Rendah",
+  SECONDARY:    "Sekolah Menengah",
+  YOUTH:        "Belia",
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -20,12 +37,23 @@ function triggerDownload(blob: Blob, filename: string) {
 
 function n(v: number) { return v.toLocaleString("ms-MY"); }
 
+function bar(value: number, max: number, width = 20): string {
+  if (max === 0) return "";
+  return "█".repeat(Math.max(1, Math.round((value / max) * width)));
+}
+
 // ── XLSX export ───────────────────────────────────────────────────────────────
 
-export function exportXlsx(eventName: string, slug: string, s: StatsPayload) {
+export function exportXlsx(
+  eventName: string,
+  slug: string,
+  s: StatsPayload,
+  competitions: CompetitionEntry[],
+  competitionStateStats: CompetitionStateStat[],
+) {
   const wb = XLSX.utils.book_new();
 
-  // ── Sheet 1: Summary ──────────────────────────────────────────────────────
+  // ── Sheet 1: Ringkasan ────────────────────────────────────────────────────
   const pct = (a: number, b: number) => b ? +(a / b * 100).toFixed(1) : 0;
   const summaryAoa = [
     ["LAPORAN STATISTIK PENYERTAAN"],
@@ -38,19 +66,19 @@ export function exportXlsx(eventName: string, slug: string, s: StatsPayload) {
     ["Jumlah Pasukan",     s.summary.teams],
     ["Jumlah Peserta",     s.summary.participants],
     [],
-    ["JANTINA", "BILANGAN", "%"],
-    ["Lelaki",    s.summary.male,   pct(s.summary.male,   s.summary.participants)],
-    ["Perempuan", s.summary.female, pct(s.summary.female, s.summary.participants)],
+    ["JANTINA", "BILANGAN", "%", "GRAF"],
+    ["Lelaki",    s.summary.male,   pct(s.summary.male,   s.summary.participants), bar(s.summary.male,   s.summary.participants)],
+    ["Perempuan", s.summary.female, pct(s.summary.female, s.summary.participants), bar(s.summary.female, s.summary.participants)],
   ];
   const ws1 = XLSX.utils.aoa_to_sheet(summaryAoa);
-  ws1["!cols"]   = [{ wch: 28 }, { wch: 12 }, { wch: 10 }];
+  ws1["!cols"]   = [{ wch: 28 }, { wch: 12 }, { wch: 10 }, { wch: 22 }];
   ws1["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
   ];
   XLSX.utils.book_append_sheet(wb, ws1, "Ringkasan");
 
-  // ── Sheet 2: By State ─────────────────────────────────────────────────────
+  // ── Sheet 2: Mengikut Negeri ──────────────────────────────────────────────
   const totals = s.byState.reduce((acc, r) => ({
     schoolContingents: acc.schoolContingents + r.schoolContingents,
     primarySchools:    acc.primarySchools    + r.primarySchools,
@@ -70,17 +98,58 @@ export function exportXlsx(eventName: string, slug: string, s: StatsPayload) {
   ws2["!cols"] = [{ wch: 30 }, { wch: 18 }, { wch: 15 }, { wch: 17 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, ws2, "Mengikut Negeri");
 
-  // ── Sheet 3: By Grade ─────────────────────────────────────────────────────
-  const primary   = s.byGrade.filter(g => g.eduLevel === "PRIMARY");
-  const secondary = s.byGrade.filter(g => g.eduLevel === "SECONDARY");
-  const other     = s.byGrade.filter(g => g.eduLevel !== "PRIMARY" && g.eduLevel !== "SECONDARY");
-  const gradeAoa: (string | number)[][] = [["TAHAP PENDIDIKAN", "GRED", "BILANGAN PESERTA"]];
-  if (primary.length)   { gradeAoa.push(["Sekolah Rendah", "", ""]); primary.forEach(g   => gradeAoa.push(["", g.classGrade, g.count])); }
-  if (secondary.length) { gradeAoa.push(["Sekolah Menengah", "", ""]); secondary.forEach(g => gradeAoa.push(["", g.classGrade, g.count])); }
-  if (other.length)     { gradeAoa.push(["Belia / Lain", "", ""]); other.forEach(g     => gradeAoa.push(["", g.classGrade, g.count])); }
-  const ws3 = XLSX.utils.aoa_to_sheet(gradeAoa);
-  ws3["!cols"] = [{ wch: 22 }, { wch: 20 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, ws3, "Mengikut Gred");
+  // ── Sheet 3: Pertandingan Mengikut Tahap Pendidikan ───────────────────────
+  const maxTeams = Math.max(...competitions.map(c => c.teams), 1);
+  const levelAoa: (string | number)[][] = [
+    ["TAHAP PENDIDIKAN", "KOD", "PERTANDINGAN", "PASUKAN", "PESERTA", "GRAF (PASUKAN)"],
+  ];
+  for (const level of LEVEL_ORDER) {
+    const group = competitions
+      .filter(c => c.schoolLevels.includes(level))
+      .sort((a, b) => a.code.localeCompare(b.code));
+    if (!group.length) continue;
+    levelAoa.push([LEVEL_LABEL[level] ?? level, "", "", "", "", ""]);
+    for (const c of group) {
+      levelAoa.push(["", c.code, c.name, c.teams, c.participants, bar(c.teams, maxTeams)]);
+    }
+    const subTeams = group.reduce((s, c) => s + c.teams, 0);
+    const subPart  = group.reduce((s, c) => s + c.participants, 0);
+    levelAoa.push(["Jumlah " + (LEVEL_LABEL[level] ?? level), "", "", subTeams, subPart, ""]);
+  }
+  const ws3 = XLSX.utils.aoa_to_sheet(levelAoa);
+  ws3["!cols"] = [{ wch: 22 }, { wch: 10 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, ws3, "Pertandingan Mengikut Tahap");
+
+  // ── Sheet 4: Pertandingan Mengikut Negeri ─────────────────────────────────
+  const compMap = new Map(competitions.map(c => [c.id, c]));
+  const stateCompMap = new Map<string, CompetitionStateStat[]>();
+  for (const r of competitionStateStats) {
+    const arr = stateCompMap.get(r.stateName) ?? [];
+    arr.push(r);
+    stateCompMap.set(r.stateName, arr);
+  }
+
+  const stateCompAoa: (string | number)[][] = [
+    ["NEGERI", "KOD", "PERTANDINGAN", "PASUKAN", "PESERTA"],
+  ];
+  for (const [stateName, rows] of [...stateCompMap.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const sorted = rows
+      .map(r => ({ ...r, comp: compMap.get(r.competitionId) }))
+      .filter(r => r.comp)
+      .sort((a, b) => a.comp!.code.localeCompare(b.comp!.code));
+    stateCompAoa.push([stateName, "", "", "", ""]);
+    for (const r of sorted) {
+      stateCompAoa.push(["", r.comp!.code, r.comp!.name, r.teams, r.participants]);
+    }
+    stateCompAoa.push([
+      "Jumlah " + stateName, "", "",
+      sorted.reduce((s, r) => s + r.teams, 0),
+      sorted.reduce((s, r) => s + r.participants, 0),
+    ]);
+  }
+  const ws4 = XLSX.utils.aoa_to_sheet(stateCompAoa);
+  ws4["!cols"] = [{ wch: 32 }, { wch: 10 }, { wch: 40 }, { wch: 10 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws4, "Pertandingan Mengikut Negeri");
 
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   triggerDownload(
@@ -95,6 +164,9 @@ const BLUE  = "1D4ED8";
 const LBLUE = "DBEAFE";
 const GREY  = "F4F4F5";
 const WHITE = "FFFFFF";
+const VIOLET = "4C1D95";
+const LVIOL = "EDE9FE";
+const LGREY = "E5E7EB";
 const BORDER = { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" };
 
 function hCell(text: string, width?: number): TableCell {
@@ -106,10 +178,19 @@ function hCell(text: string, width?: number): TableCell {
   });
 }
 
-function dCell(text: string, shade = WHITE, align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT, bold = false): TableCell {
+function dCell(text: string, shade = WHITE, align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT, bold = false, color?: string): TableCell {
   return new TableCell({
-    children: [new Paragraph({ alignment: align, children: [new TextRun({ text, size: 20, bold, color: shade === WHITE ? "374151" : "1E3A8A" })] })],
+    children: [new Paragraph({ alignment: align, children: [new TextRun({ text, size: 20, bold, color: color ?? (shade === WHITE ? "374151" : "1E3A8A") })] })],
     shading: { type: ShadingType.CLEAR, fill: shade, color: "auto" },
+    borders: { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER },
+  });
+}
+
+function groupCell(text: string, span: number, fill: string): TableCell {
+  return new TableCell({
+    columnSpan: span,
+    children: [new Paragraph({ children: [new TextRun({ text, bold: true, color: "1E3A8A", size: 20 })] })],
+    shading: { type: ShadingType.CLEAR, fill, color: "auto" },
     borders: { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER },
   });
 }
@@ -120,13 +201,19 @@ function heading(text: string): Paragraph {
 
 // ── DOCX export ───────────────────────────────────────────────────────────────
 
-export async function exportDocx(eventName: string, slug: string, s: StatsPayload): Promise<void> {
+export async function exportDocx(
+  eventName: string,
+  slug: string,
+  s: StatsPayload,
+  competitions: CompetitionEntry[],
+  competitionStateStats: CompetitionStateStat[],
+): Promise<void> {
   const generated = new Date().toLocaleDateString("ms-MY", { day: "2-digit", month: "long", year: "numeric" });
   const total = s.summary.participants || 1;
   const malePct = (s.summary.male / total * 100).toFixed(1);
   const femPct  = (s.summary.female / total * 100).toFixed(1);
 
-  // Summary table
+  // ── 1. Summary table ───────────────────────────────────────────────────────
   const summaryRows: [string, number][] = [
     ["Kontingen Sekolah",  s.summary.schoolContingents],
     ["Sekolah Rendah",     s.summary.primarySchools],
@@ -144,7 +231,7 @@ export async function exportDocx(eventName: string, slug: string, s: StatsPayloa
     ],
   });
 
-  // Gender table
+  // ── 2. Gender table ────────────────────────────────────────────────────────
   const genderTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
@@ -154,10 +241,10 @@ export async function exportDocx(eventName: string, slug: string, s: StatsPayloa
     ],
   });
 
-  // By-state table
+  // ── 3. By-state table ──────────────────────────────────────────────────────
   const COL_W = convertInchesToTwip(0.85);
   const stateHdrs = ["NEGERI", "KONTINGEN", "RENDAH", "MENENGAH", "PASUKAN", "PESERTA", "LELAKI", "PEREMPUAN"];
-  const totals = s.byState.reduce((acc, r) => ({
+  const stateTotals = s.byState.reduce((acc, r) => ({
     schoolContingents: acc.schoolContingents + r.schoolContingents,
     primarySchools:    acc.primarySchools    + r.primarySchools,
     secondarySchools:  acc.secondarySchools  + r.secondarySchools,
@@ -186,44 +273,121 @@ export async function exportDocx(eventName: string, slug: string, s: StatsPayloa
       new TableRow({
         children: [
           dCell("JUMLAH",                    LBLUE, AlignmentType.LEFT, true),
-          dCell(n(totals.schoolContingents), LBLUE, AlignmentType.RIGHT, true),
-          dCell(n(totals.primarySchools),    LBLUE, AlignmentType.RIGHT, true),
-          dCell(n(totals.secondarySchools),  LBLUE, AlignmentType.RIGHT, true),
-          dCell(n(totals.teams),             LBLUE, AlignmentType.RIGHT, true),
-          dCell(n(totals.participants),      LBLUE, AlignmentType.RIGHT, true),
-          dCell(n(totals.male),              LBLUE, AlignmentType.RIGHT, true),
-          dCell(n(totals.female),            LBLUE, AlignmentType.RIGHT, true),
+          dCell(n(stateTotals.schoolContingents), LBLUE, AlignmentType.RIGHT, true),
+          dCell(n(stateTotals.primarySchools),    LBLUE, AlignmentType.RIGHT, true),
+          dCell(n(stateTotals.secondarySchools),  LBLUE, AlignmentType.RIGHT, true),
+          dCell(n(stateTotals.teams),             LBLUE, AlignmentType.RIGHT, true),
+          dCell(n(stateTotals.participants),      LBLUE, AlignmentType.RIGHT, true),
+          dCell(n(stateTotals.male),              LBLUE, AlignmentType.RIGHT, true),
+          dCell(n(stateTotals.female),            LBLUE, AlignmentType.RIGHT, true),
         ],
       }),
     ],
   });
 
-  // Grade table
-  const primary   = s.byGrade.filter(g => g.eduLevel === "PRIMARY");
-  const secondary = s.byGrade.filter(g => g.eduLevel === "SECONDARY");
-  const other     = s.byGrade.filter(g => g.eduLevel !== "PRIMARY" && g.eduLevel !== "SECONDARY");
-  const gradeRows: TableRow[] = [new TableRow({ children: [hCell("TAHAP PENDIDIKAN"), hCell("GRED"), hCell("BILANGAN")] })];
-  ([
-    { label: "Sekolah Rendah (Darjah)", items: primary },
-    { label: "Sekolah Menengah (Tingkatan)", items: secondary },
-    { label: "Belia / Lain", items: other },
-  ] as { label: string; items: typeof primary }[]).filter(g => g.items.length).forEach(group => {
-    gradeRows.push(new TableRow({
-      children: [new TableCell({
-        columnSpan: 3,
-        children: [new Paragraph({ children: [new TextRun({ text: group.label, bold: true, color: "1E3A8A", size: 20 })] })],
-        shading: { type: ShadingType.CLEAR, fill: LBLUE, color: "auto" },
-        borders: { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER },
-      })],
+  // ── 4. Competitions by education level ────────────────────────────────────
+  const compHdrs = ["KOD", "PERTANDINGAN", "PASUKAN", "PESERTA"];
+  const levelRows: TableRow[] = [new TableRow({ children: compHdrs.map(h => hCell(h)) })];
+  const maxTeams = Math.max(...competitions.map(c => c.teams), 1);
+
+  for (const level of LEVEL_ORDER) {
+    const group = competitions
+      .filter(c => c.schoolLevels.includes(level))
+      .sort((a, b) => a.code.localeCompare(b.code));
+    if (!group.length) continue;
+
+    levelRows.push(new TableRow({
+      children: [groupCell(LEVEL_LABEL[level] ?? level, 4, LBLUE)],
     }));
-    group.items.forEach((item, i) => {
-      gradeRows.push(new TableRow({
-        children: [dCell("", i % 2 === 0 ? WHITE : GREY), dCell(item.classGrade, i % 2 === 0 ? WHITE : GREY), dCell(n(item.count), i % 2 === 0 ? WHITE : GREY, AlignmentType.RIGHT)],
+
+    group.forEach((c, i) => {
+      levelRows.push(new TableRow({
+        children: [
+          dCell(c.code,           i % 2 === 0 ? WHITE : GREY),
+          dCell(c.name,           i % 2 === 0 ? WHITE : GREY),
+          dCell(n(c.teams),       i % 2 === 0 ? WHITE : GREY, AlignmentType.RIGHT),
+          dCell(n(c.participants),i % 2 === 0 ? WHITE : GREY, AlignmentType.RIGHT),
+        ],
       }));
     });
-  });
-  const gradeTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: gradeRows });
 
+    // Bar chart row for this level (visual)
+    const barMax = Math.max(...group.map(c => c.teams), 1);
+    group.forEach((c) => {
+      const barStr = "█".repeat(Math.max(1, Math.round(c.teams / barMax * 18)));
+      levelRows.push(new TableRow({
+        children: [
+          dCell(c.code, LGREY),
+          new TableCell({
+            columnSpan: 3,
+            children: [new Paragraph({ children: [new TextRun({ text: barStr, size: 16, color: "3B82F6" })] })],
+            shading: { type: ShadingType.CLEAR, fill: LGREY, color: "auto" },
+            borders: { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER },
+          }),
+        ],
+      }));
+    });
+
+    const subT = group.reduce((s, c) => s + c.teams, 0);
+    const subP = group.reduce((s, c) => s + c.participants, 0);
+    levelRows.push(new TableRow({
+      children: [
+        dCell(`Jumlah ${LEVEL_LABEL[level] ?? level}`, LVIOL, AlignmentType.LEFT, true, "4C1D95"),
+        dCell("", LVIOL),
+        dCell(n(subT), LVIOL, AlignmentType.RIGHT, true, VIOLET),
+        dCell(n(subP), LVIOL, AlignmentType.RIGHT, true, VIOLET),
+      ],
+    }));
+  }
+  const levelTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: levelRows });
+
+  // ── 5. Competitions by state ──────────────────────────────────────────────
+  const compMap = new Map(competitions.map(c => [c.id, c]));
+  const stateCompMap = new Map<string, CompetitionStateStat[]>();
+  for (const r of competitionStateStats) {
+    const arr = stateCompMap.get(r.stateName) ?? [];
+    arr.push(r);
+    stateCompMap.set(r.stateName, arr);
+  }
+
+  const stateCompHdrs = ["KOD", "PERTANDINGAN", "PASUKAN", "PESERTA"];
+  const stateCompRows: TableRow[] = [new TableRow({ children: stateCompHdrs.map(h => hCell(h)) })];
+
+  for (const [stateName, rows] of [...stateCompMap.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const sorted = rows
+      .map(r => ({ ...r, comp: compMap.get(r.competitionId) }))
+      .filter(r => r.comp)
+      .sort((a, b) => a.comp!.code.localeCompare(b.comp!.code));
+
+    stateCompRows.push(new TableRow({
+      children: [groupCell(stateName, 4, LGREY)],
+    }));
+
+    sorted.forEach((r, i) => {
+      stateCompRows.push(new TableRow({
+        children: [
+          dCell(r.comp!.code,      i % 2 === 0 ? WHITE : GREY),
+          dCell(r.comp!.name,      i % 2 === 0 ? WHITE : GREY),
+          dCell(n(r.teams),        i % 2 === 0 ? WHITE : GREY, AlignmentType.RIGHT),
+          dCell(n(r.participants), i % 2 === 0 ? WHITE : GREY, AlignmentType.RIGHT),
+        ],
+      }));
+    });
+
+    const subT = sorted.reduce((s, r) => s + r.teams, 0);
+    const subP = sorted.reduce((s, r) => s + r.participants, 0);
+    stateCompRows.push(new TableRow({
+      children: [
+        dCell(`Jumlah ${stateName}`, LBLUE, AlignmentType.LEFT, true),
+        dCell("", LBLUE),
+        dCell(n(subT), LBLUE, AlignmentType.RIGHT, true),
+        dCell(n(subP), LBLUE, AlignmentType.RIGHT, true),
+      ],
+    }));
+  }
+  const stateCompTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: stateCompRows });
+
+  // ── Assemble document ──────────────────────────────────────────────────────
   const doc = new Document({
     styles: { default: { document: { run: { font: "Calibri", size: 22 } } } },
     sections: [{
@@ -256,8 +420,10 @@ export async function exportDocx(eventName: string, slug: string, s: StatsPayloa
         genderTable,
         heading("3. Pecahan Mengikut Negeri"),
         stateTable,
-        heading("4. Peserta Mengikut Gred"),
-        gradeTable,
+        heading("4. Pertandingan Mengikut Tahap Pendidikan"),
+        levelTable,
+        heading("5. Pertandingan Mengikut Negeri"),
+        stateCompTable,
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 600 },

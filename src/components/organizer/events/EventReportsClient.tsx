@@ -7,8 +7,7 @@ import {
   Trophy, Building2, AlertCircle,
 } from "lucide-react";
 import { exportXlsx, exportDocx } from "@/lib/export/eventReportExport";
-import type { StatsPayload } from "@/lib/export/eventReportExport";
-import type { CompetitionEntry, CompetitionStateStat } from "@/app/(organizer)/organizer/events/[slug]/manage/reports/page";
+import type { StatsPayload, CompetitionEntry, CompetitionStateStat } from "@/lib/export/eventReportExport";
 
 const LEVEL_ORDER = ["KINDERGARTEN", "PRIMARY", "SECONDARY", "YOUTH"] as const;
 const LEVEL_LABEL: Record<string, string> = {
@@ -67,14 +66,14 @@ export function EventReportsClient({ eventId, eventName, slug, competitions, com
   async function handleXlsx() {
     if (!stats) return;
     setExportingXlsx(true);
-    try { exportXlsx(eventName, slug, stats); }
+    try { exportXlsx(eventName, slug, stats, competitions, competitionStateStats); }
     finally { setExportingXlsx(false); }
   }
 
   async function handleDocx() {
     if (!stats) return;
     setExportingDocx(true);
-    try { await exportDocx(eventName, slug, stats); }
+    try { await exportDocx(eventName, slug, stats, competitions, competitionStateStats); }
     finally { setExportingDocx(false); }
   }
 

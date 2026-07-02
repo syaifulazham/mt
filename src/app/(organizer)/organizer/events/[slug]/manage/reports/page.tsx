@@ -5,17 +5,11 @@ import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { EventReportsClient } from "@/components/organizer/events/EventReportsClient";
+import type { CompetitionEntry, CompetitionStateStat } from "@/lib/export/eventReportExport";
+
+export type { CompetitionEntry, CompetitionStateStat };
 
 export const metadata: Metadata = { title: "Laporan" };
-
-export type CompetitionEntry = {
-  id: string; name: string; code: string; schoolLevels: string[];
-  teams: number; participants: number;
-};
-
-export type CompetitionStateStat = {
-  competitionId: string; stateName: string; teams: number; participants: number;
-};
 
 export default async function EventReportsPage({ params }: { params: Promise<{ slug: string }> }) {
   const session = await getOrganizerSession();
