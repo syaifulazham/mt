@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
-  BarChart3, FileSpreadsheet, FileText, Loader2, RefreshCw,
+  ArrowLeft, BarChart3, FileSpreadsheet, FileText, Loader2, RefreshCw,
   Trophy, Building2, AlertCircle,
 } from "lucide-react";
 import { exportXlsx, exportDocx } from "@/lib/export/eventReportExport";
@@ -84,11 +85,19 @@ export function EventReportsClient({ eventId, eventName, slug, competitions, com
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2.5">
-          <BarChart3 className="h-5 w-5 text-violet-600" />
-          <div>
-            <h2 className="text-base font-semibold text-zinc-900">Laporan Statistik Penyertaan</h2>
-            <p className="text-xs text-zinc-400">{eventName}</p>
+        <div className="flex items-start gap-3">
+          <Link
+            href={`/organizer/events/${slug}/manage`}
+            className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Kembali
+          </Link>
+          <div className="flex items-center gap-2.5">
+            <BarChart3 className="h-5 w-5 text-violet-600" />
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900">Laporan Statistik Penyertaan</h2>
+              <p className="text-xs text-zinc-400">{eventName}</p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
