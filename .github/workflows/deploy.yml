@@ -9,6 +9,9 @@ jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # needed to push to ghcr.io
 
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +78,44 @@ jobs:
           # Strip leading whitespace caused by YAML indentation
           sed -i 's/^          //' nginx-mt.conf
 
-      # ── Copy files to server ──────────────────────────────────────────────────
+      # ── Set up Docker Buildx (required for build-push-action + GHA cache) ──────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Log in to GitHub Container Registry ──────────────────────────────────
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Build migrator image on runner and push to ghcr.io ───────────────────
+      - name: Build and push migrator image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          target: migrator
+          tags: ghcr.io/${{ github.repository_owner }}/mt:migrator
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Build app image on runner and push to ghcr.io ────────────────────────
+      - name: Build and push app image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/mt:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_APP_URL=https://${{ secrets.DOMAIN }}
+            NEXT_PUBLIC_R2_PUBLIC_URL=${{ secrets.NEXT_PUBLIC_R2_PUBLIC_URL }}
+
+      # ── Copy .env.production and nginx config to server ──────────────────────
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -86,7 +126,7 @@ jobs:
           source: .env.production,nginx-mt.conf
           target: /opt/mt/
 
-      # ── SSH: nginx + certbot + deploy ─────────────────────────────────────────
+      # ── SSH: nginx + certbot + pull pre-built images + deploy ─────────────────
       - name: Deploy on server
         uses: appleboy/ssh-action@v1
         with:
@@ -97,6 +137,7 @@ jobs:
           script: |
             set -e
             DOMAIN="${{ secrets.DOMAIN }}"
+            GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/mt"
 
             # ── nginx setup (idempotent) ────────────────────────────────────────
             echo "── Setting up nginx ──"
@@ -136,66 +177,44 @@ jobs:
               sudo systemctl reload nginx
             fi
 
-            # ── app deploy ─────────────────────────────────────────────────────
-            echo "── Pulling latest code ──"
+            # ── Pull pre-built images from ghcr.io ─────────────────────────────
+            # Images were built on the GitHub Actions runner which has reliable
+            # Docker Hub access; server only needs to reach ghcr.io
+            echo "── Pulling pre-built images from ghcr.io ──"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker pull ${GHCR_IMAGE}:migrator
+            docker pull ${GHCR_IMAGE}:latest
+
+            # ── Sync code (for prisma schema used by migrator) ──────────────────
+            echo "── Syncing code ──"
             cd /opt/mt
-
-            # Preserve env file — git clean would delete it (it's gitignored)
-            # NEXT_PUBLIC_* vars must be present at docker build time
             cp .env.production /tmp/.env.mt.production
-
             git fetch origin main
             git clean -fd
             git reset --hard origin/main
-
-            # Restore env file before build so NEXT_PUBLIC_ vars are embedded
             cp /tmp/.env.mt.production .env.production
 
-            echo "── Building Docker images ──"
-            # Extract NEXT_PUBLIC_ vars from env file — needed as build args
-            # because .dockerignore excludes .env.* from the build context
-            CLERK_PK=$(grep ^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY .env.production | cut -d= -f2-)
-            APP_URL=$(grep  ^NEXT_PUBLIC_APP_URL                .env.production | cut -d= -f2-)
-            R2_URL=$(grep   ^NEXT_PUBLIC_R2_PUBLIC_URL          .env.production | cut -d= -f2-)
-
-            # Pre-pull base image with retries — avoids BuildKit TLS timeouts
-            # against Docker Hub during the build metadata check step
-            echo "── Pre-fetching base image ──"
-            for i in 1 2 3; do
-              docker pull node:22-alpine && break
-              [ $i -lt 3 ] && echo "Pull attempt $i failed, retrying in 20s..." && sleep 20
-            done || echo "Warning: could not refresh node:22-alpine from registry; using cached image"
-
-            # DOCKER_BUILDKIT=0 uses the legacy builder which skips the registry
-            # metadata re-check, so a cached base image is always sufficient
-            DOCKER_BUILDKIT=0 docker build --target migrator -t mt-migrator:latest .
-            DOCKER_BUILDKIT=0 docker build \
-              --build-arg "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PK}" \
-              --build-arg "NEXT_PUBLIC_APP_URL=${APP_URL}" \
-              --build-arg "NEXT_PUBLIC_R2_PUBLIC_URL=${R2_URL}" \
-              -t mt:latest .
-
+            # ── Migrating database ──────────────────────────────────────────────
             echo "── Migrating database ──"
-            # Resolve any previously failed migrations before re-applying
             for migration in \
               20260520000000_add_missing_tables_and_columns \
               20260620000001_add_drone_access_team_events_prerequisites; do
               docker run --rm \
                 --network host \
                 --env-file /opt/mt/.env.production \
-                mt-migrator:latest \
+                ${GHCR_IMAGE}:migrator \
                 node_modules/.bin/prisma migrate resolve --rolled-back "$migration" 2>/dev/null || true
             done
             docker run --rm \
               --network host \
               --env-file /opt/mt/.env.production \
-              mt-migrator:latest
+              ${GHCR_IMAGE}:migrator
 
+            # ── Restarting container ────────────────────────────────────────────
             echo "── Restarting container ──"
             docker stop mt 2>/dev/null || true
             docker rm   mt 2>/dev/null || true
 
-            # Uploads and SQLite data live OUTSIDE the git repo so git clean never deletes them
             sudo mkdir -p /var/mt/uploads /var/mt/data
             sudo chown -R 1001:1001 /var/mt/uploads /var/mt/data
 
@@ -206,7 +225,7 @@ jobs:
               --restart unless-stopped \
               -v /var/mt/uploads:/app/public/uploads \
               -v /var/mt/data:/app/data \
-              mt:latest
+              ${GHCR_IMAGE}:latest
 
             echo "── Pruning old images ──"
             docker image prune -f
