@@ -1,5 +1,6 @@
-const BASE_URL = process.env.EPTIMEDU_BASE_URL ?? "";
-const API_KEY  = process.env.EPTIMEDU_API_KEY  ?? "";
+const BASE_URL      = process.env.EPTIMEDU_BASE_URL ?? "";
+const API_KEY       = process.env.EPTIMEDU_API_KEY  ?? "";
+const TIMEOUT_MS    = parseInt(process.env.EPTIMEDU_TIMEOUT_MS ?? "8000", 10);
 
 export function eptimEduConfigured() {
   return !!API_KEY && !!BASE_URL;
@@ -8,17 +9,26 @@ export function eptimEduConfigured() {
 async function req(path: string, options?: RequestInit) {
   if (!API_KEY)  throw new Error("EPTIMEDU_API_KEY not configured");
   if (!BASE_URL) throw new Error("EPTIMEDU_BASE_URL not configured");
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Authorization": `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
-      ...(options?.headers ?? {}),
-    },
-  });
-  const json = await res.json().catch(() => null);
-  if (!res.ok) throw Object.assign(new Error(json?.error ?? "EptimEdu API error"), { status: res.status, body: json });
-  return json;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Authorization": `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+        ...(options?.headers ?? {}),
+      },
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw Object.assign(new Error(json?.error ?? "EptimEdu API error"), { status: res.status, body: json });
+    return json;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const eptimEdu = {

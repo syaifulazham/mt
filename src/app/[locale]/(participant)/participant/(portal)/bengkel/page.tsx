@@ -52,27 +52,25 @@ export default async function BengkelPage() {
   const publishedCourseIds = new Set<string>();
 
   if (configured) {
-    // Always fetch the published course list (no auth needed beyond API key)
-    const coursesResult = await eptimEdu.courses().catch(() => ({ courses: [] }));
-    for (const c of coursesResult.courses ?? []) {
+    const icDigits = participant.ic ? participant.ic.replace(/\D/g, "") : null;
+
+    // courses() and userExists() are independent — run in parallel
+    const [coursesResult, existsResult] = await Promise.allSettled([
+      eptimEdu.courses(),
+      icDigits ? eptimEdu.userExists(icDigits) : Promise.resolve(null),
+    ]);
+
+    const coursesData = coursesResult.status === "fulfilled" ? coursesResult.value : { courses: [] };
+    for (const c of coursesData.courses ?? []) {
       if (c.status === "published") publishedCourseIds.add(c.id);
     }
 
-    if (participant.ic) {
-      const icDigits = participant.ic.replace(/\D/g, "");
-      try {
-        const check = await eptimEdu.userExists(icDigits);
-        if (check?.exists) {
-          lmsUser = { username: icDigits };
-          // Fetch actual enrollments so we can show accurate status
-          const enrolResult = await eptimEdu.getUserEnrolments(icDigits).catch(() => ({ enrolments: [] }));
-          enrolledCourseIds = new Set(
-            (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
-          );
-        }
-      } catch {
-        // 404 or network error = no account, silently ignored
-      }
+    if (existsResult.status === "fulfilled" && existsResult.value?.exists && icDigits) {
+      lmsUser = { username: icDigits };
+      const enrolResult = await eptimEdu.getUserEnrolments(icDigits).catch(() => ({ enrolments: [] }));
+      enrolledCourseIds = new Set(
+        (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
+      );
     }
   }
 
