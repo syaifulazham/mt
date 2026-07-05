@@ -158,8 +158,18 @@ jobs:
             APP_URL=$(grep  ^NEXT_PUBLIC_APP_URL                .env.production | cut -d= -f2-)
             R2_URL=$(grep   ^NEXT_PUBLIC_R2_PUBLIC_URL          .env.production | cut -d= -f2-)
 
-            docker build --target migrator -t mt-migrator:latest .
-            docker build \
+            # Pre-pull base image with retries — avoids BuildKit TLS timeouts
+            # against Docker Hub during the build metadata check step
+            echo "── Pre-fetching base image ──"
+            for i in 1 2 3; do
+              docker pull node:22-alpine && break
+              [ $i -lt 3 ] && echo "Pull attempt $i failed, retrying in 20s..." && sleep 20
+            done || echo "Warning: could not refresh node:22-alpine from registry; using cached image"
+
+            # DOCKER_BUILDKIT=0 uses the legacy builder which skips the registry
+            # metadata re-check, so a cached base image is always sufficient
+            DOCKER_BUILDKIT=0 docker build --target migrator -t mt-migrator:latest .
+            DOCKER_BUILDKIT=0 docker build \
               --build-arg "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PK}" \
               --build-arg "NEXT_PUBLIC_APP_URL=${APP_URL}" \
               --build-arg "NEXT_PUBLIC_R2_PUBLIC_URL=${R2_URL}" \
