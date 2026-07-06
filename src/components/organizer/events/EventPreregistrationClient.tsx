@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
-  ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2,
+  ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download,
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
@@ -251,9 +251,62 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   } | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [exporting, setExporting]       = useState<"xlsx" | "docx" | null>(null);
+  const [downloading, setDownloading]   = useState(false);
 
   // Select-all checkbox indeterminate ref (teams)
   const selectAllRef = useRef<HTMLInputElement>(null);
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({ type: listTab });
+      if (debouncedQ)    params.set("q", debouncedQ);
+      if (competitionId) params.set("competitionId", competitionId);
+      if (stateId)       params.set("stateId", stateId);
+
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/export?${params}`);
+      if (!res.ok) throw new Error("Export failed");
+      const { data } = await res.json();
+
+      const { utils, writeFile } = await import("xlsx");
+
+      if (listTab === "participants") {
+        const wsData = data.map((r: { name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null; contingentName: string | null; teamName: string; stateName: string | null; competitionCode: string; competitionName: string }) => ({
+          "Nama":         r.name            ?? "",
+          "IC":           r.ic              ?? "",
+          "Jantina":      r.gender === "MALE" ? "Lelaki" : r.gender === "FEMALE" ? "Perempuan" : (r.gender ?? ""),
+          "Tahap":        r.eduLevel        ?? "",
+          "Gred/Kelas":   r.classGrade      ?? "",
+          "Kontingen":    r.contingentName  ?? "",
+          "Pasukan":      r.teamName        ?? "",
+          "Negeri":       r.stateName       ?? "",
+          "Pertandingan": `${r.competitionCode} — ${r.competitionName}`,
+        }));
+        const ws = utils.json_to_sheet(wsData);
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Peserta");
+        writeFile(wb, `pendaftaran-peserta-${event.slug}.xlsx`);
+      } else {
+        const wsData = data.map((r: { teamName: string; contingentName: string | null; stateName: string | null; competitionCode: string; competitionName: string; members: number; memberNames: string }) => ({
+          "Pasukan":      r.teamName        ?? "",
+          "Kontingen":    r.contingentName  ?? "",
+          "Negeri":       r.stateName       ?? "",
+          "Pertandingan": `${r.competitionCode} — ${r.competitionName}`,
+          "Jml Ahli":     r.members         ?? 0,
+          "Nama Ahli":    r.memberNames     ?? "",
+        }));
+        const ws = utils.json_to_sheet(wsData);
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Pasukan");
+        writeFile(wb, `pendaftaran-pasukan-${event.slug}.xlsx`);
+      }
+    } catch (e) {
+      console.error("[download]", e);
+      alert("Gagal memuat turun. Sila cuba lagi.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function handleExport(format: "xlsx" | "docx") {
     if (!stats) return;
@@ -562,6 +615,18 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
             ? (loading ? "Memuatkan…" : `${total} peserta`)
             : (teamsLoading ? "Memuatkan…" : `${teamsTotal} pasukan`)}
         </span>
+
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          title={listTab === "participants" ? "Muat turun senarai peserta (.xlsx)" : "Muat turun senarai pasukan (.xlsx)"}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors shrink-0"
+        >
+          {downloading
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <Download className="h-3.5 w-3.5" />}
+          {listTab === "participants" ? "Peserta" : "Pasukan"}
+        </button>
 
         {/* Bulk unregister (teams tab) */}
         {listTab === "teams" && selectedTeamIds.size > 0 && (

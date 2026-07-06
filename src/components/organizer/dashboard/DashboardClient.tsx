@@ -31,6 +31,8 @@ type DashData = {
     byZone: ChartRow[];
     byState: ChartRow[];
     byCompetition: CompRow[];
+    schoolByZone: ChartRow[];
+    schoolByState: ChartRow[];
   };
 };
 
@@ -266,6 +268,37 @@ export function DashboardClient({ userName }: { userName: string }) {
         )}
       </ChartCard>
 
+      {/* School contingent locality */}
+      <div>
+        <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">School Contingents by Locality</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+          <ChartCard title="School Contingents by Zone">
+            {charts.schoolByZone.length === 0 ? (
+              <p className="text-sm text-zinc-400 italic py-4">No zone data.</p>
+            ) : (
+              <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                {charts.schoolByZone.map((z, i) => (
+                  <HorizBar key={z.label} label={z.label} count={z.count} max={charts.schoolByZone[0]?.count ?? 1} color={COLORS[i % COLORS.length]} />
+                ))}
+              </div>
+            )}
+          </ChartCard>
+
+          <ChartCard title="School Contingents by State">
+            {charts.schoolByState.length === 0 ? (
+              <p className="text-sm text-zinc-400 italic py-4">No state data.</p>
+            ) : (
+              <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                {charts.schoolByState.map((s, i) => (
+                  <HorizBar key={s.label} label={s.label} count={s.count} max={charts.schoolByState[0]?.count ?? 1} color={COLORS[i % COLORS.length]} />
+                ))}
+              </div>
+            )}
+          </ChartCard>
+
+        </div>
+      </div>
 
     </div>
   );

@@ -48,6 +48,30 @@ export async function GET() {
   // ethnicity) use the SAME eligibility logic so their totals tally with
   // totalParticipation.
 
+  // ── School contingent locality breakdown ──────────────────────────────────
+  const schoolConts = await db.contingent.findMany({
+    where: { contingentType: "SCHOOL" },
+    select: {
+      school: {
+        select: {
+          zone:  { select: { name: true } },
+          state: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  const schoolZoneMap:  Record<string, number> = {};
+  const schoolStateMap: Record<string, number> = {};
+  for (const c of schoolConts) {
+    const zoneName  = c.school?.zone?.name  ?? "Tiada Zon";
+    const stateName = c.school?.state?.name ?? "Tiada Negeri";
+    schoolZoneMap[zoneName]   = (schoolZoneMap[zoneName]   ?? 0) + 1;
+    schoolStateMap[stateName] = (schoolStateMap[stateName] ?? 0) + 1;
+  }
+  const schoolByZone  = Object.entries(schoolZoneMap).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+  const schoolByState = Object.entries(schoolStateMap).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+
   const [competitions, allParticipants, zoneStates] = await Promise.all([
     db.competition.findMany({
       select: {
@@ -159,6 +183,6 @@ export async function GET() {
       independentContingents,
       internationalContingents,
     },
-    charts: { byGender, byEthnicity, byZone, byState, byCompetition },
+    charts: { byGender, byEthnicity, byZone, byState, byCompetition, schoolByZone, schoolByState },
   });
 }
