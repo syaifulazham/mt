@@ -60,8 +60,8 @@ export default async function BengkelPage() {
       icDigits ? eptimEdu.userExists(icDigits) : Promise.resolve(null),
     ]);
 
-    const coursesData = coursesResult.status === "fulfilled" ? coursesResult.value : { courses: [] };
-    for (const c of coursesData.courses ?? []) {
+    const coursesData = coursesResult.status === "fulfilled" ? coursesResult.value : null;
+    for (const c of coursesData?.courses ?? []) {
       if (c.status === "published") publishedCourseIds.add(c.id);
     }
 
@@ -69,7 +69,7 @@ export default async function BengkelPage() {
       lmsUser = { username: icDigits };
       const enrolResult = await eptimEdu.getUserEnrolments(icDigits).catch(() => ({ enrolments: [] }));
       enrolledCourseIds = new Set(
-        (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
+        (enrolResult?.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
       );
     }
   }

@@ -75,18 +75,14 @@ export async function POST(req: NextRequest) {
     courseId = team.competition.eptimEduCourseId ?? null;
   }
 
-  // Enrol team in the course (force=true bypasses invite-only restrictions)
+  // Enrol team in the course (force=true bypasses invite-only restrictions).
+  // Best-effort: fire-and-forget so a slow/failed enrol doesn't block the SSO token.
+  // The team's lmsUserId is already set, so the account exists; enrolment can be
+  // retried transparently on the next sign-in once the LMS recovers.
   if (courseId) {
-    try {
-      await eptimEdu.enrol(username, courseId, { force: true });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "EptimEdu enrolment failed";
-      console.error("[bengkel/signin POST] enrol error:", msg, { username, courseId, eventId });
-      return NextResponse.json(
-        { error: `Gagal mendaftar kursus: ${msg}` },
-        { status: 422 },
-      );
-    }
+    eptimEdu.enrol(username, courseId, { force: true }).catch((e: unknown) => {
+      console.error("[bengkel/signin POST] enrol error (non-fatal):", e instanceof Error ? e.message : e, { username, courseId });
+    });
   }
 
   // Generate SSO token

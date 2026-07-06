@@ -101,6 +101,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         password,
         name: team.name,
       });
+      if (!result?.userId) throw new Error("Enrolment succeeded but no userId returned");
       lmsUserId = result.userId;
       enrolled  = true;
     } else {

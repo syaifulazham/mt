@@ -40,11 +40,11 @@ export async function POST() {
     ]);
 
     const enrolledIds = new Set<string>(
-      (enrolResult.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
+      (enrolResult?.enrolments ?? []).map((e: { courseId: string }) => e.courseId)
     );
 
     // Enrol in all PUBLISHED org courses not yet enrolled
-    const publishedToEnrol = (catalogResult.courses ?? [])
+    const publishedToEnrol = (catalogResult?.courses ?? [])
       .filter((c: { id: string; status: string }) => c.status === "PUBLISHED" && !enrolledIds.has(c.id))
       .map((c: { id: string }) => c.id);
 
