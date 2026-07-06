@@ -51,12 +51,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   try {
     await eptimEdu.enrol(username, team.competition.eptimEduCourseId);
   } catch (e: unknown) {
-    const status = (e as { status?: number }).status;
-    if (status !== 409) {
-      const msg = e instanceof Error ? e.message : "EptimEdu API error";
-      return NextResponse.json({ error: msg }, { status: 422 });
-    }
-    // 409 = already enrolled in EptimEdu — sync our flag and treat as success
+    const msg = e instanceof Error ? e.message : "EptimEdu API error";
+    return NextResponse.json({ error: msg }, { status: 422 });
   }
 
   await db.team.update({ where: { id }, data: { lmsCourseEnrolled: true } });

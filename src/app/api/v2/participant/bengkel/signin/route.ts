@@ -80,17 +80,12 @@ export async function POST(req: NextRequest) {
     try {
       await eptimEdu.enrol(username, courseId, { force: true });
     } catch (e: unknown) {
-      const httpStatus = (e as { status?: number }).status;
-      if (httpStatus === 409) {
-        // 409 = already enrolled — treat as success, proceed
-      } else {
-        const msg = e instanceof Error ? e.message : "EptimEdu enrolment failed";
-        console.error("[bengkel/signin POST] enrol error:", msg, { username, courseId, eventId });
-        return NextResponse.json(
-          { error: `Gagal mendaftar kursus: ${msg}` },
-          { status: 422 },
-        );
-      }
+      const msg = e instanceof Error ? e.message : "EptimEdu enrolment failed";
+      console.error("[bengkel/signin POST] enrol error:", msg, { username, courseId, eventId });
+      return NextResponse.json(
+        { error: `Gagal mendaftar kursus: ${msg}` },
+        { status: 422 },
+      );
     }
   }
 

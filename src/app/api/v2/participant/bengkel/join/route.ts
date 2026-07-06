@@ -23,30 +23,11 @@ export async function POST() {
   const username = icDigits;
   const password = participant.name.trim().slice(0, 2).toLowerCase() + icDigits.slice(0, 6);
 
-  // Create LMS account if it doesn't exist
-  let created = false;
-  try {
-    let exists = false;
-    try {
-      const check = await eptimEdu.userExists(username);
-      exists = !!check?.exists;
-    } catch (e: unknown) {
-      // Some LMS implementations return 404 for non-existent users
-      if ((e as { status?: number }).status !== 404) throw e;
-      exists = false;
-    }
+  // Check whether an LMS account already exists (to populate the `created` flag)
+  const existsBefore = await eptimEdu.userExists(username).then(r => !!r?.exists).catch(() => false);
 
-    if (!exists) {
-      await eptimEdu.createUser({ username, password, name: participant.name });
-      created = true;
-    }
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "LMS account creation failed";
-    console.error("[bengkel/join] account error:", msg, { username });
-    return NextResponse.json({ error: msg }, { status: 422 });
-  }
-
-  // Enroll in competition LMS courses matching the participant's target group
+  // Enroll in competition LMS courses matching the participant's target group.
+  // enrol() auto-provisions the user if the account doesn't exist yet.
   const competitions = await db.competition.findMany({
     where: {
       eptimEduCourseId: { not: null },
@@ -67,16 +48,13 @@ export async function POST() {
   await Promise.allSettled(
     courseIds.map(async courseId => {
       try {
-        await eptimEdu.enrol(username, courseId);
+        await eptimEdu.enrol(username, courseId, { password, name: participant.name });
         enrolled++;
       } catch (e: unknown) {
-        // 409 = already enrolled — expected and harmless
-        if ((e as { status?: number }).status !== 409) {
-          console.warn("[bengkel/join] enrol error for course", courseId, e instanceof Error ? e.message : e);
-        }
+        console.warn("[bengkel/join] enrol error for course", courseId, e instanceof Error ? e.message : e);
       }
     })
   );
 
-  return NextResponse.json({ username, created, enrolled });
+  return NextResponse.json({ username, created: !existsBefore, enrolled });
 }

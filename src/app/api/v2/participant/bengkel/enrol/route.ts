@@ -27,9 +27,6 @@ export async function POST(req: NextRequest) {
     await eptimEdu.enrol(icDigits, courseId);
     return NextResponse.json({ ok: true, courseId });
   } catch (e: unknown) {
-    // 409 = already enrolled — treat as success
-    if ((e as { status?: number }).status === 409)
-      return NextResponse.json({ ok: true, courseId, alreadyEnrolled: true });
     const msg = e instanceof Error ? e.message : "Enrolment failed";
     return NextResponse.json({ error: msg }, { status: 422 });
   }

@@ -91,30 +91,28 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const password = randomPassword(6);
 
   try {
-    // Check if username already exists in EptimEdu
-    const check = await eptimEdu.userExists(username);
     let lmsUserId: string;
-
-    if (check.exists) {
-      lmsUserId = check.user.id;
-    } else {
-      const created = await eptimEdu.createUser({
-        username,
-        password,
-        name:  team.name,
-        email: team.email ?? undefined,
-      });
-      lmsUserId = created.id;
-    }
-
-    // Enrol in course if competition has one attached
     let enrolled = false;
+
     if (team.competition.eptimEduCourseId) {
-      try {
-        await eptimEdu.enrol(username, team.competition.eptimEduCourseId);
-        enrolled = true;
-      } catch {
-        // Ignore "already enrolled" errors
+      // enrol() auto-provisions the user if the account doesn't exist yet.
+      // Response includes userId which we store as the LMS account reference.
+      const result = await eptimEdu.enrol(username, team.competition.eptimEduCourseId, {
+        password,
+        name: team.name,
+      });
+      lmsUserId = result.userId;
+      enrolled  = true;
+    } else {
+      // No course attached — just provision/locate the account
+      const check = await eptimEdu.userExists(username);
+      if (check?.exists) {
+        lmsUserId = check.user.id;
+      } else {
+        const created = await eptimEdu.createUser({
+          username, password, name: team.name, email: team.email ?? undefined,
+        });
+        lmsUserId = created.id;
       }
     }
 
