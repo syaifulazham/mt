@@ -340,29 +340,16 @@ function CredentialsDialog({
   );
 }
 
-// ── Team row ───────────────────────────────────────────────────────────────────
+// ── Shared hook: join / enrol actions ─────────────────────────────────────────
 
-function TeamRow({
-  team,
-  stats,
-  progressData,
-  onJoined,
-  onEnrolled,
-}: {
-  team: Team;
-  stats: StatsEntry | undefined;
-  progressData: ProgressEntry | undefined;  // undefined = still loading
-  onJoined: (teamId: string, creds: Credentials) => void;
-  onEnrolled: (teamId: string) => void;
-}) {
-  const t = useTranslations("lms");
+function useTeamLmsActions(
+  team: Team,
+  onJoined: (teamId: string, creds: Credentials) => void,
+  onEnrolled: (teamId: string) => void,
+) {
   const [joining,   setJoining]   = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [err,       setErr]       = useState("");
-
-  const hasAccount    = !!team.lmsUserId;
-  const hasCourse     = !!team.competition.eptimEduCourseId;
-  const courseEnrolled = team.lmsCourseEnrolled;
 
   async function join() {
     setJoining(true); setErr("");
@@ -387,6 +374,31 @@ function TeamRow({
       setErr(e instanceof Error ? e.message : "Failed");
     } finally { setEnrolling(false); }
   }
+
+  return { joining, enrolling, err, join, enrol };
+}
+
+// ── Team row — mobile card ─────────────────────────────────────────────────────
+
+function TeamRow({
+  team,
+  stats,
+  progressData,
+  onJoined,
+  onEnrolled,
+}: {
+  team: Team;
+  stats: StatsEntry | undefined;
+  progressData: ProgressEntry | undefined;
+  onJoined: (teamId: string, creds: Credentials) => void;
+  onEnrolled: (teamId: string) => void;
+}) {
+  const t = useTranslations("lms");
+  const { joining, enrolling, err, join, enrol } = useTeamLmsActions(team, onJoined, onEnrolled);
+
+  const hasAccount     = !!team.lmsUserId;
+  const hasCourse      = !!team.competition.eptimEduCourseId;
+  const courseEnrolled = team.lmsCourseEnrolled;
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors dark:hover:bg-zinc-800/40">
@@ -510,6 +522,140 @@ function TeamRow({
         )}
       </div>
     </div>
+  );
+}
+
+// ── Team row — desktop table ───────────────────────────────────────────────────
+
+function TeamTableRow({
+  team,
+  stats,
+  progressData,
+  index,
+  onJoined,
+  onEnrolled,
+}: {
+  team: Team;
+  stats: StatsEntry | undefined;
+  progressData: ProgressEntry | undefined;
+  index: number;
+  onJoined: (teamId: string, creds: Credentials) => void;
+  onEnrolled: (teamId: string) => void;
+}) {
+  const t = useTranslations("lms");
+  const { joining, enrolling, err, join, enrol } = useTeamLmsActions(team, onJoined, onEnrolled);
+
+  const hasAccount     = !!team.lmsUserId;
+  const hasCourse      = !!team.competition.eptimEduCourseId;
+  const courseEnrolled = team.lmsCourseEnrolled;
+
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" });
+
+  return (
+    <tr className={index % 2 === 0 ? "bg-white dark:bg-zinc-900" : "bg-zinc-50/40 dark:bg-zinc-800/20"}>
+      {/* Team name */}
+      <td className="px-4 py-2.5">
+        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 whitespace-nowrap">{team.name}</p>
+      </td>
+
+      {/* Email */}
+      <td className="px-4 py-2.5">
+        <span className={`text-xs ${team.email ? "text-zinc-500" : "text-zinc-300 italic"}`}>
+          {team.email ?? t("noEmail")}
+        </span>
+      </td>
+
+      {/* Login */}
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        {hasAccount ? (
+          <span className="text-xs text-zinc-500">
+            {stats === undefined
+              ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+              : stats === null
+                ? <span className="text-zinc-300">—</span>
+                : stats.loginCount > 0
+                  ? <><span className="font-medium text-zinc-700 dark:text-zinc-300">{stats.loginCount}×</span>
+                      {stats.lastLoginAt && <span className="text-zinc-400"> · {fmtDate(stats.lastLoginAt)}</span>}
+                    </>
+                  : <span className="italic text-zinc-400">{t("neverLoggedIn")}</span>
+            }
+          </span>
+        ) : <span className="text-zinc-300 text-xs">—</span>}
+      </td>
+
+      {/* Submission */}
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        {hasAccount && hasCourse ? (
+          <span className="text-xs">
+            {progressData === undefined
+              ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+              : progressData?.hasSubmission && progressData.lastSubmittedAt
+                ? <span className="font-medium text-green-600 dark:text-green-400">
+                    {t("submittedOn", { date: fmtDate(progressData.lastSubmittedAt) })}
+                  </span>
+                : <span className="text-zinc-300">—</span>
+            }
+          </span>
+        ) : <span className="text-zinc-300 text-xs">—</span>}
+      </td>
+
+      {/* Progress */}
+      <td className="px-4 py-2.5 whitespace-nowrap">
+        {hasAccount && hasCourse ? (
+          <span className="text-xs">
+            {progressData === undefined
+              ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+              : !progressData?.enrolled
+                ? <span className="text-zinc-300">—</span>
+                : progressData.isComplete
+                  ? <span className="font-medium text-blue-600 dark:text-blue-400">
+                      {t("courseCompleted", {
+                        date: progressData.completedAt ? fmtDate(progressData.completedAt) : "—",
+                      })}
+                    </span>
+                  : <span className="text-zinc-500 dark:text-zinc-400">
+                      {t("courseInProgress", { percent: progressData.completionPercent })}
+                    </span>
+            }
+          </span>
+        ) : <span className="text-zinc-300 text-xs">—</span>}
+      </td>
+
+      {/* Actions */}
+      <td className="px-4 py-2.5 text-right">
+        <div className="flex items-center justify-end gap-2">
+          {!hasAccount ? (
+            <Button size="sm" className="h-7 text-xs gap-1.5 whitespace-nowrap"
+              disabled={joining || !team.email} onClick={join}
+              title={!team.email ? t("joinEmailTitle") : undefined}>
+              {joining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+              {t("joinBtn")}
+            </Button>
+          ) : courseEnrolled ? (
+            <BadgeCheck className="h-7 w-7 text-blue-500" />
+          ) : (
+            <>
+              <div className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-100 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
+                <CheckCircle2 className="h-3 w-3" />{t("registered")}
+              </div>
+              {hasCourse && (
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 whitespace-nowrap"
+                  disabled={enrolling} onClick={enrol}>
+                  {enrolling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GraduationCap className="h-3.5 w-3.5" />}
+                  {t("enrolBtn")}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+        {err && (
+          <p className="flex items-center justify-end gap-1 text-[11px] text-red-600 mt-1">
+            <AlertCircle className="h-3 w-3 shrink-0" />{err}
+          </p>
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -652,15 +798,39 @@ export function BengkelClient() {
             const comp = compTeams[0].competition;
             return (
               <div key={comp.id} className="rounded-xl border bg-white shadow-sm overflow-hidden dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-black/20">
+                {/* Competition header */}
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-zinc-50/80 dark:bg-zinc-800/60 dark:border-zinc-800">
                   <Trophy className="h-3.5 w-3.5 text-zinc-400" />
                   <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">{comp.name}</span>
                   <span className="text-[10px] text-zinc-400 font-mono">({comp.code})</span>
                 </div>
-                <div className="divide-y dark:divide-zinc-800">
-                  {compTeams.map(t => (
-                    <TeamRow key={t.id} team={t} stats={loginStats[t.id]} progressData={progressStats[t.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
+
+                {/* Mobile: card list */}
+                <div className="md:hidden divide-y dark:divide-zinc-800">
+                  {compTeams.map(team => (
+                    <TeamRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
                   ))}
+                </div>
+
+                {/* Desktop: table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-zinc-50/60 dark:bg-zinc-800/40 border-b dark:border-zinc-800">
+                        <th className="text-left px-4 py-2 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">{t("colTeam")}</th>
+                        <th className="text-left px-4 py-2 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">{t("colEmail")}</th>
+                        <th className="text-left px-4 py-2 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">{t("colLogin")}</th>
+                        <th className="text-left px-4 py-2 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">{t("colSubmission")}</th>
+                        <th className="text-left px-4 py-2 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">{t("colProgress")}</th>
+                        <th className="px-4 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y dark:divide-zinc-800">
+                      {compTeams.map((team, i) => (
+                        <TeamTableRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} index={i} onJoined={handleJoined} onEnrolled={handleEnrolled} />
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             );
