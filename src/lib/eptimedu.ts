@@ -51,6 +51,9 @@ export const eptimEdu = {
   getUserSubmissions: (username: string, courseId: string) =>
     req(`/api/v1/users/${encodeURIComponent(username)}/courses/${encodeURIComponent(courseId)}/submissions`),
 
+  getUserCourseProgress: (username: string, courseId: string) =>
+    req(`/api/v1/users/${encodeURIComponent(username)}/courses/${encodeURIComponent(courseId)}/progress`),
+
   createSsoToken: (username: string) =>
     req("/api/v1/auth/sso-token", { method: "POST", body: JSON.stringify({ username }) }),
 

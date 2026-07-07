@@ -39,10 +39,13 @@ type Credentials = { username: string; password: string; enrolled: boolean };
 type LoginStats  = { loginCount: number; lastLoginAt: string | null };
 type StatsEntry  = LoginStats | null;  // null = fetched, no data
 
-type SubmissionEntry = {
+type ProgressEntry = {
+  enrolled: boolean;
+  isComplete: boolean;
+  completedAt: string | null;
+  completionPercent: number;
   hasSubmission: boolean;
   submissionCount: number;
-  firstSubmittedAt: string | null;
   lastSubmittedAt: string | null;
 } | null;  // null = fetched, no data (team not enrolled or API error)
 
@@ -342,13 +345,13 @@ function CredentialsDialog({
 function TeamRow({
   team,
   stats,
-  submissionStatus,
+  progressData,
   onJoined,
   onEnrolled,
 }: {
   team: Team;
   stats: StatsEntry | undefined;
-  submissionStatus: SubmissionEntry | undefined;  // undefined = still loading
+  progressData: ProgressEntry | undefined;  // undefined = still loading
   onJoined: (teamId: string, creds: Credentials) => void;
   onEnrolled: (teamId: string) => void;
 }) {
@@ -416,26 +419,49 @@ function TeamRow({
           </div>
         )}
         {hasAccount && hasCourse && (
-          <div className="flex items-center gap-1 mt-1">
-            <Upload className="h-3 w-3 text-zinc-400 shrink-0" />
-            <span className="text-xs text-zinc-500">
-              {submissionStatus === undefined
-                ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
-                : submissionStatus === null || !submissionStatus.hasSubmission
-                  ? <span className="text-amber-500 dark:text-amber-400">No submission</span>
-                  : <>
-                      <span className="font-medium text-green-600 dark:text-green-400">
-                        {submissionStatus.submissionCount}× submitted
-                      </span>
-                      {submissionStatus.lastSubmittedAt && (
-                        <span className="text-zinc-400">
-                          {" · "}{new Date(submissionStatus.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })}
+          <>
+            {/* Submission row — only shown when the team has submitted something */}
+            {(progressData === undefined || (progressData !== null && progressData.hasSubmission)) && (
+              <div className="flex items-center gap-1 mt-1">
+                <Upload className="h-3 w-3 text-zinc-400 shrink-0" />
+                <span className="text-xs text-zinc-500">
+                  {progressData === undefined
+                    ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+                    : progressData?.hasSubmission && progressData.lastSubmittedAt
+                      ? <span className="font-medium text-green-600 dark:text-green-400">
+                          {t("submittedOn", {
+                            date: new Date(progressData.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" }),
+                          })}
                         </span>
-                      )}
-                    </>
-              }
-            </span>
-          </div>
+                      : null
+                  }
+                </span>
+              </div>
+            )}
+
+            {/* Course progress row */}
+            <div className="flex items-center gap-1 mt-1">
+              <GraduationCap className="h-3 w-3 text-zinc-400 shrink-0" />
+              <span className="text-xs text-zinc-500">
+                {progressData === undefined
+                  ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+                  : !progressData?.enrolled
+                    ? null
+                    : progressData.isComplete
+                      ? <span className="font-medium text-blue-600 dark:text-blue-400">
+                          {t("courseCompleted", {
+                            date: progressData.completedAt
+                              ? new Date(progressData.completedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })
+                              : "—",
+                          })}
+                        </span>
+                      : <span className="text-zinc-500 dark:text-zinc-400">
+                          {t("courseInProgress", { percent: progressData.completionPercent })}
+                        </span>
+                }
+              </span>
+            </div>
+          </>
         )}
         {err && (
           <p className="flex items-center gap-1 text-[11px] text-red-600 mt-1">
@@ -493,8 +519,8 @@ export function BengkelClient() {
   const t = useTranslations("lms");
   const [teams,           setTeams]           = useState<Team[]>([]);
   const [loading,         setLoading]         = useState(true);
-  const [loginStats,      setLoginStats]      = useState<Record<string, StatsEntry>>({});
-  const [submissionStats, setSubmissionStats] = useState<Record<string, SubmissionEntry>>({});
+  const [loginStats,    setLoginStats]    = useState<Record<string, StatsEntry>>({});
+  const [progressStats, setProgressStats] = useState<Record<string, ProgressEntry>>({});
   const [creds,           setCreds]           = useState<{ teamId: string; teamName: string; data: Credentials } | null>(null);
 
   const load = useCallback(async () => {
@@ -543,9 +569,9 @@ export function BengkelClient() {
         enrolledWithCourse.length > 0
           ? Promise.allSettled(
               enrolledWithCourse.map(t =>
-                fetch(`/api/v2/manager/teams/${t.id}/lms/submissions?courseId=${encodeURIComponent(t.competition.eptimEduCourseId!)}`)
+                fetch(`/api/v2/manager/teams/${t.id}/lms/progress?courseId=${encodeURIComponent(t.competition.eptimEduCourseId!)}`)
                   .then(r => r.json())
-                  .then(j => ({ id: t.id, data: (j.data ?? null) as SubmissionEntry }))
+                  .then(j => ({ id: t.id, data: (j.data ?? null) as ProgressEntry }))
               )
             )
           : Promise.resolve([]),
@@ -557,11 +583,11 @@ export function BengkelClient() {
       }
       setLoginStats(statsMap);
 
-      const subMap: Record<string, SubmissionEntry> = {};
+      const progMap: Record<string, ProgressEntry> = {};
       for (const r of subResults) {
-        if (r.status === "fulfilled") subMap[r.value.id] = r.value.data;
+        if (r.status === "fulfilled") progMap[r.value.id] = r.value.data;
       }
-      setSubmissionStats(subMap);
+      setProgressStats(progMap);
     } finally { setLoading(false); }
   }, []);
 
@@ -575,8 +601,7 @@ export function BengkelClient() {
       t.id === teamId ? { ...t, lmsUserId: data.username, lmsCourseEnrolled: data.enrolled } : t
     ));
     setLoginStats(prev => ({ ...prev, [teamId]: { loginCount: 0, lastLoginAt: null } }));
-    // Newly joined — no submissions yet
-    setSubmissionStats(prev => ({ ...prev, [teamId]: { hasSubmission: false, submissionCount: 0, firstSubmittedAt: null, lastSubmittedAt: null } }));
+    setProgressStats(prev => ({ ...prev, [teamId]: { enrolled: false, isComplete: false, completedAt: null, completionPercent: 0, hasSubmission: false, submissionCount: 0, lastSubmittedAt: null } }));
   }
 
   function handleEnrolled(teamId: string) {
@@ -634,7 +659,7 @@ export function BengkelClient() {
                 </div>
                 <div className="divide-y dark:divide-zinc-800">
                   {compTeams.map(t => (
-                    <TeamRow key={t.id} team={t} stats={loginStats[t.id]} submissionStatus={submissionStats[t.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
+                    <TeamRow key={t.id} team={t} stats={loginStats[t.id]} progressData={progressStats[t.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
                   ))}
                 </div>
               </div>
