@@ -119,14 +119,19 @@ export default async function TeamPage() {
 
             <div className="p-5 space-y-4">
               {/* Team name + competition */}
-              <div>
-                <h2 className="text-base font-bold dark:text-zinc-100">{team.name}</h2>
-                <p className="text-sm text-[#085782] dark:text-blue-400 font-medium">
-                  {comp.name}
-                  <span className="ml-2 text-xs font-normal bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded">
-                    {comp.code}
-                  </span>
-                </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold dark:text-zinc-100">{team.name}</h2>
+                  <p className="text-sm text-[#085782] dark:text-blue-400 font-medium">
+                    {comp.name}
+                    <span className="ml-2 text-xs font-normal bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded">
+                      {comp.code}
+                    </span>
+                  </p>
+                </div>
+                {team.lmsUserId && (
+                  <EptimEduLoginButton teamId={team.id} />
+                )}
               </div>
 
               {/* Venue + dates */}

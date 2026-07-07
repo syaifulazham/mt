@@ -249,7 +249,7 @@ GET /sectors/{custom_id}/users
 
 ### 6. List Challenges
 
-Returns all challenges for the event.
+Returns all challenges for the event associated with the API key.
 
 ```
 GET /challenges
@@ -274,11 +274,19 @@ GET /challenges
       "challenge_mode": "automation",
       "status": "published",
       "order_index": 0,
-      "created_at": "2026-06-01T00:00:00.000Z"
+      "max_attempts": 5,
+      "created_at": "2026-06-01T00:00:00.000Z",
+      "updated_at": "2026-06-10T08:00:00.000Z"
     }
   ]
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| `challenge_mode` | One of `manual`, `automation`, or `both` |
+| `max_attempts` | Maximum scored attempts allowed per user. `null` = unlimited |
+| `order_index` | Display ordering (0-based) |
 
 ---
 
@@ -329,7 +337,80 @@ GET /challenges/{challenge_id}/results
 
 ---
 
-### 8. Get All Event Results
+### 8. Get All Attempts for a Challenge
+
+Returns every submitted attempt for a challenge (not just the best per user). Useful for pulling raw scoring data, auditing, or building custom analytics. Results are sorted by submission time (newest first).
+
+```
+GET /challenges/{challenge_id}/attempts
+```
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `limit` | Max results to return (default 500, max 1000) |
+| `offset` | Skip this many results for pagination (default 0) |
+| `user_id` | Optional - filter to a specific user's attempts |
+| `session_kind` | Optional - filter by session kind: `manual`, `automation`, or `trial` |
+
+**Response (200):**
+
+```json
+{
+  "challenge_id": "uuid-challenge-1",
+  "challenge_name": "Level 1 - Basic Flight",
+  "challenge_mode": "automation",
+  "total": 128,
+  "limit": 500,
+  "offset": 0,
+  "attempts": [
+    {
+      "attempt_id": "uuid-attempt-1",
+      "user_id": "uuid-1",
+      "full_name": "Ahmad Razif",
+      "email": "pilot@school.edu",
+      "pilot_handle": "razif_ace",
+      "sector_custom_id": "SMK-TM-2026",
+      "sector_name": "SMK Taman Melawati",
+      "score": 95,
+      "max_score": 100,
+      "elapsed_seconds": 38.2,
+      "phase": "completed",
+      "session_kind": "automation",
+      "submitted_at": "2026-06-18T14:30:00.000Z"
+    },
+    {
+      "attempt_id": "uuid-attempt-2",
+      "user_id": "uuid-1",
+      "full_name": "Ahmad Razif",
+      "email": "pilot@school.edu",
+      "pilot_handle": "razif_ace",
+      "sector_custom_id": "SMK-TM-2026",
+      "sector_name": "SMK Taman Melawati",
+      "score": 72,
+      "max_score": 100,
+      "elapsed_seconds": 45.1,
+      "phase": "completed",
+      "session_kind": "automation",
+      "submitted_at": "2026-06-18T13:15:00.000Z"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `phase` | Terminal state: `completed`, `crashed`, or `aborted` |
+| `session_kind` | Run type: `manual`, `automation`, or `trial` |
+| `total` | Total matching attempts (for pagination) |
+
+**Errors:**
+- `404` - Challenge not found in this event
+
+---
+
+### 9. Get All Event Results
 
 Returns the best scores for all participants across all (or filtered) challenges in the event. Sorted by challenge name, then score descending.
 
@@ -374,7 +455,7 @@ GET /results
 
 ---
 
-### 9. Results by Sector Users
+### 10. Results by Sector Users
 
 Returns the best scores for all users in a sector across the event's challenges.
 
@@ -415,7 +496,7 @@ Results are sorted by challenge name, then by best score (descending).
 
 ---
 
-### 10. Check Sector Availability
+### 11. Check Sector Availability
 
 Check if a sector `custom_id` is available (not already used) within the event.
 
@@ -436,7 +517,7 @@ Returns `"available": false` if a sector with that `custom_id` already exists in
 
 ---
 
-### 11. Check User ID Availability
+### 12. Check User ID Availability
 
 Check if a `userid` is available (not already registered).
 
@@ -531,11 +612,19 @@ curl -X GET "$BASE/challenges?status=published" \
 curl -X GET "$BASE/challenges/CHALLENGE_UUID/results" \
   -H "X-API-Key: $API_KEY"
 
-# 7. Check all event results
+# 7. Pull all raw attempts for a challenge (every submission)
+curl -X GET "$BASE/challenges/CHALLENGE_UUID/attempts" \
+  -H "X-API-Key: $API_KEY"
+
+# 8. Pull attempts for a specific user in a challenge
+curl -X GET "$BASE/challenges/CHALLENGE_UUID/attempts?user_id=USER_UUID" \
+  -H "X-API-Key: $API_KEY"
+
+# 9. Check all event results
 curl -X GET "$BASE/results" \
   -H "X-API-Key: $API_KEY"
 
-# 8. Check results for a specific sector
+# 10. Check results for a specific sector
 curl -X GET "$BASE/sectors/SMK-TM-2026/results" \
   -H "X-API-Key: $API_KEY"
 ```

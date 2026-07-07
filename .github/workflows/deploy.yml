@@ -48,29 +48,40 @@ jobs:
           NEXT_PUBLIC_R2_PUBLIC_URL=${{ secrets.NEXT_PUBLIC_R2_PUBLIC_URL }}
           EOF
 
-      # ── Write nginx config (no indentation so file is valid) ─────────────────
+      # ── Write nginx config ───────────────────────────────────────────────────
       - name: Generate nginx config
         run: |
           cat > nginx-mt.conf << 'EOF'
           server {
               listen 80;
               server_name ${{ secrets.DOMAIN }};
+              return 301 https://$host$request_uri;
+          }
+
+          server {
+              listen 443 ssl;
+              server_name ${{ secrets.DOMAIN }};
+              ssl_certificate /etc/letsencrypt/live/${{ secrets.DOMAIN }}/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/${{ secrets.DOMAIN }}/privkey.pem;
+              include /etc/letsencrypt/options-ssl-nginx.conf;
+              ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+              client_max_body_size 50M;
               location /uploads/ {
-                  alias /var/mt/uploads/;
+                  alias /opt/mt/uploads/;
                   expires 30d;
                   add_header Cache-Control "public, no-transform";
               }
               location / {
-                  proxy_pass         http://127.0.0.1:${{ secrets.PORT }};
+                  proxy_pass http://127.0.0.1:3310;
                   proxy_http_version 1.1;
-                  proxy_set_header   Upgrade           $http_upgrade;
-                  proxy_set_header   Connection        "upgrade";
-                  proxy_set_header   Host              $host;
-                  proxy_set_header   X-Real-IP         $remote_addr;
-                  proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-                  proxy_set_header   X-Forwarded-Proto $scheme;
-                  proxy_set_header   X-Forwarded-Host  $host;
-                  proxy_set_header   X-Forwarded-Port  443;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_set_header X-Forwarded-Host $host;
+                  proxy_set_header X-Forwarded-Port 443;
                   proxy_read_timeout 60s;
               }
           }
@@ -144,21 +155,22 @@ jobs:
             if ! command -v nginx &>/dev/null; then
               sudo apt-get update -qq && sudo apt-get install -y nginx
             fi
-
-            sudo cp /opt/mt/nginx-mt.conf /etc/nginx/sites-available/mt
             sudo ln -sf /etc/nginx/sites-available/mt /etc/nginx/sites-enabled/mt
             sudo rm -f /etc/nginx/sites-enabled/default
-            sudo nginx -t
             sudo systemctl enable nginx
-            sudo systemctl reload nginx
 
-            # ── certbot (only obtain cert if it doesn't exist yet) ──────────────
+            # ── SSL certificate (bootstrap on first deploy, skip afterwards) ─────
             echo "── Checking SSL certificate ──"
             if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
               echo "── Obtaining SSL certificate for $DOMAIN ──"
               if ! command -v certbot &>/dev/null; then
                 sudo apt-get install -y certbot python3-certbot-nginx
               fi
+              # Minimal HTTP-only config so nginx can start for the HTTP-01 challenge.
+              # certbot --nginx also creates options-ssl-nginx.conf + ssl-dhparams.pem.
+              printf 'server { listen 80; server_name %s; }\n' "$DOMAIN" \
+                | sudo tee /etc/nginx/sites-available/mt > /dev/null
+              sudo nginx -t && (sudo systemctl reload nginx 2>/dev/null || sudo systemctl start nginx)
               sudo rm -f /var/lib/letsencrypt/.certbot.lock
               sudo certbot --nginx \
                 --non-interactive \
@@ -166,16 +178,11 @@ jobs:
                 --email mahza13@gmail.com \
                 --domains $DOMAIN \
                 --redirect
-              sudo systemctl reload nginx
-            else
-              echo "── Certificate exists — restoring SSL to nginx config ──"
-              sudo certbot install \
-                --nginx \
-                --non-interactive \
-                --cert-name $DOMAIN \
-                --redirect 2>/dev/null || true
-              sudo systemctl reload nginx
             fi
+
+            # Install custom nginx config (two-block SSL; overwrites any certbot-modified config)
+            sudo cp /opt/mt/nginx-mt.conf /etc/nginx/sites-available/mt
+            sudo nginx -t && (sudo systemctl reload nginx 2>/dev/null || sudo systemctl start nginx)
 
             # ── Pull pre-built images from ghcr.io ─────────────────────────────
             # Images were built on the GitHub Actions runner which has reliable
@@ -215,16 +222,16 @@ jobs:
             docker stop mt 2>/dev/null || true
             docker rm   mt 2>/dev/null || true
 
-            sudo mkdir -p /var/mt/uploads /var/mt/data
-            sudo chown -R 1001:1001 /var/mt/uploads /var/mt/data
+            sudo mkdir -p /opt/mt/uploads /opt/mt/data
+            sudo chown -R 1001:1001 /opt/mt/uploads /opt/mt/data
 
             docker run -d \
               --name mt \
               --network host \
               --env-file /opt/mt/.env.production \
               --restart unless-stopped \
-              -v /var/mt/uploads:/app/public/uploads \
-              -v /var/mt/data:/app/data \
+              -v /opt/mt/uploads:/app/public/uploads \
+              -v /opt/mt/data:/app/data \
               ${GHCR_IMAGE}:latest
 
             echo "── Pruning old images ──"
