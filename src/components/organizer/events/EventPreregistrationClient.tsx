@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
-  ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download,
+  ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download, ListChecks,
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
@@ -42,6 +42,7 @@ type EventSummary = {
   id: string;
   name: string;
   slug: string;
+  prerequisiteEvent: { id: string; name: string; slug: string } | null;
 };
 
 type StatsSummary = {
@@ -230,6 +231,13 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
 
   // Unregister confirmation modal
   const [confirmModal, setConfirmModal] = useState<{ code: string; input: string } | null>(null);
+
+  // Load-from-prerequisite modal
+  type PrereqModalState =
+    | { phase: "loading" }
+    | { phase: "success"; added: number; skipped: number }
+    | { phase: "error"; message: string };
+  const [prereqModal, setPrereqModal] = useState<PrereqModalState | null>(null);
 
   // List tab toggle
   const [listTab, setListTab] = useState<"participants" | "teams">("teams");
@@ -459,6 +467,24 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }
 
+  async function handleLoadFromPrerequisite() {
+    if (!event.prerequisiteEvent) return;
+    setPrereqModal({ phase: "loading" });
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/preregistration/load-from-prerequisite`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      loadTeams();
+      loadStats();
+      setPrereqModal({ phase: "success", added: json.added, skipped: json.skipped });
+    } catch (e: unknown) {
+      setPrereqModal({ phase: "error", message: e instanceof Error ? e.message : "Gagal memuatkan daripada prasyarat." });
+    }
+  }
+
   async function toggleSelected(teamId: string, newValue: boolean) {
     // Optimistic update
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, selected: newValue } : t));
@@ -657,6 +683,21 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <Trash2 className="h-3.5 w-3.5" />}
             Nyah-daftar {selectedTeamIds.size} pasukan
+          </button>
+        )}
+
+        {/* Load from prerequisite (teams tab) */}
+        {listTab === "teams" && event.prerequisiteEvent && (
+          <button
+            onClick={handleLoadFromPrerequisite}
+            disabled={prereqModal?.phase === "loading"}
+            title={`Daftar pasukan terpilih dari "${event.prerequisiteEvent.name}"`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 border border-indigo-200 transition-colors"
+          >
+            {prereqModal?.phase === "loading"
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <ListChecks className="h-3.5 w-3.5" />}
+            Muat dari prasyarat
           </button>
         )}
       </div>
@@ -904,6 +945,97 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                 Nyah-daftar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load-from-prerequisite modal */}
+      {prereqModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-5">
+            {prereqModal.phase === "loading" && (
+              <>
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 text-indigo-500 animate-spin" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-zinc-900">Memuatkan pasukan…</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Mendaftarkan pasukan terpilih dari acara prasyarat
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {prereqModal.phase === "success" && (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <ListChecks className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900">Muat dari Prasyarat Berjaya</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {event.prerequisiteEvent?.name}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-center">
+                    <p className="text-2xl font-bold tabular-nums text-emerald-700">{prereqModal.added}</p>
+                    <p className="text-xs text-emerald-600 mt-0.5">Pasukan didaftarkan</p>
+                  </div>
+                  <div className="rounded-xl bg-zinc-50 border border-zinc-100 px-4 py-3 text-center">
+                    <p className="text-2xl font-bold tabular-nums text-zinc-500">{prereqModal.skipped}</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">Sudah wujud</p>
+                  </div>
+                </div>
+
+                {prereqModal.added === 0 && (
+                  <p className="text-xs text-zinc-500 text-center">
+                    Semua pasukan terpilih sudah didaftarkan ke acara ini.
+                  </p>
+                )}
+
+                <button
+                  onClick={() => setPrereqModal(null)}
+                  className="w-full px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
+                >
+                  Tutup
+                </button>
+              </>
+            )}
+
+            {prereqModal.phase === "error" && (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900">Gagal</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">{prereqModal.message}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPrereqModal(null)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    onClick={handleLoadFromPrerequisite}
+                    className="flex-1 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition-colors"
+                  >
+                    Cuba Lagi
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

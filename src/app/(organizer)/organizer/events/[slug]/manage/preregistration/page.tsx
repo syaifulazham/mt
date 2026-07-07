@@ -19,14 +19,26 @@ export default async function EventPreregistrationPage({
 
   const event = await db.event.findUnique({
     where: { slug },
-    select: { id: true, name: true, slug: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      prerequisiteEvent: { select: { id: true, name: true, slug: true } },
+    },
   });
 
   if (!event) redirect("/organizer/events");
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <EventPreregistrationClient event={event} />
+      <EventPreregistrationClient
+        event={{
+          id:   event.id,
+          name: event.name,
+          slug: event.slug,
+          prerequisiteEvent: event.prerequisiteEvent ?? null,
+        }}
+      />
     </OrganizerShell>
   );
 }
