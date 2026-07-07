@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import {
-  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn, UserCircle2, ExternalLink,
+  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn, UserCircle2, ExternalLink, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +38,13 @@ type Team = {
 type Credentials = { username: string; password: string; enrolled: boolean };
 type LoginStats  = { loginCount: number; lastLoginAt: string | null };
 type StatsEntry  = LoginStats | null;  // null = fetched, no data
+
+type SubmissionEntry = {
+  hasSubmission: boolean;
+  submissionCount: number;
+  firstSubmittedAt: string | null;
+  lastSubmittedAt: string | null;
+} | null;  // null = fetched, no data (team not enrolled or API error)
 
 // ── Copy button ────────────────────────────────────────────────────────────────
 
@@ -335,11 +342,13 @@ function CredentialsDialog({
 function TeamRow({
   team,
   stats,
+  submissionStatus,
   onJoined,
   onEnrolled,
 }: {
   team: Team;
   stats: StatsEntry | undefined;
+  submissionStatus: SubmissionEntry | undefined;  // undefined = still loading
   onJoined: (teamId: string, creds: Credentials) => void;
   onEnrolled: (teamId: string) => void;
 }) {
@@ -406,6 +415,28 @@ function TeamRow({
             </span>
           </div>
         )}
+        {hasAccount && hasCourse && (
+          <div className="flex items-center gap-1 mt-1">
+            <Upload className="h-3 w-3 text-zinc-400 shrink-0" />
+            <span className="text-xs text-zinc-500">
+              {submissionStatus === undefined
+                ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+                : submissionStatus === null || !submissionStatus.hasSubmission
+                  ? <span className="text-amber-500 dark:text-amber-400">No submission</span>
+                  : <>
+                      <span className="font-medium text-green-600 dark:text-green-400">
+                        {submissionStatus.submissionCount}× submitted
+                      </span>
+                      {submissionStatus.lastSubmittedAt && (
+                        <span className="text-zinc-400">
+                          {" · "}{new Date(submissionStatus.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      )}
+                    </>
+              }
+            </span>
+          </div>
+        )}
         {err && (
           <p className="flex items-center gap-1 text-[11px] text-red-600 mt-1">
             <AlertCircle className="h-3 w-3 shrink-0" />{err}
@@ -460,10 +491,11 @@ function TeamRow({
 
 export function BengkelClient() {
   const t = useTranslations("lms");
-  const [teams,      setTeams]      = useState<Team[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [loginStats, setLoginStats] = useState<Record<string, StatsEntry>>({});
-  const [creds,      setCreds]      = useState<{ teamId: string; teamName: string; data: Credentials } | null>(null);
+  const [teams,           setTeams]           = useState<Team[]>([]);
+  const [loading,         setLoading]         = useState(true);
+  const [loginStats,      setLoginStats]      = useState<Record<string, StatsEntry>>({});
+  const [submissionStats, setSubmissionStats] = useState<Record<string, SubmissionEntry>>({});
+  const [creds,           setCreds]           = useState<{ teamId: string; teamName: string; data: Credentials } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -494,24 +526,42 @@ export function BengkelClient() {
         }
       }
 
-      // Fetch login stats for enrolled teams
+      // Fetch login stats and submission status for enrolled teams (in parallel)
       const enrolled = fetched.filter(t => t.lmsUserId);
-      if (enrolled.length > 0) {
-        const statsResults = await Promise.allSettled(
-          enrolled.map(t =>
-            fetch(`/api/v2/manager/teams/${t.id}/lms`)
-              .then(r => r.json())
-              .then(j => ({ id: t.id, data: (j.data ?? null) as StatsEntry }))
-          )
-        );
-        const statsMap: Record<string, StatsEntry> = {};
-        for (const r of statsResults) {
-          statsMap[r.status === "fulfilled" ? r.value.id : ""]
-            = r.status === "fulfilled" ? r.value.data : null;
-        }
-        delete statsMap[""];
-        setLoginStats(statsMap);
+      const enrolledWithCourse = enrolled.filter(t => t.competition.eptimEduCourseId);
+
+      const [statsResults, subResults] = await Promise.all([
+        enrolled.length > 0
+          ? Promise.allSettled(
+              enrolled.map(t =>
+                fetch(`/api/v2/manager/teams/${t.id}/lms`)
+                  .then(r => r.json())
+                  .then(j => ({ id: t.id, data: (j.data ?? null) as StatsEntry }))
+              )
+            )
+          : Promise.resolve([]),
+        enrolledWithCourse.length > 0
+          ? Promise.allSettled(
+              enrolledWithCourse.map(t =>
+                fetch(`/api/v2/manager/teams/${t.id}/lms/submissions?courseId=${encodeURIComponent(t.competition.eptimEduCourseId!)}`)
+                  .then(r => r.json())
+                  .then(j => ({ id: t.id, data: (j.data ?? null) as SubmissionEntry }))
+              )
+            )
+          : Promise.resolve([]),
+      ]);
+
+      const statsMap: Record<string, StatsEntry> = {};
+      for (const r of statsResults) {
+        if (r.status === "fulfilled") statsMap[r.value.id] = r.value.data;
       }
+      setLoginStats(statsMap);
+
+      const subMap: Record<string, SubmissionEntry> = {};
+      for (const r of subResults) {
+        if (r.status === "fulfilled") subMap[r.value.id] = r.value.data;
+      }
+      setSubmissionStats(subMap);
     } finally { setLoading(false); }
   }, []);
 
@@ -525,6 +575,8 @@ export function BengkelClient() {
       t.id === teamId ? { ...t, lmsUserId: data.username, lmsCourseEnrolled: data.enrolled } : t
     ));
     setLoginStats(prev => ({ ...prev, [teamId]: { loginCount: 0, lastLoginAt: null } }));
+    // Newly joined — no submissions yet
+    setSubmissionStats(prev => ({ ...prev, [teamId]: { hasSubmission: false, submissionCount: 0, firstSubmittedAt: null, lastSubmittedAt: null } }));
   }
 
   function handleEnrolled(teamId: string) {
@@ -582,7 +634,7 @@ export function BengkelClient() {
                 </div>
                 <div className="divide-y dark:divide-zinc-800">
                   {compTeams.map(t => (
-                    <TeamRow key={t.id} team={t} stats={loginStats[t.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
+                    <TeamRow key={t.id} team={t} stats={loginStats[t.id]} submissionStatus={submissionStats[t.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
                   ))}
                 </div>
               </div>
