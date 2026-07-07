@@ -13,6 +13,7 @@ type TeamRow = {
   competitionCode: string;
   competitionName: string;
   members: bigint;
+  selected: boolean;
 };
 
 type CountRow = { total: bigint };
@@ -66,11 +67,12 @@ export async function GET(
           COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
           c.code   AS "competitionCode",
           c.name   AS "competitionName",
-          COUNT(DISTINCT tm."contestantId") AS members
+          COUNT(DISTINCT tm."contestantId") AS members,
+          te.selected AS selected
         ${fromJoins}
         WHERE 1=1 ${extraConditions}
         GROUP BY t.id, t.name, cont.name,
-          COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name
+          COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected
         ORDER BY c.code, t.name
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `,
@@ -92,6 +94,7 @@ export async function GET(
         competitionCode: r.competitionCode,
         competitionName: r.competitionName,
         members:         Number(r.members),
+        selected:        r.selected ?? false,
       })),
       total,
       page,
@@ -124,6 +127,34 @@ export async function DELETE(
     return NextResponse.json({ success: true, removed: teamIds.length });
   } catch (e) {
     console.error("[preregistration/teams DELETE]", e);
+    return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 422 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  const { id: eventId } = await params;
+
+  try {
+    const body = await req.json();
+    const teamId: string = body?.teamId;
+    const selected: boolean = body?.selected;
+    if (!teamId || typeof selected !== "boolean")
+      return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
+
+    await db.teamEvent.update({
+      where: { teamId_eventId: { teamId, eventId } },
+      data: { selected },
+    });
+
+    return NextResponse.json({ success: true, teamId, selected });
+  } catch (e) {
+    console.error("[preregistration/teams PATCH]", e);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 422 });
   }
 }

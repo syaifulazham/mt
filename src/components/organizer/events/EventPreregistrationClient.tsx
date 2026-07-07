@@ -29,6 +29,7 @@ type Team = {
   competitionCode: string;
   competitionName: string;
   members: number;
+  selected: boolean;
 };
 
 type Competition = {
@@ -231,7 +232,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [confirmModal, setConfirmModal] = useState<{ code: string; input: string } | null>(null);
 
   // List tab toggle
-  const [listTab, setListTab] = useState<"participants" | "teams">("participants");
+  const [listTab, setListTab] = useState<"participants" | "teams">("teams");
 
   // Filters (shared across tabs)
   const [q, setQ]                         = useState("");
@@ -458,6 +459,23 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }
 
+  async function toggleSelected(teamId: string, newValue: boolean) {
+    // Optimistic update
+    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, selected: newValue } : t));
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, selected: newValue }),
+      });
+      if (!res.ok) throw new Error("Ralat");
+    } catch {
+      // Revert on failure
+      setTeams(prev => prev.map(t => t.id === teamId ? { ...t, selected: !newValue } : t));
+    }
+  }
+
+  const selectedCount   = teams.filter(t => t.selected).length;
   const totalPages      = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const teamsTotalPages = Math.max(1, Math.ceil(teamsTotal / PAGE_SIZE));
 
@@ -697,74 +715,101 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
 
       {/* Teams table */}
       {listTab === "teams" && (
-        <div className="overflow-x-auto rounded-xl border border-zinc-100">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-zinc-50 border-b border-zinc-100">
-                <th className="px-4 py-2.5 w-10">
-                  <input
-                    ref={selectAllRef}
-                    type="checkbox"
-                    onChange={toggleAllTeams}
-                    className="h-3.5 w-3.5 rounded border-zinc-300 accent-blue-600 cursor-pointer"
-                  />
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">#</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Kontingen</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pasukan</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Negeri</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pertandingan</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Ahli</th>
-              </tr>
-            </thead>
-            <tbody>
-              {teamsLoading ? (
-                <tr><td colSpan={7} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
-              ) : teams.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
-              ) : (
-                teams.map((team, i) => {
-                  const selected = selectedTeamIds.has(team.id);
-                  return (
-                    <tr
-                      key={team.id}
-                      onClick={() => toggleTeam(team.id)}
-                      className={`cursor-pointer transition-colors ${
-                        selected
-                          ? "bg-red-50/60"
-                          : i % 2 === 0 ? "bg-white hover:bg-zinc-50/60" : "bg-zinc-50/50 hover:bg-zinc-100/60"
-                      }`}
-                    >
-                      <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleTeam(team.id)}
-                          className="h-3.5 w-3.5 rounded border-zinc-300 accent-blue-600 cursor-pointer"
-                        />
-                      </td>
-                      <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">
-                        {(teamsPage - 1) * PAGE_SIZE + i + 1}
-                      </td>
-                      <td className="px-4 py-2.5 text-zinc-600 text-xs">{team.contingentName ?? "–"}</td>
-                      <td className="px-4 py-2.5 font-medium text-zinc-900">{team.teamName}</td>
-                      <td className="px-4 py-2.5 text-zinc-500 text-xs">{team.stateName ?? "–"}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1">
-                          <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
-                            {team.competitionCode}
+        <>
+          {selectedCount > 0 && (
+            <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              <span className="font-semibold">{selectedCount} pasukan dipilih</span>
+              <span className="text-emerald-500">untuk acara seterusnya</span>
+            </div>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-zinc-100">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-zinc-50 border-b border-zinc-100">
+                  <th className="px-4 py-2.5 w-10">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      onChange={toggleAllTeams}
+                      className="h-3.5 w-3.5 rounded border-zinc-300 accent-blue-600 cursor-pointer"
+                    />
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">#</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Kontingen</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pasukan</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Negeri</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pertandingan</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Ahli</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-semibold text-emerald-600 uppercase tracking-wide">Pilih</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamsLoading ? (
+                  <tr><td colSpan={8} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
+                ) : teams.length === 0 ? (
+                  <tr><td colSpan={8} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
+                ) : (
+                  teams.map((team, i) => {
+                    const isChecked = selectedTeamIds.has(team.id);
+                    return (
+                      <tr
+                        key={team.id}
+                        onClick={() => toggleTeam(team.id)}
+                        className={`cursor-pointer transition-colors ${
+                          isChecked
+                            ? "bg-red-50/60"
+                            : team.selected
+                              ? "bg-emerald-50/40"
+                              : i % 2 === 0 ? "bg-white hover:bg-zinc-50/60" : "bg-zinc-50/50 hover:bg-zinc-100/60"
+                        }`}
+                      >
+                        <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleTeam(team.id)}
+                            className="h-3.5 w-3.5 rounded border-zinc-300 accent-blue-600 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 text-zinc-400 text-xs tabular-nums">
+                          {(teamsPage - 1) * PAGE_SIZE + i + 1}
+                        </td>
+                        <td className="px-4 py-2.5 text-zinc-600 text-xs">{team.contingentName ?? "–"}</td>
+                        <td className="px-4 py-2.5 font-medium text-zinc-900">{team.teamName}</td>
+                        <td className="px-4 py-2.5 text-zinc-500 text-xs">{team.stateName ?? "–"}</td>
+                        <td className="px-4 py-2.5">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                              {team.competitionCode}
+                            </span>
+                            <span className="text-zinc-600 text-xs">{team.competitionName}</span>
                           </span>
-                          <span className="text-zinc-600 text-xs">{team.competitionName}</span>
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 text-xs">{team.members}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 text-xs">{team.members}</td>
+                        <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            role="switch"
+                            aria-checked={team.selected}
+                            onClick={() => toggleSelected(team.id, !team.selected)}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                              team.selected ? "bg-emerald-500" : "bg-zinc-200"
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                                team.selected ? "translate-x-4" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Pagination */}

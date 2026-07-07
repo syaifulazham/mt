@@ -912,6 +912,7 @@ model TeamEvent {
   id        String   @id @default(cuid())
   teamId    String
   eventId   String
+  selected  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
