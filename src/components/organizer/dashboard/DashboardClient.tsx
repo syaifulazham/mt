@@ -283,11 +283,11 @@ function SchoolCategoryModal({ categoryKey, onClose }: { categoryKey: string; on
                           <td className="px-3 py-2 text-zinc-400 tabular-nums">{i + 1}</td>
                           <td className="px-3 py-2 text-zinc-500 whitespace-nowrap">{s.state}</td>
                           <td className="px-3 py-2 font-medium text-zinc-800 dark:text-zinc-200">{s.name}</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-medium text-zinc-700 dark:text-zinc-300">{s.participants}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-sky-600">{s.male}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-pink-500">{s.female}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-zinc-500">{s.teams}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-zinc-500">{s.managers}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium text-zinc-700 dark:text-zinc-300">{s.participants || ""}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-sky-600">{s.male || ""}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-pink-500">{s.female || ""}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-zinc-500">{s.teams || ""}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-zinc-500">{s.managers || ""}</td>
                         </tr>
                       ))}
                     </tbody>
