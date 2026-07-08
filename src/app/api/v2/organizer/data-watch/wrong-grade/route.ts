@@ -30,8 +30,10 @@ const GRADE_CTE = Prisma.sql`
   with_suggestion AS (
     SELECT id, age,
       CASE
-        WHEN age BETWEEN 7  AND 12 THEN 'Darjah '    || (age -  6)::text
-        WHEN age BETWEEN 13 AND 17 THEN 'Tingkatan ' || (age - 12)::text
+        WHEN age = 5                THEN 'Prasekolah 5thn'
+        WHEN age = 6                THEN 'Prasekolah 6thn'
+        WHEN age BETWEEN 7  AND 12  THEN 'Darjah '    || (age -  6)::text
+        WHEN age BETWEEN 13 AND 17  THEN 'Tingkatan ' || (age - 12)::text
         ELSE NULL
       END AS suggested_grade
     FROM with_age

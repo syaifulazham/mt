@@ -16,6 +16,8 @@ function computeExpectedGrade(ic: string): string | null {
   const currentYear = new Date().getFullYear();
   const birthYear = yy <= currentYear % 100 ? 2000 + yy : 1900 + yy;
   const age = currentYear - birthYear;
+  if (age === 5) return "Prasekolah 5thn";
+  if (age === 6) return "Prasekolah 6thn";
   if (age >= 7  && age <= 12) return `Darjah ${age - 6}`;
   if (age >= 13 && age <= 17) return `Tingkatan ${age - 12}`;
   return null;
@@ -73,6 +75,8 @@ export async function POST(req: NextRequest) {
       with_expected AS (
         SELECT id,
           CASE
+            WHEN age = 5               THEN 'Prasekolah 5thn'
+            WHEN age = 6               THEN 'Prasekolah 6thn'
             WHEN age BETWEEN 7  AND 12 THEN 'Darjah '    || (age -  6)::text
             WHEN age BETWEEN 13 AND 17 THEN 'Tingkatan ' || (age - 12)::text
             ELSE NULL
