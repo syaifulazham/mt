@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   const contingentIds = contingents.map((c) => c.id);
 
   // Manager counts per contingent from join table
-  let managerMap: Record<string, number> = {};
+  const managerMap: Record<string, number> = {};
   if (contingentIds.length > 0) {
     const rows = await db.$queryRaw<{ contingentId: string; cnt: number }[]>`
       SELECT cm."contingentId", COUNT(*)::int AS cnt
