@@ -33,6 +33,8 @@ type DashData = {
     byCompetition: CompRow[];
     schoolByZone: ChartRow[];
     schoolByState: ChartRow[];
+    schoolByLocality: ChartRow[];
+    schoolByCategory: ChartRow[];
   };
 };
 
@@ -273,7 +275,7 @@ export function DashboardClient({ userName }: { userName: string }) {
         <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">School Contingents by Locality</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-          <ChartCard title="School Contingents by Zone">
+          <ChartCard title="By Zone">
             {charts.schoolByZone.length === 0 ? (
               <p className="text-sm text-zinc-400 italic py-4">No zone data.</p>
             ) : (
@@ -285,13 +287,37 @@ export function DashboardClient({ userName }: { userName: string }) {
             )}
           </ChartCard>
 
-          <ChartCard title="School Contingents by State">
+          <ChartCard title="By State">
             {charts.schoolByState.length === 0 ? (
               <p className="text-sm text-zinc-400 italic py-4">No state data.</p>
             ) : (
               <div className="space-y-0.5 max-h-64 overflow-y-auto">
                 {charts.schoolByState.map((s, i) => (
                   <HorizBar key={s.label} label={s.label} count={s.count} max={charts.schoolByState[0]?.count ?? 1} color={COLORS[i % COLORS.length]} />
+                ))}
+              </div>
+            )}
+          </ChartCard>
+
+          <ChartCard title="By Locality Type">
+            {charts.schoolByLocality.length === 0 ? (
+              <p className="text-sm text-zinc-400 italic py-4">No locality data.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {charts.schoolByLocality.map((r, i) => (
+                  <HorizBar key={r.label} label={r.label} count={r.count} max={charts.schoolByLocality.filter(x => x.label !== "Tiada Lokaliti")[0]?.count ?? charts.schoolByLocality[0]?.count ?? 1} color={COLORS[i % COLORS.length]} />
+                ))}
+              </div>
+            )}
+          </ChartCard>
+
+          <ChartCard title="By School Category">
+            {charts.schoolByCategory.length === 0 ? (
+              <p className="text-sm text-zinc-400 italic py-4">No category data.</p>
+            ) : (
+              <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                {charts.schoolByCategory.map((r, i) => (
+                  <HorizBar key={r.label} label={r.label} count={r.count} max={charts.schoolByCategory[0]?.count ?? 1} color={COLORS[i % COLORS.length]} />
                 ))}
               </div>
             )}
