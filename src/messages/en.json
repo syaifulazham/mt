@@ -452,7 +452,11 @@
     "credsPassword": "Password",
     "credsEnrolled": "Automatically enrolled in the linked course.",
     "credsNote": "Username is derived from the team email. Password is shown once — save it now.",
-    "credsDone": "Done"
+    "credsDone": "Done",
+    "reviewProgress": "Review",
+    "reviewProgressTitle": "Lesson Progress",
+    "lessonsCompleted": "lessons completed",
+    "pendingPages": "Pending"
   },
   "gallery": {
     "back": "Gallery",

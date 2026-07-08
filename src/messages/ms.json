@@ -452,7 +452,11 @@
     "credsPassword": "Kata Laluan",
     "credsEnrolled": "Didaftarkan secara automatik ke kursus yang dikaitkan.",
     "credsNote": "Nama pengguna diperoleh daripada emel pasukan. Kata laluan ditunjukkan sekali sahaja — simpan sekarang.",
-    "credsDone": "Selesai"
+    "credsDone": "Selesai",
+    "reviewProgress": "Semak",
+    "reviewProgressTitle": "Kemajuan Pelajaran",
+    "lessonsCompleted": "pelajaran selesai",
+    "pendingPages": "Belum selesai"
   },
   "gallery": {
     "back": "Galeri",

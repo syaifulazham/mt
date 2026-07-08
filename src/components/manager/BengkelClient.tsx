@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import {
-  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn, UserCircle2, ExternalLink, Upload,
+  Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn, UserCircle2, ExternalLink, Upload, Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +48,24 @@ type ProgressEntry = {
   submissionCount: number;
   lastSubmittedAt: string | null;
 } | null;  // null = fetched, no data (team not enrolled or API error)
+
+type LessonEntry = {
+  id: string; title: string; order: number; completed: boolean;
+  pageCount: number; completedPageCount: number;
+  pendingPages?: { id: string; title: string; order: number }[];
+};
+type ChapterEntry = {
+  id: string; title: string; order: number;
+  lessonCount: number; completedLessonCount: number;
+  lessons: LessonEntry[];
+};
+type LessonProgressData = {
+  status: string;
+  lessonCount: number;
+  completedLessonCount: number;
+  completionPercent: number;
+  chapters: ChapterEntry[];
+};
 
 // ── Copy button ────────────────────────────────────────────────────────────────
 
@@ -386,12 +404,14 @@ function TeamRow({
   progressData,
   onJoined,
   onEnrolled,
+  onReviewProgress,
 }: {
   team: Team;
   stats: StatsEntry | undefined;
   progressData: ProgressEntry | undefined;
   onJoined: (teamId: string, creds: Credentials) => void;
   onEnrolled: (teamId: string) => void;
+  onReviewProgress: (teamId: string, courseId: string) => void;
 }) {
   const t = useTranslations("lms");
   const { joining, enrolling, err, join, enrol } = useTeamLmsActions(team, onJoined, onEnrolled);
@@ -469,6 +489,14 @@ function TeamRow({
                         </span>
                       : <span className="text-zinc-500 dark:text-zinc-400">
                           {t("courseInProgress", { percent: progressData.completionPercent })}
+                          {progressData.completionPercent > 0 && (
+                            <button
+                              onClick={() => onReviewProgress(team.id, team.competition.eptimEduCourseId!)}
+                              className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+                            >
+                              <Eye className="h-3 w-3" /> {t("reviewProgress")}
+                            </button>
+                          )}
                         </span>
                 }
               </span>
@@ -534,6 +562,7 @@ function TeamTableRow({
   index,
   onJoined,
   onEnrolled,
+  onReviewProgress,
 }: {
   team: Team;
   stats: StatsEntry | undefined;
@@ -541,6 +570,7 @@ function TeamTableRow({
   index: number;
   onJoined: (teamId: string, creds: Credentials) => void;
   onEnrolled: (teamId: string) => void;
+  onReviewProgress: (teamId: string, courseId: string) => void;
 }) {
   const t = useTranslations("lms");
   const { joining, enrolling, err, join, enrol } = useTeamLmsActions(team, onJoined, onEnrolled);
@@ -616,6 +646,14 @@ function TeamTableRow({
                     </span>
                   : <span className="text-zinc-500 dark:text-zinc-400">
                       {t("courseInProgress", { percent: progressData.completionPercent })}
+                      {progressData.completionPercent > 0 && (
+                        <button
+                          onClick={() => onReviewProgress(team.id, team.competition.eptimEduCourseId!)}
+                          className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+                        >
+                          <Eye className="h-3 w-3" /> {t("reviewProgress")}
+                        </button>
+                      )}
                     </span>
             }
           </span>
@@ -659,6 +697,106 @@ function TeamTableRow({
   );
 }
 
+// ── Lesson Progress Modal ─────────────────────────────────────────────────────
+
+function LessonProgressModal({
+  teamId, teamName, courseId, onClose,
+}: {
+  teamId: string; teamName: string; courseId: string; onClose: () => void;
+}) {
+  const t = useTranslations("lms");
+  const [data,    setData]    = useState<LessonProgressData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err,     setErr]     = useState("");
+
+  useEffect(() => {
+    fetch(`/api/v2/manager/teams/${teamId}/lms/lesson-progress?courseId=${encodeURIComponent(courseId)}`)
+      .then(r => r.json())
+      .then(j => {
+        if (j.data) setData(j.data);
+        else setErr("No data available");
+      })
+      .catch(() => setErr("Failed to load"))
+      .finally(() => setLoading(false));
+  }, [teamId, courseId]);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-indigo-500" />
+            {t("reviewProgressTitle")}
+          </DialogTitle>
+          <DialogDescription className="text-xs">{teamName}</DialogDescription>
+        </DialogHeader>
+
+        <div className="overflow-y-auto flex-1 py-2 space-y-3">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-300" />
+            </div>
+          ) : err ? (
+            <p className="text-sm text-red-500 text-center py-6">{err}</p>
+          ) : data ? (
+            <>
+              {/* Summary strip */}
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-800 border text-sm">
+                <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                  {data.completedLessonCount}/{data.lessonCount}
+                </span>
+                <span className="text-zinc-500">{t("lessonsCompleted")}</span>
+                <span className="ml-auto font-mono text-indigo-600">{data.completionPercent}%</span>
+              </div>
+              {/* Chapter list */}
+              {data.chapters.map(ch => (
+                <div key={ch.id} className="space-y-1">
+                  <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wide px-1">
+                    {ch.title}
+                    <span className="ml-1.5 font-normal normal-case">
+                      ({ch.completedLessonCount}/{ch.lessonCount})
+                    </span>
+                  </p>
+                  {ch.lessons.map(ls => (
+                    <div key={ls.id}
+                      className={`flex items-start gap-2 px-3 py-2 rounded-md text-sm ${
+                        ls.completed
+                          ? "bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30"
+                          : "bg-white dark:bg-zinc-900 border dark:border-zinc-800"
+                      }`}>
+                      {ls.completed
+                        ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
+                        : <div className="h-3.5 w-3.5 rounded-full border-2 border-zinc-300 dark:border-zinc-600 mt-0.5 shrink-0" />
+                      }
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium truncate ${ls.completed ? "text-zinc-500 dark:text-zinc-400" : "text-zinc-800 dark:text-zinc-200"}`}>
+                          {ls.title}
+                        </p>
+                        {!ls.completed && ls.pendingPages && ls.pendingPages.length > 0 && (
+                          <p className="text-[11px] text-zinc-400 mt-0.5">
+                            {t("pendingPages")}: {ls.pendingPages.map(p => p.title).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-zinc-400 shrink-0 mt-0.5">
+                        {ls.completedPageCount}/{ls.pageCount}p
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          ) : null}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>{t("credsDone")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main BengkelClient ─────────────────────────────────────────────────────────
 
 export function BengkelClient() {
@@ -668,6 +806,7 @@ export function BengkelClient() {
   const [loginStats,    setLoginStats]    = useState<Record<string, StatsEntry>>({});
   const [progressStats, setProgressStats] = useState<Record<string, ProgressEntry>>({});
   const [creds,           setCreds]           = useState<{ teamId: string; teamName: string; data: Credentials } | null>(null);
+  const [lessonProgressModal, setLessonProgressModal] = useState<{ teamId: string; teamName: string; courseId: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -754,6 +893,11 @@ export function BengkelClient() {
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, lmsCourseEnrolled: true } : t));
   }
 
+  function handleReviewProgress(teamId: string, courseId: string) {
+    const team = teams.find(t => t.id === teamId);
+    if (team) setLessonProgressModal({ teamId, teamName: team.name, courseId });
+  }
+
   // Group by competition
   const grouped = teams.reduce<Record<string, Team[]>>((acc, t) => {
     if (!acc[t.competition.id]) acc[t.competition.id] = [];
@@ -808,7 +952,7 @@ export function BengkelClient() {
                 {/* Mobile: card list */}
                 <div className="md:hidden divide-y dark:divide-zinc-800">
                   {compTeams.map(team => (
-                    <TeamRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} />
+                    <TeamRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} onReviewProgress={handleReviewProgress} />
                   ))}
                 </div>
 
@@ -827,7 +971,7 @@ export function BengkelClient() {
                     </thead>
                     <tbody className="divide-y dark:divide-zinc-800">
                       {compTeams.map((team, i) => (
-                        <TeamTableRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} index={i} onJoined={handleJoined} onEnrolled={handleEnrolled} />
+                        <TeamTableRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} index={i} onJoined={handleJoined} onEnrolled={handleEnrolled} onReviewProgress={handleReviewProgress} />
                       ))}
                     </tbody>
                   </table>
@@ -843,6 +987,15 @@ export function BengkelClient() {
         teamName={creds?.teamName ?? ""}
         onClose={() => setCreds(null)}
       />
+
+      {lessonProgressModal && (
+        <LessonProgressModal
+          teamId={lessonProgressModal.teamId}
+          teamName={lessonProgressModal.teamName}
+          courseId={lessonProgressModal.courseId}
+          onClose={() => setLessonProgressModal(null)}
+        />
+      )}
     </div>
   );
 }
