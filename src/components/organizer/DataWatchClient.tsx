@@ -1,7 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, RefreshCw, Wrench, ChevronDown, ChevronUp, Loader2, CheckCircle2, ScrollText, Trash2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { AlertTriangle, RefreshCw, Wrench, ChevronDown, ChevronUp, Loader2, CheckCircle2, ScrollText, Trash2, Search, Pencil } from "lucide-react";
+
+const CANONICAL_GRADES = [
+  "Prasekolah 5thn", "Prasekolah 6thn",
+  "Darjah 1", "Darjah 2", "Darjah 3", "Darjah 4", "Darjah 5", "Darjah 6",
+  "Tingkatan 1", "Tingkatan 2", "Tingkatan 3", "Tingkatan 4", "Tingkatan 5",
+  "Tingkatan Peralihan",
+];
 
 type LogEntry = {
   ts: string;
@@ -18,8 +25,8 @@ type IcRow = {
 };
 
 type GradeRow = {
-  id: string; name: string; ic: string;
-  classGrade: string | null; age: number; expectedGrade: string;
+  id: string; name: string; ic: string | null;
+  classGrade: string | null; age: number; suggestedGrade: string | null;
   contingentName: string;
 };
 
@@ -158,11 +165,20 @@ function WrongGradeSection() {
   const [repaired,    setRepaired]    = useState<number | null>(null);
   const [repairErr,   setRepairErr]   = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [search,      setSearch]      = useState("");
+  const [gradeFilter, setGradeFilter] = useState("");
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editingValue,setEditingValue]= useState("");
+  const [saving,      setSaving]      = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async (lim: number) => {
+  const load = useCallback(async (lim: number, srch: string, gf: string) => {
     setLoading(true);
     try {
-      const res  = await fetch(`/api/v2/organizer/data-watch/wrong-grade?limit=${lim}`);
+      const sp = new URLSearchParams({ limit: String(lim) });
+      if (srch) sp.set("search", srch);
+      if (gf)   sp.set("gradeFilter", gf);
+      const res  = await fetch(`/api/v2/organizer/data-watch/wrong-grade?${sp}`);
       const text = await res.text();
       const json = text ? JSON.parse(text) : {};
       setRows(json.data  ?? []);
@@ -173,7 +189,23 @@ function WrongGradeSection() {
   }, []);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(limit); }, [load, limit]);
+  useEffect(() => { load(limit, search, gradeFilter); }, [load, limit, gradeFilter]);
+
+  // Debounce search input
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    setLimit(10);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(10, val, gradeFilter), 400);
+  }
+
+  function handleGradeFilterChange(val: string) {
+    setGradeFilter(val);
+    setLimit(10);
+  }
+
+  // Distinct grade values from current rows for filter dropdown
+  const distinctGrades = [...new Set(rows.map(r => r.classGrade ?? "__NULL__"))].sort();
 
   function toggleRow(id: string) {
     setSelectedIds(prev => {
@@ -191,7 +223,7 @@ function WrongGradeSection() {
     }
   }
 
-  const allSelected = rows.length > 0 && selectedIds.size === rows.length;
+  const allSelected  = rows.length > 0 && selectedIds.size === rows.length;
   const someSelected = selectedIds.size > 0 && selectedIds.size < rows.length;
 
   async function handleRepair() {
@@ -209,7 +241,7 @@ function WrongGradeSection() {
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       setRepaired(json.updated ?? 0);
       setSelectedIds(new Set());
-      await load(limit);
+      await load(limit, search, gradeFilter);
     } catch (e) {
       setRepairErr(e instanceof Error ? e.message : "Repair failed");
     } finally {
@@ -217,19 +249,43 @@ function WrongGradeSection() {
     }
   }
 
+  async function handleSaveEdit(id: string) {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v2/organizer/data-watch/repair-grade", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, classGrade: editingValue }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setEditingId(null);
+      await load(limit, search, gradeFilter);
+    } catch (e) {
+      setRepairErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEdit(r: GradeRow) {
+    setEditingId(r.id);
+    setEditingValue(r.suggestedGrade ?? r.classGrade ?? CANONICAL_GRADES[0]);
+  }
+
   return (
     <section className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 border-b border-zinc-100">
         <div className="flex items-center gap-2.5">
           <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Incorrect Class Grade (Age 7–17)</h2>
+            <h2 className="text-sm font-semibold text-zinc-900">Incorrect Class Grade</h2>
             <p className="text-xs text-zinc-500">
-              Grade derived from IC year of birth — Darjah 1–6 (age 7–12), Tingkatan 1–5 (age 13–17)
+              All non-canonical class grades — Prasekolah, Darjah 1–6, Tingkatan 1–5 &amp; Peralihan
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!loading && (
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
               total > 0 ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"
@@ -237,9 +293,35 @@ function WrongGradeSection() {
               {total} record{total !== 1 ? "s" : ""}
             </span>
           )}
+          {/* Search input */}
+          <div className="relative flex items-center">
+            <Search className="absolute left-2 h-3 w-3 text-zinc-400 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => handleSearchChange(e.target.value)}
+              placeholder="Search name / IC / grade…"
+              className="pl-6 pr-2 py-1 text-xs border border-zinc-200 rounded-md bg-white text-zinc-700 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-300 w-44"
+            />
+          </div>
+          {/* Grade filter */}
+          {rows.length > 0 && (
+            <select
+              value={gradeFilter}
+              onChange={e => handleGradeFilterChange(e.target.value)}
+              className="text-xs border border-zinc-200 rounded-md px-2 py-1 bg-white text-zinc-700 focus:outline-none focus:ring-1 focus:ring-orange-300"
+            >
+              <option value="">All grades</option>
+              {distinctGrades.map(g => (
+                <option key={g} value={g}>
+                  {g === "__NULL__" ? "— (kosong)" : g}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             type="button"
-            onClick={() => load(limit)}
+            onClick={() => load(limit, search, gradeFilter)}
             disabled={loading || repairing}
             className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 disabled:opacity-40 transition-colors"
           >
@@ -303,7 +385,7 @@ function WrongGradeSection() {
                       className="rounded border-zinc-300 cursor-pointer"
                     />
                   </th>
-                  {["Name", "IC", "Age", "Current Grade", "Expected Grade", "Contingent"].map(h => (
+                  {["Name", "IC", "Age", "Current Grade", "Suggested Correction", "Contingent", ""].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -326,15 +408,55 @@ function WrongGradeSection() {
                         />
                       </td>
                       <td className="px-4 py-2.5 font-medium text-zinc-900">{r.name}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-zinc-600">{r.ic}</td>
-                      <td className="px-4 py-2.5 text-xs text-zinc-600">{r.age}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-zinc-600">{r.ic ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-xs text-zinc-600">{r.age || "—"}</td>
                       <td className="px-4 py-2.5 text-xs">
                         <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700">{r.classGrade ?? "—"}</span>
                       </td>
                       <td className="px-4 py-2.5 text-xs">
-                        <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-700 font-medium">{r.expectedGrade}</span>
+                        {r.suggestedGrade
+                          ? <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-700 font-medium">{r.suggestedGrade}</span>
+                          : <span className="text-zinc-300">—</span>
+                        }
                       </td>
                       <td className="px-4 py-2.5 text-xs text-zinc-500">{r.contingentName}</td>
+                      {/* Inline edit cell */}
+                      {editingId === r.id ? (
+                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={editingValue}
+                              onChange={e => setEditingValue(e.target.value)}
+                              className="text-xs border border-zinc-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                            >
+                              {CANONICAL_GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                            </select>
+                            <button
+                              onClick={() => handleSaveEdit(r.id)}
+                              disabled={saving}
+                              className="text-xs text-green-700 hover:underline disabled:opacity-40"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="text-xs text-zinc-400 hover:text-zinc-600"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </td>
+                      ) : (
+                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => startEdit(r)}
+                            className="text-zinc-300 hover:text-indigo-600 transition-colors"
+                            title="Edit grade"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
+export const CANONICAL_GRADES = [
+  "Prasekolah 5thn", "Prasekolah 6thn",
+  "Darjah 1", "Darjah 2", "Darjah 3", "Darjah 4", "Darjah 5", "Darjah 6",
+  "Tingkatan 1", "Tingkatan 2", "Tingkatan 3", "Tingkatan 4", "Tingkatan 5",
+  "Tingkatan Peralihan",
+];
+
 function computeExpectedGrade(ic: string): string | null {
   const digits = ic.replace(/\D/g, "");
   if (digits.length !== 12) return null;
@@ -83,6 +90,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ updated: result });
   } catch (err) {
     console.error("[data-watch/repair-grade]", err);
+    return NextResponse.json({ error: String(err) }, { status: 422 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  if (!["SUPER_ADMIN", "ADMIN"].includes(session.role))
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+
+  try {
+    const { id, classGrade } = await req.json().catch(() => ({}));
+    if (!id || typeof classGrade !== "string")
+      return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
+    if (!CANONICAL_GRADES.includes(classGrade))
+      return NextResponse.json({ error: "INVALID_GRADE" }, { status: 400 });
+
+    await db.participant.update({ where: { id }, data: { classGrade } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[data-watch/repair-grade PATCH]", err);
     return NextResponse.json({ error: String(err) }, { status: 422 });
   }
 }
