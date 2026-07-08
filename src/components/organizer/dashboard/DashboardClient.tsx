@@ -5,8 +5,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend,
 } from "recharts";
-import { Loader2, Users, Building2, UserCheck, Trophy, GraduationCap, BookOpen, Briefcase, School } from "lucide-react";
+import { Loader2, Users, Building2, UserCheck, Trophy, GraduationCap, BookOpen, Briefcase, School, Download, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import type { SchoolCategoryData } from "@/lib/export/schoolCategoryExport";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -21,8 +24,9 @@ type Stats = {
   independentContingents: number;
   internationalContingents: number;
 };
-type ChartRow = { label: string; count: number };
-type CompRow  = { code: string; name: string; count: number };
+type ChartRow    = { label: string; count: number };
+type CatChartRow = { key: string; label: string; count: number };
+type CompRow     = { code: string; name: string; count: number };
 type DashData = {
   stats: Stats;
   charts: {
@@ -34,7 +38,7 @@ type DashData = {
     schoolByZone: ChartRow[];
     schoolByState: ChartRow[];
     schoolByLocality: ChartRow[];
-    schoolByCategory: ChartRow[];
+    schoolByCategory: CatChartRow[];
   };
 };
 
@@ -104,11 +108,20 @@ function PieTooltip({ active, payload }: { active?: boolean; payload?: {name: st
 
 // ── Horizontal bar (custom, for competition list) ──────────────────────────────
 
-function HorizBar({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
+function HorizBar({
+  label, count, max, color, onClick,
+}: {
+  label: string; count: number; max: number; color: string; onClick?: () => void;
+}) {
   const pct = max > 0 ? (count / max) * 100 : 0;
+  const clickable = !!onClick;
   return (
-    <div className="flex items-center gap-3 py-1.5">
-      <div className="w-48 shrink-0 text-xs text-zinc-700 truncate" title={label}>{label}</div>
+    <div
+      className={cn("flex items-center gap-3 py-1.5 rounded px-1", clickable && "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group")}
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+    >
+      <div className={cn("w-48 shrink-0 text-xs truncate", clickable ? "text-indigo-700 dark:text-indigo-400 group-hover:underline" : "text-zinc-700")} title={label}>{label}</div>
       <div className="flex-1 bg-zinc-100 rounded-full h-2 overflow-hidden">
         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
       </div>
@@ -117,11 +130,184 @@ function HorizBar({ label, count, max, color }: { label: string; count: number; 
   );
 }
 
+// ── School Category drill-down modal ───────────────────────────────────────────
+
+function SchoolCategoryModal({ categoryKey, onClose }: { categoryKey: string; onClose: () => void }) {
+  const [detail,    setDetail]    = useState<SchoolCategoryData | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [err,       setErr]       = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/v2/organizer/dashboard/school-category?category=${encodeURIComponent(categoryKey)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.error) setErr(j.error);
+        else setDetail(j);
+      })
+      .catch(() => setErr("Failed to load"))
+      .finally(() => setLoading(false));
+  }, [categoryKey]);
+
+  async function downloadDocx() {
+    if (!detail) return;
+    setExporting(true);
+    try {
+      const { exportSchoolCategoryDocx } = await import("@/lib/export/schoolCategoryExport");
+      await exportSchoolCategoryDocx(detail);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const maxGrade = detail ? Math.max(...detail.byGrade.map((g) => g.count), 1) : 1;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <DialogTitle className="text-base font-bold text-zinc-900">
+                {loading ? "Loading…" : detail?.categoryLabel ?? categoryKey}
+              </DialogTitle>
+              <p className="text-xs text-zinc-500 mt-0.5">Drill-down: School Category Statistics</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {detail && (
+                <Button size="sm" className="h-8 gap-1.5 text-xs" disabled={exporting} onClick={downloadDocx}>
+                  {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  Download DOCX
+                </Button>
+              )}
+              <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-6">
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-zinc-300" />
+            </div>
+          ) : err ? (
+            <p className="text-sm text-red-500 text-center py-12">{err}</p>
+          ) : detail ? (
+            <>
+              {/* ── Summary tiles ── */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                {[
+                  { label: "Schools",      value: detail.stats.schools,      color: "bg-indigo-500" },
+                  { label: "Participants", value: detail.stats.participants,  color: "bg-blue-500"   },
+                  { label: "Male",         value: detail.stats.male,          color: "bg-sky-400"    },
+                  { label: "Female",       value: detail.stats.female,        color: "bg-pink-400"   },
+                  { label: "Teams",        value: detail.stats.teams,         color: "bg-emerald-500"},
+                  { label: "Managers",     value: detail.stats.managers,      color: "bg-violet-500" },
+                  { label: "Trainers",     value: detail.stats.trainers,      color: "bg-amber-500"  },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="rounded-lg border bg-white dark:bg-zinc-900 p-3 text-center">
+                    <div className={cn("w-2 h-2 rounded-full mx-auto mb-1.5", color)} />
+                    <p className="text-xl font-bold tabular-nums text-zinc-900 dark:text-zinc-100">{value.toLocaleString()}</p>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Charts row ── */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="rounded-xl border bg-white dark:bg-zinc-900 overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-zinc-50/80 dark:bg-zinc-800/60">
+                    <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Participants by Gender</p>
+                  </div>
+                  <div className="p-4">
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChart data={detail.byGender} barSize={56} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#71717a" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} axisLine={false} tickLine={false} width={40} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                          <Cell fill="#0ea5e9" />
+                          <Cell fill="#f472b6" />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-white dark:bg-zinc-900 overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-zinc-50/80 dark:bg-zinc-800/60">
+                    <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Participants by Class Grade</p>
+                  </div>
+                  <div className="p-4">
+                    {detail.byGrade.length === 0 ? (
+                      <p className="text-sm text-zinc-400 italic py-4">No grade data.</p>
+                    ) : (
+                      <div className="space-y-0.5 max-h-52 overflow-y-auto">
+                        {detail.byGrade.map((g) => (
+                          <HorizBar key={g.label} label={g.label} count={g.count} max={maxGrade} color="#6366f1" />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── School list ── */}
+              <div className="rounded-xl border bg-white dark:bg-zinc-900 overflow-hidden">
+                <div className="px-4 py-3 border-b bg-zinc-50/80 dark:bg-zinc-800/60 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                    School List
+                    <span className="ml-2 text-xs font-normal text-zinc-400">({detail.schools.length} schools)</span>
+                  </p>
+                </div>
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-zinc-50 dark:bg-zinc-800 border-b dark:border-zinc-700">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide whitespace-nowrap">#</th>
+                        <th className="text-left px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide whitespace-nowrap">State</th>
+                        <th className="text-left px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide">School Name</th>
+                        <th className="text-right px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide whitespace-nowrap">Participants</th>
+                        <th className="text-right px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide whitespace-nowrap">Male</th>
+                        <th className="text-right px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide whitespace-nowrap">Female</th>
+                        <th className="text-right px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide whitespace-nowrap">Teams</th>
+                        <th className="text-right px-3 py-2 font-semibold text-zinc-500 uppercase tracking-wide whitespace-nowrap">Managers</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y dark:divide-zinc-800">
+                      {detail.schools.map((s, i) => (
+                        <tr key={i} className={i % 2 === 0 ? "bg-white dark:bg-zinc-900" : "bg-zinc-50/40 dark:bg-zinc-800/20"}>
+                          <td className="px-3 py-2 text-zinc-400 tabular-nums">{i + 1}</td>
+                          <td className="px-3 py-2 text-zinc-500 whitespace-nowrap">{s.state}</td>
+                          <td className="px-3 py-2 font-medium text-zinc-800 dark:text-zinc-200">{s.name}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium text-zinc-700 dark:text-zinc-300">{s.participants}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-sky-600">{s.male}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-pink-500">{s.female}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-zinc-500">{s.teams}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-zinc-500">{s.managers}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function DashboardClient({ userName }: { userName: string }) {
-  const [data,    setData]    = useState<DashData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data,          setData]          = useState<DashData | null>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [drillCategory, setDrillCategory] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/v2/organizer/dashboard")
@@ -315,16 +501,30 @@ export function DashboardClient({ userName }: { userName: string }) {
             {charts.schoolByCategory.length === 0 ? (
               <p className="text-sm text-zinc-400 italic py-4">No category data.</p>
             ) : (
-              <div className="space-y-0.5 max-h-64 overflow-y-auto">
-                {charts.schoolByCategory.map((r, i) => (
-                  <HorizBar key={r.label} label={r.label} count={r.count} max={charts.schoolByCategory[0]?.count ?? 1} color={COLORS[i % COLORS.length]} />
-                ))}
-              </div>
+              <>
+                <p className="text-[10px] text-zinc-400 mb-1.5">Click a category to view detailed stats</p>
+                <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                  {charts.schoolByCategory.map((r, i) => (
+                    <HorizBar
+                      key={r.key}
+                      label={r.label}
+                      count={r.count}
+                      max={charts.schoolByCategory[0]?.count ?? 1}
+                      color={COLORS[i % COLORS.length]}
+                      onClick={() => setDrillCategory(r.key)}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </ChartCard>
 
         </div>
       </div>
+
+      {drillCategory && (
+        <SchoolCategoryModal categoryKey={drillCategory} onClose={() => setDrillCategory(null)} />
+      )}
 
     </div>
   );

@@ -136,7 +136,7 @@ export async function GET() {
   const schoolZoneMap:     Record<string, number> = {};
   const schoolStateMap:    Record<string, number> = {};
   const schoolLocalityMap: Record<string, number> = {};
-  const schoolCategoryMap: Record<string, number> = {};
+  const schoolCategoryMap: Record<string, { label: string; count: number }> = {};
 
   for (const c of schoolConts) {
     const stateId  = c.school?.state?.id;
@@ -154,7 +154,9 @@ export async function GET() {
 
     const categoryKey   = c.school?.category as string | null;
     const categoryLabel = categoryKey ? (SCHOOL_CATEGORY_LABEL[categoryKey] ?? categoryKey) : "Tiada Kategori";
-    schoolCategoryMap[categoryLabel] = (schoolCategoryMap[categoryLabel] ?? 0) + 1;
+    const catMapKey = categoryKey ?? "TIADA";
+    if (!schoolCategoryMap[catMapKey]) schoolCategoryMap[catMapKey] = { label: categoryLabel, count: 0 };
+    schoolCategoryMap[catMapKey].count += 1;
   }
 
   const schoolByZone  = Object.entries(schoolZoneMap).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
@@ -169,7 +171,9 @@ export async function GET() {
       if (ib !== -1) return  1;
       return b.count - a.count;
     });
-  const schoolByCategory = Object.entries(schoolCategoryMap).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+  const schoolByCategory = Object.entries(schoolCategoryMap)
+    .map(([key, { label, count }]) => ({ key, label, count }))
+    .sort((a, b) => b.count - a.count);
 
   // ── Participation breakdowns (eligibility pass) ───────────────────────────
 
