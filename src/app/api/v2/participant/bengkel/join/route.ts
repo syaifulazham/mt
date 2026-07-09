@@ -51,7 +51,14 @@ export async function POST() {
         await eptimEdu.enrol(username, courseId, { password, name: participant.name });
         enrolled++;
       } catch (e: unknown) {
-        console.warn("[bengkel/join] enrol error for course", courseId, e instanceof Error ? e.message : e);
+        const status = (e as { status?: number }).status;
+        const body   = (e as { body?: unknown }).body;
+        console.warn(
+          "[bengkel/join] enrol error for course", courseId,
+          e instanceof Error ? e.message : e,
+          status ? `HTTP ${status}` : "",
+          body ? JSON.stringify(body) : "",
+        );
       }
     })
   );
