@@ -65,7 +65,7 @@ export async function GET(
         JOIN teams                t          ON t.id   = tm."teamId"
         JOIN team_events          te         ON te."teamId" = t.id AND te."eventId" = ${eventId}
         JOIN competitions         c          ON c.id   = t."competitionId"
-        JOIN event_competitions   ec         ON ec."competitionId" = c.id AND ec."eventId" = ${eventId}
+        LEFT JOIN event_competitions   ec    ON ec."competitionId" = c.id AND ec."eventId" = ${eventId}
         LEFT JOIN contingents     cont       ON cont.id = t."contingentId"
         LEFT JOIN states          s          ON s.id   = cont."stateId"
         LEFT JOIN schools         sch        ON sch.id = cont."schoolId"
@@ -98,7 +98,7 @@ export async function GET(
       FROM teams t
       JOIN team_events          te         ON te."teamId" = t.id AND te."eventId" = ${eventId}
       JOIN competitions         c          ON c.id   = t."competitionId"
-      JOIN event_competitions   ec         ON ec."competitionId" = c.id AND ec."eventId" = ${eventId}
+      LEFT JOIN event_competitions   ec    ON ec."competitionId" = c.id AND ec."eventId" = ${eventId}
       LEFT JOIN team_members    tm         ON tm."teamId" = t.id
       LEFT JOIN contestants     p          ON p.id = tm."contestantId"
       LEFT JOIN contingents     cont       ON cont.id = t."contingentId"
