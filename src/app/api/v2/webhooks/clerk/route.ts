@@ -57,33 +57,31 @@ export async function POST(req: Request) {
 
   const fullName = [data.first_name, data.last_name].filter(Boolean).join(" ") || "Unknown";
 
+  const profileData = {
+    email: primaryEmail,
+    name: fullName,
+    phone: data.phone_numbers[0]?.phone_number ?? null,
+  };
+
   try {
-    if (type === "user.created") {
-      await db.managerProfile.create({
-        data: {
-          clerkUserId: data.id,
-          email: primaryEmail,
-          name: fullName,
-          phone: data.phone_numbers[0]?.phone_number ?? null,
-        },
-      });
-    } else if (type === "user.updated") {
-      await db.managerProfile.update({
-        where: { clerkUserId: data.id },
-        data: {
-          email: primaryEmail,
-          name: fullName,
-          phone: data.phone_numbers[0]?.phone_number ?? null,
-        },
+    if (type === "user.created" || type === "user.updated") {
+      // upsert handles: webhook replays (created→P2002) and
+      // user.updated arriving before user.created (updated→P2025)
+      await db.managerProfile.upsert({
+        where:  { clerkUserId: data.id },
+        create: { clerkUserId: data.id, ...profileData },
+        update: profileData,
       });
     } else if (type === "user.deleted") {
-      await db.managerProfile.update({
+      // updateMany silently no-ops when the record doesn't exist
+      await db.managerProfile.updateMany({
         where: { clerkUserId: data.id },
-        data: { deletedAt: new Date() },
+        data:  { deletedAt: new Date() },
       });
     }
   } catch (err) {
-    console.error("[clerk-webhook] DB error:", err);
+    const code = (err as { code?: string }).code;
+    console.error("[clerk-webhook] DB error:", type, `code=${code ?? "?"}`, err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 
