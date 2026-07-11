@@ -139,6 +139,19 @@ export function OnboardingForm() {
         <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.82rem", lineHeight: 1.6 }}>
           {t("joinRequestSentDesc")}
         </p>
+        <button
+          onClick={() => router.push("/manager/dashboard")}
+          style={{
+            background: "linear-gradient(135deg, #CC0001, #ff2244)",
+            border: "none", color: "#fff",
+            fontFamily: "inherit", fontWeight: 700,
+            fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase",
+            padding: "12px 32px", cursor: "pointer",
+            clipPath: "polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%)",
+          }}
+        >
+          {t("goToDashboard")}
+        </button>
       </div>
     );
   }

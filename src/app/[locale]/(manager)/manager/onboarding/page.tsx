@@ -26,8 +26,15 @@ export default async function OnboardingPage({
   const { userId } = await auth();
   if (!userId) redirect("/manager/sign-in");
 
-  const profile = await db.managerProfile.findUnique({ where: { clerkUserId: userId } });
-  if (profile?.profileComplete) redirect("/manager/dashboard");
+  const profile = await db.managerProfile.findUnique({
+    where: { clerkUserId: userId },
+    include: {
+      contingentManagers: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
+    },
+  });
+  // Redirect if profile is complete OR if already active in a contingent
+  // (covers the case where an organizer activated them before onboarding completed)
+  if (profile?.profileComplete || profile?.contingentManagers?.length) redirect("/manager/dashboard");
 
   return (
     <>

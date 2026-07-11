@@ -35,16 +35,26 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
   const record = await db.contingentManager.findUnique({
     where: { id: managerId },
-    select: { id: true, contingentId: true },
+    select: { id: true, contingentId: true, managerId: true },
   });
 
   if (!record || record.contingentId !== id)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await db.contingentManager.update({
-    where: { id: managerId },
-    data: { status, respondedAt: new Date() },
-  });
+  await db.$transaction([
+    db.contingentManager.update({
+      where: { id: managerId },
+      data: { status, respondedAt: new Date() },
+    }),
+    // When an organizer directly activates a manager, ensure their portal
+    // profile is marked complete so they are not trapped on the onboarding page.
+    ...(status === "ACTIVE"
+      ? [db.managerProfile.update({
+          where: { id: record.managerId },
+          data:  { profileComplete: true },
+        })]
+      : []),
+  ]);
 
   const updated = await db.contingentManager.findMany({
     where: { contingentId: id },

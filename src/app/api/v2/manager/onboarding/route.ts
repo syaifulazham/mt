@@ -36,21 +36,33 @@ export async function POST(req: Request) {
     update: profileData,
   });
 
-  // ── Block if already in an active contingent (1 contingent per manager) ───
-  const activeLink = await db.contingentManager.findFirst({
-    where: { managerId: updated.id, status: "ACTIVE" },
-    include: { contingent: { select: { name: true } } },
+  // ── Block / short-circuit if already linked to a contingent ─────────────
+  const existingLink = await db.contingentManager.findFirst({
+    where: { managerId: updated.id },
+    include: { contingent: { select: { id: true, name: true } } },
   });
-  if (activeLink) {
+  if (existingLink?.status === "ACTIVE") {
     return NextResponse.json(
       {
         error: {
           code: "ALREADY_IN_CONTINGENT",
-          message: `You are already managing "${activeLink.contingent.name}". Leave that contingent before joining or creating another.`,
+          message: `You are already managing "${existingLink.contingent.name}". Leave that contingent before joining or creating another.`,
         },
       },
       { status: 409 },
     );
+  }
+  // Already has a pending join request — return it so the client shows the
+  // waiting screen (with dashboard link) without creating a duplicate row.
+  if (existingLink?.status === "PENDING") {
+    return NextResponse.json({
+      data: {
+        profileId:     updated.id,
+        contingentId:  existingLink.contingent.id,
+        status:        "PENDING",
+        alreadyMember: true,
+      },
+    });
   }
 
   // ── For SCHOOL type: check for existing contingent (1 per school) ──────────

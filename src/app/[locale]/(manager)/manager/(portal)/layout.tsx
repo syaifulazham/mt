@@ -21,19 +21,24 @@ export default async function PortalLayout({ children }: { children: React.React
     },
   });
 
-  if (!profile?.profileComplete) redirect("/manager/onboarding");
+  // Allow access if profile is complete OR if already active in a contingent
+  // (covers manager accounts activated by organizer before completing onboarding)
+  const activeContingentManager = profile
+    ? await db.contingentManager.findFirst({
+        where: { managerId: profile.id, status: "ACTIVE" },
+        select: { id: true },
+      })
+    : null;
+
+  if (!profile?.profileComplete && !activeContingentManager) redirect("/manager/onboarding");
+  if (!profile) redirect("/manager/onboarding");
 
   const institutionLabel =
     profile.school?.name ??
     profile.higherInstitution?.name ??
     (profile.institutionType === "INDEPENDENT" ? "Independent Group" : "International");
 
-  const contingentManager = await db.contingentManager.findFirst({
-    where: { managerId: profile.id, status: "ACTIVE" },
-    select: { id: true },
-  });
-
-  const hasContingent = !!contingentManager;
+  const hasContingent = !!activeContingentManager;
 
   return (
     <ManagerThemeProvider className="flex min-h-screen flex-col">

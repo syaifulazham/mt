@@ -30,16 +30,23 @@ export async function PATCH(
   });
   if (!request) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
-  const updated = await db.contingentManager.update({
-    where: { id: requestId },
-    data: {
-      status:      action === "APPROVE" ? "ACTIVE" : "REJECTED",
-      respondedAt: new Date(),
-    },
-    include: {
-      manager: { select: { name: true, email: true } },
-    },
-  });
+  const newStatus = action === "APPROVE" ? "ACTIVE" : "REJECTED";
+
+  const [updated] = await db.$transaction([
+    db.contingentManager.update({
+      where: { id: requestId },
+      data: { status: newStatus, respondedAt: new Date() },
+      include: { manager: { select: { name: true, email: true } } },
+    }),
+    // Ensure the approved manager can access the portal even if they never
+    // fully completed their profile (e.g. organizer-activated directly).
+    ...(action === "APPROVE"
+      ? [db.managerProfile.update({
+          where: { id: request.managerId },
+          data:  { profileComplete: true },
+        })]
+      : []),
+  ]);
 
   return NextResponse.json({ data: updated });
 }
