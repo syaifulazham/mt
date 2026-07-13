@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { DashboardContingentCard } from "@/components/manager/DashboardContingentCard";
 import { IncompleteIcAlert } from "@/components/manager/IncompleteIcAlert";
 import { MissingEthnicityAlert } from "@/components/manager/MissingEthnicityAlert";
+import { DashboardAcceptanceSection } from "@/components/manager/DashboardAcceptanceSection";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -90,6 +91,8 @@ export default async function ManagerDashboardPage({
 
       <IncompleteIcAlert />
       <MissingEthnicityAlert />
+
+      <DashboardAcceptanceSection />
 
       <div className="space-y-3">
         <h2 className="text-sm font-semibold">{t("contingentsHeading")}</h2>
