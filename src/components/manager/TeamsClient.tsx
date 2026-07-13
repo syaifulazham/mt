@@ -181,7 +181,7 @@ function CompetitionPicker({
         className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-ring"
       >
         <span className={`truncate ${selected ? "" : "text-zinc-400"}`}>
-          {selected ? `${selected.name} (${selected.code})` : "— Select competition —"}
+          {selected ? `${selected.code} ${selected.name}` : "— Select competition —"}
         </span>
         <ChevronDown className={`h-4 w-4 text-zinc-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -209,9 +209,11 @@ function CompetitionPicker({
                           : "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:bg-blue-50 dark:hover:bg-zinc-700/60"
                       }`}
                     >
-                      <span className="block text-xs font-medium truncate">{c.name}</span>
-                      <span className={`block text-[10px] ${c.id === value ? "text-blue-100" : "text-zinc-400"}`}>
-                        {c.code}
+                      <span className="flex items-baseline gap-1 text-xs font-medium truncate">
+                        <span className={`shrink-0 ${c.id === value ? "text-blue-100" : "text-zinc-400"}`}>
+                          {c.code}
+                        </span>
+                        <span className="truncate">{c.name}</span>
                       </span>
                     </button>
                   ))}
