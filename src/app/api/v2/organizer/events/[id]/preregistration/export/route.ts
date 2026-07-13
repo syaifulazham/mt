@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 
 type ParticipantRow = {
+  id: string;
   name: string;
   ic: string | null;
   gender: string;
@@ -50,6 +51,7 @@ export async function GET(
 
       const rows = await db.$queryRaw<ParticipantRow[]>`
         SELECT
+          p.id,
           p.name,
           p.ic,
           p.gender,

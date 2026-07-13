@@ -99,7 +99,7 @@ function TeamRow({
         {/* Team + Contingent */}
         <td className="px-3 py-2.5">
           <p className="text-sm font-semibold text-zinc-900 leading-tight">{team.name}</p>
-          <p className="text-xs text-zinc-500 mt-0.5 truncate max-w-[200px]">{team.contingent}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">{team.contingent}</p>
         </td>
 
         {/* Members expand */}

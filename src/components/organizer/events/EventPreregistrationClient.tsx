@@ -281,7 +281,8 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       const { utils, writeFile } = await import("xlsx");
 
       if (listTab === "participants") {
-        const wsData = data.map((r: { name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null; contingentName: string | null; teamName: string; stateName: string | null; competitionCode: string; competitionName: string }) => ({
+        const wsData = data.map((r: { id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null; contingentName: string | null; teamName: string; stateName: string | null; competitionCode: string; competitionName: string }) => ({
+          "qr_code":      r.id              ?? "",
           "Nama":         r.name            ?? "",
           "IC":           r.ic              ?? "",
           "Jantina":      r.gender === "MALE" ? "Lelaki" : r.gender === "FEMALE" ? "Perempuan" : (r.gender ?? ""),
