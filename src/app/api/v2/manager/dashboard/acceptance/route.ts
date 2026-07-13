@@ -27,6 +27,9 @@ export async function GET() {
         select: {
           id: true, name: true, slug: true, status: true,
           startDate: true, endDate: true, venue: true,
+          description: true, address: true, city: true,
+          zone:  { select: { name: true } },
+          state: { select: { name: true } },
         },
       },
       team: {

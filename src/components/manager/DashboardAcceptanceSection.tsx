@@ -33,7 +33,11 @@ type AcceptanceTeam = {
 type AcceptanceEvent = {
   event: {
     id: string; name: string; slug: string; status: string;
-    startDate: string | null; endDate: string | null; venue: string | null;
+    startDate: string | null; endDate: string | null;
+    venue: string | null; address: string | null; city: string | null;
+    description: string | null;
+    zone:  { name: string } | null;
+    state: { name: string } | null;
   };
   teams: AcceptanceTeam[];
 };
@@ -328,22 +332,47 @@ function EventAcceptancePanel({ entry, onAcceptanceChange, t }: {
         onClick={() => setOpen(v => !v)}
       >
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{entry.event.name}</span>
-          </div>
-          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{entry.event.name}</span>
+
+          {/* Event detail pills row */}
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+            {/* Zone / State */}
+            {(entry.event.zone?.name || entry.event.state?.name) && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5">
+                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                {entry.event.zone?.name ?? entry.event.state?.name}
+              </span>
+            )}
+            {/* Dates */}
             {(entry.event.startDate || entry.event.endDate) && (
-              <span className="text-[11px] text-zinc-500">
+              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">
+                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                 {fmtDate(entry.event.startDate)}
                 {entry.event.endDate && entry.event.endDate !== entry.event.startDate
                   ? ` – ${fmtDate(entry.event.endDate)}`
                   : ""}
               </span>
             )}
+            {/* Venue */}
             {entry.event.venue && (
-              <span className="text-[11px] text-zinc-500">{entry.event.venue}</span>
+              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">
+                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                {entry.event.venue}
+              </span>
+            )}
+            {/* Address / City */}
+            {(entry.event.address || entry.event.city) && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">
+                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                {[entry.event.address, entry.event.city].filter(Boolean).join(", ")}
+              </span>
             )}
           </div>
+
+          {/* Description */}
+          {entry.event.description && (
+            <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed line-clamp-2">{entry.event.description}</p>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
