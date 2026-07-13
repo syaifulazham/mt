@@ -92,8 +92,6 @@ export default async function ManagerDashboardPage({
       <IncompleteIcAlert />
       <MissingEthnicityAlert />
 
-      <DashboardAcceptanceSection />
-
       <div className="space-y-3">
         <h2 className="text-sm font-semibold">{t("contingentsHeading")}</h2>
 
@@ -105,6 +103,8 @@ export default async function ManagerDashboardPage({
           <p className="text-sm text-muted-foreground">{t("noContingents")}</p>
         )}
       </div>
+
+      <DashboardAcceptanceSection locale={locale} />
     </div>
   );
 }

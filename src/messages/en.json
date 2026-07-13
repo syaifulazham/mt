@@ -362,6 +362,21 @@
       "placeholder": "— Select race —",
       "save": "Save",
       "selectPrompt": "Please select a race"
+    },
+    "acceptance": {
+      "title": "Event Participation Acceptance",
+      "subtitle": "Events requiring acceptance confirmation from the contingent manager",
+      "downloadBtn": "Download Report",
+      "refresh": "Refresh",
+      "loadError": "Failed to load acceptance data.",
+      "empty": "No events require acceptance at this time.",
+      "pendingWarning": "{count} team(s) still pending acceptance.",
+      "colCode": "Code",
+      "colTeam": "Team Name",
+      "colMembers": "Members",
+      "colAcceptance": "Acceptance",
+      "membersLabel": "Team Members",
+      "trainersLabel": "Trainers"
     }
   },
   "contingents": {

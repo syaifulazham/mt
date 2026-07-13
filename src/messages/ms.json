@@ -362,6 +362,21 @@
       "placeholder": "— Pilih bangsa —",
       "save": "Simpan",
       "selectPrompt": "Sila pilih bangsa"
+    },
+    "acceptance": {
+      "title": "Pengesahan Penyertaan Acara",
+      "subtitle": "Senarai acara yang memerlukan pengesahan daripada pengurus kontinjen",
+      "downloadBtn": "Muat Turun Laporan",
+      "refresh": "Muat semula",
+      "loadError": "Gagal memuatkan data pengesahan acara.",
+      "empty": "Tiada acara memerlukan pengesahan pada masa ini.",
+      "pendingWarning": "{count} pasukan masih belum disahkan (PENDING).",
+      "colCode": "Kod",
+      "colTeam": "Nama Pasukan",
+      "colMembers": "Ahli",
+      "colAcceptance": "Penerimaan",
+      "membersLabel": "Ahli Pasukan",
+      "trainersLabel": "Jurulatih"
     }
   },
   "contingents": {
