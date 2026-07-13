@@ -39,6 +39,12 @@ type Competition = {
   name: string;
 };
 
+type TargetGroup = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 type EventSummary = {
   id: string;
   name: string;
@@ -248,9 +254,11 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [debouncedQ, setDebouncedQ]       = useState("");
   const [competitionId, setCompetitionId] = useState("");
   const [stateId, setStateId]             = useState("");
+  const [targetGroupId, setTargetGroupId] = useState("");
 
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [states, setStates]             = useState<{ id: string; name: string }[]>([]);
+  const [targetGroups, setTargetGroups] = useState<TargetGroup[]>([]);
 
   // Stats panel
   const [statsOpen, setStatsOpen]       = useState(true);
@@ -273,6 +281,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       if (debouncedQ)    params.set("q", debouncedQ);
       if (competitionId) params.set("competitionId", competitionId);
       if (stateId)       params.set("stateId", stateId);
+      if (targetGroupId) params.set("targetGroupId", targetGroupId);
 
       const res = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/export?${params}`);
       if (!res.ok) throw new Error("Export failed");
@@ -355,6 +364,14 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       .catch(() => {});
   }, []);
 
+  // Load target groups present in this event's registered teams
+  useEffect(() => {
+    fetch(`/api/v2/organizer/events/${event.id}/preregistration/target-groups`)
+      .then((r) => r.json())
+      .then((d) => setTargetGroups((d.data ?? []) as TargetGroup[]))
+      .catch(() => {});
+  }, [event.id]);
+
   // Load stats
   const loadStats = useCallback(() => {
     setStatsLoading(true);
@@ -376,6 +393,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       if (debouncedQ)    sp.set("q", debouncedQ);
       if (competitionId) sp.set("competitionId", competitionId);
       if (stateId)       sp.set("stateId", stateId);
+      if (targetGroupId) sp.set("targetGroupId", targetGroupId);
 
       const res  = await fetch(`/api/v2/organizer/events/${event.id}/preregistration?${sp}`);
       const json = await res.json();
@@ -387,7 +405,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     } finally {
       setLoading(false);
     }
-  }, [event.id, page, debouncedQ, competitionId, stateId]);
+  }, [event.id, page, debouncedQ, competitionId, stateId, targetGroupId]);
 
   // Load teams
   const loadTeams = useCallback(async () => {
@@ -398,6 +416,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       if (debouncedQ)    sp.set("q", debouncedQ);
       if (competitionId) sp.set("competitionId", competitionId);
       if (stateId)       sp.set("stateId", stateId);
+      if (targetGroupId) sp.set("targetGroupId", targetGroupId);
 
       const res  = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams?${sp}`);
       const json = await res.json();
@@ -409,11 +428,11 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     } finally {
       setTeamsLoading(false);
     }
-  }, [event.id, teamsPage, debouncedQ, competitionId, stateId]);
+  }, [event.id, teamsPage, debouncedQ, competitionId, stateId, targetGroupId]);
 
   // Reset pages on filter change
-  useEffect(() => { setPage(1); }, [debouncedQ, competitionId, stateId]); // eslint-disable-line react-hooks/set-state-in-effect
-  useEffect(() => { setTeamsPage(1); setSelectedTeamIds(new Set()); }, [debouncedQ, competitionId, stateId]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { setTeamsPage(1); setSelectedTeamIds(new Set()); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/set-state-in-effect
 
   useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
   useEffect(() => { loadTeams(); }, [loadTeams]); // eslint-disable-line react-hooks/set-state-in-effect
@@ -618,17 +637,30 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       </div>
 
       {/* Filters */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
+        <input
+          type="text"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={listTab === "participants" ? "Cari nama peserta atau pasukan…" : "Cari nama pasukan atau kontingen…"}
+          className="w-full pl-8 pr-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+        />
+      </div>
+
       <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
-          <input
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={listTab === "participants" ? "Cari nama peserta atau pasukan…" : "Cari nama pasukan atau kontingen…"}
-            className="w-full pl-8 pr-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
-          />
-        </div>
+        {targetGroups.length > 0 && (
+          <select
+            value={targetGroupId}
+            onChange={(e) => setTargetGroupId(e.target.value)}
+            className="text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+          >
+            <option value="">Semua Kumpulan Sasaran</option>
+            {targetGroups.map((tg) => (
+              <option key={tg.id} value={tg.id}>{tg.name}</option>
+            ))}
+          </select>
+        )}
 
         {competitions.length > 0 && (
           <select

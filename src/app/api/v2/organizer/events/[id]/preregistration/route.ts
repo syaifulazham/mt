@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { targetGroupMatchSql } from "@/lib/targetGroupMatch";
 
 const PAGE_SIZE = 50;
 
@@ -31,6 +32,7 @@ export async function GET(
   const q             = (searchParams.get("q") ?? "").trim();
   const competitionId = searchParams.get("competitionId") ?? "";
   const stateId       = searchParams.get("stateId") ?? "";
+  const targetGroupId = searchParams.get("targetGroupId") ?? "";
   const page          = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const pageSize      = Math.min(200, Math.max(1, parseInt(searchParams.get("pageSize") ?? String(PAGE_SIZE), 10)));
 
@@ -40,6 +42,9 @@ export async function GET(
       ${competitionId ? Prisma.sql`AND c.id = ${competitionId}` : Prisma.empty}
       ${stateId
         ? Prisma.sql`AND COALESCE(s.id, sch_state.id, hi_state.id) = ${stateId}`
+        : Prisma.empty}
+      ${targetGroupId
+        ? Prisma.sql`AND EXISTS (SELECT 1 FROM target_groups tg WHERE tg.id = ${targetGroupId} AND ${targetGroupMatchSql("p", "tg")})`
         : Prisma.empty}
       ${q
         ? Prisma.sql`AND (p.name ILIKE ${"%" + q + "%"} OR t.name ILIKE ${"%" + q + "%"})`

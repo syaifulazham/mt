@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { targetGroupMatchSql } from "@/lib/targetGroupMatch";
 
 type ParticipantRow = {
   id: string;
@@ -40,12 +41,16 @@ export async function GET(
   const q             = (searchParams.get("q") ?? "").trim();
   const competitionId = searchParams.get("competitionId") ?? "";
   const stateId       = searchParams.get("stateId") ?? "";
+  const targetGroupId = searchParams.get("targetGroupId") ?? "";
 
   try {
     if (type === "participants") {
       const extraConditions = Prisma.sql`
         ${competitionId ? Prisma.sql`AND c.id = ${competitionId}` : Prisma.empty}
         ${stateId ? Prisma.sql`AND COALESCE(s.id, sch_state.id, hi_state.id) = ${stateId}` : Prisma.empty}
+        ${targetGroupId
+          ? Prisma.sql`AND EXISTS (SELECT 1 FROM target_groups tg WHERE tg.id = ${targetGroupId} AND ${targetGroupMatchSql("p", "tg")})`
+          : Prisma.empty}
         ${q ? Prisma.sql`AND (p.name ILIKE ${"%" + q + "%"} OR t.name ILIKE ${"%" + q + "%"})` : Prisma.empty}
       `;
 
@@ -85,6 +90,15 @@ export async function GET(
     const extraConditions = Prisma.sql`
       ${competitionId ? Prisma.sql`AND c.id = ${competitionId}` : Prisma.empty}
       ${stateId ? Prisma.sql`AND COALESCE(s.id, sch_state.id, hi_state.id) = ${stateId}` : Prisma.empty}
+      ${targetGroupId
+        ? Prisma.sql`AND EXISTS (
+            SELECT 1
+            FROM team_members tm2
+            JOIN contestants   p2 ON p2.id = tm2."contestantId"
+            JOIN target_groups tg ON tg.id = ${targetGroupId}
+            WHERE tm2."teamId" = t.id AND ${targetGroupMatchSql("p2", "tg")}
+          )`
+        : Prisma.empty}
       ${q ? Prisma.sql`AND (t.name ILIKE ${"%" + q + "%"} OR cont.name ILIKE ${"%" + q + "%"})` : Prisma.empty}
     `;
 
