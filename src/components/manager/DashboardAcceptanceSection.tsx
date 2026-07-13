@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
+import { QRCodeSVG } from "qrcode.react";
 import {
   CheckCircle2, Clock, Loader2, RefreshCw,
   Users, Trophy, ChevronDown, ChevronUp, AlertCircle,
-  FileText, Check,
+  FileText, Check, QrCode, MapPin, X,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ type AcceptanceTeam = {
   teamName:        string;
   competitionCode: string;
   competitionName: string;
+  contingentId:    string;
   contingentName:  string;
   acceptance:      string;
   members:         Member[];
@@ -36,6 +38,7 @@ type AcceptanceEvent = {
     startDate: string | null; endDate: string | null;
     venue: string | null; address: string | null; city: string | null;
     description: string | null;
+    latitude: number | null; longitude: number | null;
     zone:  { name: string } | null;
     state: { name: string } | null;
   };
@@ -107,6 +110,65 @@ const ACCEPTANCE_DOT: Record<string, string> = {
   ACCEPT:  "bg-emerald-500",
   REJECT:  "bg-red-500",
 };
+
+// ── QR Code full-screen modal ─────────────────────────────────────────────────
+
+function QrModal({ contingentId, contingentName, eventName, onClose }: {
+  contingentId: string;
+  contingentName: string;
+  eventName: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex flex-col items-center bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl px-8 py-8 max-w-sm w-full"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1.5 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {/* Header */}
+        <p className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase mb-1">Malaysia Techlympics 2026</p>
+        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 text-center mb-6 leading-snug">{eventName}</p>
+
+        {/* QR Code */}
+        <div className="p-3 rounded-xl border-2 border-zinc-100 dark:border-zinc-700 bg-white shadow-sm">
+          <QRCodeSVG
+            value={contingentId}
+            size={220}
+            level="H"
+            imageSettings={{
+              src: "/logo-mt.svg",
+              height: 44,
+              width: 44,
+              excavate: true,
+            }}
+          />
+        </div>
+
+        {/* Bottom: contingent / school name */}
+        <p className="mt-6 text-xs font-semibold text-zinc-500 text-center tracking-wide uppercase">{contingentName}</p>
+        <p className="mt-0.5 text-[10px] text-zinc-400 font-mono">{contingentId}</p>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 // ── Team table row with expandable members/trainers ───────────────────────────
 
@@ -311,6 +373,7 @@ function EventAcceptancePanel({ entry, onAcceptanceChange, t }: {
 }) {
   const [open,        setOpen]        = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [qrOpen,      setQrOpen]      = useState(false);
 
   const acceptanceCounts = ACCEPTANCE_OPTIONS.reduce((acc, opt) => {
     acc[opt] = entry.teams.filter(tm => tm.acceptance === opt).length;
@@ -324,55 +387,26 @@ function EventAcceptancePanel({ entry, onAcceptanceChange, t }: {
     finally { setDownloading(false); }
   }
 
+  const ev = entry.event;
+  const dateStr = ev.startDate
+    ? ev.endDate && ev.endDate !== ev.startDate
+      ? `${fmtDate(ev.startDate)} – ${fmtDate(ev.endDate)}`
+      : fmtDate(ev.startDate)
+    : null;
+  const locationStr    = [ev.address, ev.city].filter(Boolean).join(", ") || null;
+  const contingentId   = entry.teams[0]?.contingentId ?? "";
+  const contingentName = entry.teams[0]?.contingentName ?? "";
+  const hasGps         = ev.latitude != null && ev.longitude != null;
+
   return (
     <div className="rounded-xl border border-zinc-200 overflow-hidden dark:border-zinc-700">
-      {/* Event header */}
+      {/* ── Title bar (always visible, click to toggle) ── */}
       <div
         className="flex items-center gap-3 px-4 py-3 bg-zinc-50 dark:bg-zinc-800 cursor-pointer select-none"
         onClick={() => setOpen(v => !v)}
       >
         <div className="flex-1 min-w-0">
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{entry.event.name}</span>
-
-          {/* Event detail pills row */}
-          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
-            {/* Zone / State */}
-            {(entry.event.zone?.name || entry.event.state?.name) && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5">
-                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-                {entry.event.zone?.name ?? entry.event.state?.name}
-              </span>
-            )}
-            {/* Dates */}
-            {(entry.event.startDate || entry.event.endDate) && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">
-                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                {fmtDate(entry.event.startDate)}
-                {entry.event.endDate && entry.event.endDate !== entry.event.startDate
-                  ? ` – ${fmtDate(entry.event.endDate)}`
-                  : ""}
-              </span>
-            )}
-            {/* Venue */}
-            {entry.event.venue && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">
-                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
-                {entry.event.venue}
-              </span>
-            )}
-            {/* Address / City */}
-            {(entry.event.address || entry.event.city) && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">
-                <svg className="h-2.5 w-2.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                {[entry.event.address, entry.event.city].filter(Boolean).join(", ")}
-              </span>
-            )}
-          </div>
-
-          {/* Description */}
-          {entry.event.description && (
-            <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed line-clamp-2">{entry.event.description}</p>
-          )}
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{ev.name}</span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -397,6 +431,74 @@ function EventAcceptancePanel({ entry, onAcceptanceChange, t }: {
           {open ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
         </div>
       </div>
+
+      {/* ── Event detail card ── */}
+      <div className="px-4 py-3 bg-white dark:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
+          {(ev.zone?.name || ev.state?.name) && (
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">Zon</span>
+              <span className="text-[12px] text-zinc-700 dark:text-zinc-300">{ev.zone?.name ?? ev.state?.name}</span>
+            </div>
+          )}
+          {dateStr && (
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">Tarikh</span>
+              <span className="text-[12px] text-zinc-700 dark:text-zinc-300">{dateStr}</span>
+            </div>
+          )}
+          {ev.venue && (
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">Tempat</span>
+              <span className="text-[12px] text-zinc-700 dark:text-zinc-300">{ev.venue}</span>
+            </div>
+          )}
+          {locationStr && (
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">Lokasi</span>
+              <span className="text-[12px] text-zinc-700 dark:text-zinc-300">{locationStr}</span>
+            </div>
+          )}
+          {ev.description && (
+            <div className="flex gap-2 sm:col-span-2">
+              <span className="w-28 shrink-0 text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">Penerangan</span>
+              <span className="text-[12px] text-zinc-600 dark:text-zinc-400 leading-relaxed">{ev.description}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+          <button
+            onClick={() => setQrOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-zinc-800 text-white hover:bg-zinc-700 dark:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors shadow-sm"
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            QR Code
+          </button>
+          {hasGps && (
+            <a
+              href={`https://maps.google.com/?q=${ev.latitude},${ev.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              GPS
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* QR Code modal */}
+      {qrOpen && (
+        <QrModal
+          contingentId={contingentId}
+          contingentName={contingentName}
+          eventName={ev.name}
+          onClose={() => setQrOpen(false)}
+        />
+      )}
 
       {/* Teams table */}
       {open && (

@@ -28,6 +28,7 @@ export async function GET() {
           id: true, name: true, slug: true, status: true,
           startDate: true, endDate: true, venue: true,
           description: true, address: true, city: true,
+          latitude: true, longitude: true,
           zone:  { select: { name: true } },
           state: { select: { name: true } },
         },
@@ -35,7 +36,8 @@ export async function GET() {
       team: {
         select: {
           id: true, name: true,
-          contingent: { select: { name: true } },
+          contingentId: true,
+          contingent: { select: { id: true, name: true } },
           competition: { select: { id: true, code: true, name: true } },
           members: {
             include: {
@@ -71,6 +73,7 @@ export async function GET() {
       competitionId: string;
       competitionCode: string;
       competitionName: string;
+      contingentId: string;
       contingentName: string;
       acceptance: string;
       members: Array<{ id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null }>;
@@ -89,6 +92,7 @@ export async function GET() {
       competitionId:   te.team.competition.id,
       competitionCode: te.team.competition.code,
       competitionName: te.team.competition.name,
+      contingentId:    te.team.contingentId ?? "",
       contingentName:  te.team.contingent?.name ?? "",
       acceptance:      te.acceptance,
       members:         te.team.members.map((m) => ({
