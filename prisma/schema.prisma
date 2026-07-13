@@ -480,9 +480,10 @@ model Event {
   endDate             DateTime?
   registrationStart   DateTime?
   registrationEnd     DateTime?
-  status              EventStatus @default(DRAFT)
-  prerequisiteEventId String?
-  createdAt           DateTime    @default(now())
+  status                  EventStatus @default(DRAFT)
+  prerequisiteEventId     String?
+  needManagerAcceptance   Boolean     @default(false)
+  createdAt               DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
   state               State?             @relation(fields: [stateId], references: [id])
@@ -909,11 +910,12 @@ model NewsArticle {
 }
 
 model TeamEvent {
-  id        String   @id @default(cuid())
-  teamId    String
-  eventId   String
-  selected  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  teamId     String
+  eventId    String
+  selected   Boolean  @default(false)
+  acceptance String   @default("PENDING")
+  createdAt  DateTime @default(now())
 
   team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)

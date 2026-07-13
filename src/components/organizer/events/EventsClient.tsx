@@ -41,6 +41,7 @@ type EventDetail = EventListItem & {
   registrationStart: string | null; registrationEnd: string | null;
   prerequisiteEventId: string | null;
   prerequisiteEvent: PrerequisiteEvent | null;
+  needManagerAcceptance: boolean;
 };
 
 type StateOption = { id: string; name: string };
@@ -590,6 +591,62 @@ function PrerequisitePickerModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ManagerAcceptanceSection({ event, canWrite, onSaved }: {
+  event: EventDetail; canWrite: boolean;
+  onSaved: (u: Partial<EventDetail>) => void;
+}) {
+  const [value,  setValue]  = useState(event.needManagerAcceptance);
+  const [saving, setSaving] = useState(false);
+  const [err,    setErr]    = useState("");
+
+  async function toggle(next: boolean) {
+    if (!canWrite) return;
+    setValue(next);
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ needManagerAcceptance: next }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved({ needManagerAcceptance: next });
+    } catch (e) {
+      setValue(!next); // revert
+      setErr(e instanceof Error ? e.message : "Gagal");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <SectionCard title="Perlukan Pengesahan Pengurus Kontinjen">
+      <p className="text-xs text-zinc-500">
+        Apabila diaktifkan, pengurus kontinjen mesti mengesahkan penyertaan pasukan mereka sebelum dianggap sah. Status penerimaan (PENDING / HOLD / ACCEPT / REJECT) akan dipaparkan dalam halaman pra-pendaftaran.
+      </p>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={value}
+          disabled={!canWrite || saving}
+          onClick={() => toggle(!value)}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 ${
+            value ? "bg-blue-600" : "bg-zinc-200"
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+              value ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </button>
+        <span className={`text-sm font-medium ${value ? "text-blue-700" : "text-zinc-500"}`}>
+          {saving ? "Menyimpan…" : value ? "Ya — Pengesahan diperlukan" : "Tidak — Tiada pengesahan diperlukan"}
+        </span>
+      </div>
+      {err && <p className="text-xs text-red-500">{err}</p>}
+    </SectionCard>
   );
 }
 
@@ -1418,6 +1475,7 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
             <InfoSection       event={selected} canWrite={canWrite} states={states} zones={zones} onSaved={handleSectionSaved} />
             <DatesSection      event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <VenueSection        event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
+            <ManagerAcceptanceSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} />
           </div>

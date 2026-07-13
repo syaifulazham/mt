@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     name, slug, description, scope, stateId, zoneId,
     venue, address, city, latitude, longitude,
     startDate, endDate, registrationStart, registrationEnd, status,
-    prerequisiteEventId,
+    prerequisiteEventId, needManagerAcceptance,
   } = await req.json();
 
   try {
@@ -68,7 +68,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(registrationStart !== undefined && { registrationStart: registrationStart ? new Date(registrationStart) : null }),
         ...(registrationEnd   !== undefined && { registrationEnd:   registrationEnd   ? new Date(registrationEnd)   : null }),
         ...(status      && { status }),
-        ...(prerequisiteEventId !== undefined && { prerequisiteEventId: prerequisiteEventId || null }),
+        ...(prerequisiteEventId   !== undefined && { prerequisiteEventId: prerequisiteEventId || null }),
+        ...(needManagerAcceptance !== undefined && { needManagerAcceptance: Boolean(needManagerAcceptance) }),
       },
     });
     return NextResponse.json({ data: event });

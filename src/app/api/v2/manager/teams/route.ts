@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       },
       teamEvents: {
         include: {
-          event: { select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true } },
+          event: { select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, needManagerAcceptance: true } },
         },
         orderBy: { createdAt: "asc" },
       },

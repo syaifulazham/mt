@@ -14,6 +14,7 @@ type TeamRow = {
   competitionName: string;
   members: bigint;
   selected: boolean;
+  acceptance: string;
 };
 
 type CountRow = { total: bigint };
@@ -68,11 +69,12 @@ export async function GET(
           c.code   AS "competitionCode",
           c.name   AS "competitionName",
           COUNT(DISTINCT tm."contestantId") AS members,
-          te.selected AS selected
+          te.selected   AS selected,
+          te.acceptance AS acceptance
         ${fromJoins}
         WHERE 1=1 ${extraConditions}
         GROUP BY t.id, t.name, cont.name,
-          COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected
+          COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected, te.acceptance
         ORDER BY c.code, t.name
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `,
@@ -95,6 +97,7 @@ export async function GET(
         competitionName: r.competitionName,
         members:         Number(r.members),
         selected:        r.selected ?? false,
+        acceptance:      r.acceptance ?? "PENDING",
       })),
       total,
       page,

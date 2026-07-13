@@ -30,6 +30,7 @@ type Team = {
   competitionName: string;
   members: number;
   selected: boolean;
+  acceptance: string;
 };
 
 type Competition = {
@@ -781,14 +782,15 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Negeri</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pertandingan</th>
                   <th className="text-right px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Ahli</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-semibold text-violet-600 uppercase tracking-wide">Penerimaan</th>
                   <th className="text-center px-4 py-2.5 text-xs font-semibold text-emerald-600 uppercase tracking-wide">Pilih</th>
                 </tr>
               </thead>
               <tbody>
                 {teamsLoading ? (
-                  <tr><td colSpan={8} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
+                  <tr><td colSpan={9} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
                 ) : teams.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
+                  <tr><td colSpan={9} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
                 ) : (
                   teams.map((team, i) => {
                     const isChecked = selectedTeamIds.has(team.id);
@@ -827,6 +829,22 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 text-xs">{team.members}</td>
+                        <td className="px-4 py-2.5 text-center">
+                          {(() => {
+                            const a = team.acceptance ?? "PENDING";
+                            const cls: Record<string, string> = {
+                              PENDING: "bg-zinc-100 text-zinc-500 border-zinc-200",
+                              HOLD:    "bg-amber-50 text-amber-700 border-amber-200",
+                              ACCEPT:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+                              REJECT:  "bg-red-50 text-red-700 border-red-200",
+                            };
+                            return (
+                              <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls[a] ?? cls.PENDING}`}>
+                                {a}
+                              </span>
+                            );
+                          })()}
+                        </td>
                         <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                           <button
                             role="switch"

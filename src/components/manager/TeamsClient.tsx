@@ -53,7 +53,12 @@ type EventRef = {
   description?: string | null;
 };
 
-type TeamEventEntry = { id: string; eventId: string; event: EventRef };
+type TeamEventEntry = {
+  id: string;
+  eventId: string;
+  acceptance: string;
+  event: EventRef & { needManagerAcceptance: boolean };
+};
 
 type EligibleEvent = EventRef & { venue: string | null; description: string | null };
 
@@ -650,6 +655,66 @@ function TeamEmailRow({ team, onUpdated }: { team: Team; onUpdated: (t: Team) =>
   );
 }
 
+const ACCEPTANCE_OPTIONS = ["PENDING", "HOLD", "ACCEPT", "REJECT"] as const;
+const ACCEPTANCE_CLS: Record<string, string> = {
+  PENDING: "bg-zinc-100 text-zinc-600 border-zinc-200 hover:bg-zinc-200",
+  HOLD:    "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100",
+  ACCEPT:  "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100",
+  REJECT:  "bg-red-50 text-red-700 border-red-200 hover:bg-red-100",
+};
+
+function AcceptanceControl({
+  team, teamEvent, onUpdated,
+}: {
+  team: Team;
+  teamEvent: TeamEventEntry;
+  onUpdated: (acceptance: string) => void;
+}) {
+  const [saving, setSaving] = useState<string | null>(null);
+
+  async function set(acceptance: string) {
+    if (saving) return;
+    setSaving(acceptance);
+    try {
+      const res = await fetch(`/api/v2/manager/teams/${team.id}/events/${teamEvent.eventId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acceptance }),
+      });
+      if (!res.ok) throw new Error("Gagal");
+      onUpdated(acceptance);
+    } catch {
+      // silently fail — state reverts since onUpdated wasn't called
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const current = teamEvent.acceptance ?? "PENDING";
+
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      <span className="text-zinc-400 shrink-0">Penerimaan — <span className="font-medium text-zinc-700">{teamEvent.event.name}</span>:</span>
+      <div className="flex gap-1 flex-wrap">
+        {ACCEPTANCE_OPTIONS.map(opt => (
+          <button
+            key={opt}
+            disabled={!!saving}
+            onClick={() => set(opt)}
+            className={`px-2 py-0.5 rounded-full border font-semibold transition-colors disabled:opacity-50 ${
+              current === opt
+                ? ACCEPTANCE_CLS[opt]
+                : "bg-white text-zinc-400 border-zinc-200 hover:border-zinc-300"
+            }`}
+          >
+            {saving === opt ? "…" : opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeamCard({
   team,
   onRename,
@@ -781,26 +846,52 @@ function TeamCard({
       </div>
 
       {/* Event footer */}
-      <div className="border-t px-4 py-2.5 flex items-center gap-2 flex-wrap">
-        <CalendarDays className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-        {team.teamEvents.length === 0 ? (
-          <span className="text-xs text-zinc-400 italic">No events joined</span>
-        ) : (
-          team.teamEvents.map((te) => (
-            <span
-              key={te.id}
-              className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100 font-medium"
-            >
-              {te.event.name}
-            </span>
-          ))
-        )}
-        <button
-          className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 hover:underline shrink-0"
-          onClick={() => onJoinEvent(team)}
-        >
-          + Join
-        </button>
+      <div className="border-t px-4 py-2.5 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <CalendarDays className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+          {team.teamEvents.length === 0 ? (
+            <span className="text-xs text-zinc-400 italic">No events joined</span>
+          ) : (
+            team.teamEvents.map((te) => {
+              const a = te.acceptance ?? "PENDING";
+              const acCls: Record<string, string> = {
+                PENDING: "bg-zinc-100 text-zinc-500 border-zinc-200",
+                HOLD:    "bg-amber-50 text-amber-700 border-amber-200",
+                ACCEPT:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+                REJECT:  "bg-red-50 text-red-700 border-red-200",
+              };
+              return (
+                <span
+                  key={te.id}
+                  className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100 font-medium"
+                >
+                  {te.event.name}
+                  {te.event.needManagerAcceptance && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0 rounded-full border ${acCls[a] ?? acCls.PENDING}`}>
+                      {a}
+                    </span>
+                  )}
+                </span>
+              );
+            })
+          )}
+          <button
+            className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 hover:underline shrink-0"
+            onClick={() => onJoinEvent(team)}
+          >
+            + Join
+          </button>
+        </div>
+
+        {/* Acceptance controls for events requiring manager confirmation */}
+        {team.teamEvents.filter(te => te.event.needManagerAcceptance).map(te => (
+          <AcceptanceControl key={te.id} team={team} teamEvent={te} onUpdated={(acceptance) => {
+            onUpdated({
+              ...team,
+              teamEvents: team.teamEvents.map(t => t.id === te.id ? { ...t, acceptance } : t),
+            });
+          }} />
+        ))}
       </div>
     </div>
   );
