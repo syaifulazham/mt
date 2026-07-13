@@ -96,7 +96,6 @@ function fmtDate(d: string | null) {
 }
 
 const GENDER_LABEL: Record<string, string> = { MALE: "L", FEMALE: "P" };
-const EDU_LABEL: Record<string, string> = { PRIMARY: "Rendah", SECONDARY: "Menengah", YOUTH: "Belia" };
 
 const ACCEPTANCE_DOT: Record<string, string> = {
   PENDING: "bg-zinc-400",
@@ -382,7 +381,6 @@ function EventAcceptancePanel({ entry, onAcceptanceChange, t }: {
 // ── Report download ───────────────────────────────────────────────────────────
 
 const GENDER_FULL: Record<string, string> = { MALE: "Lelaki", FEMALE: "Perempuan" };
-const EDU_FULL:    Record<string, string> = { PRIMARY: "Rendah", SECONDARY: "Menengah", KINDERGARTEN: "Prasekolah", YOUTH: "Belia" };
 const ACCEPT_COLOR: Record<string, string> = { ACCEPT: "065F46", REJECT: "991B1B", HOLD: "92400E", PENDING: "374151" };
 const ACCEPT_FILL:  Record<string, string> = { ACCEPT: "D1FAE5", REJECT: "FEE2E2", HOLD: "FEF3C7", PENDING: "F4F4F5" };
 
@@ -399,7 +397,7 @@ async function downloadReport() {
 
   const {
     Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun,
-    HeadingLevel, AlignmentType, WidthType, ShadingType, BorderStyle,
+    AlignmentType, WidthType, ShadingType, BorderStyle,
     convertInchesToTwip,
   } = await import("docx");
 
@@ -716,7 +714,7 @@ async function downloadReport() {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function DashboardAcceptanceSection({ locale: _locale }: { locale: string }) {
+export function DashboardAcceptanceSection() {
   const t = useTranslations("dashboard.acceptance");
 
   const [events,       setEvents]       = useState<AcceptanceEvent[]>([]);
@@ -733,6 +731,7 @@ export function DashboardAcceptanceSection({ locale: _locale }: { locale: string
       .finally(() => setLoading(false));
   }, [t]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   function handleAcceptanceChange(teamEventId: string, _teamId: string, _eventId: string, value: string) {
