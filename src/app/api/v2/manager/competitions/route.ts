@@ -19,6 +19,11 @@ export async function GET(_req: NextRequest) {
       name: true,
       minTeamSize: true,
       maxTeamSize: true,
+      targetGroups: {
+        select: {
+          targetGroup: { select: { id: true, code: true, name: true } },
+        },
+      },
     },
     orderBy: { name: "asc" },
   });

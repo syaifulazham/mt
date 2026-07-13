@@ -18,6 +18,8 @@ import {
 
 type Contingent = { id: string; name: string };
 
+type TargetGroupRef = { id: string; code: string; name: string };
+
 type Competition = {
   id: string;
   code: string;
@@ -25,6 +27,7 @@ type Competition = {
   minTeamSize: number;
   maxTeamSize: number;
   status: string;
+  targetGroups?: { targetGroup: TargetGroupRef }[];
 };
 
 type Participant = {
@@ -114,6 +117,114 @@ function MemberSlots({ filled, max }: { filled: number; max: number }) {
   );
 }
 
+// ── Competition picker (grouped by Target Group, 3-column grid) ──────────────
+
+type CompetitionGroup = { id: string; name: string; items: Competition[] };
+
+function groupCompetitionsByTargetGroup(competitions: Competition[]): CompetitionGroup[] {
+  const groups = new Map<string, CompetitionGroup>();
+  const ungrouped: Competition[] = [];
+
+  for (const c of competitions) {
+    const tgs = c.targetGroups ?? [];
+    if (tgs.length === 0) { ungrouped.push(c); continue; }
+    for (const { targetGroup: tg } of tgs) {
+      if (!groups.has(tg.id)) groups.set(tg.id, { id: tg.id, name: tg.name, items: [] });
+      groups.get(tg.id)!.items.push(c);
+    }
+  }
+
+  const sorted = [...groups.values()]
+    .map((g) => ({ ...g, items: [...g.items].sort((a, b) => a.code.localeCompare(b.code)) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (ungrouped.length > 0) {
+    sorted.push({
+      id: "__none__",
+      name: "Lain-lain",
+      items: [...ungrouped].sort((a, b) => a.code.localeCompare(b.code)),
+    });
+  }
+
+  return sorted;
+}
+
+function CompetitionPicker({
+  competitions,
+  value,
+  onChange,
+}: {
+  competitions: Competition[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [open]);
+
+  const selected = competitions.find((c) => c.id === value);
+  const groups = groupCompetitionsByTargetGroup(competitions);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <span className={`truncate ${selected ? "" : "text-zinc-400"}`}>
+          {selected ? `${selected.name} (${selected.code})` : "— Select competition —"}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-zinc-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="mt-1.5 border border-zinc-200 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-900 shadow-lg max-h-80 overflow-y-auto p-3 space-y-3">
+          {groups.length === 0 ? (
+            <p className="text-sm text-zinc-400 italic px-1">No competitions available.</p>
+          ) : (
+            groups.map((g) => (
+              <div key={g.id}>
+                <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide mb-1.5 px-0.5">
+                  {g.name}
+                </p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {g.items.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { onChange(c.id); setOpen(false); }}
+                      title={`${c.name} (${c.code})`}
+                      className={`text-left rounded-md border px-2 py-1.5 transition-colors ${
+                        c.id === value
+                          ? "bg-blue-600 border-blue-600 text-white"
+                          : "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:bg-blue-50 dark:hover:bg-zinc-700/60"
+                      }`}
+                    >
+                      <span className="block text-xs font-medium truncate">{c.name}</span>
+                      <span className={`block text-[10px] ${c.id === value ? "text-blue-100" : "text-zinc-400"}`}>
+                        {c.code}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Create Team Dialog ────────────────────────────────────────────────────────
 
 function CreateTeamDialog({
@@ -166,7 +277,7 @@ function CreateTeamDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm p-0 overflow-hidden">
+      <DialogContent className="max-w-lg p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-0">
           <DialogTitle>Create Team</DialogTitle>
           <DialogDescription className="text-xs text-zinc-400 mt-0.5">
@@ -195,16 +306,11 @@ function CreateTeamDialog({
             {competitions.length === 0 ? (
               <p className="text-sm text-zinc-500 italic">No team competitions available.</p>
             ) : (
-              <select
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              <CompetitionPicker
+                competitions={competitions}
                 value={competitionId}
-                onChange={(e) => setCompetitionId(e.target.value)}
-              >
-                <option value="">— Select competition —</option>
-                {competitions.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                ))}
-              </select>
+                onChange={setCompetitionId}
+              />
             )}
             {selectedComp && (
               <p className="text-xs text-zinc-500">
