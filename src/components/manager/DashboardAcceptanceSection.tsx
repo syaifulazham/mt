@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import {
   CheckCircle2, Clock, Loader2, RefreshCw,
   Users, Trophy, ChevronDown, ChevronUp, AlertCircle,
-  FileSpreadsheet, Check,
+  FileText, Check,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -305,19 +305,27 @@ function EventAcceptancePanel({ entry, onAcceptanceChange, t }: {
   onAcceptanceChange: (teamEventId: string, teamId: string, eventId: string, value: string) => void;
   t: TFn;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open,        setOpen]        = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   const acceptanceCounts = ACCEPTANCE_OPTIONS.reduce((acc, opt) => {
-    acc[opt] = entry.teams.filter(t => t.acceptance === opt).length;
+    acc[opt] = entry.teams.filter(tm => tm.acceptance === opt).length;
     return acc;
   }, {} as Record<string, number>);
+
+  async function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation();
+    setDownloading(true);
+    try { await downloadReport(entry.event.id, entry.event.name); }
+    finally { setDownloading(false); }
+  }
 
   return (
     <div className="rounded-xl border border-zinc-200 overflow-hidden dark:border-zinc-700">
       {/* Event header */}
-      <button
+      <div
+        className="flex items-center gap-3 px-4 py-3 bg-zinc-50 dark:bg-zinc-800 cursor-pointer select-none"
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-start gap-3 px-4 py-3 bg-zinc-50 hover:bg-zinc-100 transition-colors dark:bg-zinc-800 dark:hover:bg-zinc-700 text-left"
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -343,9 +351,23 @@ function EventAcceptancePanel({ entry, onAcceptanceChange, t }: {
           {acceptanceCounts.HOLD    > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{acceptanceCounts.HOLD} HOLD</span>}
           {acceptanceCounts.REJECT  > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">{acceptanceCounts.REJECT} REJECT</span>}
           {acceptanceCounts.PENDING > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200">{acceptanceCounts.PENDING} PENDING</span>}
+
+          {/* Per-event Word download button */}
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            title={t("downloadBtn")}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#2B579A] text-white hover:bg-[#1e3f73] disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {downloading
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <FileText className="h-3 w-3" />}
+            {t("downloadBtn")}
+          </button>
+
           {open ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
         </div>
-      </button>
+      </div>
 
       {/* Teams table */}
       {open && (
@@ -389,8 +411,8 @@ function fmtDateDoc(d: string | null) {
   return new Date(d).toLocaleDateString("ms-MY", { day: "numeric", month: "long", year: "numeric" });
 }
 
-async function downloadReport() {
-  const res = await fetch("/api/v2/manager/dashboard/report");
+async function downloadReport(eventId: string, eventName: string) {
+  const res = await fetch(`/api/v2/manager/dashboard/report?eventId=${encodeURIComponent(eventId)}`);
   if (!res.ok) { alert("Gagal memuatkan data laporan."); return; }
   const payload: ReportPayload & { data: null } = await res.json();
   if (!payload.events?.length) { alert("Tiada pasukan untuk dijana laporan."); return; }
@@ -708,7 +730,8 @@ async function downloadReport() {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  a.href = url; a.download = `laporan-penyertaan-${stamp}.docx`; a.click();
+  const safeName = eventName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  a.href = url; a.download = `laporan-penyertaan-${safeName}-${stamp}.docx`; a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -717,10 +740,9 @@ async function downloadReport() {
 export function DashboardAcceptanceSection() {
   const t = useTranslations("dashboard.acceptance");
 
-  const [events,       setEvents]       = useState<AcceptanceEvent[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState<string | null>(null);
-  const [downloading,  setDownloading]  = useState(false);
+  const [events,  setEvents]  = useState<AcceptanceEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true); setError(null);
@@ -743,12 +765,6 @@ export function DashboardAcceptanceSection() {
     })));
   }
 
-  async function handleDownload() {
-    setDownloading(true);
-    try { await downloadReport(); }
-    finally { setDownloading(false); }
-  }
-
   return (
     <div className="space-y-3">
       {/* Section header */}
@@ -757,26 +773,14 @@ export function DashboardAcceptanceSection() {
           <h2 className="text-sm font-semibold dark:text-zinc-100">{t("title")}</h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{t("subtitle")}</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={load}
-            disabled={loading}
-            title={t("refresh")}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors disabled:opacity-40"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          </button>
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors shadow-sm"
-          >
-            {downloading
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <FileSpreadsheet className="h-3.5 w-3.5" />}
-            {t("downloadBtn")}
-          </button>
-        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          title={t("refresh")}
+          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors disabled:opacity-40 shrink-0"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
       {/* Body */}

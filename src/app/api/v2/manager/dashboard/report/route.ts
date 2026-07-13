@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const eventId = new URL(req.url).searchParams.get("eventId") ?? null;
 
   const manager = await db.managerProfile.findUnique({
     where: { clerkUserId: userId },
@@ -36,7 +37,7 @@ export async function GET() {
   // Only teams in events that require manager acceptance
   const teamEvents = await db.teamEvent.findMany({
     where: {
-      event: { needManagerAcceptance: true },
+      event: { needManagerAcceptance: true, ...(eventId ? { id: eventId } : {}) },
       team:  { contingentId: { in: contingentIds } },
     },
     include: {
