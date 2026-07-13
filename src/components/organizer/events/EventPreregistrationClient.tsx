@@ -336,13 +336,13 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     return () => clearTimeout(t);
   }, [q]);
 
-  // Load competitions
+  // Load competitions from registered teams (not event_competitions — teams loaded via
+  // prerequisite may not have event_competitions rows yet).
   useEffect(() => {
-    fetch(`/api/v2/organizer/events/${event.id}/competitions`)
+    fetch(`/api/v2/organizer/events/${event.id}/preregistration/competitions`)
       .then((r) => r.json())
       .then((d) => {
-        const list = (d.data ?? []) as { competition: { id: string; code: string; name: string } }[];
-        setCompetitions(list.map((ec) => ec.competition));
+        setCompetitions((d.data ?? []) as { id: string; code: string; name: string }[]);
       })
       .catch(() => {});
   }, [event.id]);
