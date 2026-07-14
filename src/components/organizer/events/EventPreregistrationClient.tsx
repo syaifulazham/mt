@@ -296,6 +296,27 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   async function handleDownload() {
     setDownloading(true);
     try {
+      if (listTab === "trainers") {
+        // Server-side styled xlsx (exceljs) with merged cells + contingent colours
+        const sp = new URLSearchParams();
+        if (debouncedQ)    sp.set("q",             debouncedQ);
+        if (competitionId) sp.set("competitionId", competitionId);
+        if (stateId)       sp.set("stateId",       stateId);
+        if (targetGroupId) sp.set("targetGroupId", targetGroupId);
+        const res = await fetch(
+          `/api/v2/organizer/events/${event.id}/preregistration/trainers/xlsx?${sp}`,
+        );
+        if (!res.ok) throw new Error("Export failed");
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `pendaftaran-jurulatih-${event.slug}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
       const params = new URLSearchParams({ type: listTab });
       if (debouncedQ)    params.set("q", debouncedQ);
       if (competitionId) params.set("competitionId", competitionId);
@@ -338,21 +359,6 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         const wb = utils.book_new();
         utils.book_append_sheet(wb, ws, "Pasukan");
         writeFile(wb, `pendaftaran-pasukan-${event.slug}.xlsx`);
-      } else if (listTab === "trainers") {
-        const wsData = data.map((r: { name: string; email: string | null; phoneNumber: string | null; contingentName: string | null; stateName: string | null; teams: number; participants: number; teamNames: string[] }) => ({
-          "Kontinjen":        r.contingentName ?? "",
-          "Negeri":           r.stateName      ?? "",
-          "Nama":             r.name           ?? "",
-          "Email":            r.email          ?? "",
-          "Telefon":          r.phoneNumber    ?? "",
-          "Pasukan":          (r.teamNames ?? []).join("\n"),
-          "Bilangan Pasukan": r.teams          ?? 0,
-          "Bilangan Peserta": r.participants   ?? 0,
-        }));
-        const ws = utils.json_to_sheet(wsData);
-        const wb = utils.book_new();
-        utils.book_append_sheet(wb, ws, "Jurulatih");
-        writeFile(wb, `pendaftaran-jurulatih-${event.slug}.xlsx`);
       }
     } catch (e) {
       console.error("[download]", e);
