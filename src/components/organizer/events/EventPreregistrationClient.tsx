@@ -1004,7 +1004,6 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Kontinjen</th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Negeri</th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Nama</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Email / Telefon</th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Pasukan</th>
                 <th className="text-right px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Bil. Pasukan</th>
                 <th className="text-right px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Bil. Peserta</th>
@@ -1012,9 +1011,9 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
             </thead>
             <tbody>
               {trainersLoading ? (
-                <tr><td colSpan={8} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
+                <tr><td colSpan={7} className="text-center py-10 text-zinc-400 text-sm">Memuatkan…</td></tr>
               ) : trainers.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
+                <tr><td colSpan={7} className="text-center py-10 text-zinc-300 text-sm">Tiada data</td></tr>
               ) : (
                 trainers.map((tr, i) => (
                   <tr key={tr.id} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}>
@@ -1023,10 +1022,10 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                     </td>
                     <td className="px-4 py-2.5 text-zinc-600 text-xs">{tr.contingentName ?? "–"}</td>
                     <td className="px-4 py-2.5 text-zinc-500 text-xs">{tr.stateName ?? "–"}</td>
-                    <td className="px-4 py-2.5 font-medium text-zinc-900">{tr.name}</td>
-                    <td className="px-4 py-2.5 text-zinc-600 text-xs">
-                      <div>{tr.email ?? "–"}</div>
-                      <div className="text-zinc-400">{tr.phoneNumber ?? "–"}</div>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium text-zinc-900 text-sm">{tr.name}</div>
+                      {tr.email && <div className="text-xs text-zinc-500 mt-0.5">{tr.email}</div>}
+                      {tr.phoneNumber && <div className="text-xs text-zinc-400">{tr.phoneNumber}</div>}
                     </td>
                     <td className="px-4 py-2.5 text-zinc-600 text-xs">
                       {tr.teamNames.map((n) => (
