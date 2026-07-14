@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Users, Trophy, UserCheck, ChevronRight } from "lucide-react";
-import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
@@ -35,6 +34,27 @@ const TYPE_COLOR: Record<ContingentRow["contingentType"], string> = {
 };
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+
+const ShieldPlaceholder = () => (
+  <svg viewBox="0 0 36 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-7 w-7">
+    <path d="M18 2L4 8V20C4 28.4 10.2 36.3 18 38C25.8 36.3 32 28.4 32 20V8L18 2Z" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.5" strokeLinejoin="round"/>
+    <path d="M18 7L9 11V19.5C9 24.7 13 29.5 18 31C23 29.5 27 24.7 27 19.5V11L18 7Z" fill="#CBD5E1"/>
+  </svg>
+);
+
+function ContingentLogo({ logoUrl, name }: { logoUrl: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!logoUrl || failed) return <ShieldPlaceholder />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoUrl}
+      alt={name}
+      className="object-contain h-full w-full"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export function ContingentsClient() {
   const router = useRouter();
@@ -177,21 +197,7 @@ export function ContingentsClient() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 shrink-0 rounded-md border border-zinc-100 bg-zinc-50 overflow-hidden flex items-center justify-center">
-                          {row.logoUrl ? (
-                            <Image
-                              src={row.logoUrl}
-                              alt={row.shortName ?? row.name}
-                              width={36}
-                              height={36}
-                              className="object-contain h-full w-full"
-                              unoptimized
-                            />
-                          ) : (
-                            <svg viewBox="0 0 36 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-7 w-7">
-                              <path d="M18 2L4 8V20C4 28.4 10.2 36.3 18 38C25.8 36.3 32 28.4 32 20V8L18 2Z" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.5" strokeLinejoin="round"/>
-                              <path d="M18 7L9 11V19.5C9 24.7 13 29.5 18 31C23 29.5 27 24.7 27 19.5V11L18 7Z" fill="#CBD5E1"/>
-                            </svg>
-                          )}
+                          <ContingentLogo logoUrl={row.logoUrl} name={row.shortName ?? row.name} />
                         </div>
                         <div>
                           <p className="font-medium text-zinc-900 leading-snug">{row.name}</p>
