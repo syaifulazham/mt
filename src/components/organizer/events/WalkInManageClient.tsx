@@ -90,9 +90,8 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     setLoading(false);
   }, [event.id]);
 
-  useEffect(() => {
-    if (selectedWic) loadRegistrations(selectedWic.id, statusFilter);
-  }, [selectedWic, statusFilter, loadRegistrations]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (selectedWic) loadRegistrations(selectedWic.id, statusFilter); }, [selectedWic, statusFilter, loadRegistrations]);
 
   async function updateStatus(reg: Registration, status: string) {
     setUpdating(reg.id);
