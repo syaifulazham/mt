@@ -39,8 +39,7 @@ type EventDetail = EventListItem & {
   venue: string | null; address: string | null; city: string | null;
   latitude: number | null; longitude: number | null;
   registrationStart: string | null; registrationEnd: string | null;
-  prerequisiteEventId: string | null;
-  prerequisiteEvent: PrerequisiteEvent | null;
+  prerequisites: { prerequisite: PrerequisiteEvent }[];
   needManagerAcceptance: boolean;
 };
 
@@ -506,22 +505,25 @@ const STATUS_CLS: Record<string, string> = {
 };
 
 function PrerequisitePickerModal({
-  open, excludeId, onClose, onSelect,
+  open, excludeId, selected, onClose, onConfirm,
 }: {
   open: boolean; excludeId: string;
+  selected: PrerequisiteEvent[];
   onClose: () => void;
-  onSelect: (ev: EventListItem) => void;
+  onConfirm: (list: PrerequisiteEvent[]) => void;
 }) {
   const [search,    setSearch]    = useState("");
   const [results,   setResults]   = useState<EventListItem[]>([]);
   const [searching, setSearching] = useState(false);
+  const [pending,   setPending]   = useState<PrerequisiteEvent[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) { setSearch(""); setResults([]); return; }
+    setPending(selected);
     setTimeout(() => inputRef.current?.focus(), 80);
-  }, [open]);
+  }, [open, selected]);
 
   useEffect(() => {
     const q = search.trim();
@@ -538,12 +540,35 @@ function PrerequisitePickerModal({
   }, [search, excludeId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  function toggle(ev: EventListItem) {
+    setPending(prev =>
+      prev.some(p => p.id === ev.id)
+        ? prev.filter(p => p.id !== ev.id)
+        : [...prev, { id: ev.id, name: ev.name, slug: ev.slug, status: ev.status }]
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Pilih Acara Prasyarat</DialogTitle>
+          <p className="text-xs text-zinc-500 mt-1">Boleh pilih lebih dari satu. Peserta layak jika menyertai mana-mana acara yang dipilih.</p>
         </DialogHeader>
+
+        {/* Selected chips */}
+        {pending.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {pending.map(p => (
+              <span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                {p.name}
+                <button type="button" onClick={() => setPending(prev => prev.filter(x => x.id !== p.id))}>
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Search input */}
         <div className="relative">
@@ -559,7 +584,7 @@ function PrerequisitePickerModal({
         </div>
 
         {/* Results */}
-        <div className="min-h-[160px] max-h-80 overflow-y-auto rounded-lg border divide-y">
+        <div className="min-h-[160px] max-h-72 overflow-y-auto rounded-lg border divide-y">
           {!search.trim() && (
             <div className="flex items-center justify-center h-32 text-sm text-zinc-400">
               Taip nama acara untuk mencari
@@ -570,24 +595,33 @@ function PrerequisitePickerModal({
               Tiada acara dijumpai
             </div>
           )}
-          {results.map(ev => (
-            <button key={ev.id} type="button"
-              className="w-full text-left px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 transition-colors"
-              onClick={() => { onSelect(ev); onClose(); }}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{ev.name}</p>
-                <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{ev.slug}</p>
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[ev.status] ?? "bg-zinc-100 text-zinc-500"}`}>
-                {ev.status}
-              </span>
-            </button>
-          ))}
+          {results.map(ev => {
+            const checked = pending.some(p => p.id === ev.id);
+            return (
+              <button key={ev.id} type="button"
+                className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors ${checked ? "bg-amber-50" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"}`}
+                onClick={() => toggle(ev)}
+              >
+                <div className={`h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center ${checked ? "bg-amber-500 border-amber-500" : "border-zinc-300"}`}>
+                  {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{ev.name}</p>
+                  <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{ev.slug}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[ev.status] ?? "bg-zinc-100 text-zinc-500"}`}>
+                  {ev.status}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button onClick={() => { onConfirm(pending); onClose(); }}>
+            Simpan ({pending.length} dipilih)
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -654,7 +688,9 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
   event: EventDetail; canWrite: boolean;
   onSaved: (u: Partial<EventDetail>) => void;
 }) {
-  const [selected, setSelected] = useState<PrerequisiteEvent | null>(event.prerequisiteEvent ?? null);
+  const [selected, setSelected] = useState<PrerequisiteEvent[]>(
+    event.prerequisites?.map(p => p.prerequisite) ?? []
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [dirty,  setDirty]  = useState(false);
   const [saving, setSaving] = useState(false);
@@ -665,13 +701,18 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
     try {
       const res = await fetch(`/api/v2/organizer/events/${event.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prerequisiteEventId: selected?.id ?? null }),
+        body: JSON.stringify({ prerequisiteEventIds: selected.map(e => e.id) }),
       });
       if (!res.ok) throw new Error("Gagal menyimpan");
-      onSaved({ prerequisiteEventId: selected?.id ?? null, prerequisiteEvent: selected });
+      onSaved({ prerequisites: selected.map(p => ({ prerequisite: p })) });
       setDirty(false);
     } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
     finally { setSaving(false); }
+  }
+
+  function remove(id: string) {
+    setSelected(prev => prev.filter(e => e.id !== id));
+    setDirty(true);
   }
 
   return (
@@ -681,28 +722,32 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
         action={canWrite && <SaveBtn dirty={dirty} saving={saving} onSave={save} />}
       >
         <p className="text-xs text-zinc-500">
-          Tetapkan acara yang mesti disertai terlebih dahulu sebelum peserta boleh mendaftar ke acara ini.
+          Tetapkan acara yang mesti disertai terlebih dahulu. Peserta layak mendaftar jika menyertai <em>mana-mana</em> acara yang dipilih.
         </p>
 
-        {selected ? (
-          <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-            <GitMerge className="h-4 w-4 text-amber-500 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{selected.name}</p>
-              <p className="text-[11px] text-zinc-500 font-mono">{selected.slug}</p>
-            </div>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[selected.status] ?? "bg-zinc-100 text-zinc-500"}`}>
-              {selected.status}
-            </span>
-            {canWrite && (
-              <button type="button"
-                onClick={() => { setSelected(null); setDirty(true); }}
-                className="shrink-0 text-zinc-400 hover:text-red-500 transition-colors"
-                title="Buang prasyarat"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+        {selected.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {selected.map(ev => (
+              <div key={ev.id} className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <GitMerge className="h-4 w-4 text-amber-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{ev.name}</p>
+                  <p className="text-[11px] text-zinc-500 font-mono">{ev.slug}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_CLS[ev.status] ?? "bg-zinc-100 text-zinc-500"}`}>
+                  {ev.status}
+                </span>
+                {canWrite && (
+                  <button type="button"
+                    onClick={() => remove(ev.id)}
+                    className="shrink-0 text-zinc-400 hover:text-red-500 transition-colors"
+                    title="Buang prasyarat"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         ) : (
           <p className="text-sm text-zinc-400 italic">Tiada prasyarat ditetapkan.</p>
@@ -711,7 +756,7 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
         {canWrite && (
           <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setPickerOpen(true)}>
             <Search className="h-3.5 w-3.5" />
-            {selected ? "Tukar acara prasyarat" : "Pilih acara prasyarat"}
+            Tambah acara prasyarat
           </Button>
         )}
 
@@ -721,8 +766,9 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
       <PrerequisitePickerModal
         open={pickerOpen}
         excludeId={event.id}
+        selected={selected}
         onClose={() => setPickerOpen(false)}
-        onSelect={ev => { setSelected(ev); setDirty(true); }}
+        onConfirm={list => { setSelected(list); setDirty(true); }}
       />
     </>
   );

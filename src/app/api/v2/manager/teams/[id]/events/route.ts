@@ -101,7 +101,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: {
       status: { notIn: ["DRAFT", "COMPLETED", "ARCHIVE"] },
       id: { notIn: joinedIds },
-      prerequisiteEventId: null,
+      prerequisites: { none: {} },
       eventCompetitions: { some: { competitionId: team.competitionId } },
     },
     select: {
@@ -143,12 +143,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify location eligibility
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, venue: true, description: true, stateId: true, zoneId: true, prerequisiteEventId: true },
+    select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, venue: true, description: true, stateId: true, zoneId: true, _count: { select: { prerequisites: true } } },
   });
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
 
   // Reject direct joins for events that require a prerequisite
-  if (event.prerequisiteEventId) return NextResponse.json({ error: "EVENT_REQUIRES_PREREQUISITE" }, { status: 403 });
+  if (event._count.prerequisites > 0) return NextResponse.json({ error: "EVENT_REQUIRES_PREREQUISITE" }, { status: 403 });
 
   const allowed = await filterByLocation([event], team.effectiveStateId);
   if (allowed.length === 0) return NextResponse.json({ error: "EVENT_LOCATION_MISMATCH" }, { status: 403 });

@@ -23,7 +23,9 @@ export default async function EventPreregistrationPage({
       id: true,
       name: true,
       slug: true,
-      prerequisiteEvent: { select: { id: true, name: true, slug: true } },
+      prerequisites: {
+        select: { prerequisite: { select: { id: true, name: true, slug: true } } },
+      },
     },
   });
 
@@ -33,10 +35,10 @@ export default async function EventPreregistrationPage({
     <OrganizerShell userName={session.name} role={session.role}>
       <EventPreregistrationClient
         event={{
-          id:   event.id,
-          name: event.name,
-          slug: event.slug,
-          prerequisiteEvent: event.prerequisiteEvent ?? null,
+          id:           event.id,
+          name:         event.name,
+          slug:         event.slug,
+          prerequisites: event.prerequisites,
         }}
       />
     </OrganizerShell>

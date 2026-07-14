@@ -61,7 +61,7 @@ type EventSummary = {
   id: string;
   name: string;
   slug: string;
-  prerequisiteEvent: { id: string; name: string; slug: string } | null;
+  prerequisites: { prerequisite: { id: string; name: string; slug: string } }[];
 };
 
 type StatsSummary = {
@@ -554,7 +554,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   }
 
   async function handleLoadFromPrerequisite() {
-    if (!event.prerequisiteEvent) return;
+    if (!event.prerequisites?.length) return;
     setPrereqModal({ phase: "loading" });
     try {
       const res = await fetch(
@@ -811,11 +811,11 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         )}
 
         {/* Load from prerequisite (teams tab) */}
-        {listTab === "teams" && event.prerequisiteEvent && (
+        {listTab === "teams" && (event.prerequisites?.length ?? 0) > 0 && (
           <button
             onClick={handleLoadFromPrerequisite}
             disabled={prereqModal?.phase === "loading"}
-            title={`Daftar pasukan terpilih dari "${event.prerequisiteEvent.name}"`}
+            title={`Daftar pasukan terpilih dari acara prasyarat (${event.prerequisites!.map(p => p.prerequisite.name).join(", ")})`}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 border border-indigo-200 transition-colors"
           >
             {prereqModal?.phase === "loading"
@@ -1189,7 +1189,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                   <div>
                     <h3 className="text-sm font-semibold text-zinc-900">Muat dari Prasyarat Berjaya</h3>
                     <p className="text-xs text-zinc-500 mt-0.5">
-                      {event.prerequisiteEvent?.name}
+                      {event.prerequisites?.map(p => p.prerequisite.name).join(", ")}
                     </p>
                   </div>
                 </div>

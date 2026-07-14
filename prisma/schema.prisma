@@ -481,20 +481,30 @@ model Event {
   registrationStart   DateTime?
   registrationEnd     DateTime?
   status                  EventStatus @default(DRAFT)
-  prerequisiteEventId     String?
   needManagerAcceptance   Boolean     @default(false)
   createdAt               DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  state               State?             @relation(fields: [stateId], references: [id])
-  zone                Zone?              @relation(fields: [zoneId], references: [id])
-  prerequisiteEvent   Event?             @relation("EventPrerequisite", fields: [prerequisiteEventId], references: [id])
-  dependentEvents     Event[]            @relation("EventPrerequisite")
+  state               State?              @relation(fields: [stateId], references: [id])
+  zone                Zone?               @relation(fields: [zoneId], references: [id])
+  prerequisites       EventPrerequisite[] @relation("EventPrerequisites")
+  asPrerequisiteOf    EventPrerequisite[] @relation("EventAsPrerequisite")
   eventCompetitions   EventCompetition[]
   teamEvents          TeamEvent[]
   resultsEndpoints    ResultsEndpoint[]
 
   @@map("events")
+}
+
+model EventPrerequisite {
+  eventId        String
+  prerequisiteId String
+
+  event        Event @relation("EventPrerequisites",  fields: [eventId],        references: [id], onDelete: Cascade)
+  prerequisite Event @relation("EventAsPrerequisite", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, prerequisiteId])
+  @@map("event_prerequisites")
 }
 
 model Competition {

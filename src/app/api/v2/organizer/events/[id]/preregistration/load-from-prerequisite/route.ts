@@ -3,8 +3,8 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
 /**
- * POST — Register all "selected" teams from this event's prerequisite event
- * into the current event.  Skips teams already registered.
+ * POST — Register all "selected" teams from ANY of this event's prerequisite
+ * events into the current event.  Skips teams already registered.
  */
 export async function POST(
   _req: NextRequest,
@@ -17,22 +17,25 @@ export async function POST(
 
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { prerequisiteEventId: true },
+    select: { prerequisites: { select: { prerequisiteId: true } } },
   });
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
-  if (!event.prerequisiteEventId)
+  if (event.prerequisites.length === 0)
     return NextResponse.json({ error: "NO_PREREQUISITE" }, { status: 400 });
 
-  // Fetch selected teams from the prerequisite event
+  const prerequisiteIds = event.prerequisites.map((p) => p.prerequisiteId);
+
+  // Fetch selected teams from ALL prerequisite events
   const selectedTeamEvents = await db.teamEvent.findMany({
-    where: { eventId: event.prerequisiteEventId, selected: true },
+    where: { eventId: { in: prerequisiteIds }, selected: true },
     select: { teamId: true },
   });
 
   if (selectedTeamEvents.length === 0)
     return NextResponse.json({ added: 0, skipped: 0 });
 
-  const teamIds = selectedTeamEvents.map((te) => te.teamId);
+  // Deduplicate across multiple prerequisites (a team may appear in several)
+  const teamIds = [...new Set(selectedTeamEvents.map((te) => te.teamId))];
 
   // Find which are already registered to the current event
   const existing = await db.teamEvent.findMany({
