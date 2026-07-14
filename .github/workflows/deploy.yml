@@ -189,6 +189,14 @@ jobs:
             # Docker Hub access; server only needs to reach ghcr.io
             echo "── Pulling pre-built images from ghcr.io ──"
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+            # Remove stale local copies so Docker pulls fresh layers.
+            # This prevents "failed to register layer / overlay mount" errors
+            # caused by interrupted or corrupted previous pulls.
+            docker rmi ${GHCR_IMAGE}:migrator 2>/dev/null || true
+            docker rmi ${GHCR_IMAGE}:latest   2>/dev/null || true
+            docker system prune -f
+
             docker pull ${GHCR_IMAGE}:migrator
             docker pull ${GHCR_IMAGE}:latest
 
