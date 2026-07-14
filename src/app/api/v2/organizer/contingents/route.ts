@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
         id:             true,
         name:           true,
         shortName:      true,
+        logoUrl:        true,
         contingentType: true,
         status:         true,
         createdAt:      true,

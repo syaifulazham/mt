@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Users, Trophy, UserCheck, ChevronRight } from "lucide-react";
+import { Search, Users, Trophy, UserCheck, ChevronRight, Building2 } from "lucide-react";
+import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
@@ -10,6 +11,7 @@ type ContingentRow = {
   id: string;
   name: string;
   shortName: string | null;
+  logoUrl: string | null;
   contingentType: "SCHOOL" | "HIGHER" | "INDEPENDENT" | "INTERNATIONAL";
   status: "ACTIVE" | "SUSPENDED";
   createdAt: string;
@@ -173,10 +175,28 @@ export function ContingentsClient() {
                       {rangeStart + i}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-zinc-900 leading-snug">{row.name}</p>
-                      {row.shortName && (
-                        <p className="text-xs text-zinc-400 mt-0.5">{row.shortName}</p>
-                      )}
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 shrink-0 rounded-md border border-zinc-100 bg-zinc-50 overflow-hidden flex items-center justify-center">
+                          {row.logoUrl ? (
+                            <Image
+                              src={row.logoUrl}
+                              alt={row.shortName ?? row.name}
+                              width={36}
+                              height={36}
+                              className="object-contain h-full w-full"
+                              unoptimized
+                            />
+                          ) : (
+                            <Building2 className="h-4 w-4 text-zinc-300" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-zinc-900 leading-snug">{row.name}</p>
+                          {row.shortName && (
+                            <p className="text-xs text-zinc-400 mt-0.5">{row.shortName}</p>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${TYPE_COLOR[row.contingentType]}`}>
