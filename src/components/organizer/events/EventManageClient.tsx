@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import {
-  ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy,
+  ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -67,6 +67,15 @@ const MODULES: Module[] = [
     bg: "bg-rose-50",
     border: "border-rose-100",
     href: "results",
+  },
+  {
+    icon: UserPlus,
+    title: "Walk-in Registration",
+    description: "Daftar peserta walk-in di kaunter & sahkan kehadiran melalui QR kod.",
+    color: "text-teal-600",
+    bg: "bg-teal-50",
+    border: "border-teal-100",
+    href: "walkin",
   },
 ];
 
