@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Users, Trophy, UserCheck, ChevronRight, Building2 } from "lucide-react";
+import { Search, Users, Trophy, UserCheck, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -187,7 +187,10 @@ export function ContingentsClient() {
                               unoptimized
                             />
                           ) : (
-                            <Building2 className="h-4 w-4 text-zinc-300" />
+                            <svg viewBox="0 0 36 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-7 w-7">
+                              <path d="M18 2L4 8V20C4 28.4 10.2 36.3 18 38C25.8 36.3 32 28.4 32 20V8L18 2Z" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.5" strokeLinejoin="round"/>
+                              <path d="M18 7L9 11V19.5C9 24.7 13 29.5 18 31C23 29.5 27 24.7 27 19.5V11L18 7Z" fill="#CBD5E1"/>
+                            </svg>
                           )}
                         </div>
                         <div>
