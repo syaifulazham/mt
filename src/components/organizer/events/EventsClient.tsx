@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel,
+  Gavel, Copy,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -684,17 +684,20 @@ function ManagerAcceptanceSection({ event, canWrite, onSaved }: {
   );
 }
 
-function PrerequisiteSection({ event, canWrite, onSaved }: {
+function PrerequisiteSection({ event, canWrite, onSaved, onCompetitionsCopied }: {
   event: EventDetail; canWrite: boolean;
   onSaved: (u: Partial<EventDetail>) => void;
+  onCompetitionsCopied: () => void;
 }) {
   const [selected, setSelected] = useState<PrerequisiteEvent[]>(
     event.prerequisites?.map(p => p.prerequisite) ?? []
   );
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [dirty,  setDirty]  = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [err,    setErr]    = useState("");
+  const [dirty,   setDirty]   = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [err,     setErr]     = useState("");
 
   async function save() {
     setSaving(true); setErr("");
@@ -713,6 +716,21 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
   function remove(id: string) {
     setSelected(prev => prev.filter(e => e.id !== id));
     setDirty(true);
+  }
+
+  async function copyCompetitions() {
+    setCopying(true); setCopyMsg(null); setErr("");
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/competitions/copy-from-prerequisites`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Gagal");
+      setCopyMsg(`${json.added} pertandingan disalin, ${json.skipped} sudah wujud`);
+      if (json.added > 0) onCompetitionsCopied();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal menyalin"); }
+    finally { setCopying(false); }
   }
 
   return (
@@ -753,13 +771,22 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
           <p className="text-sm text-zinc-400 italic">Tiada prasyarat ditetapkan.</p>
         )}
 
-        {canWrite && (
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setPickerOpen(true)}>
-            <Search className="h-3.5 w-3.5" />
-            Tambah acara prasyarat
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canWrite && (
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setPickerOpen(true)}>
+              <Search className="h-3.5 w-3.5" />
+              Tambah acara prasyarat
+            </Button>
+          )}
+          {canWrite && selected.length > 0 && (
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50" onClick={copyCompetitions} disabled={copying}>
+              {copying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+              Salin pertandingan dari prasyarat
+            </Button>
+          )}
+        </div>
 
+        {copyMsg && <p className="text-xs text-emerald-600">{copyMsg}</p>}
         {err && <p className="text-xs text-red-500">{err}</p>}
       </SectionCard>
 
@@ -774,7 +801,7 @@ function PrerequisiteSection({ event, canWrite, onSaved }: {
   );
 }
 
-function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite: boolean }) {
+function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: string; canWrite: boolean; refreshKey?: number }) {
   const [links,   setLinks]   = useState<EventCompLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [view,    setView]    = useState<"list" | "form">("list");
@@ -816,7 +843,7 @@ function CompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite:
   }, [eventId]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   const searchComps = useCallback(async (q: string) => {
     setCompSearching(true);
@@ -1204,6 +1231,7 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
 
   const [selected,      setSelected]      = useState<EventDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [compRefreshKey, setCompRefreshKey] = useState(0);
 
   const [states, setStates] = useState<StateOption[]>([]);
   const [zones,  setZones]  = useState<ZoneOption[]>([]);
@@ -1522,8 +1550,8 @@ export function EventsClient({ role }: { role: OrganizerRole }) {
             <DatesSection      event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <VenueSection        event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <ManagerAcceptanceSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
-            <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
-            <CompetitionsSection eventId={selected.id} canWrite={canWrite} />
+            <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
+            <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
           </div>
         )}
       </main>
