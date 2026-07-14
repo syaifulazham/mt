@@ -28,6 +28,17 @@ type TeamRow = {
   memberNames: string | null;
 };
 
+type TrainerRow = {
+  name: string;
+  email: string | null;
+  phoneNumber: string | null;
+  contingentName: string | null;
+  stateName: string | null;
+  teams: bigint;
+  participants: bigint;
+  teamNames: string[] | null;
+};
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -37,7 +48,8 @@ export async function GET(
 
   const { id: eventId } = await params;
   const { searchParams } = req.nextUrl;
-  const type          = searchParams.get("type") === "teams" ? "teams" : "participants";
+  const typeParam     = searchParams.get("type");
+  const type          = typeParam === "teams" ? "teams" : typeParam === "trainers" ? "trainers" : "participants";
   const q             = (searchParams.get("q") ?? "").trim();
   const competitionId = searchParams.get("competitionId") ?? "";
   const stateId       = searchParams.get("stateId") ?? "";
@@ -84,6 +96,67 @@ export async function GET(
       `;
 
       return NextResponse.json({ type, data: rows });
+    }
+
+    if (type === "trainers") {
+      const extraConditions = Prisma.sql`
+        ${competitionId ? Prisma.sql`AND c.id = ${competitionId}` : Prisma.empty}
+        ${stateId ? Prisma.sql`AND COALESCE(s.id, sch_state.id, hi_state.id) = ${stateId}` : Prisma.empty}
+        ${targetGroupId
+          ? Prisma.sql`AND EXISTS (
+              SELECT 1
+              FROM team_members tm2
+              JOIN contestants   p2 ON p2.id = tm2."contestantId"
+              JOIN target_groups tg ON tg.id = ${targetGroupId}
+              WHERE tm2."teamId" = t.id AND ${targetGroupMatchSql("p2", "tg")}
+            )`
+          : Prisma.empty}
+        ${q
+          ? Prisma.sql`AND (tr.name ILIKE ${"%" + q + "%"} OR tr.email ILIKE ${"%" + q + "%"} OR tr."phoneNumber" ILIKE ${"%" + q + "%"} OR cont.name ILIKE ${"%" + q + "%"})`
+          : Prisma.empty}
+      `;
+
+      const rows = await db.$queryRaw<TrainerRow[]>`
+        SELECT
+          tr.name,
+          tr.email,
+          tr."phoneNumber",
+          cont.name AS "contingentName",
+          COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
+          COUNT(DISTINCT t.id)               AS teams,
+          COUNT(DISTINCT tm."contestantId")  AS participants,
+          ARRAY_AGG(DISTINCT t.name ORDER BY t.name) AS "teamNames"
+        FROM trainers tr
+        JOIN team_trainers        tt         ON tt."trainerId" = tr.id
+        JOIN teams                t          ON t.id   = tt."teamId"
+        JOIN team_events          te         ON te."teamId"  = t.id  AND te."eventId" = ${eventId}
+        JOIN competitions         c          ON c.id   = t."competitionId"
+        LEFT JOIN team_members    tm         ON tm."teamId" = t.id
+        LEFT JOIN contingents     cont       ON cont.id = tr."contingentId"
+        LEFT JOIN states          s          ON s.id   = cont."stateId"
+        LEFT JOIN schools         sch        ON sch.id = cont."schoolId"
+        LEFT JOIN states          sch_state  ON sch_state.id = sch."stateId"
+        LEFT JOIN higher_institutions hi     ON hi.id  = cont."higherInstitutionId"
+        LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
+        WHERE 1=1 ${extraConditions}
+        GROUP BY tr.id, tr.name, tr.email, tr."phoneNumber", cont.name,
+          COALESCE(s.name, sch_state.name, hi_state.name)
+        ORDER BY cont.name, tr.name
+      `;
+
+      return NextResponse.json({
+        type,
+        data: rows.map(r => ({
+          name:           r.name,
+          email:          r.email,
+          phoneNumber:    r.phoneNumber,
+          contingentName: r.contingentName,
+          stateName:      r.stateName,
+          teams:          Number(r.teams),
+          participants:   Number(r.participants),
+          teamNames:      r.teamNames ?? [],
+        })),
+      });
     }
 
     // teams
