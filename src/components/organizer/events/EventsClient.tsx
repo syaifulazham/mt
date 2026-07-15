@@ -995,13 +995,13 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                             : "border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-400 hover:text-zinc-600"
                         }`}>
                         <BookOpen className="h-3 w-3 shrink-0" />
-                        <span className="truncate max-w-[160px]">{link.eptimEduCourseTitle ?? "Pautan kursus EptimEdu…"}</span>
+                        <span>{link.eptimEduCourseTitle ?? "Pautan kursus EptimEdu…"}</span>
                         {link.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
                       </button>
                     ) : link.eptimEduCourseId ? (
                       <div className="mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 w-fit">
                         <BookOpen className="h-3 w-3 shrink-0" />
-                        <span className="truncate max-w-[160px]">{link.eptimEduCourseTitle}</span>
+                        <span>{link.eptimEduCourseTitle}</span>
                       </div>
                     ) : null}
                   </div>
