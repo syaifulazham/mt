@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateCompetitionUserFields, deleteCompetition, getAllClusters, slugify } from "@/lib/mapping-db";
+import { getOrganizerSession } from "@/lib/auth/session";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
   const { id } = await params;
   const body = await req.json();
   const {
@@ -33,6 +37,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
   const { id } = await params;
   try {
     deleteCompetition(id);

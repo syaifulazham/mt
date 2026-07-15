@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insertCompetition, getAllClusters, slugify } from "@/lib/mapping-db";
 import { randomUUID } from "crypto";
+import { getOrganizerSession } from "@/lib/auth/session";
 
 export async function POST(req: NextRequest) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
   const body = await req.json();
   const {
     name, slug, cluster_id, is_international, method,

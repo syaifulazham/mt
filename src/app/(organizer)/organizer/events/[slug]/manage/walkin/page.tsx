@@ -25,10 +25,20 @@ export default async function WalkInManagePage({
         orderBy: { createdAt: "asc" },
         select: {
           id: true, competitionId: true, picName: true, maxSlots: true,
-          publishToPortal: true, endpointActive: true, routeSlug: true,
+          publishToPortal: true,
           competition: { select: { id: true, code: true, name: true } },
           _count: { select: { registrations: true } },
+          endpoints: {
+            where: { active: true },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, routeSlug: true, passcode: true, label: true, active: true, createdAt: true },
+          },
         },
+      },
+      walkInEndpoints: {
+        where: { walkInCompetitionId: null, active: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, routeSlug: true, passcode: true, label: true, active: true, createdAt: true },
       },
     },
   });

@@ -3,6 +3,7 @@ import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
 import type { Metadata } from "next";
 import { CompetitionsClient } from "@/components/participant/CompetitionsClient";
+import { WalkInCompetitionsSection } from "@/components/participant/WalkInCompetitionsSection";
 
 const droneEnabled = !!process.env.EPTIMDRONE_API_KEY;
 
@@ -24,24 +25,53 @@ export default async function CompetitionsPage() {
   });
   const enrolledIds = new Set(memberships.map((m) => m.team.competitionId));
 
-  const competitions = await db.competition.findMany({
-    where: {
-      targetGroups: {
-        some: {
-          targetGroup: {
-            schoolLevel: participant.eduLevel,
-            ...(participant.ppki ? {} : { ppki: false }),
+  const [competitions, walkInLinks] = await Promise.all([
+    db.competition.findMany({
+      where: {
+        targetGroups: {
+          some: {
+            targetGroup: {
+              schoolLevel: participant.eduLevel,
+              ...(participant.ppki ? {} : { ppki: false }),
+            },
           },
         },
       },
-    },
-    include: {
-      theme:        { select: { name: true, color: true } },
-      targetGroups: { include: { targetGroup: { select: { ppki: true, schoolLevel: true } } } },
-      docs:         { select: { id: true, name: true, url: true } },
-    },
-    orderBy: { code: "asc" },
-  });
+      include: {
+        theme:        { select: { name: true, color: true } },
+        targetGroups: { include: { targetGroup: { select: { ppki: true, schoolLevel: true } } } },
+        docs:         { select: { id: true, name: true, url: true } },
+      },
+      orderBy: { code: "asc" },
+    }),
+    db.eventWalkInCompetition.findMany({
+      where: {
+        publishToPortal: true,
+        competition: {
+          targetGroups: {
+            some: {
+              targetGroup: {
+                schoolLevel: participant.eduLevel,
+                ...(participant.ppki ? {} : { ppki: false }),
+              },
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        maxSlots: true,
+        _count: { select: { registrations: true } },
+        event: {
+          select: { id: true, name: true, slug: true, venue: true, startDate: true, endDate: true },
+        },
+        competition: {
+          select: { id: true, code: true, name: true, participationType: true },
+        },
+      },
+      orderBy: [{ event: { startDate: "asc" } }, { competition: { code: "asc" } }],
+    }),
+  ]);
 
   const data = competitions.map(comp => ({
     id:                 comp.id,
@@ -60,15 +90,36 @@ export default async function CompetitionsPage() {
     docs:                   comp.docs,
   }));
 
+  const walkInData = walkInLinks.map(wic => ({
+    id:              wic.id,
+    maxSlots:        wic.maxSlots,
+    registrations:   wic._count.registrations,
+    event: {
+      id:        wic.event.id,
+      name:      wic.event.name,
+      slug:      wic.event.slug,
+      venue:     wic.event.venue,
+      startDate: wic.event.startDate?.toISOString() ?? null,
+      endDate:   wic.event.endDate?.toISOString()   ?? null,
+    },
+    competition: wic.competition,
+  }));
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold dark:text-zinc-100">Pertandingan</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Senarai pertandingan yang layak untuk anda sertai
-        </p>
+    <div className="space-y-8">
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-xl font-bold dark:text-zinc-100">Pertandingan</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Senarai pertandingan yang layak untuk anda sertai
+          </p>
+        </div>
+        <CompetitionsClient competitions={data} />
       </div>
-      <CompetitionsClient competitions={data} />
+
+      {walkInData.length > 0 && (
+        <WalkInCompetitionsSection walkInCompetitions={walkInData} />
+      )}
     </div>
   );
 }

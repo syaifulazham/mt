@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { syncFromMaster, getAllClusters, schoolLevelToKey } from "@/lib/mapping-db";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getOrganizerSession } from "@/lib/auth/session";
 
 const LEVEL_KEYS = ["kids", "teens", "youth", "open", "kindergarten"] as const;
 const LEVEL_DESC = {
@@ -58,6 +59,9 @@ ${tgList}`;
 }
 
 export async function POST() {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
   try {
     const themes = await db.theme.findMany({
       orderBy: { name: "asc" },

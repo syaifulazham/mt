@@ -33,7 +33,7 @@ export default async function ParticipantPortalLayout({
           boxShadow:         "var(--pt-header-shadow, none)",
         }}
       >
-        <Link href="/participant/profile" className="flex items-center gap-3">
+        <Link href="/participant/dashboard" className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo-mt.svg"

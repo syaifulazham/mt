@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Swords, Trophy, BookOpen, Award, MessageCircle } from "lucide-react";
+import { LayoutDashboard, User, Swords, Trophy, BookOpen, Award, MessageCircle } from "lucide-react";
 
 const NAV = [
-  { href: "/participant/profile",      icon: User,          label: "Profil" },
-  { href: "/participant/team",         icon: Swords,        label: "Pasukan" },
-  { href: "/participant/competitions", icon: Trophy,        label: "Pertandingan" },
-  { href: "/participant/bengkel",      icon: BookOpen,      label: "Bengkel" },
-  { href: "/participant/certificates", icon: Award,         label: "Sijil" },
-  { href: "/participant/chat",         icon: MessageCircle, label: "AI Rimau" },
-] as const;
+  { href: "/participant/dashboard",    icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/participant/profile",      icon: User,            label: "Profil" },
+  { href: "/participant/team",         icon: Swords,          label: "Pasukan" },
+  { href: "/participant/competitions", icon: Trophy,          label: "Pertandingan" },
+  { href: "/participant/bengkel",      icon: BookOpen,        label: "Bengkel" },
+  { href: "/participant/certificates", icon: Award,           label: "Sijil" },
+  { href: "/participant/chat",         icon: MessageCircle,   label: "AI Rimau" },
+];
 
 export function ParticipantMobileNav() {
   const pathname = usePathname();

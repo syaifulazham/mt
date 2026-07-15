@@ -493,6 +493,7 @@ model Event {
   asPrerequisiteOf    EventPrerequisite[] @relation("EventAsPrerequisite")
   eventCompetitions   EventCompetition[]
   walkInCompetitions  EventWalkInCompetition[]
+  walkInEndpoints     WalkInEndpoint[]
   teamEvents          TeamEvent[]
   resultsEndpoints    ResultsEndpoint[]
 
@@ -589,18 +590,32 @@ model EventWalkInCompetition {
   picContact      String?
   maxSlots        Int      @default(0)
   publishToPortal Boolean  @default(false)
-  routeSlug       String?  @unique
-  passcode        String?
-  endpointActive  Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   event         Event       @relation(fields: [eventId],       references: [id], onDelete: Cascade)
   competition   Competition @relation(fields: [competitionId], references: [id])
   registrations WalkInRegistration[]
+  endpoints     WalkInEndpoint[]
 
   @@unique([eventId, competitionId])
   @@map("event_walkin_competitions")
+}
+
+model WalkInEndpoint {
+  id                  String   @id @default(cuid())
+  eventId             String
+  walkInCompetitionId String?  // null = general endpoint (any competition in the event)
+  routeSlug           String   @unique
+  passcode            String
+  label               String?
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  event             Event                   @relation(fields: [eventId],             references: [id], onDelete: Cascade)
+  walkInCompetition EventWalkInCompetition? @relation(fields: [walkInCompetitionId], references: [id], onDelete: SetNull)
+
+  @@map("walkin_endpoints")
 }
 
 model WalkInRegistration {

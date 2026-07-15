@@ -16,24 +16,38 @@ function randomPasscode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// POST — add a new counter endpoint to this walk-in competition
+// GET — list general (event-level) endpoints
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const { id } = await params;
+
+  const endpoints = await db.walkInEndpoint.findMany({
+    where: { eventId: id, walkInCompetitionId: null, active: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, routeSlug: true, passcode: true, label: true, active: true, createdAt: true },
+  });
+
+  return NextResponse.json({ data: endpoints });
+}
+
+// POST — create a new general (event-level) endpoint
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; wicId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-  const { wicId } = await params;
+  const { id } = await params;
 
   const body = await req.json().catch(() => ({}));
-  const label: string | undefined = body.label?.trim() || undefined;
+  const existingCount = await db.walkInEndpoint.count({ where: { eventId: id, walkInCompetitionId: null } });
+  const label = body.label?.trim() || `Kaunter ${existingCount + 1}`;
 
-  // Auto-label if not provided: "Kaunter N"
-  const existingCount = await db.walkInEndpoint.count({ where: { walkInCompetitionId: wicId } });
-  const resolvedLabel = label ?? `Kaunter ${existingCount + 1}`;
-
-  // Generate unique slug
   let routeSlug = randomSlug();
   for (let attempt = 0; attempt < 5; attempt++) {
     const existing = await db.walkInEndpoint.findUnique({ where: { routeSlug } });
@@ -41,14 +55,8 @@ export async function POST(
     routeSlug = randomSlug();
   }
 
-  const passcode = randomPasscode();
-
-  // Resolve eventId from the WIC
-  const wic = await db.eventWalkInCompetition.findUnique({ where: { id: wicId }, select: { eventId: true } });
-  if (!wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-
   const endpoint = await db.walkInEndpoint.create({
-    data: { eventId: wic.eventId, walkInCompetitionId: wicId, routeSlug, passcode, label: resolvedLabel },
+    data: { eventId: id, walkInCompetitionId: null, routeSlug, passcode: randomPasscode(), label },
     select: { id: true, routeSlug: true, passcode: true, label: true, active: true, createdAt: true },
   });
 

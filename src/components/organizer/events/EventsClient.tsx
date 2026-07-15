@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, lazy, Suspense, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, RefreshCw,
+  Gavel, Copy,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -67,6 +68,7 @@ type EduCourse = {
 type CompSearch = {
   id: string; code: string; name: string; participationType: string;
   targetGroups: { targetGroup: { id: string; name: string } }[];
+  theme?: { id: string; name: string; color: string } | null;
 };
 
 type JudgingTemplateSummary = {
@@ -1218,32 +1220,132 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
 
 type WalkInComp = {
   id: string; competitionId: string;
-  picName: string | null; picContact: string | null; maxSlots: number;
-  publishToPortal: boolean;
-  routeSlug: string | null; passcode: string | null; endpointActive: boolean;
   competition: { id: string; code: string; name: string; participationType: string };
   _count: { registrations: number };
 };
 
+function WalkInPickerModal({ linkedIds, onAdd, onClose }: {
+  linkedIds: Set<string>;
+  onAdd: (competitionId: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [q,            setQ]            = useState("");
+  const [allComps,     setAllComps]     = useState<CompSearch[]>([]);
+  const [loadingComps, setLoadingComps] = useState(true);
+  const [adding,       setAdding]       = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const res = await fetch("/api/v2/organizer/competitions?pageSize=100");
+      const j   = await res.json();
+      setAllComps(j.data ?? []);
+      setLoadingComps(false);
+    }
+    load();
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const filtered = allComps
+    .filter(c =>
+      c.name.toLowerCase().includes(q.toLowerCase()) ||
+      c.code.toLowerCase().includes(q.toLowerCase())
+    )
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  const groups: Record<string, CompSearch[]> = {};
+  for (const c of filtered) {
+    const key = c.theme?.name ?? "Lain-lain";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  }
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === "Lain-lain") return 1;
+    if (b === "Lain-lain") return -1;
+    return a.localeCompare(b);
+  });
+
+  async function handlePick(c: CompSearch) {
+    if (linkedIds.has(c.id) || adding) return;
+    setAdding(c.id);
+    await onAdd(c.id);
+    setAdding(null);
+    onClose();
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl border flex flex-col w-full max-w-2xl max-h-[80vh]"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+          <h2 className="text-sm font-semibold text-zinc-900">Tambah Pertandingan Walk-in</h2>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="px-5 py-3 border-b shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
+            <input value={q} onChange={e => setQ(e.target.value)} autoFocus
+              placeholder="Cari nama atau kod pertandingan…"
+              className="w-full h-9 rounded-lg border border-input bg-background pl-9 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
+          </div>
+        </div>
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+          {loadingComps ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            </div>
+          ) : sortedKeys.length === 0 ? (
+            <p className="text-sm text-zinc-400 text-center py-8">Tiada pertandingan dijumpai.</p>
+          ) : sortedKeys.map(groupName => (
+            <div key={groupName}>
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{groupName}</p>
+              <div className="grid grid-cols-3 gap-2">
+                {groups[groupName].map(c => {
+                  const linked = linkedIds.has(c.id);
+                  return (
+                    <button key={c.id} type="button"
+                      disabled={linked || !!adding}
+                      onClick={() => handlePick(c)}
+                      className={`relative text-left rounded-lg border p-3 transition-colors ${
+                        linked
+                          ? "bg-zinc-50 border-zinc-200 cursor-not-allowed opacity-60"
+                          : adding === c.id
+                          ? "bg-violet-50 border-violet-300"
+                          : "bg-white border-zinc-200 hover:border-violet-300 hover:bg-violet-50"
+                      }`}
+                    >
+                      <p className="text-xs font-medium text-zinc-900 leading-tight line-clamp-2">
+                        <span className="font-mono font-normal text-zinc-400">{c.code}</span> {c.name}
+                      </p>
+                      {linked && (
+                        <span className="absolute top-1.5 right-1.5 text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Ditambah</span>
+                      )}
+                      {adding === c.id && (
+                        <Loader2 className="absolute top-1.5 right-1.5 h-3 w-3 animate-spin text-violet-500" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function WalkInCompetitionsSection({ eventId, canWrite }: { eventId: string; canWrite: boolean }) {
-  const [links,   setLinks]   = useState<WalkInComp[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [view,    setView]    = useState<"list" | "form">("list");
-
-  const [compSearch,    setCompSearch]    = useState("");
-  const [compResults,   setCompResults]   = useState<CompSearch[]>([]);
-  const [compSearching, setCompSearching] = useState(false);
-  const [picked,        setPicked]        = useState<CompSearch | null>(null);
-  const [picName,       setPicName]       = useState("");
-  const [picContact,    setPicContact]    = useState("");
-  const [maxSlots,      setMaxSlots]      = useState(0);
-  const [saving,        setSaving]        = useState(false);
-  const [formErr,       setFormErr]       = useState("");
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [generatingId, setGeneratingId]  = useState<string | null>(null);
-  const [copyMsg,      setCopyMsg]       = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget]  = useState<WalkInComp | null>(null);
+  const [links,        setLinks]        = useState<WalkInComp[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [showPicker,   setShowPicker]   = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<WalkInComp | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1256,57 +1358,13 @@ function WalkInCompetitionsSection({ eventId, canWrite }: { eventId: string; can
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
-  function searchComps(q: string) {
-    setCompSearch(q);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (!q.trim()) { setCompResults([]); return; }
-    searchTimer.current = setTimeout(async () => {
-      setCompSearching(true);
-      const res = await fetch(`/api/v2/organizer/competitions?q=${encodeURIComponent(q)}&pageSize=20`);
-      const j   = await res.json();
-      const linked = new Set(links.map(l => l.competitionId));
-      setCompResults((j.data ?? []).filter((c: CompSearch) => !linked.has(c.id)));
-      setCompSearching(false);
-    }, 300);
-  }
-
-  function resetForm() { setView("list"); setPicked(null); setCompSearch(""); setCompResults([]); setPicName(""); setPicContact(""); setMaxSlots(0); setFormErr(""); }
-
-  async function handleAdd() {
-    if (!picked) return;
-    setSaving(true); setFormErr("");
-    try {
-      const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitionId: picked.id, picName, picContact, maxSlots }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "Gagal");
-      setLinks(prev => [...prev, j.data]);
-      resetForm();
-    } catch (e) { setFormErr(e instanceof Error ? e.message : "Gagal"); }
-    finally { setSaving(false); }
-  }
-
-  async function togglePortal(wic: WalkInComp) {
-    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wic.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publishToPortal: !wic.publishToPortal }),
+  async function handleAdd(competitionId: string) {
+    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ competitionId }),
     });
-    if (res.ok) setLinks(prev => prev.map(l => l.id === wic.id ? { ...l, publishToPortal: !wic.publishToPortal } : l));
-  }
-
-  async function generateEndpoint(wic: WalkInComp) {
-    setGeneratingId(wic.id);
-    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wic.id}/endpoint`, { method: "POST" });
-    const j   = await res.json();
-    if (res.ok) setLinks(prev => prev.map(l => l.id === wic.id ? { ...l, ...j.data } : l));
-    setGeneratingId(null);
-  }
-
-  async function deactivateEndpoint(wic: WalkInComp) {
-    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wic.id}/endpoint`, { method: "DELETE" });
-    if (res.ok) setLinks(prev => prev.map(l => l.id === wic.id ? { ...l, endpointActive: false, routeSlug: null, passcode: null } : l));
+    const j = await res.json();
+    if (res.ok) setLinks(prev => [...prev, j.data]);
   }
 
   async function handleDelete() {
@@ -1315,18 +1373,16 @@ function WalkInCompetitionsSection({ eventId, canWrite }: { eventId: string; can
     if (res.ok) { setLinks(prev => prev.filter(l => l.id !== deleteTarget.id)); setDeleteTarget(null); }
   }
 
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text).then(() => { setCopyMsg("Disalin!"); setTimeout(() => setCopyMsg(null), 2000); });
-  }
-
   if (loading) return null;
+
+  const linkedIds = new Set(links.map(l => l.competitionId));
 
   return (
     <>
       <SectionCard
         title="Pertandingan Walk-in"
-        action={canWrite && view === "list" && (
-          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => setView("form")}>
+        action={canWrite && (
+          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => setShowPicker(true)}>
             <Plus className="h-3.5 w-3.5" /> Tambah
           </Button>
         )}
@@ -1335,138 +1391,38 @@ function WalkInCompetitionsSection({ eventId, canWrite }: { eventId: string; can
           Pertandingan walk-in boleh menggunakan pertandingan yang sama tetapi pendaftaran dan keputusan adalah berasingan.
         </p>
 
-        {view === "list" ? (
-          links.length === 0 ? (
-            <p className="text-sm text-zinc-400 italic">Tiada pertandingan walk-in ditambah.</p>
-          ) : (
-            <div className="space-y-3">
-              {links.map(wic => (
-                <div key={wic.id} className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-3 space-y-2.5">
-                  {/* Header row */}
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-zinc-900">{wic.competition.name}</p>
-                      <p className="text-[11px] text-zinc-400 font-mono">{wic.competition.code}</p>
-                      {wic.picName && <p className="text-xs text-zinc-500 mt-0.5">PIC: {wic.picName}{wic.picContact ? ` · ${wic.picContact}` : ""}</p>}
-                    </div>
-                    <span className="text-[10px] text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full whitespace-nowrap">
-                      {wic._count.registrations} daftar
-                      {wic.maxSlots > 0 ? ` / ${wic.maxSlots}` : ""}
-                    </span>
-                    {canWrite && (
-                      <button type="button" onClick={() => setDeleteTarget(wic)}
-                        className="text-zinc-300 hover:text-red-500 transition-colors shrink-0">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Publish to portal toggle */}
-                  {canWrite && (
-                    <div className="flex items-center gap-2">
-                      <button type="button" role="switch" aria-checked={wic.publishToPortal}
-                        onClick={() => togglePortal(wic)}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${wic.publishToPortal ? "bg-emerald-500" : "bg-zinc-200"}`}
-                      >
-                        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wic.publishToPortal ? "translate-x-4" : "translate-x-0"}`} />
-                      </button>
-                      <span className="text-xs text-zinc-600">Siarkan ke portal peserta</span>
-                      {wic.publishToPortal && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Aktif</span>}
-                    </div>
-                  )}
-
-                  {/* Counter endpoint */}
-                  {canWrite && (
-                    <div className="space-y-1.5">
-                      {wic.endpointActive && wic.routeSlug ? (
-                        <div className="rounded-md bg-indigo-50 border border-indigo-100 px-3 py-2 space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded font-medium">AKTIF</span>
-                            <span className="text-xs text-zinc-500">Endpoint kaunter</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <code className="text-xs text-indigo-700 truncate flex-1">/walkin/{wic.routeSlug}</code>
-                            <button type="button" onClick={() => copyToClipboard(`${window.location.origin}/walkin/${wic.routeSlug}`)}
-                              className="text-indigo-400 hover:text-indigo-700 transition-colors shrink-0">
-                              <Copy className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-zinc-500">Passcode:</span>
-                            <code className="text-xs font-bold tracking-widest text-zinc-800">{wic.passcode}</code>
-                          </div>
-                          <div className="flex items-center gap-2 pt-0.5">
-                            <Button size="sm" variant="outline" className="h-6 text-[11px] gap-1"
-                              onClick={() => generateEndpoint(wic)} disabled={generatingId === wic.id}>
-                              {generatingId === wic.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                              Jana semula
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-6 text-[11px] text-red-600 border-red-200 hover:bg-red-50"
-                              onClick={() => deactivateEndpoint(wic)}>
-                              Nyahaktif
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                          onClick={() => generateEndpoint(wic)} disabled={generatingId === wic.id}>
-                          {generatingId === wic.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
-                          Jana endpoint kaunter
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {copyMsg && <p className="text-xs text-emerald-600">{copyMsg}</p>}
-            </div>
-          )
+        {links.length === 0 ? (
+          <p className="text-sm text-zinc-400 italic">Tiada pertandingan walk-in ditambah.</p>
         ) : (
-          /* Add form */
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
-              <input value={compSearch} onChange={e => searchComps(e.target.value)}
-                placeholder="Cari pertandingan…"
-                className="w-full h-9 rounded-lg border border-input bg-background pl-9 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
-              {compSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-zinc-400" />}
-            </div>
-            {compResults.length > 0 && (
-              <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
-                {compResults.map(c => (
-                  <button key={c.id} type="button"
-                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${picked?.id === c.id ? "bg-violet-50" : "hover:bg-zinc-50"}`}
-                    onClick={() => setPicked(c)}>
-                    {picked?.id === c.id && <Check className="h-3.5 w-3.5 text-violet-500 shrink-0" />}
-                    <span className="flex-1 truncate">{c.name}</span>
-                    <span className="text-[11px] text-zinc-400 font-mono shrink-0">{c.code}</span>
+          <div className="space-y-2">
+            {links.map(wic => (
+              <div key={wic.id} className="rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2.5 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-900 truncate">{wic.competition.name}</p>
+                  <p className="text-[11px] text-zinc-400 font-mono">{wic.competition.code}</p>
+                </div>
+                <span className="text-[10px] text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+                  {wic._count.registrations} daftar
+                </span>
+                {canWrite && (
+                  <button type="button" onClick={() => setDeleteTarget(wic)}
+                    className="text-zinc-300 hover:text-red-500 transition-colors shrink-0">
+                    <Trash2 className="h-4 w-4" />
                   </button>
-                ))}
+                )}
               </div>
-            )}
-            {picked && (
-              <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-sm font-medium text-violet-800">
-                {picked.name} <span className="font-mono text-xs font-normal ml-1">{picked.code}</span>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <input value={picName} onChange={e => setPicName(e.target.value)} placeholder="Nama PIC (pilihan)"
-                className="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
-              <input value={picContact} onChange={e => setPicContact(e.target.value)} placeholder="Hubungi PIC (pilihan)"
-                className="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
-            </div>
-            <input type="number" value={maxSlots} onChange={e => setMaxSlots(Number(e.target.value))} placeholder="Maks slot (0 = tiada had)"
-              className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
-            {formErr && <p className="text-xs text-red-500">{formErr}</p>}
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd} disabled={!picked || saving} className="gap-1">
-                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Tambah
-              </Button>
-              <Button size="sm" variant="outline" onClick={resetForm}>Batal</Button>
-            </div>
+            ))}
           </div>
         )}
       </SectionCard>
+
+      {showPicker && (
+        <WalkInPickerModal
+          linkedIds={linkedIds}
+          onAdd={handleAdd}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
 
       <DeleteDialog
         open={!!deleteTarget}

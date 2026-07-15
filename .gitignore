@@ -56,3 +56,4 @@ data/
 *.db-wal
 
 public/uploads/states/
+public/uploads/themes/
