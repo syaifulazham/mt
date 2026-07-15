@@ -974,50 +974,69 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
             </div>
           )}
           {!loading && links.length > 0 && (
-            <div className="divide-y">
-              {links.map(link => (
-                <div key={link.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0 group">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{link.competition.name}</p>
-                    <p className="text-xs font-mono text-zinc-400">{link.competition.code}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-zinc-400">
-                      {link.picName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{link.picName}</span>}
-                      {link.picContact && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{link.picContact}</span>}
-                      {link.maxTeams > 0 && <span>Maks {link.maxTeams} pasukan</span>}
-                      <span className="text-zinc-300">{link.competition._count.teams} berdaftar</span>
-                    </div>
-                    {/* EptimEdu course badge / link button */}
-                    {canWrite ? (
-                      <button type="button" onClick={() => setLinkCourseFor(link)}
-                        className={`mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors w-fit ${
-                          link.eptimEduCourseId
-                            ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
-                            : "border border-dashed border-zinc-300 text-zinc-400 hover:border-zinc-400 hover:text-zinc-600"
-                        }`}>
-                        <BookOpen className="h-3 w-3 shrink-0" />
-                        <span>{link.eptimEduCourseTitle ?? "Pautan kursus EptimEdu…"}</span>
-                        {link.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
-                      </button>
-                    ) : link.eptimEduCourseId ? (
-                      <div className="mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 w-fit">
-                        <BookOpen className="h-3 w-3 shrink-0" />
-                        <span>{link.eptimEduCourseTitle}</span>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-left text-zinc-400">
+                  <th className="pb-2 font-medium">Pertandingan</th>
+                  <th className="pb-2 font-medium text-right pr-1">Berdaftar</th>
+                  {canWrite && <th className="pb-2 w-12" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {links.map(link => (
+                  <tr key={link.id} className="group align-top">
+                    <td className="py-2.5 pr-4">
+                      <p className="text-sm font-medium text-zinc-900">
+                        <span className="font-mono text-zinc-400 mr-1.5">{link.competition.code}</span>
+                        {link.competition.name}
+                      </p>
+                      {/* EptimEdu course badge / link button */}
+                      <div className="mt-1">
+                        {canWrite ? (
+                          <button type="button" onClick={() => setLinkCourseFor(link)}
+                            className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors w-fit ${
+                              link.eptimEduCourseId
+                                ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                                : "border border-dashed border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600"
+                            }`}>
+                            <BookOpen className="h-3 w-3 shrink-0" />
+                            <span>{link.eptimEduCourseTitle ?? "Pautan kursus EptimEdu…"}</span>
+                            {link.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
+                          </button>
+                        ) : link.eptimEduCourseId ? (
+                          <div className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 w-fit">
+                            <BookOpen className="h-3 w-3 shrink-0" />
+                            <span>{link.eptimEduCourseTitle}</span>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                  {canWrite && (
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity">
-                      <button onClick={() => openEdit(link)} className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600">
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                      </button>
-                      <button onClick={() => setDeleteTarget(link)} className="p-1 rounded hover:bg-red-50 text-red-400">
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                      {(link.picName || link.picContact || link.maxTeams > 0) && (
+                        <div className="flex items-center gap-3 mt-1 text-zinc-400">
+                          {link.picName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{link.picName}</span>}
+                          {link.picContact && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{link.picContact}</span>}
+                          {link.maxTeams > 0 && <span>Maks {link.maxTeams} pasukan</span>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums text-zinc-600 font-medium pr-1 whitespace-nowrap">
+                      {link.competition._count.teams}
+                    </td>
+                    {canWrite && (
+                      <td className="py-2.5">
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => openEdit(link)} className="p-1 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600">
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                          </button>
+                          <button onClick={() => setDeleteTarget(link)} className="p-1 rounded hover:bg-red-50 text-red-400">
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </>
       )}
