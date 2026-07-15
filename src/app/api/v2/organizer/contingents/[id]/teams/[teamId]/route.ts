@@ -12,12 +12,39 @@ export async function GET(
   const { id, teamId } = await params;
 
   const team = await db.team.findUnique({
-    where: { id: teamId },
+    where: { id: teamId, contingentId: id },
     select: {
       id: true,
       email: true,
       lmsUserId: true,
       lmsCourseEnrolled: true,
+      competition: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          eptimEduCourseId: true,
+          eptimEduCourseTitle: true,
+        },
+      },
+      teamEvents: {
+        select: {
+          event: {
+            select: {
+              id: true,
+              name: true,
+              eventCompetitions: {
+                where: { competition: { teams: { some: { id: teamId } } } },
+                select: {
+                  eptimEduCourseId: true,
+                  eptimEduCourseTitle: true,
+                },
+                take: 1,
+              },
+            },
+          },
+        },
+      },
       members: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -43,9 +70,25 @@ export async function GET(
 
   if (!team) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Guard: team must belong to the contingent
-  const belongs = await db.team.count({ where: { id: teamId, contingentId: id } });
-  if (!belongs) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Flatten event courses: use event-specific override, fall back to competition default
+  const eventCourses = team.teamEvents.map((te) => {
+    const ec = te.event.eventCompetitions[0];
+    return {
+      eventId: te.event.id,
+      eventName: te.event.name,
+      courseId: ec?.eptimEduCourseId ?? team.competition?.eptimEduCourseId ?? null,
+      courseTitle: ec?.eptimEduCourseTitle ?? team.competition?.eptimEduCourseTitle ?? null,
+    };
+  });
 
-  return NextResponse.json(team);
+  return NextResponse.json({
+    id: team.id,
+    email: team.email,
+    lmsUserId: team.lmsUserId,
+    lmsCourseEnrolled: team.lmsCourseEnrolled,
+    competition: team.competition,
+    eventCourses,
+    members: team.members,
+    trainers: team.trainers,
+  });
 }

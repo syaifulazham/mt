@@ -824,6 +824,8 @@ type TeamDetail = {
   email: string | null;
   lmsUserId: string | null;
   lmsCourseEnrolled: boolean;
+  competition: { id: string; code: string; name: string; eptimEduCourseId: string | null; eptimEduCourseTitle: string | null } | null;
+  eventCourses: { eventId: string; eventName: string; courseId: string | null; courseTitle: string | null }[];
   members: { id: string; participant: { id: string; name: string; ic: string | null; email: string | null; gender: string; age: number | null; eduLevel: string; status: string } }[];
   trainers: { trainer: { id: string; name: string; ic: string | null; phoneNumber: string | null; status: string } }[];
 };
@@ -912,6 +914,41 @@ function TeamsTab({ contingentId, teams }: {
                         <span className="text-zinc-400 font-mono">{detail.email}</span>
                       )}
                     </div>
+
+                    {/* Event course assignments */}
+                    {detail.eventCourses.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-2">
+                          Course Assignments
+                        </h4>
+                        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead className="bg-slate-100 border-b border-slate-200">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Event</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Course</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {detail.eventCourses.map((ec) => (
+                                <tr key={ec.eventId} className="hover:bg-slate-50">
+                                  <td className="px-3 py-2 text-zinc-700">{ec.eventName}</td>
+                                  <td className="px-3 py-2">
+                                    {ec.courseId ? (
+                                      <span className="text-zinc-800">
+                                        {ec.courseTitle ?? ec.courseId}
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-400">No course assigned</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Members */}
                     <div>
