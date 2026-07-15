@@ -390,8 +390,13 @@ function CameraQrScanner({ onScan, onError }: {
 
   // Auto-start on mount unless the user previously closed it manually.
   // Component remounts after each ConfirmCard dismissal, resetting manuallyOff to false.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { startScanner(); }, []);
+  // Deferred via setTimeout so setState calls inside startScanner don't run
+  // synchronously within the effect body (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    const id = setTimeout(() => { startScanner(); }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleManualStop() {
     setManuallyOff(true);
