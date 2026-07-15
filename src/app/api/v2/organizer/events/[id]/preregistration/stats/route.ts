@@ -73,13 +73,17 @@ export async function GET(
       `,
       db.$queryRaw<GradeRow[]>`
         SELECT
-          p."eduLevel"   AS "eduLevel",
-          p."classGrade" AS "classGrade",
+          p."eduLevel" AS "eduLevel",
+          CASE WHEN p."eduLevel" = 'YOUTH' THEN 'Belia'
+               ELSE p."classGrade"
+          END AS "classGrade",
           COUNT(DISTINCT p.id) AS count
         ${fromJoins}
-        WHERE p."classGrade" IS NOT NULL
-        GROUP BY p."eduLevel", p."classGrade"
-        ORDER BY p."eduLevel", p."classGrade"
+        WHERE (p."classGrade" IS NOT NULL OR p."eduLevel" = 'YOUTH')
+        GROUP BY p."eduLevel",
+                 CASE WHEN p."eduLevel" = 'YOUTH' THEN 'Belia' ELSE p."classGrade" END
+        ORDER BY p."eduLevel",
+                 CASE WHEN p."eduLevel" = 'YOUTH' THEN 'Belia' ELSE p."classGrade" END
       `,
       db.$queryRaw<StateRow[]>`
         SELECT

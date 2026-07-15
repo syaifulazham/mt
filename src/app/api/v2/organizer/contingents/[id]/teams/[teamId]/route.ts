@@ -15,13 +15,16 @@ export async function GET(
     where: { id: teamId },
     select: {
       id: true,
+      email: true,
+      lmsUserId: true,
+      lmsCourseEnrolled: true,
       members: {
         orderBy: { createdAt: "asc" },
         select: {
           id: true,
           participant: {
             select: {
-              id: true, name: true, ic: true, gender: true,
+              id: true, name: true, ic: true, email: true, gender: true,
               age: true, eduLevel: true, status: true,
             },
           },
@@ -38,7 +41,7 @@ export async function GET(
     },
   });
 
-  if (!team || !team) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!team) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Guard: team must belong to the contingent
   const belongs = await db.team.count({ where: { id: teamId, contingentId: id } });

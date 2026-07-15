@@ -821,7 +821,10 @@ function ManagersTab({
 
 type TeamDetail = {
   id: string;
-  members: { id: string; participant: { id: string; name: string; ic: string | null; gender: string; age: number | null; eduLevel: string; status: string } }[];
+  email: string | null;
+  lmsUserId: string | null;
+  lmsCourseEnrolled: boolean;
+  members: { id: string; participant: { id: string; name: string; ic: string | null; email: string | null; gender: string; age: number | null; eduLevel: string; status: string } }[];
   trainers: { trainer: { id: string; name: string; ic: string | null; phoneNumber: string | null; status: string } }[];
 };
 
@@ -895,6 +898,21 @@ function TeamsTab({ contingentId, teams }: {
                   <p className="text-sm text-zinc-400 text-center py-4">Loading…</p>
                 ) : (
                   <>
+                    {/* EptimEdu enrolment badge */}
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="font-semibold uppercase tracking-widest text-zinc-500">EptimEdu</span>
+                      {detail.lmsUserId ? (
+                        detail.lmsCourseEnrolled
+                          ? <span className="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2 py-0.5 text-green-700 font-medium">Enrolled</span>
+                          : <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 border border-yellow-200 px-2 py-0.5 text-yellow-700 font-medium">Account only</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 border border-zinc-200 px-2 py-0.5 text-zinc-500">Not enrolled</span>
+                      )}
+                      {detail.email && (
+                        <span className="text-zinc-400 font-mono">{detail.email}</span>
+                      )}
+                    </div>
+
                     {/* Members */}
                     <div>
                       <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-2">
@@ -910,6 +928,7 @@ function TeamsTab({ contingentId, teams }: {
                                 <th className="px-3 py-2 text-left font-medium text-zinc-500 w-6">#</th>
                                 <th className="px-3 py-2 text-left font-medium text-zinc-500">Name</th>
                                 <th className="px-3 py-2 text-left font-medium text-zinc-500">IC</th>
+                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Email</th>
                                 <th className="px-3 py-2 text-left font-medium text-zinc-500">Gender</th>
                                 <th className="px-3 py-2 text-left font-medium text-zinc-500">Age</th>
                                 <th className="px-3 py-2 text-left font-medium text-zinc-500">Level</th>
@@ -922,6 +941,7 @@ function TeamsTab({ contingentId, teams }: {
                                   <td className="px-3 py-2 text-zinc-400 tabular-nums">{i + 1}</td>
                                   <td className="px-3 py-2 font-medium text-zinc-800">{m.participant.name}</td>
                                   <td className="px-3 py-2 text-zinc-500 font-mono">{m.participant.ic ?? "—"}</td>
+                                  <td className="px-3 py-2 text-zinc-500">{m.participant.email ?? "—"}</td>
                                   <td className="px-3 py-2 text-zinc-500">{m.participant.gender}</td>
                                   <td className="px-3 py-2 text-zinc-500 tabular-nums">{m.participant.age ?? "—"}</td>
                                   <td className="px-3 py-2 text-zinc-500">{m.participant.eduLevel}</td>
