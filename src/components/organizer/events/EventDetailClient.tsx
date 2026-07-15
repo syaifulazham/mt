@@ -419,13 +419,13 @@ function CompetitionCard({
             }`}
           >
             <BookOpen className="h-3 w-3 shrink-0" />
-            <span className="truncate">{ec.eptimEduCourseTitle ?? "Link EptimEdu course…"}</span>
+            <span className="flex-1 text-left">{ec.eptimEduCourseTitle ?? "Link EptimEdu course…"}</span>
             {ec.eptimEduCourseId && <Link2 className="h-3 w-3 shrink-0 ml-auto opacity-60" />}
           </button>
         ) : ec.eptimEduCourseId ? (
           <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
             <BookOpen className="h-3 w-3 shrink-0" />
-            <span className="truncate">{ec.eptimEduCourseTitle}</span>
+            <span>{ec.eptimEduCourseTitle}</span>
           </div>
         ) : null}
 
