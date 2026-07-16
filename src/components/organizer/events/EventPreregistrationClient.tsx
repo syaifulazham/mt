@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
   ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download, ListChecks,
+  CheckSquare, Square, X,
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
@@ -62,6 +63,22 @@ type EventSummary = {
   name: string;
   slug: string;
   prerequisites: { prerequisite: { id: string; name: string; slug: string } }[];
+};
+
+type PrereqTeam = {
+  id: string;
+  name: string;
+  contingentName: string | null;
+  competitionCode: string | null;
+  competitionName: string | null;
+  members: number;
+  alreadyRegistered: boolean;
+};
+
+type PrereqGroup = {
+  id: string;
+  name: string;
+  teams: PrereqTeam[];
 };
 
 type StatsSummary = {
@@ -261,6 +278,8 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   // Load-from-prerequisite modal
   type PrereqModalState =
     | { phase: "loading" }
+    | { phase: "picking"; groups: PrereqGroup[]; selectedIds: Set<string> }
+    | { phase: "saving" }
     | { phase: "success"; added: number; skipped: number }
     | { phase: "error"; message: string };
   const [prereqModal, setPrereqModal] = useState<PrereqModalState | null>(null);
@@ -553,13 +572,42 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }
 
+  // Step 1: fetch prerequisite teams and show picker
   async function handleLoadFromPrerequisite() {
     if (!event.prerequisites?.length) return;
     setPrereqModal({ phase: "loading" });
     try {
       const res = await fetch(
         `/api/v2/organizer/events/${event.id}/preregistration/load-from-prerequisite`,
-        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      const groups: PrereqGroup[] = json.groups ?? [];
+      // Pre-select all teams not yet registered
+      const initialSelected = new Set<string>();
+      for (const g of groups) {
+        for (const t of g.teams) {
+          if (!t.alreadyRegistered) initialSelected.add(t.id);
+        }
+      }
+      setPrereqModal({ phase: "picking", groups, selectedIds: initialSelected });
+    } catch (e: unknown) {
+      setPrereqModal({ phase: "error", message: e instanceof Error ? e.message : "Gagal memuatkan senarai pasukan." });
+    }
+  }
+
+  // Step 2: POST the chosen IDs
+  async function handleConfirmLoad(selectedIds: Set<string>) {
+    if (selectedIds.size === 0) return;
+    setPrereqModal({ phase: "saving" });
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/preregistration/load-from-prerequisite`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamIds: [...selectedIds] }),
+        },
       );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Ralat");
@@ -1162,26 +1210,182 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
 
       {/* Load-from-prerequisite modal */}
       {prereqModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className={`bg-white rounded-2xl shadow-xl w-full mx-auto flex flex-col ${
+            prereqModal.phase === "picking" ? "max-w-2xl max-h-[90vh]" : "max-w-sm"
+          }`}>
+
+            {/* Loading — fetching team list */}
             {prereqModal.phase === "loading" && (
-              <>
-                <div className="flex flex-col items-center gap-3 py-4">
-                  <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 text-indigo-500 animate-spin" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-semibold text-zinc-900">Memuatkan pasukan…</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">
-                      Mendaftarkan pasukan terpilih dari acara prasyarat
-                    </p>
-                  </div>
+              <div className="p-6 flex flex-col items-center gap-3 py-10">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 text-indigo-500 animate-spin" />
                 </div>
-              </>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-zinc-900">Memuatkan senarai pasukan…</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Mengambil pasukan dari acara prasyarat</p>
+                </div>
+              </div>
             )}
 
+            {/* Saving — registering selected teams */}
+            {prereqModal.phase === "saving" && (
+              <div className="p-6 flex flex-col items-center gap-3 py-10">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 text-indigo-500 animate-spin" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-zinc-900">Mendaftarkan pasukan…</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Sila tunggu sebentar</p>
+                </div>
+              </div>
+            )}
+
+            {/* Picker */}
+            {prereqModal.phase === "picking" && (() => {
+              const { groups, selectedIds } = prereqModal;
+              const allPickable = groups.flatMap(g => g.teams.filter(t => !t.alreadyRegistered).map(t => t.id));
+              const allSelected = allPickable.length > 0 && allPickable.every(id => selectedIds.has(id));
+
+              function toggleTeam(id: string) {
+                setPrereqModal(prev => {
+                  if (prev?.phase !== "picking") return prev;
+                  const next = new Set(prev.selectedIds);
+                  next.has(id) ? next.delete(id) : next.add(id);
+                  return { ...prev, selectedIds: next };
+                });
+              }
+
+              function toggleAll() {
+                setPrereqModal(prev => {
+                  if (prev?.phase !== "picking") return prev;
+                  const next = allSelected ? new Set<string>() : new Set(allPickable);
+                  return { ...prev, selectedIds: next };
+                });
+              }
+
+              function toggleGroup(g: PrereqGroup) {
+                const groupPickable = g.teams.filter(t => !t.alreadyRegistered).map(t => t.id);
+                const groupAllSel = groupPickable.every(id => selectedIds.has(id));
+                setPrereqModal(prev => {
+                  if (prev?.phase !== "picking") return prev;
+                  const next = new Set(prev.selectedIds);
+                  groupPickable.forEach(id => groupAllSel ? next.delete(id) : next.add(id));
+                  return { ...prev, selectedIds: next };
+                });
+              }
+
+              const totalTeams = groups.reduce((s, g) => s + g.teams.length, 0);
+
+              return (
+                <>
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-900">Pilih Pasukan dari Prasyarat</h3>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        {totalTeams} pasukan ditemui · {selectedIds.size} dipilih
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={toggleAll}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-zinc-200 hover:bg-zinc-50 transition-colors text-zinc-600"
+                      >
+                        {allSelected
+                          ? <><CheckSquare className="h-3.5 w-3.5 text-indigo-600" /> Nyah-pilih Semua</>
+                          : <><Square className="h-3.5 w-3.5" /> Pilih Semua</>}
+                      </button>
+                      <button onClick={() => setPrereqModal(null)} className="rounded-lg p-1.5 hover:bg-zinc-100 transition-colors">
+                        <X className="h-4 w-4 text-zinc-500" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Team list */}
+                  <div className="overflow-y-auto flex-1 divide-y">
+                    {groups.map(g => {
+                      const groupPickable = g.teams.filter(t => !t.alreadyRegistered);
+                      const groupAllSel = groupPickable.length > 0 && groupPickable.every(t => selectedIds.has(t.id));
+                      return (
+                        <div key={g.id}>
+                          {/* Group header */}
+                          <div className="flex items-center justify-between px-5 py-2.5 bg-zinc-50 border-b sticky top-0">
+                            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">{g.name}</p>
+                            {groupPickable.length > 0 && (
+                              <button
+                                onClick={() => toggleGroup(g)}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                              >
+                                {groupAllSel ? "Nyah-pilih kumpulan" : "Pilih kumpulan"}
+                              </button>
+                            )}
+                          </div>
+                          {/* Teams */}
+                          {g.teams.length === 0 ? (
+                            <p className="px-5 py-3 text-xs text-zinc-400 italic">Tiada pasukan</p>
+                          ) : g.teams.map(t => (
+                            <label
+                              key={t.id}
+                              className={`flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-colors ${
+                                t.alreadyRegistered
+                                  ? "opacity-50 cursor-default bg-zinc-50"
+                                  : selectedIds.has(t.id)
+                                    ? "bg-indigo-50 hover:bg-indigo-100"
+                                    : "hover:bg-zinc-50"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={t.alreadyRegistered || selectedIds.has(t.id)}
+                                disabled={t.alreadyRegistered}
+                                onChange={() => !t.alreadyRegistered && toggleTeam(t.id)}
+                                className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-zinc-900 truncate">{t.name}</p>
+                                <p className="text-xs text-zinc-400 truncate">{t.contingentName ?? "—"}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                {t.competitionCode && (
+                                  <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{t.competitionCode}</span>
+                                )}
+                                <p className="text-xs text-zinc-400 mt-0.5">{t.members} ahli</p>
+                              </div>
+                              {t.alreadyRegistered && (
+                                <span className="text-xs text-emerald-600 font-medium shrink-0">Sudah daftar</span>
+                              )}
+                            </label>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between gap-3 px-5 py-4 border-t shrink-0">
+                    <button
+                      onClick={() => setPrereqModal(null)}
+                      className="px-4 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={() => handleConfirmLoad(selectedIds)}
+                      disabled={selectedIds.size === 0}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ListChecks className="h-4 w-4" />
+                      Muat {selectedIds.size} pasukan terpilih
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* Success */}
             {prereqModal.phase === "success" && (
-              <>
+              <div className="p-6 space-y-5">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
                     <ListChecks className="h-4 w-4 text-emerald-600" />
@@ -1193,7 +1397,6 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                     </p>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-center">
                     <p className="text-2xl font-bold tabular-nums text-emerald-700">{prereqModal.added}</p>
@@ -1204,24 +1407,23 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                     <p className="text-xs text-zinc-400 mt-0.5">Sudah wujud</p>
                   </div>
                 </div>
-
                 {prereqModal.added === 0 && (
                   <p className="text-xs text-zinc-500 text-center">
-                    Semua pasukan terpilih sudah didaftarkan ke acara ini.
+                    Semua pasukan yang dipilih sudah didaftarkan ke acara ini.
                   </p>
                 )}
-
                 <button
                   onClick={() => setPrereqModal(null)}
                   className="w-full px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
                 >
                   Tutup
                 </button>
-              </>
+              </div>
             )}
 
+            {/* Error */}
             {prereqModal.phase === "error" && (
-              <>
+              <div className="p-6 space-y-5">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
                     <Trash2 className="h-4 w-4 text-red-600" />
@@ -1245,8 +1447,9 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                     Cuba Lagi
                   </button>
                 </div>
-              </>
+              </div>
             )}
+
           </div>
         </div>
       )}
