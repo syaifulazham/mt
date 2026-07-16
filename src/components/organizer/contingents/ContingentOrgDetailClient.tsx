@@ -838,6 +838,50 @@ function TeamsTab({ contingentId, teams }: {
   const [details,   setDetails]   = useState<Record<string, TeamDetail>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
+  // Per-team, per-course enrolment tracking: teamId → Set of enrolled courseIds
+  const [enrolledMap,  setEnrolledMap]  = useState<Record<string, Set<string>>>({});
+  const [enrolling,    setEnrolling]    = useState<{ teamId: string; courseId: string } | null>(null);
+  const [enrolError,   setEnrolError]   = useState<{ teamId: string; courseId: string; message: string } | null>(null);
+
+  // Seed enrolledMap when a team detail loads for the first time
+  function seedEnrolled(teamId: string, detail: TeamDetail) {
+    if (!detail.lmsCourseEnrolled) return;
+    const ids = detail.eventCourses.map((ec) => ec.courseId).filter(Boolean) as string[];
+    if (ids.length > 0)
+      setEnrolledMap((prev) => ({ ...prev, [teamId]: new Set(ids) }));
+  }
+
+  async function handleEnrol(teamId: string, courseId: string) {
+    setEnrolling({ teamId, courseId });
+    setEnrolError(null);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/contingents/${contingentId}/teams/${teamId}/enrol-course`,
+        { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ courseId }) },
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        setEnrolError({ teamId, courseId, message: json.error ?? "Enrolment failed." });
+      } else {
+        setEnrolledMap((prev) => {
+          const existing = new Set(prev[teamId] ?? []);
+          existing.add(courseId);
+          return { ...prev, [teamId]: existing };
+        });
+        // Update cached detail so the badge also reflects enrolled state
+        setDetails((prev) => {
+          const d = prev[teamId];
+          return d ? { ...prev, [teamId]: { ...d, lmsCourseEnrolled: true } } : prev;
+        });
+      }
+    } catch {
+      setEnrolError({ teamId, courseId, message: "Network error. Please try again." });
+    } finally {
+      setEnrolling(null);
+    }
+  }
+
   async function toggle(teamId: string) {
     if (expanded === teamId) { setExpanded(null); return; }
     setExpanded(teamId);
@@ -847,6 +891,7 @@ function TeamsTab({ contingentId, teams }: {
       const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/teams/${teamId}`);
       const json = await res.json();
       setDetails((prev) => ({ ...prev, [teamId]: json }));
+      seedEnrolled(teamId, json);
     } finally { setLoadingId(null); }
   }
 
@@ -916,39 +961,91 @@ function TeamsTab({ contingentId, teams }: {
                     </div>
 
                     {/* Event course assignments */}
-                    {detail.eventCourses.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-2">
-                          Course Assignments
-                        </h4>
-                        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-                          <table className="w-full text-xs">
-                            <thead className="bg-slate-100 border-b border-slate-200">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Event</th>
-                                <th className="px-3 py-2 text-left font-medium text-zinc-500">Course</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {detail.eventCourses.map((ec) => (
-                                <tr key={ec.eventId} className="hover:bg-slate-50">
-                                  <td className="px-3 py-2 text-zinc-700">{ec.eventName}</td>
-                                  <td className="px-3 py-2">
-                                    {ec.courseId ? (
-                                      <span className="text-zinc-800">
-                                        {ec.courseTitle ?? ec.courseId}
-                                      </span>
-                                    ) : (
-                                      <span className="text-zinc-400">No course assigned</span>
-                                    )}
-                                  </td>
+                    {detail.eventCourses.length > 0 && (() => {
+                      const hasUnenrolled = detail.eventCourses.some(
+                        (ec) => ec.courseId && !(enrolledMap[t.id]?.has(ec.courseId)),
+                      );
+                      return (
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                            Course Assignments
+                          </h4>
+
+                          {/* Callout — shown only when at least one course is unenrolled */}
+                          {hasUnenrolled && (
+                            <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                              <p className="text-xs text-amber-800 leading-relaxed">
+                                This team has not been enrolled in the assigned course(s) on EptimEdu.
+                                Click the <strong>Enrol</strong> button on the relevant row to register them.
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                            <table className="w-full text-xs">
+                              <thead className="bg-slate-100 border-b border-slate-200">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Event</th>
+                                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Course</th>
+                                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Status</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {detail.eventCourses.map((ec) => {
+                                  const enrolled = ec.courseId
+                                    ? (enrolledMap[t.id]?.has(ec.courseId) ?? false)
+                                    : false;
+                                  const isEnrolling = enrolling?.teamId === t.id
+                                    && enrolling?.courseId === ec.courseId;
+                                  const needsEnrol = !!ec.courseId && !enrolled;
+                                  return (
+                                    <tr key={ec.eventId} className={needsEnrol ? "bg-amber-50/40 hover:bg-amber-50" : "hover:bg-slate-50"}>
+                                      <td className="px-3 py-2 text-zinc-700">{ec.eventName}</td>
+                                      <td className="px-3 py-2">
+                                        {ec.courseId ? (
+                                          <span className="text-zinc-800">
+                                            {ec.courseTitle ?? ec.courseId}
+                                          </span>
+                                        ) : (
+                                          <span className="text-zinc-400">No course assigned</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {!ec.courseId ? (
+                                          <span className="text-zinc-300">—</span>
+                                        ) : enrolled ? (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2 py-0.5 text-green-700 font-medium">
+                                            <Check className="h-3 w-3" /> Enrolled
+                                          </span>
+                                        ) : (
+                                          /* Pulsing ring wrapper */
+                                          <span className="relative inline-flex">
+                                            {!isEnrolling && (
+                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-40 pointer-events-none" />
+                                            )}
+                                            <button
+                                              type="button"
+                                              disabled={isEnrolling || !!enrolling}
+                                              onClick={() => handleEnrol(t.id, ec.courseId!)}
+                                              className="relative inline-flex items-center gap-1 rounded-full border border-blue-400 bg-blue-600 px-2.5 py-0.5 text-white font-semibold shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                              {isEnrolling
+                                                ? <><Loader2 className="h-3 w-3 animate-spin" /> Enrolling…</>
+                                                : "Enrol"}
+                                            </button>
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Members */}
                     <div>
@@ -1040,6 +1137,41 @@ function TeamsTab({ contingentId, teams }: {
           </div>
         );
       })}
+
+      {/* Enrolment error modal */}
+      <Dialog open={!!enrolError} onOpenChange={(open) => { if (!open) setEnrolError(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              Enrolment Failed
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-zinc-700">{enrolError?.message}</p>
+            {enrolError && (
+              <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2 text-xs text-zinc-500 font-mono space-y-0.5">
+                <p>Team ID: {enrolError.teamId}</p>
+                <p>Course ID: {enrolError.courseId}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEnrolError(null)}>Close</Button>
+            <Button
+              onClick={() => {
+                if (enrolError) {
+                  const { teamId, courseId } = enrolError;
+                  setEnrolError(null);
+                  handleEnrol(teamId, courseId);
+                }
+              }}
+            >
+              Retry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
