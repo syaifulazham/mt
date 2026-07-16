@@ -824,6 +824,7 @@ type TeamDetail = {
   email: string | null;
   lmsUserId: string | null;
   lmsCourseEnrolled: boolean;
+  enrolledCourseIds: string[];
   competition: { id: string; code: string; name: string; eptimEduCourseId: string | null; eptimEduCourseTitle: string | null } | null;
   eventCourses: { eventId: string; eventName: string; courseId: string | null; courseTitle: string | null }[];
   members: { id: string; participant: { id: string; name: string; ic: string | null; email: string | null; gender: string; age: number | null; eduLevel: string; status: string } }[];
@@ -843,12 +844,10 @@ function TeamsTab({ contingentId, teams }: {
   const [enrolling,    setEnrolling]    = useState<{ teamId: string; courseId: string } | null>(null);
   const [enrolError,   setEnrolError]   = useState<{ teamId: string; courseId: string; message: string } | null>(null);
 
-  // Seed enrolledMap when a team detail loads for the first time
+  // Seed enrolledMap from EptimEdu-verified course IDs returned by the API
   function seedEnrolled(teamId: string, detail: TeamDetail) {
-    if (!detail.lmsCourseEnrolled) return;
-    const ids = detail.eventCourses.map((ec) => ec.courseId).filter(Boolean) as string[];
-    if (ids.length > 0)
-      setEnrolledMap((prev) => ({ ...prev, [teamId]: new Set(ids) }));
+    const ids = detail.enrolledCourseIds ?? [];
+    setEnrolledMap((prev) => ({ ...prev, [teamId]: new Set(ids) }));
   }
 
   async function handleEnrol(teamId: string, courseId: string) {
@@ -872,7 +871,9 @@ function TeamsTab({ contingentId, teams }: {
         // Update cached detail so the badge also reflects enrolled state
         setDetails((prev) => {
           const d = prev[teamId];
-          return d ? { ...prev, [teamId]: { ...d, lmsCourseEnrolled: true } } : prev;
+          if (!d) return prev;
+          const ids = Array.from(new Set([...d.enrolledCourseIds, courseId]));
+          return { ...prev, [teamId]: { ...d, lmsCourseEnrolled: true, enrolledCourseIds: ids } };
         });
       }
     } catch {

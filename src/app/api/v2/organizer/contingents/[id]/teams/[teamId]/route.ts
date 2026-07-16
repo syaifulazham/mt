@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { eptimEdu, eptimEduConfigured } from "@/lib/eptimedu";
+
+function emailToUsername(email: string): string {
+  return email
+    .toLowerCase()
+    .replace(/@/g, "_at_")
+    .replace(/[^a-z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 40)
+    .padEnd(3, "x");
+}
 
 export async function GET(
   _req: NextRequest,
@@ -81,11 +93,47 @@ export async function GET(
     };
   });
 
+  // Verify actual EptimEdu enrolment per course (real-time, falls back to DB flag on error)
+  let enrolledCourseIds: string[] = [];
+  if (team.email && eptimEduConfigured()) {
+    try {
+      const username = emailToUsername(team.email);
+      const result = await eptimEdu.getUserEnrolments(username);
+      // Handle both array and { enrolments: [] } response shapes
+      const raw: unknown[] = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.enrolments)
+          ? result.enrolments
+          : [];
+      enrolledCourseIds = raw
+        .map((e) => (e as { courseId?: string })?.courseId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+      // Sync DB flag if it no longer matches reality (fire-and-forget)
+      const actuallyEnrolled = enrolledCourseIds.length > 0;
+      if (actuallyEnrolled !== team.lmsCourseEnrolled) {
+        db.team.update({ where: { id: teamId }, data: { lmsCourseEnrolled: actuallyEnrolled } }).catch(() => {});
+      }
+    } catch {
+      // EptimEdu unavailable — fall back to DB flag conservatively
+      if (team.lmsCourseEnrolled) {
+        enrolledCourseIds = eventCourses
+          .map((ec) => ec.courseId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0);
+      }
+    }
+  } else if (team.lmsCourseEnrolled) {
+    enrolledCourseIds = eventCourses
+      .map((ec) => ec.courseId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+  }
+
   return NextResponse.json({
     id: team.id,
     email: team.email,
     lmsUserId: team.lmsUserId,
     lmsCourseEnrolled: team.lmsCourseEnrolled,
+    enrolledCourseIds,
     competition: team.competition,
     eventCourses,
     members: team.members,
