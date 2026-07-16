@@ -129,7 +129,7 @@ export default async function TeamPage() {
                     </span>
                   </p>
                 </div>
-                {team.lmsUserId && (
+                {(team.lmsUserId || comp.eptimEduCourseId) && (
                   <EptimEduLoginButton teamId={team.id} />
                 )}
               </div>

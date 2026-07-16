@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       team: {
         select: {
           id: true,
+          name: true,
           email: true,
           lmsUserId: true,
           competitionId: true,
@@ -54,9 +55,9 @@ export async function POST(req: NextRequest) {
 
   const team = membership.team;
 
-  if (!team.lmsUserId || !team.email) {
+  if (!team.email) {
     return NextResponse.json(
-      { error: "Akaun Bengkel MT pasukan belum didaftarkan. Hubungi pengurus pasukan anda." },
+      { error: "Pasukan tidak mempunyai alamat emel. Hubungi pengurus pasukan anda." },
       { status: 400 },
     );
   }
@@ -75,14 +76,38 @@ export async function POST(req: NextRequest) {
     courseId = team.competition.eptimEduCourseId ?? null;
   }
 
+  if (!courseId && !team.lmsUserId) {
+    return NextResponse.json(
+      { error: "Tiada kursus ditetapkan untuk acara ini. Hubungi pengurus anda." },
+      { status: 400 },
+    );
+  }
+
   // Enrol team in the course (force=true bypasses invite-only restrictions).
-  // Best-effort: fire-and-forget so a slow/failed enrol doesn't block the SSO token.
-  // The team's lmsUserId is already set, so the account exists; enrolment can be
-  // retried transparently on the next sign-in once the LMS recovers.
+  // enrol() also auto-provisions the LMS account if it doesn't exist yet.
   if (courseId) {
-    eptimEdu.enrol(username, courseId, { force: true }).catch((e: unknown) => {
-      console.error("[bengkel/signin POST] enrol error (non-fatal):", e instanceof Error ? e.message : e, { username, courseId });
-    });
+    try {
+      const enrolResult = await eptimEdu.enrol(username, courseId, { force: true, name: team.name });
+      // If this was the first enrolment, persist the new lmsUserId
+      if (enrolResult?.userId && !team.lmsUserId) {
+        db.team.update({
+          where: { id: team.id },
+          data: { lmsUserId: enrolResult.userId, lmsCourseEnrolled: true },
+        }).catch(() => {});
+      }
+    } catch (e: unknown) {
+      const httpStatus = (e as { status?: number }).status;
+      if (httpStatus === 409) {
+        // Already enrolled — fine, continue to SSO
+      } else {
+        console.error("[bengkel/signin POST] enrol error:", e instanceof Error ? e.message : e, { username, courseId });
+        // If the account has never been provisioned, SSO will also fail — surface the error
+        if (!team.lmsUserId) {
+          const msg = e instanceof Error ? e.message : "Gagal mendaftar kursus. Cuba lagi atau hubungi pentadbir.";
+          return NextResponse.json({ error: msg }, { status: 422 });
+        }
+      }
+    }
   }
 
   // Generate SSO token
