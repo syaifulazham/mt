@@ -62,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         select: {
           id: true, name: true, status: true,
           competition: { select: { id: true, code: true, name: true, participationType: true } },
-          _count: { select: { members: true } },
+          _count: { select: { members: true, teamEvents: true } },
         },
       },
       _count: { select: { participants: true } },

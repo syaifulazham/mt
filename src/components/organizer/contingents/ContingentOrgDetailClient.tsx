@@ -66,7 +66,7 @@ type ManagerMember = {
 type TeamRow = {
   id: string; name: string; status: string;
   competition: { id: string; code: string; name: string; participationType: string } | null;
-  _count: { members: number };
+  _count: { members: number; teamEvents: number };
 };
 
 type Participant = {
@@ -911,16 +911,20 @@ function TeamsTab({ contingentId, teams }: {
         const isLoading = loadingId === t.id;
         const detail    = details[t.id];
 
+        const inEvent = t._count.teamEvents > 0;
+
         return (
-          <div key={t.id}>
+          <div key={t.id} className={inEvent ? "border-l-4 border-green-400" : "border-l-4 border-transparent"}>
             {/* Row */}
             <button
               type="button"
               onClick={() => toggle(t.id)}
-              className="w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors flex items-center gap-3"
+              className={`w-full text-left px-4 py-3 transition-colors flex items-center gap-3 ${
+                inEvent ? "bg-green-50 hover:bg-green-100" : "hover:bg-zinc-50"
+              }`}
             >
-              <ChevronRight className={`h-4 w-4 text-zinc-400 shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`} />
-              <div className="flex-1 min-w-0 grid grid-cols-[1fr_1fr_auto_auto_auto] items-center gap-4 text-sm">
+              <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${inEvent ? "text-green-500" : "text-zinc-400"} ${isOpen ? "rotate-90" : ""}`} />
+              <div className="flex-1 min-w-0 grid grid-cols-[1fr_1fr_auto_auto_auto_auto] items-center gap-4 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium text-zinc-900 truncate">{t.name}</p>
                   {t.competition && <p className="text-xs text-zinc-400 font-mono mt-0.5">{t.competition.code}</p>}
@@ -932,6 +936,11 @@ function TeamsTab({ contingentId, teams }: {
                 <span className="text-xs text-zinc-500 tabular-nums whitespace-nowrap">
                   {t._count.members} member{t._count.members !== 1 ? "s" : ""}
                 </span>
+                {inEvent
+                  ? <Badge variant="outline" className="text-xs text-green-700 border-green-400 bg-green-100 whitespace-nowrap">
+                      {t._count.teamEvents} event{t._count.teamEvents !== 1 ? "s" : ""}
+                    </Badge>
+                  : <Badge variant="outline" className="text-xs text-zinc-400 border-zinc-200 bg-zinc-50">No event</Badge>}
                 {t.status === "ACTIVE"
                   ? <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-50">Active</Badge>
                   : <Badge variant="outline" className="text-xs text-zinc-500">{t.status}</Badge>}
