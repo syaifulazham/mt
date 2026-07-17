@@ -197,6 +197,8 @@ model School {
   category      SchoolCategory
   categoryShort String?
   isActive      Boolean        @default(true)
+  latitude      Float?
+  longitude     Float?
 
   state      State     @relation(fields: [stateId], references: [id])
   zone       Zone?     @relation(fields: [zoneId], references: [id])

@@ -45,7 +45,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 async function runDistanceProcessing(
   eventId: string,
-  schools: { contingentId: string; schoolName: string; stateName: string; districtName: string }[],
+  schools: { contingentId: string; schoolName: string; stateName: string; districtName: string; schoolLat: number | null; schoolLng: number | null }[],
   eventLat: number,
   eventLng: number,
   eventStateName: string,
@@ -81,16 +81,18 @@ async function runDistanceProcessing(
     });
 
     // Compute distances
+    // Prefer actual school coordinates; fall back to state centroid
     const centroid = STATE_CENTROIDS[school.stateName];
-    if (!centroid) {
+    const schoolLat = school.schoolLat ?? centroid?.[0];
+    const schoolLng = school.schoolLng ?? centroid?.[1];
+
+    if (schoolLat == null || schoolLng == null) {
       await db.contingentDistance.updateMany({
         where: { eventId, contingentId: school.contingentId, status: "PROCESSING" },
         data: { status: "ERROR" },
       });
       continue;
     }
-
-    const [schoolLat, schoolLng] = centroid;
     const airKm       = Math.round(haversineKm(schoolLat, schoolLng, eventLat, eventLng));
     const crossRegion = getRegion(school.stateName) !== eventRegion;
     const roadKm      = crossRegion ? null : Math.round(airKm * 1.35);
@@ -139,7 +141,9 @@ export async function POST(
               id:   true,
               school: {
                 select: {
-                  name:     true,
+                  name:      true,
+                  latitude:  true,
+                  longitude: true,
                   state:    { select: { name: true } },
                   district: { select: { name: true } },
                 },
@@ -154,6 +158,7 @@ export async function POST(
   // Deduplicate by contingentId; only school-linked contingents
   const allSchools = new Map<string, {
     contingentId: string; schoolName: string; stateName: string; districtName: string;
+    schoolLat: number | null; schoolLng: number | null;
   }>();
   for (const te of teamEvents) {
     const c = te.team.contingent;
@@ -163,6 +168,8 @@ export async function POST(
       schoolName:   c.school.name,
       stateName:    c.school.state?.name    ?? "",
       districtName: c.school.district?.name ?? "",
+      schoolLat:    c.school.latitude       ?? null,
+      schoolLng:    c.school.longitude      ?? null,
     });
   }
 

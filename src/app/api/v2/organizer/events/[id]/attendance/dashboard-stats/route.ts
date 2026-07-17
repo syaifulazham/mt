@@ -54,7 +54,9 @@ export async function GET(
               managers: { select: { id: true } },
               school: {
                 select: {
-                  name: true,
+                  name:      true,
+                  latitude:  true,
+                  longitude: true,
                   state:    { select: { name: true } },
                   district: { select: { name: true } },
                 },
@@ -159,6 +161,7 @@ export async function GET(
   const contingentLocations: {
     contingentId: string; name: string;
     schoolName: string | null; stateName: string | null; districtName: string | null;
+    schoolLat: number | null; schoolLng: number | null;
     present: boolean;
   }[] = [];
 
@@ -169,9 +172,11 @@ export async function GET(
     contingentLocations.push({
       contingentId: c.id,
       name:         c.name,
-      schoolName:   c.school?.name       ?? null,
-      stateName:    c.school?.state?.name  ?? null,
-      districtName: c.school?.district?.name ?? null,
+      schoolName:   c.school?.name              ?? null,
+      stateName:    c.school?.state?.name        ?? null,
+      districtName: c.school?.district?.name     ?? null,
+      schoolLat:    c.school?.latitude           ?? null,
+      schoolLng:    c.school?.longitude          ?? null,
       present:      contingentMap.get(c.id)?.present ?? false,
     });
   }

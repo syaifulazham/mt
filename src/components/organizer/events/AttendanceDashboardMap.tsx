@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Marker, Popup, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
+// State centroids — fallback when a school has no lat/lng
 const STATE_CENTROIDS: Record<string, [number, number]> = {
   "Johor":           [1.9344,  103.3587],
   "Kedah":           [5.7964,  100.6497],
@@ -40,7 +41,6 @@ const VIEW_LABELS: Record<ViewKey, string> = {
   fit:        "Semua Kontingen",
 };
 
-// Imperatively fits the map bounds whenever the `bounds` prop changes key
 function MapBoundsController({ bounds }: { bounds: [[number, number], [number, number]] | null }) {
   const map = useMap();
   const prevKey = useRef<string>("");
@@ -54,7 +54,6 @@ function MapBoundsController({ bounds }: { bounds: [[number, number], [number, n
   return null;
 }
 
-// Venue marker icon fix (Next.js can't inline leaflet CSS assets)
 function FixLeafletIcons() {
   const map = useMap();
   useEffect(() => {
@@ -78,6 +77,8 @@ export type ContingentLocation = {
   schoolName: string | null;
   stateName: string | null;
   districtName: string | null;
+  schoolLat: number | null;
+  schoolLng: number | null;
   present: boolean;
 };
 
@@ -96,40 +97,35 @@ export default function AttendanceDashboardMap({
 }: Props) {
   const [view, setView] = useState<ViewKey>("malaysia");
 
-  // Group contingents by state
-  const stateGroups = new Map<string, { total: number; present: number; items: ContingentLocation[] }>();
-  for (const c of contingentLocations) {
-    const state = c.stateName ?? "Lain-lain";
-    if (!stateGroups.has(state)) stateGroups.set(state, { total: 0, present: 0, items: [] });
-    const g = stateGroups.get(state)!;
-    g.total++;
-    if (c.present) g.present++;
-    g.items.push(c);
-  }
+  // Resolve each contingent's plot position: school lat/lng → state centroid → skip
+  const plottable = contingentLocations.map((c) => {
+    const lat = c.schoolLat ?? (c.stateName ? STATE_CENTROIDS[c.stateName]?.[0] : undefined);
+    const lng = c.schoolLng ?? (c.stateName ? STATE_CENTROIDS[c.stateName]?.[1] : undefined);
+    return lat != null && lng != null ? { ...c, lat, lng, exactCoords: c.schoolLat != null } : null;
+  }).filter((c): c is NonNullable<typeof c> => c !== null);
 
-  // Compute "fit" bounds from state centroids of active contingents + event location
+  // "Fit" bounds: cover all plotted contingents + event location
   const fitBounds: [[number, number], [number, number]] | null = (() => {
-    const points: [number, number][] = [];
-    for (const [state] of stateGroups.entries()) {
-      const c = STATE_CENTROIDS[state];
-      if (c) points.push(c);
-    }
+    const points: [number, number][] = plottable.map((c) => [c.lat, c.lng]);
     if (eventLat != null && eventLng != null) points.push([eventLat, eventLng]);
     if (points.length === 0) return null;
     const lats = points.map((p) => p[0]);
     const lngs = points.map((p) => p[1]);
     return [
-      [Math.min(...lats) - 0.5, Math.min(...lngs) - 0.5],
-      [Math.max(...lats) + 0.5, Math.max(...lngs) + 0.5],
+      [Math.min(...lats) - 0.3, Math.min(...lngs) - 0.3],
+      [Math.max(...lats) + 0.3, Math.max(...lngs) + 0.3],
     ];
   })();
 
   const activeBounds: [[number, number], [number, number]] | null =
     view === "fit" ? fitBounds : PRESET_BOUNDS[view];
 
+  const presentCount = plottable.filter((c) => c.present).length;
+  const exactCount   = plottable.filter((c) => c.exactCoords).length;
+
   return (
     <div className="relative">
-      {/* View toggle buttons — overlaid on top-right of map */}
+      {/* View toggle */}
       <div className="absolute top-3 right-3 z-[1000] flex rounded-lg overflow-hidden shadow border border-zinc-200 bg-white text-[11px] font-semibold">
         {(["malaysia", "peninsular", "sabah", "sarawak", "fit"] as ViewKey[]).map((v, i) => (
           <button
@@ -138,15 +134,22 @@ export default function AttendanceDashboardMap({
             className={[
               "px-2.5 py-1.5 transition-colors whitespace-nowrap",
               i > 0 ? "border-l border-zinc-200" : "",
-              view === v
-                ? "bg-zinc-900 text-white"
-                : "bg-white text-zinc-600 hover:bg-zinc-100",
+              view === v ? "bg-zinc-900 text-white" : "bg-white text-zinc-600 hover:bg-zinc-100",
             ].join(" ")}
           >
             {VIEW_LABELS[v]}
           </button>
         ))}
       </div>
+
+      {/* Coordinate source note */}
+      {plottable.length > 0 && (
+        <div className="absolute bottom-8 left-3 z-[1000] bg-white/90 backdrop-blur-sm rounded px-2 py-1 text-[10px] text-zinc-500 shadow">
+          {exactCount > 0
+            ? <><span className="font-semibold text-zinc-700">{exactCount}</span> koordinat sebenar · <span className="font-semibold text-zinc-700">{plottable.length - exactCount}</span> anggaran negeri</>
+            : `${plottable.length} plot (anggaran negeri)`}
+        </div>
+      )}
 
       <MapContainer
         center={[4.5, 109.5]}
@@ -171,52 +174,55 @@ export default function AttendanceDashboardMap({
           </Marker>
         )}
 
-        {/* State cluster circles */}
-        {[...stateGroups.entries()].map(([state, g]) => {
-          const centroid = STATE_CENTROIDS[state];
-          if (!centroid) return null;
-
-          const allPresent  = g.present === g.total && g.total > 0;
-          const nonePresent = g.present === 0;
-          const fillColor = allPresent ? "#10b981" : nonePresent ? "#ef4444" : "#f59e0b";
-          const radius = Math.max(18, Math.min(40, 12 + g.total * 2.5));
-
-          return (
-            <CircleMarker
-              key={state}
-              center={centroid}
-              radius={radius}
-              pathOptions={{
-                color: "white",
-                weight: 2.5,
-                fillColor,
-                fillOpacity: 0.82,
-              }}
-            >
-              <Tooltip permanent direction="center" opacity={1}>
-                <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700 }}>
-                  {g.present}/{g.total}
-                </span>
-              </Tooltip>
-              <Popup maxWidth={280}>
-                <div style={{ fontSize: 12 }}>
-                  <p style={{ fontWeight: 700, marginBottom: 4 }}>{state}</p>
-                  <p style={{ marginBottom: 6 }}>
-                    Hadir: <strong>{g.present}</strong> / {g.total} kontingen
-                  </p>
-                  <ul style={{ maxHeight: 160, overflowY: "auto", paddingLeft: 0, listStyle: "none", margin: 0 }}>
-                    {g.items.map((c) => (
-                      <li key={c.contingentId} style={{ color: c.present ? "#059669" : "#dc2626", marginBottom: 2 }}>
-                        {c.present ? "✓" : "✗"} {c.schoolName ?? c.name}
-                      </li>
-                    ))}
-                  </ul>
+        {/* Individual contingent markers */}
+        {plottable.map((c) => (
+          <CircleMarker
+            key={c.contingentId}
+            center={[c.lat, c.lng]}
+            radius={c.exactCoords ? 8 : 6}
+            pathOptions={{
+              color:       c.present ? "#059669" : "#dc2626",
+              weight:      c.exactCoords ? 2 : 1.5,
+              fillColor:   c.present ? "#10b981" : "#ef4444",
+              fillOpacity: c.exactCoords ? 0.85 : 0.55,
+              dashArray:   c.exactCoords ? undefined : "4 2",
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -6]}>
+              <div style={{ fontSize: 11, maxWidth: 200 }}>
+                <div style={{ fontWeight: 700 }}>{c.schoolName ?? c.name}</div>
+                {c.districtName && <div style={{ color: "#6b7280" }}>{c.districtName}, {c.stateName}</div>}
+                <div style={{ color: c.present ? "#059669" : "#dc2626", marginTop: 2 }}>
+                  {c.present ? "✓ Hadir" : "✗ Belum hadir"}
                 </div>
-              </Popup>
-            </CircleMarker>
-          );
-        })}
+                {!c.exactCoords && <div style={{ color: "#9ca3af", fontSize: 10, marginTop: 2 }}>* koordinat anggaran negeri</div>}
+              </div>
+            </Tooltip>
+          </CircleMarker>
+        ))}
       </MapContainer>
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 px-1 pt-2 text-[11px] text-zinc-500">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full bg-emerald-500 border-2 border-emerald-700" />
+          Hadir ({presentCount})
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full bg-red-400 border-2 border-red-600" />
+          Belum hadir ({plottable.length - presentCount})
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full bg-blue-500 border-2 border-blue-700" />
+          Lokasi Acara
+        </span>
+        {plottable.length - exactCount > 0 && (
+          <span className="flex items-center gap-1.5 text-zinc-400">
+            <span className="inline-block h-3 w-3 rounded-full border border-dashed border-zinc-400" style={{ background: "rgba(239,68,68,0.4)" }} />
+            Anggaran (tiada koordinat)
+          </span>
+        )}
+      </div>
     </div>
   );
 }
