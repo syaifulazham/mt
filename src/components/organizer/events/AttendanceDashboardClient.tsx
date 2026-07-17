@@ -568,8 +568,8 @@ function DistanceModal({
                 Berhenti
               </button>
             )}
-            {/* Restart button — shown when all done, not currently processing */}
-            {allDone && !anyProcessing && doneRows.length > 0 && (
+            {/* Restart button — shown whenever there are done records and not currently processing */}
+            {doneRows.length > 0 && !anyProcessing && (
               <button
                 onClick={() => void handleReset()}
                 disabled={startLoading}
