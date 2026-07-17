@@ -58,7 +58,7 @@ export async function POST(
     return NextResponse.json({ error: "NO_SCHOOL_COORDINATES" }, { status: 400 });
 
   const airKm       = Math.round(haversineKm(school.latitude, school.longitude, event.latitude, event.longitude));
-  const crossRegion = getRegion(school.state?.name) !== getRegion(event.state?.name);
+  const crossRegion = getRegion(school.state?.name ?? null) !== getRegion(event.state?.name ?? null);
   const roadKm      = crossRegion ? null : Math.round(airKm * 1.35);
   const waterKm     = crossRegion ? airKm : null;
 
