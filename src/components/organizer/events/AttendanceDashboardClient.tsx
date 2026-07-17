@@ -251,6 +251,15 @@ function DistanceModal({
     };
   }, [eventId]);
 
+  async function handleReset() {
+    try {
+      await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-records`, { method: "DELETE" });
+      setRecords([]);
+      // Immediately kick off fresh processing
+      void handleStart();
+    } catch { /* ignore */ }
+  }
+
   async function handleStop() {
     try {
       await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-table/stop`, { method: "POST" });
@@ -557,6 +566,17 @@ function DistanceModal({
               >
                 <X className="h-3 w-3" />
                 Berhenti
+              </button>
+            )}
+            {/* Restart button — shown when all done, not currently processing */}
+            {allDone && !anyProcessing && doneRows.length > 0 && (
+              <button
+                onClick={() => void handleReset()}
+                disabled={startLoading}
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-300 hover:bg-zinc-100 disabled:opacity-40 text-zinc-600 text-[11px] font-semibold px-3 py-1.5 transition-colors"
+              >
+                {startLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                Kira Semula
               </button>
             )}
             {/* Start button */}
