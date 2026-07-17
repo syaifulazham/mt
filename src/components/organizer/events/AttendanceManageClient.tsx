@@ -409,7 +409,7 @@ export function AttendanceManageClient({ event }: { event: EventSummary }) {
     }
   }, [event.id]);
 
-  useEffect(() => { fetchEndpoints(); }, [fetchEndpoints]);
+  useEffect(() => { fetchEndpoints(); }, [fetchEndpoints]); // eslint-disable-line react-hooks/set-state-in-effect
 
   async function handleToggleActive(ep: Endpoint) {
     setActionBusy(ep.id);

@@ -377,8 +377,8 @@ export function EventManageClient({
   const mainColors   = [...new Set(MAIN_CONNECTIONS.map(c => c.color))];
   const walkinColors = [...new Set(WALKIN_CONNECTIONS.map(c => c.color))];
 
-  const main   = useArrows(MAIN_CONNECTIONS);
-  const walkin = useArrows(WALKIN_CONNECTIONS);
+  const { wrapRef: mainWrapRef,   arrows: mainArrows,   svgH: mainSvgH   } = useArrows(MAIN_CONNECTIONS);
+  const { wrapRef: walkinWrapRef, arrows: walkinArrows, svgH: walkinSvgH } = useArrows(WALKIN_CONNECTIONS);
 
   const mainH   = ROW[2] + CARD_H + 24;
   const walkinH = CARD_H + 24;
@@ -411,10 +411,10 @@ export function EventManageClient({
       {/* ── Main flow ── */}
       <div className="overflow-x-auto">
         <div
-          ref={main.wrapRef}
+          ref={mainWrapRef}
           style={{ position: "relative", width: CANVAS_W, height: mainH }}
         >
-          <ArrowSvg arrows={main.arrows} height={main.svgH} colors={mainColors} />
+          <ArrowSvg arrows={mainArrows} height={mainSvgH} colors={mainColors} />
           {mainModules.map(mod => (
             <ModuleCard key={mod.title} mod={mod} eventSlug={event.slug} />
           ))}
@@ -432,10 +432,10 @@ export function EventManageClient({
         </div>
         <div className="overflow-x-auto">
           <div
-            ref={walkin.wrapRef}
+            ref={walkinWrapRef}
             style={{ position: "relative", width: CANVAS_W, height: walkinH }}
           >
-            <ArrowSvg arrows={walkin.arrows} height={walkin.svgH} colors={walkinColors} />
+            <ArrowSvg arrows={walkinArrows} height={walkinSvgH} colors={walkinColors} />
             {WALKIN_MODULES.map(mod => (
               <ModuleCard key={mod.title} mod={mod} eventSlug={event.slug} />
             ))}

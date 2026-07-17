@@ -233,7 +233,7 @@ export function EventAttendanceConfirmedClient({ event }: { event: EventSummary 
       .finally(() => setStatsLoading(false));
   }, [event.id]);
 
-  useEffect(() => { loadStats(); }, [loadStats]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadStats(); }, [loadStats]); // eslint-disable-line react-hooks/set-state-in-effect
 
   const loadTeams = useCallback(async () => {
     setTeamsLoading(true);
@@ -298,13 +298,13 @@ export function EventAttendanceConfirmedClient({ event }: { event: EventSummary 
     }
   }, [event.id, trainersPage, debouncedQ, competitionId, stateId, targetGroupId]);
 
-  useEffect(() => { setPage(1); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setTeamsPage(1); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setTrainersPage(1); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { setTeamsPage(1); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { setTrainersPage(1); }, [debouncedQ, competitionId, stateId, targetGroupId]); // eslint-disable-line react-hooks/set-state-in-effect
 
-  useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadTeams(); }, [loadTeams]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadTrainers(); }, [loadTrainers]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { loadTeams(); }, [loadTeams]); // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { loadTrainers(); }, [loadTrainers]); // eslint-disable-line react-hooks/set-state-in-effect
 
   async function toggleAttendance(team: Team) {
     setToggling(team.id);
