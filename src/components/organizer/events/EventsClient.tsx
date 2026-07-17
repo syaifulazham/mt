@@ -815,6 +815,15 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
   const [saving,     setSaving]     = useState(false);
   const [formErr,    setFormErr]    = useState("");
 
+  // Copy-from-event dialog state
+  const [copyOpen,      setCopyOpen]      = useState(false);
+  const [copyQ,         setCopyQ]         = useState("");
+  const [copyList,      setCopyList]      = useState<EventListItem[]>([]);
+  const [copySearching, setCopySearching] = useState(false);
+  const [copyPicked,    setCopyPicked]    = useState<EventListItem | null>(null);
+  const [copying,       setCopying]       = useState(false);
+  const [copyMsg,       setCopyMsg]       = useState("");
+
   const [compSearch,    setCompSearch]    = useState("");
   const [compResults,   setCompResults]   = useState<CompSearch[]>([]);
   const [compSearching, setCompSearching] = useState(false);
@@ -953,11 +962,49 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
     load();
   }
 
+  const copySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!copyOpen) return;
+    if (copySearchTimer.current) clearTimeout(copySearchTimer.current);
+    copySearchTimer.current = setTimeout(async () => {
+      setCopySearching(true);
+      try {
+        const res = await fetch(`/api/v2/organizer/events?q=${encodeURIComponent(copyQ)}&pageSize=20`);
+        const j = await res.json();
+        setCopyList((j.data ?? []).filter((e: EventListItem) => e.id !== eventId));
+      } finally { setCopySearching(false); }
+    }, 300);
+    return () => { if (copySearchTimer.current) clearTimeout(copySearchTimer.current); };
+  }, [copyQ, copyOpen, eventId]);
+
+  async function doCopyFromEvent() {
+    if (!copyPicked) return;
+    setCopying(true); setCopyMsg("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/copy-from-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceEventId: copyPicked.id }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Gagal");
+      setCopyMsg(`${j.added} pertandingan ditambah, ${j.skipped} sudah wujud.`);
+      load();
+    } catch (e) {
+      setCopyMsg(e instanceof Error ? e.message : "Gagal menyalin.");
+    } finally { setCopying(false); }
+  }
+
   return (
     <SectionCard
       title={`Pertandingan (${links.length})`}
       action={view === "list" && canWrite
-        ? <Button size="sm" onClick={openAdd} className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />Tambah</Button>
+        ? <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => { setCopyOpen(true); setCopyQ(""); setCopyList([]); setCopyPicked(null); setCopyMsg(""); }} className="h-7 text-xs gap-1">
+              <Copy className="h-3 w-3" />Salin dari acara
+            </Button>
+            <Button size="sm" onClick={openAdd} className="h-7 text-xs gap-1"><Plus className="h-3 w-3" />Tambah</Button>
+          </div>
         : view === "form"
           ? <button onClick={() => setView("list")} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700"><ArrowLeft className="h-3.5 w-3.5" />Kembali</button>
           : undefined
@@ -1231,6 +1278,68 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
           setLinkCourseFor(null);
         }}
       />
+
+      {/* Copy-from-event dialog */}
+      <Dialog open={copyOpen} onOpenChange={open => { if (!open) setCopyOpen(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Copy className="h-4 w-4 text-zinc-500" />Salin Pertandingan dari Acara Lain
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400" />
+              <Input
+                value={copyQ}
+                onChange={e => { setCopyQ(e.target.value); setCopyPicked(null); setCopyMsg(""); }}
+                placeholder="Cari nama acara…"
+                className="pl-8 h-8 text-sm"
+                autoFocus
+              />
+              {copySearching && <Loader2 className="absolute right-2.5 top-2 h-3.5 w-3.5 animate-spin text-zinc-400" />}
+            </div>
+            <div className="rounded-md border max-h-52 overflow-y-auto">
+              {!copySearching && copyList.length === 0 && (
+                <p className="px-4 py-5 text-center text-xs text-zinc-400">Tiada acara ditemui.</p>
+              )}
+              {copyList.map(ev => (
+                <button
+                  key={ev.id}
+                  type="button"
+                  onClick={() => { setCopyPicked(ev); setCopyMsg(""); }}
+                  className={`w-full text-left px-4 py-2.5 border-b last:border-0 flex items-center gap-3 transition-colors ${
+                    copyPicked?.id === ev.id ? "bg-blue-50 border-blue-200" : "hover:bg-zinc-50"
+                  }`}
+                >
+                  {copyPicked?.id === ev.id
+                    ? <Check className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                    : <div className="h-3.5 w-3.5 shrink-0" />
+                  }
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-900 truncate">{ev.name}</p>
+                    <p className="text-[10px] text-zinc-400">{ev.scope} · {ev.status}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {copyMsg && (
+              <p className={`text-xs ${copyMsg.includes("Gagal") ? "text-red-500" : "text-green-600"}`}>{copyMsg}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyOpen(false)} className="text-xs h-8">Tutup</Button>
+            <Button
+              onClick={doCopyFromEvent}
+              disabled={!copyPicked || copying}
+              className="text-xs h-8 gap-1.5"
+            >
+              {copying && <Loader2 className="h-3 w-3 animate-spin" />}
+              Salin Pertandingan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SectionCard>
   );
 }

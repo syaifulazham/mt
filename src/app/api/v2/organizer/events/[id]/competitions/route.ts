@@ -5,15 +5,17 @@ import { Prisma } from "@prisma/client";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
-const EC_INCLUDE = {
-  competition: {
-    include: {
-      theme:        { select: { id: true, name: true, color: true } },
-      targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },
-      _count:       { select: { teams: true } },
+function makeEcInclude(eventId: string) {
+  return {
+    competition: {
+      include: {
+        theme:        { select: { id: true, name: true, color: true } },
+        targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },
+        _count:       { select: { teams: { where: { teamEvents: { some: { eventId } } } } } },
+      },
     },
-  },
-} as const;
+  } as const;
+}
 
 // GET /api/v2/organizer/events/[id]/competitions
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const rows = await db.eventCompetition.findMany({
     where: { eventId },
     orderBy: { createdAt: "asc" },
-    include: EC_INCLUDE,
+    include: makeEcInclude(eventId),
   });
 
   return NextResponse.json({ data: rows, total: rows.length });
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         picContact: picContact?.trim() || null,
         maxTeams:   Number(maxTeams)   || 0,
       },
-      include: EC_INCLUDE,
+      include: makeEcInclude(eventId),
     });
     return NextResponse.json({ data: ec }, { status: 201 });
   } catch (e: unknown) {

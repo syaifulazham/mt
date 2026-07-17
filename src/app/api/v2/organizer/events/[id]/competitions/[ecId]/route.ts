@@ -4,15 +4,17 @@ import { db } from "@/lib/db";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
-const EC_INCLUDE = {
-  competition: {
-    include: {
-      theme:        { select: { id: true, name: true, color: true } },
-      targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },
-      _count:       { select: { teams: true } },
+function makeEcInclude(eventId: string) {
+  return {
+    competition: {
+      include: {
+        theme:        { select: { id: true, name: true, color: true } },
+        targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },
+        _count:       { select: { teams: { where: { teamEvents: { some: { eventId } } } } } },
+      },
     },
-  },
-} as const;
+  } as const;
+}
 
 // PATCH /api/v2/organizer/events/[id]/competitions/[ecId]
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string; ecId: string }> }) {
@@ -35,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(eptimEduCourseId    !== undefined && { eptimEduCourseId:    eptimEduCourseId    ?? null }),
       ...(eptimEduCourseTitle !== undefined && { eptimEduCourseTitle: eptimEduCourseTitle ?? null }),
     },
-    include: EC_INCLUDE,
+    include: makeEcInclude(eventId),
   });
 
   return NextResponse.json({ data: updated });
