@@ -21,15 +21,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
-  const { name, code, stateId, isActive } = await req.json();
+  const { name, code, stateId, isActive, sector, heiType, parentCode } = await req.json();
   try {
     const hei = await db.higherInstitution.update({
       where: { id },
       data: {
-        ...(name     && { name: name.trim() }),
-        ...(code !== undefined && { code: code?.trim().toUpperCase() || null }),
-        ...(stateId  !== undefined && { stateId: stateId || null }),
-        ...(isActive !== undefined && { isActive }),
+        ...(name        && { name: name.trim() }),
+        ...(code        !== undefined && { code: code?.trim().toUpperCase() || null }),
+        ...(stateId     !== undefined && { stateId: stateId || null }),
+        ...(isActive    !== undefined && { isActive }),
+        ...(sector      !== undefined && { sector: sector || null }),
+        ...(heiType     !== undefined && { heiType: heiType || null }),
+        ...(parentCode  !== undefined && { parentCode: parentCode?.trim() || null }),
       },
     });
     return NextResponse.json({ data: hei });
