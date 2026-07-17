@@ -275,6 +275,17 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   // Unregister confirmation modal
   const [confirmModal, setConfirmModal] = useState<{ code: string; input: string } | null>(null);
 
+  // Prerequisite tally check
+  type PrereqCheckResult = {
+    isTallied:      boolean;
+    totalSelected:  number;
+    totalRegistered: number;
+    missing:        number;
+    prerequisites:  { id: string; name: string; slug: string; selectedCount: number; registeredCount: number; missingCount: number }[];
+  };
+  const [prereqCheck, setPrereqCheck]       = useState<PrereqCheckResult | null>(null);
+  const [prereqCheckDismissed, setPrereqCheckDismissed] = useState(false);
+
   // Load-from-prerequisite modal
   type PrereqModalState =
     | { phase: "loading" }
@@ -442,6 +453,15 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   }, [event.id]);
 
   useEffect(() => { loadStats(); }, [loadStats]); // eslint-disable-line react-hooks/set-state-in-effect
+
+  // Prerequisite tally check (only when event has prerequisites)
+  useEffect(() => {
+    if (!event.prerequisites?.length) return;
+    fetch(`/api/v2/organizer/events/${event.id}/preregistration/prerequisite-check`)
+      .then((r) => r.json())
+      .then((d) => setPrereqCheck(d))
+      .catch(() => {});
+  }, [event.id, event.prerequisites?.length]);
 
   // Load participants
   const load = useCallback(async () => {
@@ -614,6 +634,9 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       loadTeams();
       loadStats();
       setPrereqModal({ phase: "success", added: json.added, skipped: json.skipped });
+      // Refresh the tally banner
+      fetch(`/api/v2/organizer/events/${event.id}/preregistration/prerequisite-check`)
+        .then((r) => r.json()).then((d) => setPrereqCheck(d)).catch(() => {});
     } catch (e: unknown) {
       setPrereqModal({ phase: "error", message: e instanceof Error ? e.message : "Gagal memuatkan daripada prasyarat." });
     }
@@ -873,6 +896,60 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
           </button>
         )}
       </div>
+
+      {/* Prerequisite tally banner */}
+      {prereqCheck && !prereqCheck.isTallied && !prereqCheckDismissed && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+          <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-amber-800">
+              {prereqCheck.missing} pasukan dari acara prasyarat belum didaftarkan ke acara ini
+            </p>
+            <p className="text-amber-700 mt-0.5 text-xs">
+              {prereqCheck.totalRegistered} daripada {prereqCheck.totalSelected} pasukan terpilih telah didaftarkan.
+              Gunakan &ldquo;Muat dari prasyarat&rdquo; untuk melengkapkan senarai.
+            </p>
+            {prereqCheck.prerequisites.length > 1 && (
+              <ul className="mt-2 space-y-0.5">
+                {prereqCheck.prerequisites.map((p) => (
+                  <li key={p.id} className="text-xs text-amber-700 flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${p.missingCount > 0 ? "bg-amber-400" : "bg-green-400"}`} />
+                    <span className="font-medium">{p.name}:</span>
+                    {p.missingCount === 0
+                      ? <span className="text-green-700">lengkap ({p.registeredCount}/{p.selectedCount})</span>
+                      : <span>{p.registeredCount}/{p.selectedCount} didaftarkan — <span className="font-semibold">{p.missingCount} belum</span></span>
+                    }
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleLoadFromPrerequisite}
+              disabled={prereqModal?.phase === "loading"}
+              className="text-xs px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 font-medium transition-colors"
+            >
+              Muat sekarang
+            </button>
+            <button
+              onClick={() => setPrereqCheckDismissed(true)}
+              className="text-amber-400 hover:text-amber-600 transition-colors"
+              title="Tutup"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {prereqCheck?.isTallied && (event.prerequisites?.length ?? 0) > 0 && !prereqCheckDismissed && (
+        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-xs text-green-700">
+          <span className="text-green-500">✓</span>
+          <span>Semua <strong>{prereqCheck.totalSelected} pasukan terpilih</strong> dari acara prasyarat telah didaftarkan.</span>
+          <button onClick={() => setPrereqCheckDismissed(true)} className="ml-auto text-green-400 hover:text-green-600">✕</button>
+        </div>
+      )}
 
       {/* Error */}
       {(listTab === "participants" ? error : listTab === "teams" ? teamsError : trainersError) && (
