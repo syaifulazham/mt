@@ -790,6 +790,7 @@ export function HEITab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [aiOpen, setAiOpen]       = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetch("/api/v2/organizer/reference-data/states?pageSize=100")
@@ -811,6 +812,40 @@ export function HEITab() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
+
+  async function handleExportCsv() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ page: "1", pageSize: "10000", q });
+      if (stateFilter) params.set("stateId", stateFilter);
+      if (typeFilter)  params.set("heiType", typeFilter);
+      const res  = await fetch(`/api/v2/organizer/reference-data/higher-institutions?${params}`);
+      const json = await res.json();
+      const rows: HEI[] = json.data ?? [];
+      const escape = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
+      const header = "Name,Code,Type,Sector,State,Parent,Contingents,Active";
+      const lines  = rows.map(r => [
+        escape(r.name),
+        escape(r.code),
+        escape(r.heiType),
+        escape(r.sector),
+        escape(r.state?.name),
+        escape(r.parentCode),
+        String(r._count.contingents),
+        r.isActive ? "Yes" : "No",
+      ].join(","));
+      const csv  = [header, ...lines].join("\r\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = "higher-institutions.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function openAdd() {
     setEditing(null); setName(""); setCode(""); setStateId(stateFilter || "");
@@ -913,27 +948,52 @@ export function HEITab() {
   return (
     <div>
       {/* ── Toolbar ─────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <select
-          value={stateFilter}
-          onChange={(e) => { setStateFilter(e.target.value); setPage(1); }}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="">All states</option>
-          {states.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+      <div className="flex flex-col gap-2 mb-4">
+        {/* Row 1: filters + action buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={stateFilter}
+            onChange={(e) => { setStateFilter(e.target.value); setPage(1); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">All states</option>
+            {states.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
 
-        <select
-          value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value as "" | "HQ" | "BRANCH"); setPage(1); }}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="">All types</option>
-          <option value="HQ">HQ only</option>
-          <option value="BRANCH">Branch only</option>
-        </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => { setTypeFilter(e.target.value as "" | "HQ" | "BRANCH"); setPage(1); }}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">All types</option>
+            <option value="HQ">HQ only</option>
+            <option value="BRANCH">Branch only</option>
+          </select>
 
-        <div className="relative flex-1 min-w-32">
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-violet-600 border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+              onClick={() => setAiOpen(true)}
+            >
+              <Sparkles className="h-4 w-4" /> AI Search
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={exporting} className="gap-1.5">
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              Export CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setCsvRows([]); setImportResult(null); setImportOpen(true); }}>
+              <Upload className="h-4 w-4 mr-1" /> Import CSV
+            </Button>
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="h-4 w-4 mr-1" /> Add HEI
+            </Button>
+          </div>
+        </div>
+
+        {/* Row 2: search box */}
+        <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search name or code…"
@@ -942,21 +1002,6 @@ export function HEITab() {
             className="pl-8"
           />
         </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5 text-violet-600 border-violet-200 hover:bg-violet-50 hover:text-violet-700"
-          onClick={() => setAiOpen(true)}
-        >
-          <Sparkles className="h-4 w-4" /> AI Search
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => { setCsvRows([]); setImportResult(null); setImportOpen(true); }}>
-          <Upload className="h-4 w-4 mr-1" /> Import CSV
-        </Button>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="h-4 w-4 mr-1" /> Add HEI
-        </Button>
       </div>
 
       {/* ── Table ───────────────────────────────────────── */}
