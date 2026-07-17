@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight,
   Loader2, Upload, Download, Sparkles, Check, X,
-  Building2, GitBranch, Settings2, ChevronDown,
+  Building2, GitBranch, Settings2, ChevronDown, FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -215,6 +215,25 @@ function AiFetchDialog({
       return next;
     });
     setEditingIdx(null);
+  }
+
+  function exportCsv() {
+    const rows = selectedCount > 0
+      ? [...selected].filter((i) => results[i]).map((i) => results[i])
+      : visible.map(({ r }) => r);
+    const header = "Name,Code,Type,Sector,State,ParentCode";
+    const escape = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
+    const lines = rows.map(r =>
+      [escape(r.name), escape(r.code), escape(r.type), escape(r.sector), escape(r.state), escape(r.parentCode)].join(",")
+    );
+    const csv = [header, ...lines].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `higher-institutions-${selectedCount > 0 ? "selected" : "visible"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const visible = results
@@ -448,55 +467,78 @@ function AiFetchDialog({
 
         {/* Filters */}
         {results.length > 0 && (
-          <div className="px-6 py-2.5 border-b shrink-0 flex items-center gap-2 flex-wrap">
-            {/* Type filter */}
-            <div className="flex gap-1 rounded-md bg-zinc-100 p-0.5">
-              {(["ALL", "HQ", "BRANCH"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    filter === f ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
-                  }`}
-                >
-                  {f === "ALL" ? "All" : f === "HQ" ? `HQ (${hqCount})` : `Branch (${branchCount})`}
-                </button>
-              ))}
-            </div>
-
-            {/* Sector filter */}
-            <div className="flex gap-1 rounded-md bg-zinc-100 p-0.5">
-              {(["ALL", "PUBLIC", "PRIVATE", "FOREIGN_BRANCH"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setSectorFilter(f)}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                    sectorFilter === f ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
-                  }`}
-                >
-                  {f === "ALL" ? "All sectors" : f === "FOREIGN_BRANCH" ? "Foreign" : f.charAt(0) + f.slice(1).toLowerCase()}
-                </button>
-              ))}
-            </div>
-
-            {/* Existence filter — only when matching has completed and found duplicates */}
-            {existingMatches.size > 0 && (
+          <div className="px-6 py-2.5 border-b shrink-0 space-y-2">
+            {/* Row 1: filter chips + select-all + Export CSV */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Type filter */}
               <div className="flex gap-1 rounded-md bg-zinc-100 p-0.5">
-                {(["ALL", "NEW", "EXISTS"] as const).map((f) => (
+                {(["ALL", "HQ", "BRANCH"] as const).map((f) => (
                   <button
                     key={f}
-                    onClick={() => setExistenceFilter(f)}
-                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                      existenceFilter === f ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+                    onClick={() => setFilter(f)}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                      filter === f ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
                     }`}
                   >
-                    {f === "ALL" ? "All" : f === "NEW" ? `New (${results.length - existingMatches.size})` : `In DB (${existingMatches.size})`}
+                    {f === "ALL" ? "All" : f === "HQ" ? `HQ (${hqCount})` : `Branch (${branchCount})`}
                   </button>
                 ))}
               </div>
-            )}
 
-            <div className="relative flex-1 min-w-40">
+              {/* Sector filter */}
+              <div className="flex gap-1 rounded-md bg-zinc-100 p-0.5">
+                {(["ALL", "PUBLIC", "PRIVATE", "FOREIGN_BRANCH"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setSectorFilter(f)}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      sectorFilter === f ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+                    }`}
+                  >
+                    {f === "ALL" ? "All sectors" : f === "FOREIGN_BRANCH" ? "Foreign" : f.charAt(0) + f.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+
+              {/* Existence filter */}
+              {existingMatches.size > 0 && (
+                <div className="flex gap-1 rounded-md bg-zinc-100 p-0.5">
+                  {(["ALL", "NEW", "EXISTS"] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setExistenceFilter(f)}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                        existenceFilter === f ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+                      }`}
+                    >
+                      {f === "ALL" ? "All" : f === "NEW" ? `New (${results.length - existingMatches.size})` : `In DB (${existingMatches.size})`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => toggleAll(visibleIndices)}
+                  className="text-xs text-zinc-500 hover:text-zinc-800 underline"
+                >
+                  {visibleIndices.every((i) => selected.has(i)) ? "Deselect visible" : "Select visible"}
+                </button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={exportCsv}
+                  className="h-7 text-xs gap-1.5"
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  Export CSV
+                  {selectedCount > 0 && <span className="text-zinc-400">({selectedCount})</span>}
+                </Button>
+              </div>
+            </div>
+
+            {/* Row 2: search box */}
+            <div className="relative">
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400" />
               <Input
                 className="pl-8 h-7 text-xs"
@@ -505,13 +547,6 @@ function AiFetchDialog({
                 onChange={(e) => setSearchQ(e.target.value)}
               />
             </div>
-
-            <button
-              onClick={() => toggleAll(visibleIndices)}
-              className="text-xs text-zinc-500 hover:text-zinc-800 underline ml-auto"
-            >
-              {visibleIndices.every((i) => selected.has(i)) ? "Deselect visible" : "Select visible"}
-            </button>
           </div>
         )}
 
