@@ -15,14 +15,13 @@ function emailToUsername(email: string): string {
 }
 
 /**
- * POST { teamId, eventId? }
+ * POST { teamId?, eventId? }
  *
- * 1. Verify caller is a member of the team.
- * 2. Resolve the courseId: EventCompetition.eptimEduCourseId first,
- *    fall back to Competition.eptimEduCourseId.
- * 3. Enrol the team's EptimEdu account in that course (force=true to bypass
- *    invite-only restrictions). HTTP 409 = already enrolled = OK.
- * 4. Generate and return an SSO login URL.
+ * Individual mode (no teamId): generate an SSO token for the participant
+ * using their IC number as the LMS username.
+ *
+ * Team mode (teamId provided — legacy): verify team membership, optionally
+ * enrol the team account in a course, then return an SSO login URL.
  */
 export async function POST(req: NextRequest) {
   const session = await getParticipantSession();
@@ -33,7 +32,28 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({})) as { teamId?: string; eventId?: string };
   const { teamId, eventId } = body;
-  if (!teamId) return NextResponse.json({ error: "MISSING_TEAM_ID" }, { status: 400 });
+
+  // ── Individual mode ────────────────────────────────────────────────────────
+  if (!teamId) {
+    const participant = await db.participant.findUnique({
+      where: { id: session.participantId },
+      select: { ic: true },
+    });
+    if (!participant) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+    const icDigits = participant.ic?.replace(/\D/g, "") ?? "";
+    if (!icDigits) return NextResponse.json({ error: "NO_IC" }, { status: 400 });
+
+    try {
+      const result = await eptimEdu.createSsoToken(icDigits);
+      return NextResponse.json({ loginUrl: result.loginUrl });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "EptimEdu API error";
+      return NextResponse.json({ error: msg }, { status: 422 });
+    }
+  }
+
+  // ── Team mode (legacy) ─────────────────────────────────────────────────────
 
   // Verify membership and load team credentials
   const membership = await db.teamMember.findFirst({
