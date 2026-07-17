@@ -194,15 +194,24 @@ function SortBtn({
 
 // ── Distance modal ────────────────────────────────────────────────────────────
 
+// States in Borneo Malaysia; everything else = Peninsular (or unknown)
+const BORNEO_STATES = new Set(["Sabah", "Sarawak", "Labuan"]);
+function getRegion(state: string | null): "borneo" | "peninsular" | null {
+  if (!state) return null;
+  return BORNEO_STATES.has(state) ? "borneo" : "peninsular";
+}
+
 function DistanceModal({
   eventId,
   contingentLocations,
   eventVenue,
+  eventStateName,
   onClose,
 }: {
   eventId: string;
   contingentLocations: ContingentLocation[];
   eventVenue: string | null;
+  eventStateName: string | null;
   onClose: () => void;
 }) {
   const [records,      setRecords]      = useState<DistanceRecord[]>([]);
@@ -292,6 +301,10 @@ function DistanceModal({
   const displayRows    = [...doneRows, ...processingRows, ...errorRows, ...pendingRows];
 
   const hasWater   = records.some((r) => r.waterKm != null);
+  const eventRegion = getRegion(eventStateName);
+  // Only show air km when there's a cross-region pair (Peninsular ↔ Borneo)
+  const showAirForContingent = (stateName: string | null) =>
+    eventRegion === null || getRegion(stateName) !== eventRegion;
   const allDone    = pendingRows.length === 0 && processingRows.length === 0 && errorRows.length === 0;
   const anyProcessing = processingRows.length > 0;
   const canStart   = pendingRows.length > 0 || errorRows.length > 0;
@@ -374,9 +387,11 @@ function DistanceModal({
                   <th className="text-right py-2 pr-3">
                     <SortBtn col="road"  label="Jalan (km)"  sortCol={sortCol} setSortCol={setSortCol} />
                   </th>
-                  <th className="text-right py-2 pr-3">
-                    <SortBtn col="air"   label="Udara (km)"  sortCol={sortCol} setSortCol={setSortCol} />
-                  </th>
+                  {doneRows.some((c) => showAirForContingent(c.stateName)) && (
+                    <th className="text-right py-2 pr-3">
+                      <SortBtn col="air" label="Udara (km)" sortCol={sortCol} setSortCol={setSortCol} />
+                    </th>
+                  )}
                   {hasWater && (
                     <th className="text-right py-2">
                       <SortBtn col="water" label="Laut (km)" sortCol={sortCol} setSortCol={setSortCol} />
@@ -391,7 +406,8 @@ function DistanceModal({
                   const isProcessing = rec?.status === "PROCESSING";
                   const isError      = rec?.status === "ERROR";
                   const isPending    = !rec;
-                  const textCls = isPending ? "text-zinc-400" : "text-zinc-800";
+                  const textCls    = isPending ? "text-zinc-400" : "text-zinc-800";
+                  const showAir    = showAirForContingent(c.stateName);
                   return (
                     <tr key={c.contingentId} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                       {/* Status dot */}
@@ -410,9 +426,11 @@ function DistanceModal({
                       <td className="py-2 pr-3 text-right font-mono font-semibold text-zinc-800">
                         {isDone ? rec!.roadKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>}
                       </td>
-                      <td className="py-2 pr-3 text-right font-mono text-zinc-500">
-                        {isDone ? rec!.airKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>}
-                      </td>
+                      {showAir && (
+                        <td className="py-2 pr-3 text-right font-mono text-zinc-500">
+                          {isDone ? rec!.airKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>}
+                        </td>
+                      )}
                       {hasWater && (
                         <td className="py-2 text-right font-mono text-blue-500">
                           {isDone
@@ -431,7 +449,9 @@ function DistanceModal({
                       {doneRows.length} selesai · {processingRows.length} dikira · {pendingRows.length} belum
                     </td>
                     <td className="py-2 pr-3 text-right font-mono text-xs">{doneKmTotals.road.toLocaleString()}</td>
-                    <td className="py-2 pr-3 text-right font-mono text-xs text-zinc-400">{doneKmTotals.air.toLocaleString()}</td>
+                    {doneRows.some((c) => showAirForContingent(c.stateName)) && (
+                      <td className="py-2 pr-3 text-right font-mono text-xs text-zinc-400">{doneKmTotals.air.toLocaleString()}</td>
+                    )}
                     {hasWater && <td />}
                   </tr>
                 </tfoot>
@@ -799,6 +819,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
           eventId={event.id}
           contingentLocations={contingentLocations}
           eventVenue={data.event.venue}
+          eventStateName={data.event.stateName}
           onClose={() => setShowDistance(false)}
         />
       )}
