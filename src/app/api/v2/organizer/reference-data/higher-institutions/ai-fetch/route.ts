@@ -22,20 +22,43 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const extraPrompt: string = body?.extraPrompt ?? "";
+  const modelId: string = body?.model ?? "gemini-2.5-flash";
+  const stateFocus: string | undefined = body?.stateFocus;
+  const categories = {
+    publicUnis:   body?.categories?.publicUnis   !== false,
+    privateUnis:  body?.categories?.privateUnis  !== false,
+    polytechnics: body?.categories?.polytechnics !== false,
+    commColleges: body?.categories?.commColleges !== false,
+    foreign:      body?.categories?.foreign      !== false,
+  };
 
   // Fetch existing HEI codes and names for filtering + client-side duplicate marking
   const existingHEIs = await db.higherInstitution.findMany({ select: { code: true, name: true } });
   const existingCodes = new Set(existingHEIs.map((h) => (h.code ?? "").toUpperCase()).filter(Boolean));
   const existingNames = existingHEIs.map((h) => h.name);
 
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+  const aiModel = genAI.getGenerativeModel({
+    model: modelId,
     generationConfig: { responseMimeType: "application/json" },
   });
 
+  // Build category include list from toggles
+  const categoryLines: string[] = [];
+  if (categories.publicUnis)   categoryLines.push("1. All 20 Malaysian public universities (UM, UKM, UPM, UTM, USM, UiTM, UIAM, UUM, UNIMAS, UMS, UPSI, UTHM, UMP, UTeM, UniMAP, UMT, UMK, USIM, UPNM, UniKL) and their branch campuses");
+  if (categories.privateUnis)  categoryLines.push("2. Major private universities: MMU, UTAR, Taylor's University, Sunway University, HELP University, UCSI University, SEGi University, APU, IMU, Heriot-Watt University Malaysia, Monash University Malaysia, University of Nottingham Malaysia, Curtin University Malaysia, Newcastle University Medicine Malaysia, Perdana University, Lincoln University College, MSU, INTI International University, Nilai University, MAHSA University");
+  if (categories.polytechnics) categoryLines.push("3. Polytechnics (Politeknik) with code prefix \"POLY-\"");
+  if (categories.commColleges) categoryLines.push("4. Community Colleges (Kolej Komuniti) with code prefix \"KK-\"");
+  if (categories.foreign)      categoryLines.push("5. Foreign university branch campuses (sector: FOREIGN_BRANCH)");
+
+  const scopeClause = stateFocus
+    ? `FOCUS ONLY on institutions located in or associated with the state of ${stateFocus}. Include branches of national universities in that state.`
+    : "Cover all Malaysian states nationally.";
+
   const prompt = `You are a Malaysian higher education database researcher with access to current internet data.
 
-List ALL accredited higher education institutions registered in Malaysia as of 2024–2025.
+List accredited higher education institutions registered in Malaysia as of 2024–2025.
+
+${scopeClause}
 
 For each institution return a JSON object with:
 - "name": Full official English name
@@ -46,27 +69,19 @@ For each institution return a JSON object with:
     e.g. UTM Kuala Lumpur → "UTM-KL", UiTM Pulau Pinang → "UiTM-PP", UiTM Kedah → "UiTM-KDH"
 - "type": "HQ" for main/headquarters campus, "BRANCH" for branch/satellite campuses
 - "parentCode": for BRANCH entries, the code of the parent HQ (e.g. "UiTM"); null for HQ entries
-- "state": Malaysian state where main campus is located — use exact Malaysian state names:
+- "state": Malaysian state where campus is located — use exact Malaysian state names:
   Johor, Kedah, Kelantan, Melaka, Negeri Sembilan, Pahang, Perak, Perlis, Pulau Pinang,
   Sabah, Sarawak, Selangor, Terengganu, Kuala Lumpur, Labuan, Putrajaya
   Use null for online-only or unspecified.
 - "sector": one of "PUBLIC" (government-funded), "PRIVATE" (private local), "FOREIGN_BRANCH" (foreign university branch)
 
-MUST include:
-1. All 20 Malaysian public universities (UM, UKM, UPM, UTM, USM, UiTM, UIAM, UUM, UNIMAS, UMS, UPSI, UTHM, UMP, UTeM, UniMAP, UMT, UMK, USIM, UPNM, UniKL) — HQ entries
-2. UiTM branches in every state: Johor, Kedah, Kelantan, Melaka, Negeri Sembilan, Pahang, Perak, Perlis, Pulau Pinang, Sabah, Sarawak, Terengganu (plus Puncak Alam as HQ)
-3. UTM branch in Kuala Lumpur
-4. USM Engineering Campus (Pulau Pinang)
-5. UPM Bintulu Campus (Sarawak)
-6. Major private universities: MMU, UTAR, Taylor's University, Sunway University, HELP University, UCSI University, SEGi University, APU (Asia Pacific University), IMU, Heriot-Watt University Malaysia, Monash University Malaysia, University of Nottingham Malaysia, Curtin University Malaysia, Newcastle University Medicine Malaysia, Perdana University, Lincoln University College, Management and Science University (MSU), Binary University, INTI International University, Nilai University, KDU University College, MAHSA University, MUST (Malaysian University of Science and Technology)
-7. UiTM Cawangan branches for each state
-8. Polytechnics (Politeknik): at least the main ones per state with code prefix "POLY-"
-9. Community Colleges (Kolej Komuniti): code prefix "KK-" for at least 2-3 per state
+INCLUDE the following categories:
+${categoryLines.length > 0 ? categoryLines.join("\n") : "All categories of Malaysian higher education institutions."}
 ${extraPrompt ? `\nAdditional instructions from user:\n${extraPrompt}` : ""}
 Return ONLY a valid JSON array. No markdown fences, no explanation.`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await aiModel.generateContent(prompt);
     let raw = result.response.text().trim()
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/i, "");

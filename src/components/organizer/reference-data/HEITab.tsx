@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight,
   Loader2, Upload, Download, Sparkles, Check, X,
-  Building2, GitBranch,
+  Building2, GitBranch, Settings2, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,6 +95,16 @@ function AiFetchDialog({
   const [editingIdx, setEditingIdx]   = useState<number | null>(null);
   const [editBuf, setEditBuf]         = useState<Partial<AiHEI>>({});
   const [extraPrompt, setExtraPrompt] = useState("");
+  const [showConfig,  setShowConfig]  = useState(false);
+  const [model,       setModel]       = useState("gemini-2.5-flash");
+  const [stateFocus,  setStateFocus]  = useState("ALL");
+  const [categories,  setCategories]  = useState({
+    publicUnis:   true,
+    privateUnis:  true,
+    polytechnics: true,
+    commColleges: true,
+    foreign:      true,
+  });
   const [matching, setMatching]           = useState(false);
   const [matchProgress, setMatchProgress] = useState(0);
   const [existingMatches, setExistingMatches] = useState<Set<number>>(new Set());
@@ -104,6 +114,8 @@ function AiFetchDialog({
     setFilter("ALL"); setSectorFilter("ALL"); setExistenceFilter("ALL"); setSearchQ("");
     setImporting(false); setImportResult(null); setError("");
     setEditingIdx(null); setExtraPrompt("");
+    setShowConfig(false); setModel("gemini-2.5-flash"); setStateFocus("ALL");
+    setCategories({ publicUnis: true, privateUnis: true, polytechnics: true, commColleges: true, foreign: true });
     setMatching(false); setMatchProgress(0); setExistingMatches(new Set());
   }
 
@@ -118,11 +130,20 @@ function AiFetchDialog({
       const res  = await fetch("/api/v2/organizer/reference-data/higher-institutions/ai-fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extraPrompt: extraPrompt.trim() || undefined }),
+        body: JSON.stringify({
+          extraPrompt: extraPrompt.trim() || undefined,
+          model,
+          stateFocus: stateFocus === "ALL" ? undefined : stateFocus,
+          categories,
+        }),
       });
       const text = await res.text();
+      // Detect HTML error pages (Cloudflare, proxy errors, missing API key)
+      if (text.trimStart().startsWith("<")) {
+        throw new Error("Gemini API returned an HTML error page. The GEMINI_API_KEY may be missing or invalid on the server.");
+      }
       let j: { data?: AiHEI[]; existingNames?: string[]; error?: string; detail?: string };
-      try { j = JSON.parse(text); } catch { throw new Error(text.slice(0, 120)); }
+      try { j = JSON.parse(text); } catch { throw new Error(text.slice(0, 200)); }
       if (!res.ok) throw new Error(j.detail ? `${j.error}: ${j.detail}` : (j.error ?? "AI fetch failed"));
       newResults = j.data ?? [];
       dbNames    = j.existingNames ?? [];
@@ -258,19 +279,109 @@ function AiFetchDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Extra prompt input */}
-        <div className="px-6 py-3 border-b shrink-0">
-          <label className="block text-xs font-medium text-zinc-500 mb-1.5">
-            Additional instructions <span className="font-normal text-zinc-400">(optional — refine what Gemini searches for)</span>
-          </label>
-          <textarea
-            value={extraPrompt}
-            onChange={(e) => setExtraPrompt(e.target.value)}
-            disabled={fetching}
-            rows={2}
-            placeholder="e.g. Focus only on Sabah and Sarawak universities. Include all community colleges in Johor."
-            className="w-full text-sm border border-zinc-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-zinc-300 disabled:opacity-50 bg-white"
-          />
+        {/* Extra prompt input + configuration */}
+        <div className="px-6 py-3 border-b shrink-0 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-zinc-500 mb-1.5">
+              Additional instructions <span className="font-normal text-zinc-400">(optional — refine what Gemini searches for)</span>
+            </label>
+            <textarea
+              value={extraPrompt}
+              onChange={(e) => setExtraPrompt(e.target.value)}
+              disabled={fetching}
+              rows={2}
+              placeholder="e.g. Focus only on Sabah and Sarawak universities. Include all community colleges in Johor."
+              className="w-full text-sm border border-zinc-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-zinc-300 disabled:opacity-50 bg-white"
+            />
+          </div>
+
+          {/* Advanced config toggle */}
+          <button
+            type="button"
+            onClick={() => setShowConfig(v => !v)}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 transition-colors"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            Search configuration
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showConfig ? "rotate-180" : ""}`} />
+          </button>
+
+          {showConfig && (
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 space-y-4">
+              {/* Model selector */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Gemini Model</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { id: "gemini-2.5-flash",  label: "2.5 Flash",  note: "Fast · Recommended" },
+                    { id: "gemini-2.5-pro",    label: "2.5 Pro",    note: "Thorough · Slower" },
+                    { id: "gemini-1.5-flash",  label: "1.5 Flash",  note: "Legacy · Cheaper" },
+                  ].map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setModel(m.id)}
+                      disabled={fetching}
+                      className={`px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
+                        model === m.id
+                          ? "bg-violet-600 text-white border-violet-600"
+                          : "bg-white text-zinc-600 border-zinc-200 hover:border-violet-300"
+                      }`}
+                    >
+                      {m.label}
+                      <span className={`ml-1.5 text-[10px] font-normal ${model === m.id ? "text-violet-200" : "text-zinc-400"}`}>{m.note}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* State focus */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Focus by State</label>
+                <select
+                  value={stateFocus}
+                  onChange={e => setStateFocus(e.target.value)}
+                  disabled={fetching}
+                  className="text-xs border border-zinc-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:opacity-50"
+                >
+                  <option value="ALL">All states (national search)</option>
+                  {["Johor","Kedah","Kelantan","Melaka","Negeri Sembilan","Pahang","Perak","Perlis","Pulau Pinang","Sabah","Sarawak","Selangor","Terengganu","Kuala Lumpur","Labuan","Putrajaya"].map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Category toggles */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Include Categories</label>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { key: "publicUnis",   label: "Public Universities" },
+                    { key: "privateUnis",  label: "Private Universities" },
+                    { key: "polytechnics", label: "Polytechnics" },
+                    { key: "commColleges", label: "Community Colleges" },
+                    { key: "foreign",      label: "Foreign Branches" },
+                  ] as const).map(({ key, label }) => (
+                    <label key={key} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border cursor-pointer text-xs font-medium transition-colors select-none ${
+                      categories[key]
+                        ? "bg-violet-50 border-violet-300 text-violet-700"
+                        : "bg-white border-zinc-200 text-zinc-400"
+                    }`}>
+                      <input
+                        type="checkbox"
+                        checked={categories[key]}
+                        onChange={e => setCategories(prev => ({ ...prev, [key]: e.target.checked }))}
+                        disabled={fetching}
+                        className="hidden"
+                      />
+                      {categories[key] ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Fetch button / status bar */}
