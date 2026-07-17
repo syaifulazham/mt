@@ -74,6 +74,7 @@ function FixLeafletIcons() {
 export type ContingentLocation = {
   contingentId: string;
   name: string;
+  schoolId: string | null;
   schoolName: string | null;
   stateName: string | null;
   districtName: string | null;

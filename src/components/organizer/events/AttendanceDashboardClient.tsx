@@ -9,7 +9,7 @@ import {
 import {
   Users, Building2, UserCheck, BookUser,
   RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp, Play,
-  FileSpreadsheet, FileText,
+  FileSpreadsheet, FileText, LocateFixed, Save,
 } from "lucide-react";
 import type { ContingentLocation } from "./AttendanceDashboardMap";
 
@@ -196,6 +196,193 @@ function SortBtn({
 // ── Distance modal ────────────────────────────────────────────────────────────
 
 // States in Borneo Malaysia; everything else = Peninsular (or unknown)
+// ── School Location Modal ─────────────────────────────────────────────────────
+
+function SchoolLocationModal({
+  eventId,
+  contingentId,
+  schoolId,
+  schoolName,
+  districtName,
+  stateName,
+  initialLat,
+  initialLng,
+  onClose,
+  onSaved,
+}: {
+  eventId: string;
+  contingentId: string;
+  schoolId: string;
+  schoolName: string;
+  districtName: string | null;
+  stateName: string | null;
+  initialLat: number | null;
+  initialLng: number | null;
+  onClose: () => void;
+  onSaved: (contingentId: string, lat: number, lng: number) => void;
+}) {
+  const [lat, setLat]               = useState(initialLat?.toString() ?? "");
+  const [lng, setLng]               = useState(initialLng?.toString() ?? "");
+  const [geocoding, setGeocoding]   = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [recalcing, setRecalcing]   = useState(false);
+  const [message, setMessage]       = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  async function handleGeocode() {
+    setGeocoding(true);
+    setMessage(null);
+    try {
+      const res  = await fetch(`/api/v2/organizer/schools/${schoolId}/location`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: schoolName, district: districtName ?? "", state: stateName ?? "" }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Gagal");
+      setLat(String(json.latitude));
+      setLng(String(json.longitude));
+      setMessage({ type: "ok", text: `Koordinat dijumpai: ${json.latitude}, ${json.longitude}` });
+    } catch (e) {
+      setMessage({ type: "err", text: e instanceof Error ? e.message : "Gagal mendapatkan koordinat" });
+    } finally {
+      setGeocoding(false);
+    }
+  }
+
+  async function handleSave() {
+    const latN = parseFloat(lat);
+    const lngN = parseFloat(lng);
+    if (isNaN(latN) || isNaN(lngN)) { setMessage({ type: "err", text: "Koordinat tidak sah" }); return; }
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/v2/organizer/schools/${schoolId}/location`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latitude: latN, longitude: lngN }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved(contingentId, latN, lngN);
+      setMessage({ type: "ok", text: "Koordinat disimpan." });
+    } catch (e) {
+      setMessage({ type: "err", text: e instanceof Error ? e.message : "Gagal menyimpan" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRecalculate() {
+    // Save first if coordinates changed
+    const latN = parseFloat(lat);
+    const lngN = parseFloat(lng);
+    if (!isNaN(latN) && !isNaN(lngN) && (latN !== initialLat || lngN !== initialLng)) {
+      await handleSave();
+    }
+    setRecalcing(true);
+    setMessage(null);
+    try {
+      const res  = await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-table/recalculate-one`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contingentId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Gagal");
+      setMessage({ type: "ok", text: `Jarak dikira semula: jalan ${json.roadKm ?? "—"} km · udara ${json.airKm} km` });
+    } catch (e) {
+      setMessage({ type: "err", text: e instanceof Error ? e.message : "Gagal mengira jarak" });
+    } finally {
+      setRecalcing(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-zinc-100">
+          <div>
+            <h3 className="font-black text-sm uppercase tracking-wide flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-zinc-400" />
+              Lokasi Sekolah
+            </h3>
+            <p className="text-xs text-zinc-500 mt-0.5 font-medium">{schoolName}</p>
+            {districtName && <p className="text-[10px] text-zinc-400">{districtName}, {stateName}</p>}
+          </div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Gemini geocode */}
+          <button
+            onClick={() => void handleGeocode()}
+            disabled={geocoding}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-semibold py-2.5 transition-colors"
+          >
+            {geocoding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LocateFixed className="h-3.5 w-3.5" />}
+            {geocoding ? "Sedang mencari…" : "Cari Lokasi dengan Gemini"}
+          </button>
+
+          {/* Manual inputs */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wide mb-1">Latitud</label>
+              <input
+                type="number"
+                step="any"
+                value={lat}
+                onChange={(e) => setLat(e.target.value)}
+                placeholder="e.g. 2.7258"
+                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm font-mono focus:outline-none focus:border-zinc-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wide mb-1">Longitud</label>
+              <input
+                type="number"
+                step="any"
+                value={lng}
+                onChange={(e) => setLng(e.target.value)}
+                placeholder="e.g. 101.9424"
+                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm font-mono focus:outline-none focus:border-zinc-400"
+              />
+            </div>
+          </div>
+
+          {/* Message */}
+          {message && (
+            <p className={`text-xs px-3 py-2 rounded-lg ${message.type === "ok" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+              {message.text}
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => void handleSave()}
+              disabled={saving || recalcing}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 hover:bg-zinc-50 disabled:opacity-40 text-zinc-700 text-xs font-semibold py-2 transition-colors"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+              Simpan Lokasi
+            </button>
+            <button
+              onClick={() => void handleRecalculate()}
+              disabled={saving || recalcing}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-700 disabled:opacity-40 text-white text-xs font-semibold py-2 transition-colors"
+            >
+              {recalcing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Kira Semula Jarak
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const BORNEO_STATES = new Set(["Sabah", "Sarawak", "Labuan"]);
 function getRegion(state: string | null): "borneo" | "peninsular" {
   if (!state) return "peninsular"; // default: assume Peninsular Malaysia
@@ -221,6 +408,15 @@ function DistanceModal({
   const [startError,   setStartError]   = useState<string | null>(null);
   const [sortCol,      setSortCol]      = useState<"road" | "air" | "water">("road");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Per-contingent updated coordinates (after user saves in SchoolLocationModal)
+  const [localCoords, setLocalCoords] = useState<Map<string, { lat: number; lng: number }>>(new Map());
+  type LocationTarget = {
+    contingentId: string; schoolId: string; schoolName: string;
+    districtName: string | null; stateName: string | null;
+    lat: number | null; lng: number | null;
+  };
+  const [locationTarget, setLocationTarget] = useState<LocationTarget | null>(null);
 
   // Poll every 2 s while modal is open; stop when no PROCESSING records
   useEffect(() => {
@@ -672,6 +868,29 @@ function DistanceModal({
                             : <span className="text-zinc-300">—</span>}
                         </td>
                       )}
+                      {/* Location / recalculate button */}
+                      <td className="py-2 pl-2">
+                        {c.schoolId && (
+                          <button
+                            onClick={() => {
+                              const coords = localCoords.get(c.contingentId);
+                              setLocationTarget({
+                                contingentId: c.contingentId,
+                                schoolId:     c.schoolId!,
+                                schoolName:   c.schoolName ?? c.name,
+                                districtName: c.districtName,
+                                stateName:    c.stateName,
+                                lat:  coords?.lat ?? c.schoolLat,
+                                lng:  coords?.lng ?? c.schoolLng,
+                              });
+                            }}
+                            title="Semak / kemas lokasi sekolah"
+                            className="text-zinc-300 hover:text-violet-500 transition-colors"
+                          >
+                            <MapPin className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -707,6 +926,24 @@ function DistanceModal({
           </p>
         </div>
       </div>
+
+      {/* School location sub-modal */}
+      {locationTarget && (
+        <SchoolLocationModal
+          eventId={eventId}
+          contingentId={locationTarget.contingentId}
+          schoolId={locationTarget.schoolId}
+          schoolName={locationTarget.schoolName}
+          districtName={locationTarget.districtName}
+          stateName={locationTarget.stateName}
+          initialLat={locationTarget.lat}
+          initialLng={locationTarget.lng}
+          onClose={() => setLocationTarget(null)}
+          onSaved={(cId, lat, lng) => {
+            setLocalCoords((prev) => new Map(prev).set(cId, { lat, lng }));
+          }}
+        />
+      )}
     </div>
   );
 }

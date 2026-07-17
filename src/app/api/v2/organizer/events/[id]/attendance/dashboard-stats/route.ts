@@ -54,6 +54,7 @@ export async function GET(
               managers: { select: { id: true } },
               school: {
                 select: {
+                  id:        true,
                   name:      true,
                   latitude:  true,
                   longitude: true,
@@ -160,6 +161,7 @@ export async function GET(
   const seenContingents = new Set<string>();
   const contingentLocations: {
     contingentId: string; name: string;
+    schoolId: string | null;
     schoolName: string | null; stateName: string | null; districtName: string | null;
     schoolLat: number | null; schoolLng: number | null;
     present: boolean;
@@ -172,6 +174,7 @@ export async function GET(
     contingentLocations.push({
       contingentId: c.id,
       name:         c.name,
+      schoolId:     c.school?.id                ?? null,
       schoolName:   c.school?.name              ?? null,
       stateName:    c.school?.state?.name        ?? null,
       districtName: c.school?.district?.name     ?? null,
