@@ -2,10 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  ResponsiveContainer, Legend,
-} from "recharts";
+import { PieChart, Pie, Cell } from "recharts";
 import {
   Users, Building2, UserCheck, BookUser,
   RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp, Play,
@@ -140,24 +137,61 @@ function StatTile({
   );
 }
 
-// ── Custom recharts tooltip ───────────────────────────────────────────────────
+// ── Mini donut chart ──────────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label }: {
-  active?: boolean;
-  payload?: { name: string; value: number; fill: string }[];
-  label?: string;
+function MiniDonut({
+  label,
+  present,
+  total,
+  size = 110,
+}: {
+  label: string;
+  present: number;
+  total: number;
+  size?: number;
 }) {
-  if (!active || !payload?.length) return null;
+  const p = pct(present, total);
+  const pieData = total === 0
+    ? [{ name: "Tiada", value: 1 }]
+    : [
+        { name: "Hadir", value: present },
+        { name: "Belum", value: Math.max(0, total - present) },
+      ];
+  const fillColors = total === 0 ? [BAR_TOTAL] : [BAR_PRESENT, BAR_TOTAL];
+
   return (
-    <div className="bg-white border border-zinc-200 rounded-lg shadow-lg px-3 py-2 text-xs space-y-1">
-      <p className="font-semibold text-zinc-700 mb-1">{label}</p>
-      {payload.map((p) => (
-        <div key={p.name} className="flex items-center gap-2">
-          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: p.fill }} />
-          <span className="text-zinc-500">{p.name}:</span>
-          <span className="font-mono font-semibold text-zinc-800">{fmt(p.value)}</span>
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative" style={{ width: size, height: size }}>
+        <PieChart width={size} height={size}>
+          <Pie
+            data={pieData}
+            cx={size / 2}
+            cy={size / 2}
+            innerRadius={size * 0.28}
+            outerRadius={size * 0.44}
+            dataKey="value"
+            startAngle={90}
+            endAngle={-270}
+            strokeWidth={0}
+          >
+            {pieData.map((_, i) => (
+              <Cell key={i} fill={fillColors[i] ?? BAR_TOTAL} />
+            ))}
+          </Pie>
+        </PieChart>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span
+            className="text-sm font-black font-mono leading-none"
+            style={{ color: total === 0 ? "#a1a1aa" : "#065f46" }}
+          >
+            {p}%
+          </span>
         </div>
-      ))}
+      </div>
+      <div className="text-center leading-tight">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">{label}</p>
+        <p className="text-[10px] font-mono text-zinc-400">{fmt(present)}/{fmt(total)}</p>
+      </div>
     </div>
   );
 }
@@ -979,28 +1013,6 @@ export default function AttendanceDashboardClient({ event }: Props) {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [fetchStats]);
 
-  // ── Chart data ─────────────────────────────────────────────────────────────
-
-  const overallChartData = data
-    ? [
-        { name: "Kontingen", Dijangka: data.overall.contingents.total,  Hadir: data.overall.contingents.present },
-        { name: "Pengurus",  Dijangka: data.overall.managers.total,     Hadir: data.overall.managers.present },
-        { name: "Pasukan",   Dijangka: data.overall.teams.total,        Hadir: data.overall.teams.present },
-        { name: "Peserta",   Dijangka: data.overall.participants.total,  Hadir: data.overall.participants.present },
-      ]
-    : [];
-
-  const tgTeamChartData = data?.byTargetGroup.map((g) => ({
-    name:    g.name,
-    Dijangka: g.teams.total,
-    Hadir:   g.teams.present,
-  })) ?? [];
-
-  const tgParticipantChartData = data?.byTargetGroup.map((g) => ({
-    name:    g.name,
-    Dijangka: g.participants.total,
-    Hadir:   g.participants.present,
-  })) ?? [];
 
   // ── Venue display ──────────────────────────────────────────────────────────
 
@@ -1115,17 +1127,12 @@ export default function AttendanceDashboardClient({ event }: Props) {
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
             Perbandingan Dijangka vs Hadir
           </p>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={overallChartData} barGap={4} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#71717a" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#a1a1aa" }} axisLine={false} tickLine={false} width={40} />
-              <RechartsTooltip content={<ChartTooltip />} />
-              <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="Dijangka" fill={BAR_TOTAL}   radius={[3, 3, 0, 0]} maxBarSize={48} />
-              <Bar dataKey="Hadir"    fill={BAR_PRESENT} radius={[3, 3, 0, 0]} maxBarSize={48} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex flex-wrap justify-around gap-4 py-2">
+            <MiniDonut label="Kontingen" present={overall.contingents.present}  total={overall.contingents.total}  />
+            <MiniDonut label="Pengurus"  present={overall.managers.present}     total={overall.managers.total}     />
+            <MiniDonut label="Pasukan"   present={overall.teams.present}        total={overall.teams.total}        />
+            <MiniDonut label="Peserta"   present={overall.participants.present} total={overall.participants.total} />
+          </div>
         </div>
       </div>
 
@@ -1137,33 +1144,21 @@ export default function AttendanceDashboardClient({ event }: Props) {
           {/* Teams chart */}
           <div>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Pasukan</p>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={tgTeamChartData} barGap={4} barCategoryGap="30%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#71717a" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#a1a1aa" }} axisLine={false} tickLine={false} width={40} />
-                <RechartsTooltip content={<ChartTooltip />} />
-                <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="Dijangka" fill={BAR_TOTAL}   radius={[3, 3, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="Hadir"    fill={BAR_PRESENT} radius={[3, 3, 0, 0]} maxBarSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="flex flex-wrap gap-4 py-2">
+              {byTargetGroup.map((g) => (
+                <MiniDonut key={g.id} label={g.name} present={g.teams.present} total={g.teams.total} />
+              ))}
+            </div>
           </div>
 
           {/* Participants chart */}
           <div>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Peserta</p>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={tgParticipantChartData} barGap={4} barCategoryGap="30%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#71717a" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#a1a1aa" }} axisLine={false} tickLine={false} width={40} />
-                <RechartsTooltip content={<ChartTooltip />} />
-                <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-                <Bar dataKey="Dijangka" fill={BAR_TOTAL}   radius={[3, 3, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="Hadir"    fill={BAR_PRESENT} radius={[3, 3, 0, 0]} maxBarSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="flex flex-wrap gap-4 py-2">
+              {byTargetGroup.map((g) => (
+                <MiniDonut key={g.id} label={g.name} present={g.participants.present} total={g.participants.total} />
+              ))}
+            </div>
           </div>
 
           {/* Target group table summary */}

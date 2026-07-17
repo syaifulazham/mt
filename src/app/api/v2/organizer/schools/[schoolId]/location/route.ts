@@ -53,7 +53,7 @@ Be precise — use the actual school location, not the district or state centre.
 
   try {
     const result = await model.generateContent(prompt);
-    let raw = result.response.text().trim()
+    const raw = result.response.text().trim()
       .replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
     const coords = JSON.parse(raw) as { latitude: number; longitude: number };
 
