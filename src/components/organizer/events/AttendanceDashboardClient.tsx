@@ -387,11 +387,9 @@ function DistanceModal({
                   <th className="text-right py-2 pr-3">
                     <SortBtn col="road"  label="Jalan (km)"  sortCol={sortCol} setSortCol={setSortCol} />
                   </th>
-                  {doneRows.some((c) => showAirForContingent(c.stateName)) && (
-                    <th className="text-right py-2 pr-3">
-                      <SortBtn col="air" label="Udara (km)" sortCol={sortCol} setSortCol={setSortCol} />
-                    </th>
-                  )}
+                  <th className="text-right py-2 pr-3">
+                    <SortBtn col="air" label="Udara (km)" sortCol={sortCol} setSortCol={setSortCol} />
+                  </th>
                   {hasWater && (
                     <th className="text-right py-2">
                       <SortBtn col="water" label="Laut (km)" sortCol={sortCol} setSortCol={setSortCol} />
@@ -426,11 +424,11 @@ function DistanceModal({
                       <td className="py-2 pr-3 text-right font-mono font-semibold text-zinc-800">
                         {isDone ? rec!.roadKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>}
                       </td>
-                      {showAir && (
-                        <td className="py-2 pr-3 text-right font-mono text-zinc-500">
-                          {isDone ? rec!.airKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>}
-                        </td>
-                      )}
+                      <td className="py-2 pr-3 text-right font-mono text-zinc-500">
+                        {showAir
+                          ? (isDone ? rec!.airKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>)
+                          : ""}
+                      </td>
                       {hasWater && (
                         <td className="py-2 text-right font-mono text-blue-500">
                           {isDone
@@ -449,9 +447,9 @@ function DistanceModal({
                       {doneRows.length} selesai · {processingRows.length} dikira · {pendingRows.length} belum
                     </td>
                     <td className="py-2 pr-3 text-right font-mono text-xs">{doneKmTotals.road.toLocaleString()}</td>
-                    {doneRows.some((c) => showAirForContingent(c.stateName)) && (
-                      <td className="py-2 pr-3 text-right font-mono text-xs text-zinc-400">{doneKmTotals.air.toLocaleString()}</td>
-                    )}
+                    <td className="py-2 pr-3 text-right font-mono text-xs text-zinc-400">
+                      {doneRows.some((c) => showAirForContingent(c.stateName)) ? doneKmTotals.air.toLocaleString() : ""}
+                    </td>
                     {hasWater && <td />}
                   </tr>
                 </tfoot>
