@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { stopRequested } from "../processing-state";
 
 // ── Malaysia state centroids (same set used by the frontend map) ──────────────
 const STATE_CENTROIDS: Record<string, [number, number]> = {
@@ -28,7 +29,6 @@ function getRegion(state: string): "borneo" | "peninsular" {
   return BORNEO_STATES.has(state) ? "borneo" : "peninsular";
 }
 
-// Haversine formula — returns km
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -41,7 +41,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ── Background processor (fire-and-forget) ────────────────────────────────────
+// ── Background processor — one school at a time ───────────────────────────────
 
 async function runDistanceProcessing(
   eventId: string,
@@ -53,16 +53,36 @@ async function runDistanceProcessing(
   const eventRegion = getRegion(eventStateName);
 
   for (const school of schools) {
-    // Check it's still PROCESSING (not stopped/deleted by a concurrent stop request)
-    const current = await db.contingentDistance.findUnique({
+    // Honour a stop request between each school
+    if (stopRequested.has(eventId)) {
+      stopRequested.delete(eventId);
+      break;
+    }
+
+    // Skip if already DONE from a previous run
+    const existing = await db.contingentDistance.findUnique({
       where: { eventId_contingentId: { eventId, contingentId: school.contingentId } },
       select: { status: true },
     });
-    if (!current || current.status !== "PROCESSING") continue;
+    if (existing?.status === "DONE") continue;
 
+    // Mark this single school PROCESSING so the UI shows it in green
+    await db.contingentDistance.upsert({
+      where: { eventId_contingentId: { eventId, contingentId: school.contingentId } },
+      create: {
+        eventId,
+        contingentId: school.contingentId,
+        schoolName:   school.schoolName,
+        stateName:    school.stateName,
+        districtName: school.districtName,
+        status:       "PROCESSING",
+      },
+      update: { status: "PROCESSING" },
+    });
+
+    // Compute distances
     const centroid = STATE_CENTROIDS[school.stateName];
     if (!centroid) {
-      // No centroid → mark ERROR
       await db.contingentDistance.updateMany({
         where: { eventId, contingentId: school.contingentId, status: "PROCESSING" },
         data: { status: "ERROR" },
@@ -71,16 +91,12 @@ async function runDistanceProcessing(
     }
 
     const [schoolLat, schoolLng] = centroid;
-    const airKm = Math.round(haversineKm(schoolLat, schoolLng, eventLat, eventLng));
+    const airKm       = Math.round(haversineKm(schoolLat, schoolLng, eventLat, eventLng));
+    const crossRegion = getRegion(school.stateName) !== eventRegion;
+    const roadKm      = crossRegion ? null : Math.round(airKm * 1.35);
+    const waterKm     = crossRegion ? airKm : null;
 
-    const schoolRegion = getRegion(school.stateName);
-    const crossRegion  = schoolRegion !== eventRegion;
-
-    // Road distance: not applicable cross-region (no road across the South China Sea)
-    const roadKm  = crossRegion ? null : Math.round(airKm * 1.35);
-    // Water distance: only meaningful cross-region
-    const waterKm = crossRegion ? airKm : null;
-
+    // Only update if still PROCESSING (not stopped mid-school)
     await db.contingentDistance.updateMany({
       where: { eventId, contingentId: school.contingentId, status: "PROCESSING" },
       data: { airKm, roadKm, waterKm, status: "DONE" },
@@ -107,13 +123,12 @@ export async function POST(
       state:     { select: { name: true } },
     },
   });
-  if (!event)                return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
-  if (!event.latitude || !event.longitude)
-    return NextResponse.json({ error: "NO_COORDINATES" }, { status: 400 });
+  if (!event)                              return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
+  if (!event.latitude || !event.longitude) return NextResponse.json({ error: "NO_COORDINATES" }, { status: 400 });
 
-  const eventStateName = event.state?.name ?? "Selangor"; // fallback: Peninsular
+  const eventStateName = event.state?.name ?? "Selangor";
 
-  // Collect all registered contingents with schools
+  // Collect all accepted contingents with linked schools
   const teamEvents = await db.teamEvent.findMany({
     where: { eventId, acceptance: "ACCEPT" },
     select: {
@@ -136,14 +151,13 @@ export async function POST(
     },
   });
 
-  // Deduplicate by contingentId and only include school-linked contingents
+  // Deduplicate by contingentId; only school-linked contingents
   const allSchools = new Map<string, {
     contingentId: string; schoolName: string; stateName: string; districtName: string;
   }>();
   for (const te of teamEvents) {
     const c = te.team.contingent;
-    if (!c.school) continue;
-    if (allSchools.has(c.id)) continue;
+    if (!c.school || allSchools.has(c.id)) continue;
     allSchools.set(c.id, {
       contingentId: c.id,
       schoolName:   c.school.name,
@@ -152,8 +166,8 @@ export async function POST(
     });
   }
 
-  // Skip contingents already DONE or currently PROCESSING
-  const existingRecords = await db.contingentDistance.findMany({
+  // Skip contingents already DONE or actively PROCESSING
+  const existing = await db.contingentDistance.findMany({
     where: {
       eventId,
       contingentId: { in: [...allSchools.keys()] },
@@ -161,30 +175,18 @@ export async function POST(
     },
     select: { contingentId: true },
   });
-  const skipIds = new Set(existingRecords.map((r) => r.contingentId));
-
+  const skipIds   = new Set(existing.map((r) => r.contingentId));
   const toProcess = [...allSchools.values()].filter((s) => !skipIds.has(s.contingentId));
-  const skipped   = allSchools.size - toProcess.length;
 
   if (toProcess.length === 0) {
-    return NextResponse.json({ started: false, processing: 0, skipped });
+    return NextResponse.json({ started: false, processing: 0, skipped: allSchools.size });
   }
 
-  // Mark all as PROCESSING immediately so the UI shows green dots
-  await db.contingentDistance.createMany({
-    data: toProcess.map((s) => ({
-      eventId,
-      contingentId: s.contingentId,
-      schoolName:   s.schoolName,
-      stateName:    s.stateName,
-      districtName: s.districtName,
-      status:       "PROCESSING",
-    })),
-    skipDuplicates: true,
-  });
+  // Clear any lingering stop signal before starting
+  stopRequested.delete(eventId);
 
-  // Fire-and-forget — computes Haversine distances, updates each record
+  // Fire-and-forget — stamps each school PROCESSING → DONE individually
   void runDistanceProcessing(eventId, toProcess, event.latitude, event.longitude, eventStateName);
 
-  return NextResponse.json({ started: true, processing: toProcess.length, skipped });
+  return NextResponse.json({ started: true, processing: toProcess.length, skipped: allSchools.size - toProcess.length });
 }
