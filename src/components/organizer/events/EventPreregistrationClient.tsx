@@ -283,8 +283,10 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     missing:        number;
     prerequisites:  { id: string; name: string; slug: string; selectedCount: number; registeredCount: number; missingCount: number }[];
   };
-  const [prereqCheck, setPrereqCheck]       = useState<PrereqCheckResult | null>(null);
+  const [prereqCheck, setPrereqCheck]           = useState<PrereqCheckResult | null>(null);
   const [prereqCheckDismissed, setPrereqCheckDismissed] = useState(false);
+  const [loadingMissing, setLoadingMissing]     = useState(false);
+  const [loadMissingResult, setLoadMissingResult] = useState<{ added: number } | null>(null);
 
   // Load-from-prerequisite modal
   type PrereqModalState =
@@ -589,6 +591,29 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       alert("Gagal nyah-daftar. Sila cuba lagi.");
     } finally {
       setUnregistering(false);
+    }
+  }
+
+  // Direct sync: load only the missing selected=true teams (no picker)
+  async function handleLoadMissing() {
+    setLoadingMissing(true);
+    setLoadMissingResult(null);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/preregistration/load-from-prerequisite`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      setLoadMissingResult({ added: json.added });
+      loadTeams();
+      loadStats();
+      fetch(`/api/v2/organizer/events/${event.id}/preregistration/prerequisite-check`)
+        .then((r) => r.json()).then((d) => setPrereqCheck(d)).catch(() => {});
+    } catch {
+      // leave banner open; user can retry
+    } finally {
+      setLoadingMissing(false);
     }
   }
 
@@ -925,13 +950,19 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleLoadFromPrerequisite}
-              disabled={prereqModal?.phase === "loading"}
-              className="text-xs px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 font-medium transition-colors"
-            >
-              Muat sekarang
-            </button>
+            {loadMissingResult
+              ? <span className="text-xs text-green-700 font-medium">{loadMissingResult.added} pasukan ditambah ✓</span>
+              : (
+                <button
+                  onClick={handleLoadMissing}
+                  disabled={loadingMissing}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 font-medium transition-colors"
+                >
+                  {loadingMissing && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Muat sekarang
+                </button>
+              )
+            }
             <button
               onClick={() => setPrereqCheckDismissed(true)}
               className="text-amber-400 hover:text-amber-600 transition-colors"
