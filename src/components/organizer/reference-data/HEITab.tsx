@@ -791,6 +791,7 @@ export function HEITab() {
 
   const [aiOpen, setAiOpen]       = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/v2/organizer/reference-data/states?pageSize=100")
@@ -816,12 +817,19 @@ export function HEITab() {
   async function handleExportCsv() {
     setExporting(true);
     try {
-      const params = new URLSearchParams({ page: "1", pageSize: "10000", q });
-      if (stateFilter) params.set("stateId", stateFilter);
-      if (typeFilter)  params.set("heiType", typeFilter);
-      const res  = await fetch(`/api/v2/organizer/reference-data/higher-institutions?${params}`);
-      const json = await res.json();
-      const rows: HEI[] = json.data ?? [];
+      let rows: HEI[];
+      if (selectedIds.size > 0) {
+        // Export only the selected rows that are currently in `data`
+        rows = data.filter((h) => selectedIds.has(h.id));
+      } else {
+        // Export all records matching current filters
+        const params = new URLSearchParams({ page: "1", pageSize: "10000", q });
+        if (stateFilter) params.set("stateId", stateFilter);
+        if (typeFilter)  params.set("heiType", typeFilter);
+        const res  = await fetch(`/api/v2/organizer/reference-data/higher-institutions?${params}`);
+        const json = await res.json();
+        rows = json.data ?? [];
+      }
       const escape = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
       const header = "Name,Code,Type,Sector,State,Parent,Contingents,Active";
       const lines  = rows.map(r => [
@@ -839,7 +847,7 @@ export function HEITab() {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href     = url;
-      a.download = "higher-institutions.csv";
+      a.download = selectedIds.size > 0 ? "higher-institutions-selected.csv" : "higher-institutions.csv";
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -982,6 +990,7 @@ export function HEITab() {
             <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={exporting} className="gap-1.5">
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               Export CSV
+              {selectedIds.size > 0 && <span className="text-zinc-400">({selectedIds.size})</span>}
             </Button>
             <Button variant="outline" size="sm" onClick={() => { setCsvRows([]); setImportResult(null); setImportOpen(true); }}>
               <Upload className="h-4 w-4 mr-1" /> Import CSV
@@ -1009,6 +1018,21 @@ export function HEITab() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-50 border-b">
             <tr>
+              <th className="px-3 py-2 w-8">
+                <input
+                  type="checkbox"
+                  className="rounded border-zinc-300 accent-violet-600"
+                  checked={data.length > 0 && data.every((h) => selectedIds.has(h.id))}
+                  ref={(el) => { if (el) el.indeterminate = data.some((h) => selectedIds.has(h.id)) && !data.every((h) => selectedIds.has(h.id)); }}
+                  onChange={(e) => {
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      data.forEach((h) => e.target.checked ? next.add(h.id) : next.delete(h.id));
+                      return next;
+                    });
+                  }}
+                />
+              </th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Name</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Code</th>
               <th className="px-3 py-2 text-left font-medium text-zinc-600">Type</th>
@@ -1023,20 +1047,37 @@ export function HEITab() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-zinc-400">
+                <td colSpan={10} className="px-3 py-8 text-center text-zinc-400">
                   <Loader2 className="h-5 w-5 animate-spin inline" />
                 </td>
               </tr>
             )}
             {!loading && data.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-zinc-400">
+                <td colSpan={10} className="px-3 py-8 text-center text-zinc-400">
                   No higher institutions found.
                 </td>
               </tr>
             )}
             {!loading && data.map((h) => (
-              <tr key={h.id} className={`border-b last:border-0 hover:bg-zinc-50 ${h.heiType === "BRANCH" ? "bg-zinc-50/50" : ""}`}>
+              <tr
+                key={h.id}
+                className={`border-b last:border-0 hover:bg-zinc-50 ${selectedIds.has(h.id) ? "bg-violet-50/60" : h.heiType === "BRANCH" ? "bg-zinc-50/50" : ""}`}
+              >
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    className="rounded border-zinc-300 accent-violet-600"
+                    checked={selectedIds.has(h.id)}
+                    onChange={(e) => {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(h.id); else next.delete(h.id);
+                        return next;
+                      });
+                    }}
+                  />
+                </td>
                 <td className="px-3 py-2 max-w-[220px]">
                   <div className="flex items-center gap-1.5">
                     {h.heiType === "BRANCH" && <span className="w-2 shrink-0 border-l-2 border-zinc-200 h-4" />}
