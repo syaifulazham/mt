@@ -196,8 +196,8 @@ function SortBtn({
 
 // States in Borneo Malaysia; everything else = Peninsular (or unknown)
 const BORNEO_STATES = new Set(["Sabah", "Sarawak", "Labuan"]);
-function getRegion(state: string | null): "borneo" | "peninsular" | null {
-  if (!state) return null;
+function getRegion(state: string | null): "borneo" | "peninsular" {
+  if (!state) return "peninsular"; // default: assume Peninsular Malaysia
   return BORNEO_STATES.has(state) ? "borneo" : "peninsular";
 }
 
@@ -304,7 +304,7 @@ function DistanceModal({
   const eventRegion = getRegion(eventStateName);
   // Only show air km when there's a cross-region pair (Peninsular ↔ Borneo)
   const showAirForContingent = (stateName: string | null) =>
-    eventRegion === null || getRegion(stateName) !== eventRegion;
+    getRegion(stateName) !== eventRegion;
   const allDone    = pendingRows.length === 0 && processingRows.length === 0 && errorRows.length === 0;
   const anyProcessing = processingRows.length > 0;
   const canStart   = pendingRows.length > 0 || errorRows.length > 0;
