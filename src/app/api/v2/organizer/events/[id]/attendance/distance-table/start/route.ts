@@ -1,84 +1,89 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+// ── Malaysia state centroids (same set used by the frontend map) ──────────────
+const STATE_CENTROIDS: Record<string, [number, number]> = {
+  "Johor":           [1.9344,  103.3587],
+  "Kedah":           [5.7964,  100.6497],
+  "Kelantan":        [5.7487,  102.0000],
+  "Melaka":          [2.2055,  102.2501],
+  "Negeri Sembilan": [2.7258,  101.9424],
+  "Pahang":          [3.8126,  103.3256],
+  "Perak":           [4.5921,  101.0901],
+  "Perlis":          [6.4449,  100.2048],
+  "Pulau Pinang":    [5.4141,  100.3288],
+  "Sabah":           [5.9788,  116.0753],
+  "Sarawak":         [1.5533,  110.3592],
+  "Selangor":        [3.0738,  101.5183],
+  "Terengganu":      [5.3117,  103.1324],
+  "Kuala Lumpur":    [3.1390,  101.6869],
+  "Labuan":          [5.2831,  115.2308],
+  "Putrajaya":       [2.9264,  101.6964],
+};
+
+const BORNEO_STATES = new Set(["Sabah", "Sarawak", "Labuan"]);
+
+function getRegion(state: string): "borneo" | "peninsular" {
+  return BORNEO_STATES.has(state) ? "borneo" : "peninsular";
+}
+
+// Haversine formula — returns km
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // ── Background processor (fire-and-forget) ────────────────────────────────────
 
 async function runDistanceProcessing(
   eventId: string,
   schools: { contingentId: string; schoolName: string; stateName: string; districtName: string }[],
-  venueDesc: string,
+  eventLat: number,
+  eventLng: number,
+  eventStateName: string,
 ) {
-  if (schools.length === 0) return;
+  const eventRegion = getRegion(eventStateName);
 
-  const schoolList = schools
-    .map((s, i) => `${i + 1}. ${s.schoolName}, ${s.districtName}, ${s.stateName}`)
-    .join("\n");
+  for (const school of schools) {
+    // Check it's still PROCESSING (not stopped/deleted by a concurrent stop request)
+    const current = await db.contingentDistance.findUnique({
+      where: { eventId_contingentId: { eventId, contingentId: school.contingentId } },
+      select: { status: true },
+    });
+    if (!current || current.status !== "PROCESSING") continue;
 
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    generationConfig: { responseMimeType: "application/json" },
-  });
+    const centroid = STATE_CENTROIDS[school.stateName];
+    if (!centroid) {
+      // No centroid → mark ERROR
+      await db.contingentDistance.updateMany({
+        where: { eventId, contingentId: school.contingentId, status: "PROCESSING" },
+        data: { status: "ERROR" },
+      });
+      continue;
+    }
 
-  const prompt = `You are a Malaysian geography and transport expert with accurate knowledge of Malaysian road networks.
+    const [schoolLat, schoolLng] = centroid;
+    const airKm = Math.round(haversineKm(schoolLat, schoolLng, eventLat, eventLng));
 
-Event venue: ${venueDesc}
+    const schoolRegion = getRegion(school.stateName);
+    const crossRegion  = schoolRegion !== eventRegion;
 
-For each school listed below, estimate distances FROM the school TO the event venue.
-Rules:
-- roadKm: estimated driving distance via public roads (km). Be realistic — use known highway distances.
-- airKm: straight-line/geodesic distance (km).
-- waterKm: sea/boat distance (km) if relevant — e.g. schools in East Malaysia (Sabah/Sarawak) vs Peninsular venue, or schools on islands. Return null if not applicable.
+    // Road distance: not applicable cross-region (no road across the South China Sea)
+    const roadKm  = crossRegion ? null : Math.round(airKm * 1.35);
+    // Water distance: only meaningful cross-region
+    const waterKm = crossRegion ? airKm : null;
 
-Schools:
-${schoolList}
-
-Return ONLY a JSON array. No markdown fences, no explanation.
-Schema: [{ "schoolName": string, "stateName": string, "districtName": string, "roadKm": number, "airKm": number, "waterKm": number | null }]`;
-
-  try {
-    const result = await model.generateContent(prompt);
-    let raw = result.response.text().trim()
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/i, "");
-
-    const start = raw.indexOf("[");
-    if (start > 0) raw = raw.slice(start);
-    const end = raw.lastIndexOf("]");
-    if (end !== -1) raw = raw.slice(0, end + 1);
-
-    const parsed = JSON.parse(raw) as {
-      schoolName: string; stateName: string; districtName: string;
-      roadKm: number; airKm: number; waterKm: number | null;
-    }[];
-
-    // Build a lookup: schoolName → contingentId (use first match if duplicates)
-    const lookup = new Map(schools.map((s) => [s.schoolName.toLowerCase(), s.contingentId]));
-
-    await Promise.allSettled(
-      parsed.map(async (r) => {
-        const contingentId = lookup.get(r.schoolName.toLowerCase());
-        if (!contingentId) return;
-        await db.contingentDistance.update({
-          where: { eventId_contingentId: { eventId, contingentId } },
-          data: {
-            roadKm:  r.roadKm  ?? null,
-            airKm:   r.airKm   ?? null,
-            waterKm: r.waterKm ?? null,
-            status:  "DONE",
-          },
-        });
-      }),
-    );
-  } catch (e) {
-    console.error("[distance-table/start] Gemini processing failed:", e);
-    // Mark all as ERROR so the user can retry
     await db.contingentDistance.updateMany({
-      where: { eventId, contingentId: { in: schools.map((s) => s.contingentId) }, status: "PROCESSING" },
-      data: { status: "ERROR" },
+      where: { eventId, contingentId: school.contingentId, status: "PROCESSING" },
+      data: { airKm, roadKm, waterKm, status: "DONE" },
     });
   }
 }
@@ -97,16 +102,16 @@ export async function POST(
   const event = await db.event.findUnique({
     where: { id: eventId },
     select: {
-      venue:   true,
-      address: true,
-      city:    true,
-      state:   { select: { name: true } },
+      latitude:  true,
+      longitude: true,
+      state:     { select: { name: true } },
     },
   });
-  if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
+  if (!event)                return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
+  if (!event.latitude || !event.longitude)
+    return NextResponse.json({ error: "NO_COORDINATES" }, { status: 400 });
 
-  const venueDesc = [event.venue, event.city, event.state?.name].filter(Boolean).join(", ");
-  if (!venueDesc) return NextResponse.json({ error: "NO_VENUE" }, { status: 400 });
+  const eventStateName = event.state?.name ?? "Selangor"; // fallback: Peninsular
 
   // Collect all registered contingents with schools
   const teamEvents = await db.teamEvent.findMany({
@@ -147,7 +152,7 @@ export async function POST(
     });
   }
 
-  // Find already-processed contingents (DONE or currently PROCESSING)
+  // Skip contingents already DONE or currently PROCESSING
   const existingRecords = await db.contingentDistance.findMany({
     where: {
       eventId,
@@ -165,7 +170,7 @@ export async function POST(
     return NextResponse.json({ started: false, processing: 0, skipped });
   }
 
-  // Mark all unprocessed as PROCESSING immediately
+  // Mark all as PROCESSING immediately so the UI shows green dots
   await db.contingentDistance.createMany({
     data: toProcess.map((s) => ({
       eventId,
@@ -178,8 +183,8 @@ export async function POST(
     skipDuplicates: true,
   });
 
-  // Fire-and-forget — runs in Node.js event loop after response is sent
-  void runDistanceProcessing(eventId, toProcess, venueDesc);
+  // Fire-and-forget — computes Haversine distances, updates each record
+  void runDistanceProcessing(eventId, toProcess, event.latitude, event.longitude, eventStateName);
 
   return NextResponse.json({ started: true, processing: toProcess.length, skipped });
 }

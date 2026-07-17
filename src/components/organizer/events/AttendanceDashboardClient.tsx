@@ -251,6 +251,17 @@ function DistanceModal({
     };
   }, [eventId]);
 
+  async function handleStop() {
+    try {
+      await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-table/stop`, { method: "POST" });
+      // Immediately refresh so stopped records revert to gray
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-records`);
+      const json = await res.json();
+      setRecords(json.data ?? []);
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    } catch { /* ignore */ }
+  }
+
   async function handleStart() {
     setStartLoading(true);
     setStartError(null);
@@ -538,16 +549,26 @@ function DistanceModal({
                 </button>
               </>
             )}
+            {/* Stop button — only while processing */}
+            {anyProcessing && (
+              <button
+                onClick={() => void handleStop()}
+                className="flex items-center gap-1.5 rounded-lg border border-red-300 hover:bg-red-50 text-red-600 text-[11px] font-semibold px-3 py-1.5 transition-colors"
+              >
+                <X className="h-3 w-3" />
+                Berhenti
+              </button>
+            )}
             {/* Start button */}
             <button
               onClick={() => void handleStart()}
               disabled={!canStart || startLoading || anyProcessing}
               className="flex items-center gap-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-semibold px-3 py-1.5 transition-colors"
             >
-              {startLoading || anyProcessing
+              {startLoading
                 ? <Loader2 className="h-3 w-3 animate-spin" />
                 : <Play className="h-3 w-3" />}
-              {allDone ? "Selesai" : anyProcessing ? "Sedang diproses…" : "Mula Proses Jarak"}
+              {allDone ? "Selesai" : "Mula Proses Jarak"}
             </button>
             <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 transition-colors">
               <X className="h-5 w-5" />
@@ -559,8 +580,8 @@ function DistanceModal({
         {startError && (
           <div className="mx-6 mt-3 flex items-center gap-2 text-red-600 bg-red-50 rounded-lg px-4 py-2.5 text-xs">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {startError === "NO_VENUE"
-              ? "Lokasi acara belum dikonfigurasikan. Sila set alamat acara terlebih dahulu."
+            {startError === "NO_VENUE" || startError === "NO_COORDINATES"
+              ? "Koordinat lokasi acara belum dikonfigurasikan. Sila set latitud/longitud acara terlebih dahulu."
               : startError}
           </div>
         )}
