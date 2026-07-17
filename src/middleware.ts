@@ -22,7 +22,8 @@ const isPublicManagerRoute = createRouteMatcher([
 const isWebhookRoute = createRouteMatcher(["/api/v2/webhooks(.*)"]);
 const isJudgingRoute = createRouteMatcher(["/judging(.*)"]);
 const isResultsRoute = createRouteMatcher(["/results(.*)"]);
-const isWalkInRoute  = createRouteMatcher(["/walkin(.*)"]);
+const isWalkInRoute       = createRouteMatcher(["/walkin(.*)"]);
+const isAttendanceRoute   = createRouteMatcher(["/attendance(.*)"]);
 // Auth.js uses /api/auth/* internally — must be fully public
 const isAuthJsInternalRoute = createRouteMatcher(["/api/auth(.*)"]);
 
@@ -119,9 +120,10 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
   if (pathname.startsWith("/api/")) return NextResponse.next();
 
   // Public judging board / results / walk-in counter — no auth, no locale rewrite
-  if (isJudgingRoute(req)) return NextResponse.next();
-  if (isResultsRoute(req)) return NextResponse.next();
-  if (isWalkInRoute(req))  return NextResponse.next();
+  if (isJudgingRoute(req))    return NextResponse.next();
+  if (isResultsRoute(req))    return NextResponse.next();
+  if (isWalkInRoute(req))     return NextResponse.next();
+  if (isAttendanceRoute(req)) return NextResponse.next();
 
   // Run next-intl locale routing (handles locale prefix redirects + detection)
   return handleI18nRouting(req);

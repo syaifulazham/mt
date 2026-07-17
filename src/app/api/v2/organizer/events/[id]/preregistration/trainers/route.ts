@@ -33,11 +33,13 @@ export async function GET(
   const competitionId = searchParams.get("competitionId") ?? "";
   const stateId       = searchParams.get("stateId") ?? "";
   const targetGroupId = searchParams.get("targetGroupId") ?? "";
+  const acceptance    = searchParams.get("acceptance") ?? "";
   const page          = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const pageSize      = Math.min(200, Math.max(1, parseInt(searchParams.get("pageSize") ?? String(PAGE_SIZE), 10)));
 
   try {
     const extraConditions = Prisma.sql`
+      ${acceptance ? Prisma.sql`AND te.acceptance = ${acceptance}` : Prisma.empty}
       ${competitionId ? Prisma.sql`AND c.id = ${competitionId}` : Prisma.empty}
       ${stateId
         ? Prisma.sql`AND COALESCE(s.id, sch_state.id, hi_state.id) = ${stateId}`

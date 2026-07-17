@@ -493,9 +493,10 @@ model Event {
   asPrerequisiteOf    EventPrerequisite[] @relation("EventAsPrerequisite")
   eventCompetitions   EventCompetition[]
   walkInCompetitions  EventWalkInCompetition[]
-  walkInEndpoints     WalkInEndpoint[]
-  teamEvents          TeamEvent[]
-  resultsEndpoints    ResultsEndpoint[]
+  walkInEndpoints      WalkInEndpoint[]
+  teamEvents           TeamEvent[]
+  resultsEndpoints     ResultsEndpoint[]
+  attendanceEndpoints  AttendanceEndpoint[]
 
   @@map("events")
 }
@@ -926,6 +927,22 @@ model ResultsEndpoint {
   @@map("results_endpoints")
 }
 
+model AttendanceEndpoint {
+  id        String    @id @default(cuid())
+  eventId   String
+  routeCode String    @unique
+  passcode  String
+  label     String?
+  active    Boolean   @default(true)
+  retiredAt DateTime?
+  createdAt DateTime  @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("attendance_endpoints")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // KNOWLEDGE BASE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -993,12 +1010,13 @@ model NewsArticle {
 }
 
 model TeamEvent {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   teamId     String
   eventId    String
-  selected   Boolean  @default(false)
-  acceptance String   @default("PENDING")
-  createdAt  DateTime @default(now())
+  selected   Boolean   @default(false)
+  acceptance String    @default("PENDING")
+  attendedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
