@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import {
   Users, Building2, UserCheck, BookUser,
-  RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp,
+  RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp, Play,
 } from "lucide-react";
 import type { ContingentLocation } from "./AttendanceDashboardMap";
 
@@ -55,12 +55,15 @@ type DashboardStats = {
   contingentLocations: ContingentLocation[];
 };
 
-type DistanceRow = {
+type DistanceRecord = {
+  id: string;
+  contingentId: string;
   schoolName: string;
   stateName: string;
   districtName: string;
-  roadKm: number;
-  airKm: number;
+  status: "PROCESSING" | "DONE" | "ERROR";
+  roadKm: number | null;
+  airKm: number | null;
   waterKm: number | null;
 };
 
@@ -193,127 +196,261 @@ function SortBtn({
 
 function DistanceModal({
   eventId,
+  contingentLocations,
+  eventVenue,
   onClose,
 }: {
   eventId: string;
+  contingentLocations: ContingentLocation[];
+  eventVenue: string | null;
   onClose: () => void;
 }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [rows, setRows]       = useState<DistanceRow[]>([]);
-  const [venue, setVenue]     = useState("");
-  const [sortCol, setSortCol] = useState<"road" | "air" | "water">("road");
+  const [records,      setRecords]      = useState<DistanceRecord[]>([]);
+  const [initialLoad,  setInitialLoad]  = useState(false);
+  const [startLoading, setStartLoading] = useState(false);
+  const [startError,   setStartError]   = useState<string | null>(null);
+  const [sortCol,      setSortCol]      = useState<"road" | "air" | "water">("road");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Poll every 2 s while modal is open; stop when no PROCESSING records
   useEffect(() => {
-    fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-table`, { method: "POST" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) throw new Error(d.error);
-        setRows(d.data ?? []);
-        setVenue(d.venue ?? "");
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    async function load() {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-records`).catch(() => null);
+      if (!res || cancelled) return;
+      const json = await res.json();
+      const data: DistanceRecord[] = json.data ?? [];
+      if (!cancelled) {
+        setRecords(data);
+        setInitialLoad(true);
+        // Stop interval if nothing is still PROCESSING
+        if (!data.some((r) => r.status === "PROCESSING") && pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      }
+    }
+
+    void load();
+    pollRef.current = setInterval(() => void load(), 2000);
+
+    return () => {
+      cancelled = true;
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [eventId]);
 
-  const sorted = [...rows].sort((a, b) => {
-    if (sortCol === "road")  return (a.roadKm  ?? 0) - (b.roadKm  ?? 0);
-    if (sortCol === "air")   return (a.airKm   ?? 0) - (b.airKm   ?? 0);
-    if (sortCol === "water") return (a.waterKm ?? Infinity) - (b.waterKm ?? Infinity);
-    return 0;
-  });
+  async function handleStart() {
+    setStartLoading(true);
+    setStartError(null);
+    try {
+      const res  = await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-table/start`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      // Re-fetch immediately so green dots appear
+      const rec = await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-records`);
+      const rd  = await rec.json();
+      setRecords(rd.data ?? []);
+      // Re-start polling if it stopped
+      if (!pollRef.current) {
+        pollRef.current = setInterval(async () => {
+          const r2 = await fetch(`/api/v2/organizer/events/${eventId}/attendance/distance-records`).catch(() => null);
+          if (!r2) return;
+          const j2 = await r2.json();
+          const d2: DistanceRecord[] = j2.data ?? [];
+          setRecords(d2);
+          if (!d2.some((x) => x.status === "PROCESSING") && pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+        }, 2000);
+      }
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : "Ralat semasa memulakan proses");
+    } finally {
+      setStartLoading(false);
+    }
+  }
 
-  const hasWater = rows.some((r) => r.waterKm != null);
+  // Build a lookup: contingentId → record
+  const recordMap = new Map(records.map((r) => [r.contingentId, r]));
+
+  const doneRows = contingentLocations
+    .filter((c) => recordMap.get(c.contingentId)?.status === "DONE")
+    .sort((a, b) => {
+      const ra = recordMap.get(a.contingentId)!;
+      const rb = recordMap.get(b.contingentId)!;
+      if (sortCol === "road")  return (ra.roadKm  ?? 0) - (rb.roadKm  ?? 0);
+      if (sortCol === "air")   return (ra.airKm   ?? 0) - (rb.airKm   ?? 0);
+      if (sortCol === "water") return (ra.waterKm ?? Infinity) - (rb.waterKm ?? Infinity);
+      return 0;
+    });
+  const processingRows = contingentLocations.filter((c) => recordMap.get(c.contingentId)?.status === "PROCESSING");
+  const errorRows      = contingentLocations.filter((c) => recordMap.get(c.contingentId)?.status === "ERROR");
+  const pendingRows    = contingentLocations.filter((c) => !recordMap.has(c.contingentId));
+  const displayRows    = [...doneRows, ...processingRows, ...errorRows, ...pendingRows];
+
+  const hasWater   = records.some((r) => r.waterKm != null);
+  const allDone    = pendingRows.length === 0 && processingRows.length === 0 && errorRows.length === 0;
+  const anyProcessing = processingRows.length > 0;
+  const canStart   = pendingRows.length > 0 || errorRows.length > 0;
+
+  const doneKmTotals = doneRows.reduce(
+    (acc, c) => {
+      const r = recordMap.get(c.contingentId)!;
+      acc.road  += r.roadKm  ?? 0;
+      acc.air   += r.airKm   ?? 0;
+      acc.water += r.waterKm ?? 0;
+      return acc;
+    },
+    { road: 0, air: 0, water: 0 },
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="relative w-full max-w-3xl bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-4 border-b border-zinc-100">
           <div>
             <h2 className="font-black text-base uppercase tracking-wide">Jadual Jarak</h2>
-            {venue && <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1"><MapPin className="h-3 w-3" />{venue}</p>}
+            {eventVenue && (
+              <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1">
+                <MapPin className="h-3 w-3" />{eventVenue}
+              </p>
+            )}
           </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 transition-colors mt-0.5">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Status summary */}
+            {initialLoad && (
+              <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" />{doneRows.length} selesai</span>
+                {anyProcessing && <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />{processingRows.length} dikira</span>}
+                {pendingRows.length > 0 && <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-zinc-300" />{pendingRows.length} belum</span>}
+              </div>
+            )}
+            {/* Start button */}
+            <button
+              onClick={() => void handleStart()}
+              disabled={!canStart || startLoading || anyProcessing}
+              className="flex items-center gap-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-semibold px-3 py-1.5 transition-colors"
+            >
+              {startLoading || anyProcessing
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <Play className="h-3 w-3" />}
+              {allDone ? "Selesai" : anyProcessing ? "Sedang diproses…" : "Mula Proses Jarak"}
+            </button>
+            <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Error */}
+        {startError && (
+          <div className="mx-6 mt-3 flex items-center gap-2 text-red-600 bg-red-50 rounded-lg px-4 py-2.5 text-xs">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            {startError === "NO_VENUE"
+              ? "Lokasi acara belum dikonfigurasikan. Sila set alamat acara terlebih dahulu."
+              : startError}
+          </div>
+        )}
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-4">
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-400">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <p className="text-sm">Gemini sedang mengira jarak…</p>
+          {!initialLoad ? (
+            <div className="flex items-center justify-center py-12 text-zinc-400 text-sm gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" /> Memuatkan rekod…
             </div>
-          )}
-          {error && (
-            <div className="flex items-center gap-2 text-red-600 bg-red-50 rounded-lg px-4 py-3 text-sm">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {error === "NO_VENUE"
-                ? "Lokasi acara belum dikonfigurasikan. Sila set alamat acara terlebih dahulu."
-                : "Gemini gagal mengira jarak. Cuba lagi kemudian."}
-            </div>
-          )}
-          {!loading && !error && (
+          ) : (
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b-2 border-zinc-900">
-                  <th className="text-left py-2 pr-3 font-black uppercase tracking-wide text-[10px] text-zinc-500 w-6">#</th>
-                  <th className="text-left py-2 pr-3 font-black uppercase tracking-wide text-[10px] text-zinc-500">Sekolah</th>
-                  <th className="text-left py-2 pr-3 font-black uppercase tracking-wide text-[10px] text-zinc-500">Negeri</th>
+                  <th className="text-left py-2 pr-2 font-black uppercase tracking-wide text-[9px] text-zinc-400 w-5" />
+                  <th className="text-left py-2 pr-3 font-black uppercase tracking-wide text-[9px] text-zinc-400 w-5">#</th>
+                  <th className="text-left py-2 pr-3 font-black uppercase tracking-wide text-[9px] text-zinc-400">Sekolah</th>
+                  <th className="text-left py-2 pr-3 font-black uppercase tracking-wide text-[9px] text-zinc-400">Negeri</th>
                   <th className="text-right py-2 pr-3">
-                    <SortBtn col="road"  label="Jalan (km)" sortCol={sortCol} setSortCol={setSortCol} />
+                    <SortBtn col="road"  label="Jalan (km)"  sortCol={sortCol} setSortCol={setSortCol} />
                   </th>
                   <th className="text-right py-2 pr-3">
-                    <SortBtn col="air"   label="Udara (km)" sortCol={sortCol} setSortCol={setSortCol} />
+                    <SortBtn col="air"   label="Udara (km)"  sortCol={sortCol} setSortCol={setSortCol} />
                   </th>
                   {hasWater && (
                     <th className="text-right py-2">
-                      <SortBtn col="water" label="Laut (km)"  sortCol={sortCol} setSortCol={setSortCol} />
+                      <SortBtn col="water" label="Laut (km)" sortCol={sortCol} setSortCol={setSortCol} />
                     </th>
                   )}
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((r, i) => (
-                  <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
-                    <td className="py-2 pr-3 font-mono text-zinc-300">{i + 1}</td>
-                    <td className="py-2 pr-3 font-medium text-zinc-800 max-w-[200px] truncate">
-                      {r.schoolName}
-                      {r.districtName && <span className="text-zinc-400 font-normal"> · {r.districtName}</span>}
-                    </td>
-                    <td className="py-2 pr-3 text-zinc-500">{r.stateName}</td>
-                    <td className="py-2 pr-3 text-right font-mono font-semibold text-zinc-800">{r.roadKm?.toLocaleString()}</td>
-                    <td className="py-2 pr-3 text-right font-mono text-zinc-500">{r.airKm?.toLocaleString()}</td>
-                    {hasWater && (
-                      <td className="py-2 text-right font-mono text-blue-500">
-                        {r.waterKm != null ? r.waterKm.toLocaleString() : <span className="text-zinc-300">—</span>}
+                {displayRows.map((c, i) => {
+                  const rec = recordMap.get(c.contingentId);
+                  const isDone       = rec?.status === "DONE";
+                  const isProcessing = rec?.status === "PROCESSING";
+                  const isError      = rec?.status === "ERROR";
+                  const isPending    = !rec;
+                  const textCls = isPending ? "text-zinc-400" : "text-zinc-800";
+                  return (
+                    <tr key={c.contingentId} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
+                      {/* Status dot */}
+                      <td className="py-2 pr-2">
+                        {isDone       && <span className="block h-2.5 w-2.5 rounded-full bg-blue-500 mx-auto" />}
+                        {isProcessing && <span className="block h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse mx-auto" />}
+                        {isError      && <span className="block h-2.5 w-2.5 rounded-full bg-red-500 mx-auto" />}
+                        {isPending    && <span className="block h-2.5 w-2.5 rounded-full bg-zinc-200 mx-auto" />}
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className={`py-2 pr-3 font-mono ${isPending ? "text-zinc-300" : "text-zinc-400"}`}>{i + 1}</td>
+                      <td className={`py-2 pr-3 font-medium max-w-[200px] truncate ${textCls}`}>
+                        {c.schoolName ?? c.name}
+                        {c.districtName && <span className={`font-normal ${isPending ? "text-zinc-300" : "text-zinc-400"}`}> · {c.districtName}</span>}
+                      </td>
+                      <td className={`py-2 pr-3 ${isPending ? "text-zinc-300" : "text-zinc-500"}`}>{c.stateName ?? "—"}</td>
+                      <td className="py-2 pr-3 text-right font-mono font-semibold text-zinc-800">
+                        {isDone ? rec!.roadKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono text-zinc-500">
+                        {isDone ? rec!.airKm?.toLocaleString() : isProcessing ? <span className="text-emerald-500 text-[10px]">…</span> : <span className="text-zinc-300">—</span>}
+                      </td>
+                      {hasWater && (
+                        <td className="py-2 text-right font-mono text-blue-500">
+                          {isDone
+                            ? (rec!.waterKm != null ? rec!.waterKm.toLocaleString() : <span className="text-zinc-300">—</span>)
+                            : <span className="text-zinc-300">—</span>}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-zinc-900 font-bold">
-                  <td colSpan={3} className="py-2 pr-3 text-[10px] uppercase tracking-wide text-zinc-400">Jumlah Sekolah: {rows.length}</td>
-                  <td className="py-2 pr-3 text-right font-mono text-xs">
-                    {rows.reduce((s, r) => s + (r.roadKm ?? 0), 0).toLocaleString()}
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono text-xs text-zinc-400">
-                    {rows.reduce((s, r) => s + (r.airKm ?? 0), 0).toLocaleString()}
-                  </td>
-                  {hasWater && <td />}
-                </tr>
-              </tfoot>
+              {doneRows.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-zinc-900 font-bold">
+                    <td colSpan={4} className="py-2 pr-3 text-[9px] uppercase tracking-wide text-zinc-400">
+                      {doneRows.length} selesai · {processingRows.length} dikira · {pendingRows.length} belum
+                    </td>
+                    <td className="py-2 pr-3 text-right font-mono text-xs">{doneKmTotals.road.toLocaleString()}</td>
+                    <td className="py-2 pr-3 text-right font-mono text-xs text-zinc-400">{doneKmTotals.air.toLocaleString()}</td>
+                    {hasWater && <td />}
+                  </tr>
+                </tfoot>
+              )}
             </table>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-zinc-100 bg-zinc-50 text-[10px] text-zinc-400 flex items-center gap-1">
-          <AlertCircle className="h-3 w-3 shrink-0" />
-          Anggaran oleh Gemini AI — untuk rujukan sahaja. Jarak sebenar mungkin berbeza.
+        {/* Legend + disclaimer footer */}
+        <div className="px-6 py-3 border-t border-zinc-100 bg-zinc-50 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-[9px] text-zinc-400">
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" /> Direkod</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Dikira</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-zinc-300" /> Belum diproses</span>
+          </div>
+          <p className="text-[9px] text-zinc-400 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            Anggaran oleh Gemini AI — untuk rujukan sahaja.
+          </p>
         </div>
       </div>
     </div>
@@ -658,7 +795,12 @@ export default function AttendanceDashboardClient({ event }: Props) {
 
       {/* ── Distance modal ────────────────────────────────────────────────── */}
       {showDistance && (
-        <DistanceModal eventId={event.id} onClose={() => setShowDistance(false)} />
+        <DistanceModal
+          eventId={event.id}
+          contingentLocations={contingentLocations}
+          eventVenue={data.event.venue}
+          onClose={() => setShowDistance(false)}
+        />
       )}
     </div>
   );

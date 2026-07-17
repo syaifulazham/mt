@@ -1065,3 +1065,21 @@ model TeamDroneAccess {
 
   @@map("team_drone_access")
 }
+
+model ContingentDistance {
+  id           String   @id @default(cuid())
+  eventId      String
+  contingentId String
+  schoolName   String
+  stateName    String
+  districtName String
+  status       String   @default("PROCESSING")
+  roadKm       Float?
+  airKm        Float?
+  waterKm      Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([eventId, contingentId])
+  @@map("contingent_distances")
+}
