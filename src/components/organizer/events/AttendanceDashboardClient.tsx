@@ -1127,7 +1127,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
           <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">
             Perbandingan Dijangka vs Hadir
           </p>
-          <div className="flex flex-wrap justify-around gap-4 py-2">
+          <div className="grid grid-cols-4 gap-4 py-2 place-items-center">
             <MiniDonut label="Kontingen" present={overall.contingents.present}  total={overall.contingents.total}  />
             <MiniDonut label="Pengurus"  present={overall.managers.present}     total={overall.managers.total}     />
             <MiniDonut label="Pasukan"   present={overall.teams.present}        total={overall.teams.total}        />
@@ -1144,7 +1144,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
           {/* Teams chart */}
           <div>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Pasukan</p>
-            <div className="flex flex-wrap gap-4 py-2">
+            <div className="grid gap-4 py-2 place-items-center" style={{ gridTemplateColumns: `repeat(${byTargetGroup.length}, minmax(0, 1fr))` }}>
               {byTargetGroup.map((g) => (
                 <MiniDonut key={g.id} label={g.name} present={g.teams.present} total={g.teams.total} />
               ))}
@@ -1154,7 +1154,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
           {/* Participants chart */}
           <div>
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Peserta</p>
-            <div className="flex flex-wrap gap-4 py-2">
+            <div className="grid gap-4 py-2 place-items-center" style={{ gridTemplateColumns: `repeat(${byTargetGroup.length}, minmax(0, 1fr))` }}>
               {byTargetGroup.map((g) => (
                 <MiniDonut key={g.id} label={g.name} present={g.participants.present} total={g.participants.total} />
               ))}
