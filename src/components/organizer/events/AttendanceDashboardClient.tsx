@@ -9,6 +9,7 @@ import {
 import {
   Users, Building2, UserCheck, BookUser,
   RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp, Play,
+  FileSpreadsheet, FileText,
 } from "lucide-react";
 import type { ContingentLocation } from "./AttendanceDashboardMap";
 
@@ -320,6 +321,179 @@ function DistanceModal({
     { road: 0, air: 0, water: 0 },
   );
 
+  const anyAirCol = doneRows.some((c) => showAirForContingent(c.stateName));
+
+  // Build export rows shared by both Excel and Word
+  function buildExportRows() {
+    return displayRows.map((c, i) => {
+      const rec   = recordMap.get(c.contingentId);
+      const isDone = rec?.status === "DONE";
+      const showAir = showAirForContingent(c.stateName);
+      return {
+        no:      i + 1,
+        school:  c.schoolName ?? c.name ?? "",
+        district: c.districtName ?? "",
+        state:   c.stateName ?? "",
+        road:    isDone ? (rec!.roadKm ?? "") : "",
+        air:     isDone && showAir ? (rec!.airKm ?? "") : "",
+        water:   isDone ? (rec!.waterKm ?? "") : "",
+      };
+    });
+  }
+
+  async function downloadExcel() {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+
+    const headers = ["#", "Sekolah", "Daerah", "Negeri", "Jalan (km)", "Udara (km)", ...(hasWater ? ["Laut (km)"] : [])];
+    const rows = buildExportRows().map((r) => [
+      r.no, r.school, r.district, r.state, r.road, r.air, ...(hasWater ? [r.water] : []),
+    ]);
+
+    // Title + venue rows
+    const titleRows = [
+      ["JADUAL JARAK"],
+      [eventVenue ? `Lokasi: ${eventVenue}` : ""],
+      [],
+      headers,
+      ...rows,
+      [],
+      ["", "", "", "JUMLAH", doneKmTotals.road || "", anyAirCol ? (doneKmTotals.air || "") : "", ...(hasWater ? [doneKmTotals.water || ""] : [])],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(titleRows);
+
+    // Column widths
+    ws["!cols"] = [{ wch: 4 }, { wch: 40 }, { wch: 20 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, ...(hasWater ? [{ wch: 12 }] : [])];
+
+    // Bold title (row 0)
+    const titleRef = XLSX.utils.encode_cell({ r: 0, c: 0 });
+    if (ws[titleRef]) ws[titleRef].s = { font: { bold: true, sz: 14 } };
+
+    XLSX.utils.book_append_sheet(wb, ws, "Jadual Jarak");
+    XLSX.writeFile(wb, "jadual-jarak.xlsx");
+  }
+
+  async function downloadWord() {
+    const { Document, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel } = await import("docx");
+
+    const colCount = 5 + (anyAirCol ? 1 : 0) + (hasWater ? 1 : 0);
+    const colW = Math.floor(9000 / colCount); // total ~9000 twips
+
+    function hdrCell(text: string) {
+      return new TableCell({
+        width: { size: colW, type: WidthType.DXA },
+        shading: { fill: "1a1a1a" },
+        borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+        children: [new Paragraph({
+          children: [new TextRun({ text, bold: true, color: "FFFFFF", size: 18 })],
+          alignment: AlignmentType.CENTER,
+        })],
+      });
+    }
+
+    function dataCell(text: string, align: "left" | "right" = "left", shade?: string) {
+      return new TableCell({
+        width: { size: colW, type: WidthType.DXA },
+        shading: shade ? { fill: shade } : undefined,
+        borders: { top: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "E5E7EB" }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+        children: [new Paragraph({
+          children: [new TextRun({ text, size: 18 })],
+          alignment: align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
+        })],
+      });
+    }
+
+    const exportRows = buildExportRows();
+
+    const tableRows = [
+      // Header
+      new TableRow({
+        tableHeader: true,
+        children: [
+          hdrCell("#"), hdrCell("Sekolah"), hdrCell("Daerah"), hdrCell("Negeri"), hdrCell("Jalan (km)"),
+          hdrCell("Udara (km)"),
+          ...(hasWater ? [hdrCell("Laut (km)")] : []),
+        ],
+      }),
+      // Data rows
+      ...exportRows.map((r, i) =>
+        new TableRow({
+          children: [
+            dataCell(String(r.no), "right", i % 2 ? undefined : "F9FAFB"),
+            dataCell(r.school, "left", i % 2 ? undefined : "F9FAFB"),
+            dataCell(r.district, "left", i % 2 ? undefined : "F9FAFB"),
+            dataCell(r.state, "left", i % 2 ? undefined : "F9FAFB"),
+            dataCell(r.road !== "" ? String(r.road) : "—", "right", i % 2 ? undefined : "F9FAFB"),
+            dataCell(r.air !== "" ? String(r.air) : "", "right", i % 2 ? undefined : "F9FAFB"),
+            ...(hasWater ? [dataCell(r.water !== "" ? String(r.water) : "—", "right", i % 2 ? undefined : "F9FAFB")] : []),
+          ],
+        }),
+      ),
+      // Total row
+      new TableRow({
+        children: [
+          dataCell("", "left", "F1F5F9"),
+          dataCell("", "left", "F1F5F9"),
+          dataCell("", "left", "F1F5F9"),
+          new TableCell({
+            width: { size: colW, type: WidthType.DXA },
+            shading: { fill: "F1F5F9" },
+            borders: { top: { style: BorderStyle.SINGLE, size: 2, color: "111827" }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ children: [new TextRun({ text: "JUMLAH", bold: true, size: 18 })] })],
+          }),
+          new TableCell({
+            width: { size: colW, type: WidthType.DXA },
+            shading: { fill: "F1F5F9" },
+            borders: { top: { style: BorderStyle.SINGLE, size: 2, color: "111827" }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: String(doneKmTotals.road || ""), bold: true, size: 18 })] })],
+          }),
+          new TableCell({
+            width: { size: colW, type: WidthType.DXA },
+            shading: { fill: "F1F5F9" },
+            borders: { top: { style: BorderStyle.SINGLE, size: 2, color: "111827" }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: anyAirCol ? String(doneKmTotals.air || "") : "", bold: true, size: 18 })] })],
+          }),
+          ...(hasWater ? [new TableCell({
+            width: { size: colW, type: WidthType.DXA },
+            shading: { fill: "F1F5F9" },
+            borders: { top: { style: BorderStyle.SINGLE, size: 2, color: "111827" }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: String(doneKmTotals.water || ""), bold: true, size: 18 })] })],
+          })] : []),
+        ],
+      }),
+    ];
+
+    const doc = new Document({
+      sections: [{
+        properties: { page: { margin: { top: 720, bottom: 720, left: 900, right: 900 } } },
+        children: [
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [new TextRun({ text: "JADUAL JARAK", bold: true, size: 28, color: "111827" })],
+          }),
+          ...(eventVenue ? [new Paragraph({
+            children: [new TextRun({ text: `Lokasi: ${eventVenue}`, size: 20, color: "6B7280" })],
+            spacing: { after: 240 },
+          })] : [new Paragraph({ spacing: { after: 240 }, children: [] })]),
+          new Table({ rows: tableRows, width: { size: 9000, type: WidthType.DXA } }),
+          new Paragraph({
+            spacing: { before: 200 },
+            children: [new TextRun({ text: "* Anggaran oleh Gemini AI — untuk rujukan sahaja.", size: 16, color: "9CA3AF", italics: true })],
+          }),
+        ],
+      }],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = "jadual-jarak.docx";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="relative w-full max-w-3xl bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -342,6 +516,27 @@ function DistanceModal({
                 {anyProcessing && <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />{processingRows.length} dikira</span>}
                 {pendingRows.length > 0 && <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-zinc-300" />{pendingRows.length} belum</span>}
               </div>
+            )}
+            {/* Download buttons — only when there are DONE records */}
+            {doneRows.length > 0 && (
+              <>
+                <button
+                  onClick={() => void downloadExcel()}
+                  title="Muat turun Excel (.xlsx)"
+                  className="flex items-center gap-1 rounded-lg border border-zinc-200 hover:border-emerald-400 hover:text-emerald-600 text-zinc-500 text-[11px] font-medium px-2.5 py-1.5 transition-colors"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Excel</span>
+                </button>
+                <button
+                  onClick={() => void downloadWord()}
+                  title="Muat turun Word (.docx)"
+                  className="flex items-center gap-1 rounded-lg border border-zinc-200 hover:border-blue-400 hover:text-blue-600 text-zinc-500 text-[11px] font-medium px-2.5 py-1.5 transition-colors"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Word</span>
+                </button>
+              </>
             )}
             {/* Start button */}
             <button
