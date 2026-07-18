@@ -135,10 +135,10 @@ function TeamSpotlight({
             <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
             <div>
               <p className="text-white text-4xl md:text-5xl font-black tracking-wide uppercase drop-shadow-lg">
-                {entry.contingentShortName ?? entry.contingentName}
+                {entry.contingentName}
               </p>
               {entry.contingentShortName && (
-                <p className="text-white/50 text-sm mt-0.5">{entry.contingentName}</p>
+                <p className="text-white/50 text-sm mt-0.5">{entry.contingentShortName}</p>
               )}
             </div>
           </div>
