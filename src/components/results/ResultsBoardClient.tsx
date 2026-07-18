@@ -31,22 +31,40 @@ function fmtTime(s: number) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+function ShieldFallback({ cls }: { cls: string }) {
+  return (
+    <div className={cn(cls, "flex items-center justify-center rounded-full bg-gradient-to-br from-white/15 to-white/5 border-2 border-white/20 shadow-lg")}>
+      <svg viewBox="0 0 24 24" fill="none" className="w-3/5 h-3/5" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M12 2L3 6v6c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V6L12 2z"
+          fill="rgba(255,255,255,0.25)"
+          stroke="rgba(255,255,255,0.6)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M9 12l2 2 4-4"
+          stroke="rgba(255,255,255,0.8)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
 function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name: string; size?: "sm" | "md" | "lg" | "xl" }) {
   const [err, setErr] = useState(false);
-  const sizeMap = { sm: "w-8 h-8 text-xs", md: "w-12 h-12 text-sm", lg: "w-16 h-16 text-base", xl: "w-24 h-24 text-xl" };
+  const sizeMap = { sm: "w-8 h-8", md: "w-12 h-12", lg: "w-16 h-16", xl: "w-24 h-24" };
   const cls = sizeMap[size];
-  const initials = name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
   if (logo && !err) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={logo} alt={name} onError={() => setErr(true)}
       className={cn(cls, "rounded-full object-cover border-2 border-white/20 shadow-lg")} />;
   }
-  return (
-    <div className={cn(cls, "rounded-full bg-gradient-to-br from-white/20 to-white/5 border-2 border-white/20 flex items-center justify-center font-bold text-white shadow-lg")}>
-      {initials}
-    </div>
-  );
+  return <ShieldFallback cls={cls} />;
 }
 
 // ── Rank label (Malay ordinal) ─────────────────────────────────────────────────
