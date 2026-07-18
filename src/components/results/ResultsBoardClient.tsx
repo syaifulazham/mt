@@ -279,7 +279,7 @@ function TeamSpotlight({
               <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-3">Ahli Pasukan</p>
               <ul className="space-y-1.5">
                 {entry.members.map((m) => (
-                  <li key={m.id} className="text-sm text-white/80 font-medium">{m.name}</li>
+                  <li key={m.id} className="text-sm text-white/80 font-medium uppercase">{m.name}</li>
                 ))}
               </ul>
             </div>
