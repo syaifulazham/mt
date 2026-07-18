@@ -165,10 +165,10 @@ function TeamSpotlight({
         </div>
 
         {/* Bottom: partner logos */}
-        <div className="flex flex-wrap justify-center items-center gap-5 pb-2 opacity-50">
+        <div className="w-full -mx-6 px-6 py-4 bg-black/40 flex flex-wrap justify-center items-center gap-5">
           {PARTNER_LOGOS.map((f) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="h-8 w-auto" />
+            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="h-8 w-auto opacity-60" />
           ))}
         </div>
       </div>
