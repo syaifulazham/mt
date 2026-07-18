@@ -12,12 +12,12 @@ type RankEntry = {
   rank: number; teamId: string; teamName: string;
   contingentName: string; contingentShortName: string | null;
   contingentLogo: string | null;
-  stateId: string | null; stateName: string | null;
+  stateId: string | null; stateName: string | null; stateFlag: string | null;
   totalScore: number; bestTime: number | null;
   members: { id: string; name: string }[];
 };
 
-type CompetitionResult = { id: string; name: string; code: string; rankings: RankEntry[] };
+type CompetitionResult = { id: string; name: string; code: string; targetGroups: { code: string; name: string }[]; rankings: RankEntry[] };
 
 type BoardData = {
   endpoint: { id: string; label: string | null; status: string };
@@ -399,7 +399,7 @@ function TeamSpotlight({
         {/* Top: Techlympics logo + event name */}
         <div className="flex flex-col items-center gap-3 pt-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mt.svg" alt="Techlympics" className="h-14 w-auto brightness-0 invert opacity-90" />
+          <img src="/logo-mt.svg" alt="Techlympics" className="h-24 w-auto" style={{ filter: "drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white) drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white)" }} />
           <p className="text-white font-black tracking-widest text-center max-w-xs uppercase">{eventName}</p>
         </div>
 
@@ -417,9 +417,17 @@ function TeamSpotlight({
             <p className="text-white/30 text-xs font-mono">#{entry.rank}</p>
           </div>
 
-          {/* Contingent logo + name */}
+          {/* Contingent logo + state flag + name */}
           <div className="flex flex-col items-center gap-3">
-            <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
+            <div className="flex items-center gap-5">
+              <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
+              {entry.stateFlag && (
+                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/40 shadow-lg shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={entry.stateFlag} alt={entry.stateName ?? "State"} className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
             <div>
               <p className="text-amber-400 text-2xl md:text-3xl font-black tracking-wide uppercase drop-shadow-lg" style={{ WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
                 {entry.contingentName}
@@ -570,6 +578,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [needsPasscode, setNeedsPasscode] = useState(false);
   const [spotlight, setSpotlight] = useState<RankEntry | null>(null);
   const [showCompModal, setShowCompModal] = useState(false);
+  const [selectedTargetGroup, setSelectedTargetGroup] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"national" | "state">("national");
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
@@ -764,50 +773,106 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       )}
 
       {/* Competition picker modal */}
-      {showCompModal && (
-        <div
-          className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setShowCompModal(false)}
-        >
+      {showCompModal && (() => {
+        // All unique target groups across all competitions, sorted by code
+        const allTGs = Array.from(
+          new Map(
+            data.competitions.flatMap(c => c.targetGroups).map(tg => [tg.code, tg])
+          ).values()
+        ).sort((a, b) => a.code.localeCompare(b.code));
+
+        // Competitions filtered by selected target group, sorted by code
+        const visibleComps = data.competitions
+          .filter(c => !selectedTargetGroup || c.targetGroups.some(tg => tg.code === selectedTargetGroup))
+          .sort((a, b) => a.code.localeCompare(b.code));
+
+        return (
           <div
-            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => setShowCompModal(false)}
           >
-            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
-              <p className="text-sm font-bold text-white/60 uppercase tracking-widest">Pilih Pertandingan</p>
-              <button onClick={() => setShowCompModal(false)} className="text-white/30 hover:text-white transition-colors">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
-              {data.competitions.map(c => (
-                <button
-                  key={c.id}
-                  className={cn(
-                    "w-full text-left px-5 py-4 flex items-center gap-4 transition-colors",
-                    c.id === activeComp ? "bg-rose-600/20 hover:bg-rose-600/30" : "hover:bg-white/5"
-                  )}
-                  onClick={() => { setActiveComp(c.id); setShowCompModal(false); }}
-                >
-                  <span className={cn(
-                    "text-[10px] font-bold px-2 py-0.5 rounded font-mono border shrink-0",
-                    c.id === activeComp
-                      ? "text-rose-300 border-rose-400/30 bg-rose-500/20"
-                      : "text-white/40 border-white/10 bg-white/5"
-                  )}>{c.code}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={cn("font-semibold truncate", c.id === activeComp ? "text-white" : "text-white/60")}>
-                      {c.name}
-                    </p>
-                    <p className="text-xs text-white/30 mt-0.5">{c.rankings.length} pasukan</p>
-                  </div>
-                  {c.id === activeComp && <div className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />}
+            <div
+              className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[80vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between shrink-0">
+                <p className="text-sm font-bold text-white/60 uppercase tracking-widest">Pilih Pertandingan</p>
+                <button onClick={() => setShowCompModal(false)} className="text-white/30 hover:text-white transition-colors">
+                  <X className="h-4 w-4" />
                 </button>
-              ))}
+              </div>
+
+              {/* Target group filter chips */}
+              {allTGs.length > 0 && (
+                <div className="px-4 py-3 flex gap-2 flex-wrap border-b border-white/5 shrink-0">
+                  <button
+                    onClick={() => setSelectedTargetGroup(null)}
+                    className={cn(
+                      "text-[10px] font-bold px-3 py-1 rounded-full border transition-colors",
+                      !selectedTargetGroup
+                        ? "bg-rose-500/30 border-rose-400/40 text-rose-300"
+                        : "border-white/10 text-white/40 hover:text-white/70 hover:bg-white/5"
+                    )}
+                  >
+                    Semua
+                  </button>
+                  {allTGs.map(tg => (
+                    <button
+                      key={tg.code}
+                      onClick={() => setSelectedTargetGroup(tg.code === selectedTargetGroup ? null : tg.code)}
+                      className={cn(
+                        "text-[10px] font-bold px-3 py-1 rounded-full border transition-colors",
+                        selectedTargetGroup === tg.code
+                          ? "bg-rose-500/30 border-rose-400/40 text-rose-300"
+                          : "border-white/10 text-white/40 hover:text-white/70 hover:bg-white/5"
+                      )}
+                    >
+                      {tg.code} — {tg.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Competition list */}
+              <div className="divide-y divide-white/5 overflow-y-auto">
+                {visibleComps.map(c => (
+                  <button
+                    key={c.id}
+                    className={cn(
+                      "w-full text-left px-5 py-4 flex items-center gap-4 transition-colors",
+                      c.id === activeComp ? "bg-rose-600/20 hover:bg-rose-600/30" : "hover:bg-white/5"
+                    )}
+                    onClick={() => { setActiveComp(c.id); setShowCompModal(false); }}
+                  >
+                    <span className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 rounded font-mono border shrink-0",
+                      c.id === activeComp
+                        ? "text-rose-300 border-rose-400/30 bg-rose-500/20"
+                        : "text-white/40 border-white/10 bg-white/5"
+                    )}>{c.code}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("font-semibold truncate", c.id === activeComp ? "text-white" : "text-white/60")}>
+                        {c.name}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <p className="text-xs text-white/30">{c.rankings.length} pasukan</p>
+                        {c.targetGroups.map(tg => (
+                          <span key={tg.code} className="text-[9px] text-white/25 border border-white/10 px-1.5 py-px rounded font-mono">{tg.code}</span>
+                        ))}
+                      </div>
+                    </div>
+                    {c.id === activeComp && <div className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />}
+                  </button>
+                ))}
+                {visibleComps.length === 0 && (
+                  <p className="px-5 py-8 text-center text-white/30 text-sm">Tiada pertandingan.</p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* National / State toggle */}
       {activeResult && availableStates.length > 0 && (

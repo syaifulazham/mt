@@ -11,6 +11,7 @@ interface RankingEntry {
   contingentLogo: string | null;
   stateId: string | null;
   stateName: string | null;
+  stateFlag: string | null;
   totalScore: number;
   bestTime: number | null;
   members: { id: string; name: string }[];
@@ -20,6 +21,7 @@ interface CompetitionResult {
   id: string;
   name: string;
   code: string;
+  targetGroups: { code: string; name: string }[];
   rankings: RankingEntry[];
 }
 
@@ -86,7 +88,10 @@ export async function POST(
     },
     include: {
       competition: {
-        select: { id: true, name: true, code: true },
+        select: {
+          id: true, name: true, code: true,
+          targetGroups: { select: { targetGroup: { select: { code: true, name: true } } } },
+        },
       },
       judgingTasks: {
         include: {
@@ -131,6 +136,7 @@ export async function POST(
         id: ec.id,
         name: ec.competition.name,
         code: ec.competition.code,
+        targetGroups: ec.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
         rankings: [],
       });
       continue;
@@ -152,7 +158,9 @@ export async function POST(
             logoUrl: true,
             contingentType: true,
             stateId: true,
-            state: { select: { id: true, name: true } },
+            state: { select: { id: true, name: true, flagUrl: true } },
+            school: { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
+            higherInstitution: { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
           },
         },
       },
@@ -168,8 +176,9 @@ export async function POST(
         contingentName: team.contingent.name,
         contingentShortName: team.contingent.shortName ?? null,
         contingentLogo: team.contingent.logoUrl ?? null,
-        stateId: team.contingent.stateId ?? null,
-        stateName: team.contingent.state?.name ?? null,
+        stateId: (team.contingent.state ?? team.contingent.school?.state ?? team.contingent.higherInstitution?.state)?.id ?? null,
+        stateName: (team.contingent.state ?? team.contingent.school?.state ?? team.contingent.higherInstitution?.state)?.name ?? null,
+        stateFlag: (team.contingent.state ?? team.contingent.school?.state ?? team.contingent.higherInstitution?.state)?.flagUrl ?? null,
         totalScore: agg.totalScore,
         bestTime: agg.bestTime,
         members: team.members.map(m => ({ id: m.participant.id, name: m.participant.name })),
@@ -194,6 +203,7 @@ export async function POST(
       id: ec.id,
       name: ec.competition.name,
       code: ec.competition.code,
+      targetGroups: ec.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
       rankings,
     });
   }
