@@ -116,7 +116,7 @@ function TeamSpotlight({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/winner/1.png" alt="" className="w-28 md:w-36 select-none -ml-4" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/5.png" alt="" className="w-48 md:w-60 select-none -ml-4" />
+        <img src="/winner/5.png" alt="" className="w-48 md:w-60 select-none -ml-4" style={{ transform: "scale(1.2)", transformOrigin: "bottom left" }} />
       </div>
 
       {/* Winner figures — bottom-right: 3, 4 (jumping) */}
