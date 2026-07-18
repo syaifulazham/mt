@@ -165,7 +165,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? "Gagal");
-      setEndpoints(prev => [j.endpoint, ...prev]);
+      setEndpoints(prev => [j.data, ...prev]);
       setShowCreate(false); setCreateLabel(""); setRequirePasscode(false);
     } catch (e) {
       setCreateErr(e instanceof Error ? e.message : "Gagal");
