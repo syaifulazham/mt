@@ -134,7 +134,7 @@ function TeamSpotlight({
           <div className="flex flex-col items-center gap-3">
             <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
             <div>
-              <p className="text-white/90 text-2xl md:text-3xl font-black tracking-wide uppercase drop-shadow">
+              <p className="text-white text-4xl md:text-5xl font-black tracking-wide uppercase drop-shadow-lg">
                 {entry.contingentShortName ?? entry.contingentName}
               </p>
               {entry.contingentShortName && (
