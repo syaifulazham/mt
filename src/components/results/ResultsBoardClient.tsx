@@ -149,7 +149,7 @@ function TeamSpotlight({
         <div className="flex flex-col items-center gap-3 pt-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-mt.svg" alt="Techlympics" className="h-14 w-auto brightness-0 invert opacity-90" />
-          <p className="text-white/60 text-sm font-semibold tracking-wide text-center max-w-xs">{eventName}</p>
+          <p className="text-white font-black tracking-widest text-center max-w-xs uppercase">{eventName}</p>
         </div>
 
         {/* Middle: rank + team info */}
