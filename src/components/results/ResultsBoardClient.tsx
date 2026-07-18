@@ -74,36 +74,6 @@ const PARTNER_LOGOS = [
   "visit-my-white.svg",
 ];
 
-// ── Water ripple animation ─────────────────────────────────────────────────────
-
-function WaterRipples() {
-  return (
-    <>
-      <style>{`
-        @keyframes ripple {
-          0%   { transform: translate(-50%, -50%) scale(0.2); opacity: 0.6; }
-          100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
-        }
-      `}</style>
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[0, 1.0, 2.0, 3.0, 4.0, 5.0].map((delay, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full border border-blue-300/25"
-            style={{
-              width: "70vw",
-              height: "70vw",
-              top: "50%",
-              left: "50%",
-              animation: `ripple 6s ease-out ${delay}s infinite`,
-            }}
-          />
-        ))}
-      </div>
-    </>
-  );
-}
-
 // ── Team spotlight overlay ─────────────────────────────────────────────────────
 
 function TeamSpotlight({
@@ -126,8 +96,6 @@ function TeamSpotlight({
       className="fixed inset-0 z-[100] flex flex-col bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 overflow-y-auto"
       onClick={onClose}
     >
-      <WaterRipples />
-
       {/* Close button */}
       <button
         className="absolute top-4 right-4 z-10 text-white/50 hover:text-white transition-colors"
