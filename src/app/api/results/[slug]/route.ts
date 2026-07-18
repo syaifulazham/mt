@@ -60,8 +60,13 @@ export async function POST(
   }
 
   // 3. Check passcode
-  if (endpoint.passcode && endpoint.passcode !== body.passcode) {
-    return NextResponse.json({ error: "INVALID_PASSCODE" }, { status: 401 });
+  if (endpoint.passcode) {
+    if (!body.passcode) {
+      return NextResponse.json({ error: "PASSCODE_REQUIRED" }, { status: 401 });
+    }
+    if (endpoint.passcode !== body.passcode) {
+      return NextResponse.json({ error: "INVALID_PASSCODE" }, { status: 401 });
+    }
   }
 
   // 4. Determine which competitions to include

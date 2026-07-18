@@ -162,13 +162,17 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
     })
       .then(r => r.json())
       .then(j => {
-        if (j.error === "WRONG_PASSCODE" || j.error === "MISSING_PASSCODE") {
+        if (j.error === "PASSCODE_REQUIRED") {
           setNeedsPasscode(true);
+        } else if (j.error === "INVALID_PASSCODE") {
+          sessionStorage.removeItem(`results_pc_${slug}`);
+          setNeedsPasscode(true);
+          setError("Passcode salah. Cuba semula.");
         } else if (!j.error) {
           setData(j);
           setActiveComp(j.competitions[0]?.id ?? "");
           if (stored) sessionStorage.setItem(`results_pc_${slug}`, stored);
-        } else if (j.error === "TASK_CLOSED") {
+        } else if (j.error === "ENDPOINT_CLOSED") {
           setError("Paparan keputusan ini telah ditutup.");
         } else {
           setError(j.error ?? "Ralat tidak diketahui.");
@@ -189,8 +193,8 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       });
       const j = await res.json();
       if (!res.ok) {
-        if (j.error === "WRONG_PASSCODE") { setError("Passcode salah. Cuba semula."); return; }
-        if (j.error === "TASK_CLOSED")    { setError("Paparan keputusan ini telah ditutup."); return; }
+        if (j.error === "INVALID_PASSCODE") { setError("Passcode salah. Cuba semula."); return; }
+        if (j.error === "ENDPOINT_CLOSED") { setError("Paparan keputusan ini telah ditutup."); return; }
         if (j.error === "NOT_FOUND")      { setError("Paparan keputusan tidak dijumpai."); return; }
         setError(j.error ?? "Ralat tidak diketahui."); return;
       }
