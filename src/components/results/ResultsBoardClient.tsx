@@ -120,7 +120,7 @@ function TeamSpotlight({
       </div>
 
       {/* Winner figures — bottom-right: 3, 4 (jumping) */}
-      <div className="absolute bottom-0 right-0 z-10 flex items-end pointer-events-none">
+      <div className="absolute bottom-16 right-0 z-10 flex items-end pointer-events-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/winner/3.png" alt="" className="w-28 md:w-36 select-none"
           style={{ animation: "jump1 1.6s ease-in-out infinite" }} />
