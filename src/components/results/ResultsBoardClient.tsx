@@ -107,24 +107,34 @@ function TeamSpotlight({
           40%       { transform: translateY(-22px); }
           60%       { transform: translateY(-12px); }
         }
+        @keyframes jump3 {
+          0%, 100% { transform: translateY(0); }
+          40%       { transform: translateY(-20px); }
+          60%       { transform: translateY(-11px); }
+        }
       `}</style>
 
-      {/* Winner figures — bottom-left corner */}
+      {/* Winner figures — bottom-left: 3, 4 */}
       <div className="absolute bottom-0 left-0 z-10 flex items-end pointer-events-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/winner/3.png"
-          alt=""
-          className="w-28 md:w-36 select-none"
-          style={{ animation: "jump1 1.6s ease-in-out infinite" }}
-        />
+        <img src="/winner/3.png" alt="" className="w-28 md:w-36 select-none"
+          style={{ animation: "jump1 1.6s ease-in-out infinite" }} />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/winner/4.png"
-          alt=""
-          className="w-28 md:w-36 select-none -ml-4"
-          style={{ animation: "jump2 1.6s ease-in-out 0.25s infinite" }}
-        />
+        <img src="/winner/4.png" alt="" className="w-28 md:w-36 select-none -ml-4"
+          style={{ animation: "jump2 1.6s ease-in-out 0.25s infinite" }} />
+      </div>
+
+      {/* Winner figures — bottom-right: 1, 2, 5 */}
+      <div className="absolute bottom-0 right-0 z-10 flex items-end pointer-events-none">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/winner/5.png" alt="" className="w-28 md:w-36 select-none"
+          style={{ animation: "jump3 1.6s ease-in-out 0.1s infinite" }} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/winner/2.png" alt="" className="w-28 md:w-36 select-none -ml-4"
+          style={{ animation: "jump1 1.6s ease-in-out 0.35s infinite" }} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/winner/1.png" alt="" className="w-28 md:w-36 select-none -ml-4"
+          style={{ animation: "jump2 1.6s ease-in-out 0.55s infinite" }} />
       </div>
 
       {/* Close button */}
