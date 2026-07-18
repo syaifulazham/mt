@@ -150,16 +150,13 @@ function TeamSpotlight({
 
           {/* Members */}
           {entry.members.length > 0 && (
-            <div className="mt-2 w-full max-w-xs">
+            <div className="mt-2 w-full max-w-xs text-center">
               <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-3">Ahli Pasukan</p>
-              <ol className="space-y-1.5">
-                {entry.members.map((m, i) => (
-                  <li key={m.id} className="flex items-center gap-2 text-sm text-white/80">
-                    <span className="text-white/30 font-mono text-xs w-5 text-right shrink-0">{i + 1}.</span>
-                    <span className="font-medium">{m.name}</span>
-                  </li>
+              <ul className="space-y-1.5">
+                {entry.members.map((m) => (
+                  <li key={m.id} className="text-sm text-white/80 font-medium">{m.name}</li>
                 ))}
-              </ol>
+              </ul>
             </div>
           )}
         </div>
