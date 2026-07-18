@@ -223,8 +223,8 @@ function TeamSpotlight({
 
       {/* Close button */}
       <button
-        className="absolute top-4 right-4 z-10 text-white/50 hover:text-white transition-colors"
-        onClick={onClose}
+        className="absolute top-4 right-4 z-[200] text-white/50 hover:text-white transition-colors"
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
       >
         <X className="h-7 w-7" />
       </button>
