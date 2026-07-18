@@ -109,14 +109,14 @@ function TeamSpotlight({
         }
       `}</style>
 
-      {/* Winner figures — bottom-left: 1, 2, 5 (static) */}
-      <div className="absolute bottom-0 left-0 z-10 flex items-end pointer-events-none">
+      {/* Winner figures — bottom-left: 2, 5, 1 overlapping */}
+      <div className="absolute bottom-0 left-0 z-10 pointer-events-none" style={{ width: "380px", height: "420px" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/2.png" alt="" className="w-20 md:w-28 select-none" />
+        <img src="/winner/2.png" alt="" className="absolute bottom-0 left-0 select-none" style={{ width: "130px" }} />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/5.png" alt="" className="w-56 md:w-72 select-none -ml-4" />
+        <img src="/winner/5.png" alt="" className="absolute bottom-0 select-none" style={{ width: "260px", left: "80px" }} />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/1.png" alt="" className="w-28 md:w-36 select-none -ml-4" />
+        <img src="/winner/1.png" alt="" className="absolute bottom-0 select-none" style={{ width: "170px", left: "230px" }} />
       </div>
 
       {/* Winner figures — bottom-right: 3, 4 (jumping) */}
