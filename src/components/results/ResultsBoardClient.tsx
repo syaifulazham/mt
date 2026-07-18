@@ -190,7 +190,7 @@ function TeamSpotlight({
         <img src="/winner/2.png" alt="" className="absolute bottom-0 left-0 select-none" style={{ width: "130px", zIndex: 1 }} />
         {/* 1 — front right */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/1.png" alt="" className="absolute bottom-0 select-none" style={{ width: "160px", left: "240px", zIndex: 1 }} />
+        <img src="/winner/1.png" alt="" className="absolute bottom-0 select-none" style={{ width: "160px", left: "240px", zIndex: 1, filter: "drop-shadow(0 0 18px rgba(0,0,0,0.8)) drop-shadow(0 8px 24px rgba(0,0,0,0.6))" }} />
       </div>
 
       {/* Winner figures — bottom-right: 3, 4 (jumping) */}
