@@ -113,7 +113,7 @@ function TeamSpotlight({
       <div className="absolute bottom-0 left-0 z-10 pointer-events-none" style={{ width: "420px", height: "500px" }}>
         {/* 5 — back layer, largest */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/5.png" alt="" className="absolute bottom-0 select-none" style={{ width: "380px", left: "20px", zIndex: 0 }} />
+        <img src="/winner/5.png" alt="" className="absolute bottom-0 select-none" style={{ width: "460px", left: "20px", zIndex: 0 }} />
         {/* 2 — front left */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/winner/2.png" alt="" className="absolute bottom-0 left-0 select-none" style={{ width: "130px", zIndex: 1 }} />
