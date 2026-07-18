@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X } from "lucide-react";
+import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -92,6 +92,126 @@ const PARTNER_LOGOS = [
   "visit-my-white.svg",
 ];
 
+// ── Sparkle celebration canvas ────────────────────────────────────────────────
+
+type Sparkle = {
+  x: number; y: number; vx: number; vy: number;
+  size: number; color: string; alpha: number;
+  decay: number; rotation: number; rotSpeed: number;
+};
+
+const SPARKLE_COLORS = [
+  "#FFD700", "#FFA500", "#FF6B6B", "#FF69B4",
+  "#00CED1", "#4ECDC4", "#45B7D1", "#7B68EE",
+  "#96CEB4", "#FFEAA7", "#98FB98", "#DDA0DD",
+];
+
+function SparkleCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesRef = useRef<Sparkle[]>([]);
+  const animIdRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    function resize() {
+      if (!canvas) return;
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    function spawnBurst() {
+      if (!canvas) return;
+      const W = canvas.width;
+      const H = canvas.height;
+      for (let b = 0; b < 6; b++) {
+        const cx = Math.random() * W;
+        const cy = Math.random() * H * 0.75;
+        for (let i = 0; i < 18; i++) {
+          const angle = (Math.PI * 2 * i) / 18 + Math.random() * 0.4;
+          const speed = 2.5 + Math.random() * 7;
+          particlesRef.current.push({
+            x: cx, y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2.5,
+            size: 4 + Math.random() * 7,
+            color: SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)],
+            alpha: 1,
+            decay: 0.011 + Math.random() * 0.014,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.22,
+          });
+        }
+      }
+    }
+
+    function drawStar(c: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
+      c.save();
+      c.translate(x, y);
+      c.rotate(rot);
+      c.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a1 = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+        const a2 = a1 + Math.PI / 5;
+        c.lineTo(Math.cos(a1) * r, Math.sin(a1) * r);
+        c.lineTo(Math.cos(a2) * r * 0.42, Math.sin(a2) * r * 0.42);
+      }
+      c.closePath();
+      c.restore();
+    }
+
+    function loop() {
+      if (!canvas || !ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particlesRef.current = particlesRef.current.filter(p => p.alpha > 0.02);
+
+      for (const p of particlesRef.current) {
+        p.x       += p.vx;
+        p.y       += p.vy;
+        p.vy      += 0.13;
+        p.vx      *= 0.98;
+        p.alpha   -= p.decay;
+        p.rotation += p.rotSpeed;
+
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.fillStyle   = p.color;
+        ctx.shadowBlur  = 10;
+        ctx.shadowColor = p.color;
+        drawStar(ctx, p.x, p.y, p.size, p.rotation);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur  = 0;
+      animIdRef.current = requestAnimationFrame(loop);
+    }
+
+    loop();
+
+    function onKeyDown() { spawnBurst(); }
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      cancelAnimationFrame(animIdRef.current);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none"
+      style={{ zIndex: 500, mixBlendMode: "screen" }}
+    />
+  );
+}
+
 // ── Animated wave background ──────────────────────────────────────────────────
 
 const WAVES = [
@@ -128,11 +248,16 @@ function WaveCanvas() {
       ctx.clearRect(0, 0, W, H);
 
       for (const w of WAVES) {
-        ctx.beginPath();
+        // Precompute wave points once, reused across passes
+        const pts: [number, number][] = [];
         for (let x = 0; x <= W; x += 3) {
           const y = H * w.yOff + Math.sin((x / W) * Math.PI * 2 * w.freq + t * w.speed) * w.amp;
-          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          pts.push([x, y]);
         }
+
+        // Pass 1 — base wave with glow
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
         ctx.shadowBlur  = 28;
         ctx.shadowColor = w.glow;
         ctx.strokeStyle = w.color;
@@ -140,6 +265,42 @@ function WaveCanvas() {
         ctx.lineCap     = "round";
         ctx.stroke();
         ctx.shadowBlur  = 0;
+
+        // Pass 2 — shiny ridge (thinner white stroke offset above crest)
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x, y - 5); else ctx.lineTo(x, y - 5); });
+        ctx.strokeStyle = "rgba(255,255,255,0.20)";
+        ctx.lineWidth   = 2.5;
+        ctx.lineCap     = "round";
+        ctx.stroke();
+
+        // Pass 3 — traveling shimmer sparkle along the crest
+        const shimCx = ((t * w.speed * 200) % (W + 200)) - 100;
+        const shimR  = 100;
+        const sFrom  = Math.max(0, shimCx - shimR);
+        const sTo    = Math.min(W, shimCx + shimR);
+        if (sTo > sFrom) {
+          ctx.beginPath();
+          let first = true;
+          for (const [x, y] of pts) {
+            if (x < sFrom || x > sTo) continue;
+            if (first) { ctx.moveTo(x, y - 5); first = false; }
+            else ctx.lineTo(x, y - 5);
+          }
+          if (!first) {
+            const grad = ctx.createLinearGradient(sFrom, 0, sTo, 0);
+            grad.addColorStop(0,   "rgba(255,255,255,0)");
+            grad.addColorStop(0.4, "rgba(255,255,255,0.80)");
+            grad.addColorStop(0.6, "rgba(255,255,255,0.80)");
+            grad.addColorStop(1,   "rgba(255,255,255,0)");
+            ctx.strokeStyle = grad;
+            ctx.lineWidth   = 4;
+            ctx.shadowBlur  = 18;
+            ctx.shadowColor = "rgba(255,255,255,0.95)";
+            ctx.stroke();
+            ctx.shadowBlur  = 0;
+          }
+        }
       }
 
       t += 0.018;
@@ -407,6 +568,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [activeComp, setActiveComp] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
   const [spotlight, setSpotlight] = useState<RankEntry | null>(null);
+  const [showCompModal, setShowCompModal] = useState(false);
   const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
 
   // Try public access first (no passcode), or restore stored passcode
@@ -526,6 +688,8 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+      <SparkleCanvas />
+
       {/* Header */}
       <div className="relative border-b border-white/10 backdrop-blur-sm bg-black/20">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
@@ -550,29 +714,72 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {/* Competition tabs */}
-      {data.competitions.length > 1 && (
-        <div className="border-b border-white/5 bg-black/10">
-          <div className="max-w-4xl mx-auto px-6 py-2 flex gap-2 overflow-x-auto">
-            {data.competitions.map(c => (
-              <button key={c.id} onClick={() => setActiveComp(c.id)}
-                className={cn("text-xs px-4 py-1.5 rounded-full font-semibold whitespace-nowrap transition-all",
-                  activeComp === c.id
-                    ? "bg-rose-600 text-white shadow-lg"
-                    : "text-white/40 hover:text-white/70 hover:bg-white/5"
-                )}>
-                {c.code} — {c.name}
-              </button>
-            ))}
-          </div>
+      {/* Competition name / picker trigger */}
+      {activeResult && (
+        <div className="max-w-4xl mx-auto px-6 pt-8 pb-4 text-center">
+          {data.competitions.length > 1 ? (
+            <button
+              onClick={() => setShowCompModal(true)}
+              className="group inline-flex flex-col items-center gap-1 cursor-pointer"
+            >
+              <p className="text-xs font-semibold text-white/30 uppercase tracking-[0.2em]">{activeResult.code}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <h2 className="text-2xl font-black text-white group-hover:text-white/80 transition-colors">{activeResult.name}</h2>
+                <ChevronDown className="h-5 w-5 text-white/40 group-hover:text-white/60 transition-colors mt-0.5" />
+              </div>
+            </button>
+          ) : (
+            <>
+              <p className="text-xs font-semibold text-white/30 uppercase tracking-[0.2em] mb-1">{activeResult.code}</p>
+              <h2 className="text-2xl font-black text-white">{activeResult.name}</h2>
+            </>
+          )}
         </div>
       )}
 
-      {/* Competition name */}
-      {activeResult && (
-        <div className="max-w-4xl mx-auto px-6 pt-8 pb-4 text-center">
-          <p className="text-xs font-semibold text-white/30 uppercase tracking-[0.2em] mb-1">{activeResult.code}</p>
-          <h2 className="text-2xl font-black text-white">{activeResult.name}</h2>
+      {/* Competition picker modal */}
+      {showCompModal && (
+        <div
+          className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setShowCompModal(false)}
+        >
+          <div
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+              <p className="text-sm font-bold text-white/60 uppercase tracking-widest">Pilih Pertandingan</p>
+              <button onClick={() => setShowCompModal(false)} className="text-white/30 hover:text-white transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
+              {data.competitions.map(c => (
+                <button
+                  key={c.id}
+                  className={cn(
+                    "w-full text-left px-5 py-4 flex items-center gap-4 transition-colors",
+                    c.id === activeComp ? "bg-rose-600/20 hover:bg-rose-600/30" : "hover:bg-white/5"
+                  )}
+                  onClick={() => { setActiveComp(c.id); setShowCompModal(false); }}
+                >
+                  <span className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded font-mono border shrink-0",
+                    c.id === activeComp
+                      ? "text-rose-300 border-rose-400/30 bg-rose-500/20"
+                      : "text-white/40 border-white/10 bg-white/5"
+                  )}>{c.code}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn("font-semibold truncate", c.id === activeComp ? "text-white" : "text-white/60")}>
+                      {c.name}
+                    </p>
+                    <p className="text-xs text-white/30 mt-0.5">{c.rankings.length} pasukan</p>
+                  </div>
+                  {c.id === activeComp && <div className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
