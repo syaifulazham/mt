@@ -96,6 +96,37 @@ function TeamSpotlight({
       className="fixed inset-0 z-[100] flex flex-col bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 overflow-y-auto"
       onClick={onClose}
     >
+      <style>{`
+        @keyframes jump1 {
+          0%, 100% { transform: translateY(0); }
+          40%       { transform: translateY(-18px); }
+          60%       { transform: translateY(-10px); }
+        }
+        @keyframes jump2 {
+          0%, 100% { transform: translateY(0); }
+          40%       { transform: translateY(-22px); }
+          60%       { transform: translateY(-12px); }
+        }
+      `}</style>
+
+      {/* Winner figures — bottom-left corner */}
+      <div className="absolute bottom-0 left-0 z-10 flex items-end pointer-events-none">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/winner/3.png"
+          alt=""
+          className="w-28 md:w-36 select-none"
+          style={{ animation: "jump1 1.6s ease-in-out infinite" }}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/winner/4.png"
+          alt=""
+          className="w-28 md:w-36 select-none -ml-4"
+          style={{ animation: "jump2 1.6s ease-in-out 0.25s infinite" }}
+        />
+      </div>
+
       {/* Close button */}
       <button
         className="absolute top-4 right-4 z-10 text-white/50 hover:text-white transition-colors"
