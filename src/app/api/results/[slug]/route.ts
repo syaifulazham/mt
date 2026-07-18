@@ -11,6 +11,7 @@ interface RankingEntry {
   contingentLogo: string | null;
   totalScore: number;
   bestTime: number | null;
+  members: { id: string; name: string }[];
 }
 
 interface CompetitionResult {
@@ -140,6 +141,7 @@ export async function POST(
       select: {
         id: true,
         name: true,
+        members: { select: { participant: { select: { id: true, name: true } } } },
         contingent: {
           select: {
             id: true,
@@ -164,6 +166,7 @@ export async function POST(
         contingentLogo: team.contingent.logoUrl ?? null,
         totalScore: agg.totalScore,
         bestTime: agg.bestTime,
+        members: team.members.map(m => ({ id: m.participant.id, name: m.participant.name })),
       };
     });
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Trophy, Loader2, Eye, EyeOff, Lock, Star } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ type RankEntry = {
   contingentName: string; contingentShortName: string | null;
   contingentLogo: string | null;
   totalScore: number; bestTime: number | null;
+  members: { id: string; name: string }[];
 };
 
 type CompetitionResult = { id: string; name: string; code: string; rankings: RankEntry[] };
@@ -48,6 +49,171 @@ function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name
   );
 }
 
+// ── Rank label (Malay ordinal) ─────────────────────────────────────────────────
+
+function tempatLabel(rank: number): string {
+  const named: Record<number, string> = { 1: "Pertama", 2: "Kedua", 3: "Ketiga" };
+  return `Tempat ${named[rank] ?? `Ke-${rank}`}`;
+}
+
+function rankColor(rank: number): string {
+  if (rank === 1) return "text-amber-300";
+  if (rank === 2) return "text-slate-300";
+  if (rank === 3) return "text-orange-400";
+  return "text-white/80";
+}
+
+// ── Partner logos ──────────────────────────────────────────────────────────────
+
+const PARTNER_LOGOS = [
+  "madani-white.svg",
+  "might-white.svg",
+  "motto-white.svg",
+  "my-book-of-record-white.svg",
+  "rakan-muda-white.svg",
+  "visit-my-white.svg",
+];
+
+// ── Water ripple animation ─────────────────────────────────────────────────────
+
+function WaterRipples() {
+  return (
+    <>
+      <style>{`
+        @keyframes ripple {
+          0%   { transform: translate(-50%, -50%) scale(0.2); opacity: 0.6; }
+          100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
+        }
+      `}</style>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[0, 1.0, 2.0, 3.0, 4.0, 5.0].map((delay, i) => (
+          <div
+            key={i}
+            className="absolute rounded-full border border-blue-300/25"
+            style={{
+              width: "70vw",
+              height: "70vw",
+              top: "50%",
+              left: "50%",
+              animation: `ripple 6s ease-out ${delay}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ── Team spotlight overlay ─────────────────────────────────────────────────────
+
+function TeamSpotlight({
+  entry,
+  eventName,
+  onClose,
+}: {
+  entry: RankEntry;
+  eventName: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex flex-col bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 overflow-y-auto"
+      onClick={onClose}
+    >
+      <WaterRipples />
+
+      {/* Close button */}
+      <button
+        className="absolute top-4 right-4 z-10 text-white/50 hover:text-white transition-colors"
+        onClick={onClose}
+      >
+        <X className="h-7 w-7" />
+      </button>
+
+      {/* Content — stop propagation so clicks inside don't close */}
+      <div
+        className="relative z-10 flex flex-col items-center justify-between min-h-screen px-6 py-10 gap-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top: Techlympics logo + event name */}
+        <div className="flex flex-col items-center gap-3 pt-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mt.svg" alt="Techlympics" className="h-14 w-auto brightness-0 invert opacity-90" />
+          <p className="text-white/60 text-sm font-semibold tracking-wide text-center max-w-xs">{eventName}</p>
+        </div>
+
+        {/* Middle: rank + team info */}
+        <div className="flex flex-col items-center gap-5 text-center">
+          {/* Rank label */}
+          <div className="flex flex-col items-center gap-1">
+            <div className="flex items-center gap-3">
+              <div className="h-px w-12 bg-white/20" />
+              <p className={cn("text-3xl md:text-4xl font-black tracking-wide uppercase drop-shadow-lg", rankColor(entry.rank))}>
+                {tempatLabel(entry.rank)}
+              </p>
+              <div className="h-px w-12 bg-white/20" />
+            </div>
+            <p className="text-white/30 text-xs font-mono">#{entry.rank}</p>
+          </div>
+
+          {/* Contingent logo + name */}
+          <div className="flex flex-col items-center gap-3">
+            <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
+            <div>
+              <p className="text-white/70 text-sm font-semibold tracking-widest uppercase">
+                {entry.contingentShortName ?? entry.contingentName}
+              </p>
+              {entry.contingentShortName && (
+                <p className="text-white/40 text-xs mt-0.5">{entry.contingentName}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Team name */}
+          <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg">{entry.teamName}</p>
+
+          {/* Score + time */}
+          <div className="flex items-center gap-4 text-sm">
+            <span className={cn("font-black text-2xl", rankColor(entry.rank))}>{entry.totalScore.toFixed(1)}</span>
+            {entry.bestTime != null && (
+              <span className="text-sky-300 font-mono text-sm">{fmtTime(entry.bestTime)}</span>
+            )}
+          </div>
+
+          {/* Members */}
+          {entry.members.length > 0 && (
+            <div className="mt-2 w-full max-w-xs">
+              <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-3">Ahli Pasukan</p>
+              <ol className="space-y-1.5">
+                {entry.members.map((m, i) => (
+                  <li key={m.id} className="flex items-center gap-2 text-sm text-white/80">
+                    <span className="text-white/30 font-mono text-xs w-5 text-right shrink-0">{i + 1}.</span>
+                    <span className="font-medium">{m.name}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom: partner logos */}
+        <div className="flex flex-wrap justify-center items-center gap-5 pb-2 opacity-50">
+          {PARTNER_LOGOS.map((f) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="h-8 w-auto" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Podium ─────────────────────────────────────────────────────────────────────
 
 const PODIUM_CONFIG = [
@@ -56,7 +222,7 @@ const PODIUM_CONFIG = [
   { pos: 3, height: "h-16", bg: "from-orange-400/30 to-orange-600/20", border: "border-orange-300/30", label: "text-orange-200", icon: "🥉" },
 ];
 
-function Podium({ rankings }: { rankings: RankEntry[] }) {
+function Podium({ rankings, onSelect }: { rankings: RankEntry[]; onSelect: (e: RankEntry) => void }) {
   const top3 = [rankings[1], rankings[0], rankings[2]]; // silver, gold, bronze order
 
   return (
@@ -65,9 +231,13 @@ function Podium({ rankings }: { rankings: RankEntry[] }) {
         const team = top3[i];
         if (!team) return <div key={pos} className="w-36" />;
         return (
-          <div key={pos} className="flex flex-col items-center gap-2 flex-1 max-w-[200px]">
+          <div
+            key={pos}
+            className="flex flex-col items-center gap-2 flex-1 max-w-[200px] cursor-pointer group"
+            onClick={() => onSelect(team)}
+          >
             {/* Team info above podium */}
-            <div className="text-center space-y-1.5">
+            <div className="text-center space-y-1.5 transition-transform group-hover:scale-105 duration-200">
               <ContingentLogo logo={team.contingentLogo} name={team.contingentName} size={pos === 1 ? "xl" : "lg"} />
               <p className={cn("font-black leading-tight drop-shadow", pos === 1 ? "text-base text-white" : "text-sm text-white/80")}>
                 {team.teamName}
@@ -98,7 +268,7 @@ function Podium({ rankings }: { rankings: RankEntry[] }) {
 
 // ── Rankings table (rank 4+) ───────────────────────────────────────────────────
 
-function RankingsTable({ rankings }: { rankings: RankEntry[] }) {
+function RankingsTable({ rankings, onSelect }: { rankings: RankEntry[]; onSelect: (e: RankEntry) => void }) {
   const rest = rankings.slice(3);
   if (!rest.length) return null;
 
@@ -116,7 +286,11 @@ function RankingsTable({ rankings }: { rankings: RankEntry[] }) {
         </thead>
         <tbody>
           {rest.map(r => (
-            <tr key={r.teamId} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+            <tr
+              key={r.teamId}
+              className="border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+              onClick={() => onSelect(r)}
+            >
               <td className="px-4 py-3 text-white/50 font-bold text-sm">{r.rank}</td>
               <td className="px-4 py-3 text-white font-medium">{r.teamName}</td>
               <td className="px-4 py-3">
@@ -150,6 +324,8 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [data, setData] = useState<BoardData | null>(null);
   const [activeComp, setActiveComp] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
+  const [spotlight, setSpotlight] = useState<RankEntry | null>(null);
+  const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
 
   // Try public access first (no passcode), or restore stored passcode
   useEffect(() => {
@@ -326,13 +502,18 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       ) : (
         <div className="max-w-4xl mx-auto pb-12">
           {/* Top 3 podium */}
-          {activeResult.rankings.length >= 2 && <Podium rankings={activeResult.rankings} />}
+          {activeResult.rankings.length >= 2 && (
+            <Podium rankings={activeResult.rankings} onSelect={openSpotlight} />
+          )}
 
           {/* Rank 1 only */}
           {activeResult.rankings.length === 1 && (
-            <div className="flex flex-col items-center gap-4 py-8">
+            <div
+              className="flex flex-col items-center gap-4 py-8 cursor-pointer group"
+              onClick={() => openSpotlight(activeResult.rankings[0])}
+            >
               <ContingentLogo logo={activeResult.rankings[0].contingentLogo} name={activeResult.rankings[0].contingentName} size="xl" />
-              <div className="text-center">
+              <div className="text-center transition-transform group-hover:scale-105 duration-200">
                 <p className="text-4xl font-black">{activeResult.rankings[0].teamName}</p>
                 <p className="text-white/60 mt-1">{activeResult.rankings[0].contingentName}</p>
                 <p className="text-5xl font-black text-amber-300 mt-3">{activeResult.rankings[0].totalScore.toFixed(1)}</p>
@@ -341,8 +522,17 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
           )}
 
           {/* Rest of rankings */}
-          <RankingsTable rankings={activeResult.rankings} />
+          <RankingsTable rankings={activeResult.rankings} onSelect={openSpotlight} />
         </div>
+      )}
+
+      {/* Team spotlight overlay */}
+      {spotlight && (
+        <TeamSpotlight
+          entry={spotlight}
+          eventName={data.event.name}
+          onClose={() => setSpotlight(null)}
+        />
       )}
     </div>
   );
