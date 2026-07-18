@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +74,75 @@ const PARTNER_LOGOS = [
   "visit-my-white.svg",
 ];
 
+// ── Animated wave background ──────────────────────────────────────────────────
+
+const WAVES = [
+  { color: "rgba(30,  120, 255, 0.55)", glow: "rgba(30, 120, 255, 0.4)",  speed: 0.40, amp: 65, freq: 0.90, yOff: 0.42, width: 16 },
+  { color: "rgba(0,   220, 200, 0.50)", glow: "rgba(0,  220, 200, 0.35)", speed: 0.28, amp: 85, freq: 0.65, yOff: 0.50, width: 13 },
+  { color: "rgba(50,  200,  80, 0.48)", glow: "rgba(50, 200,  80, 0.30)", speed: 0.50, amp: 55, freq: 1.05, yOff: 0.56, width: 11 },
+  { color: "rgba(255, 170,   0, 0.45)", glow: "rgba(255,170,   0, 0.30)", speed: 0.35, amp: 72, freq: 0.75, yOff: 0.53, width: 10 },
+];
+
+function WaveCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let t = 0;
+
+    function resize() {
+      if (!canvas) return;
+      canvas.width  = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    function draw() {
+      if (!canvas || !ctx) return;
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      for (const w of WAVES) {
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 3) {
+          const y = H * w.yOff + Math.sin((x / W) * Math.PI * 2 * w.freq + t * w.speed) * w.amp;
+          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.shadowBlur  = 28;
+        ctx.shadowColor = w.glow;
+        ctx.strokeStyle = w.color;
+        ctx.lineWidth   = w.width;
+        ctx.lineCap     = "round";
+        ctx.stroke();
+        ctx.shadowBlur  = 0;
+      }
+
+      t += 0.018;
+      animId = requestAnimationFrame(draw);
+    }
+
+    draw();
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none opacity-80"
+    />
+  );
+}
+
 // ── Team spotlight overlay ─────────────────────────────────────────────────────
 
 function TeamSpotlight({
@@ -108,6 +177,8 @@ function TeamSpotlight({
           60%       { transform: translateY(-12px); }
         }
       `}</style>
+
+      <WaveCanvas />
 
       {/* Winner figures — bottom-left: 5 (back), 2 + 1 (front) */}
       <div className="absolute bottom-0 left-0 z-10 pointer-events-none" style={{ width: "420px", height: "500px" }}>
