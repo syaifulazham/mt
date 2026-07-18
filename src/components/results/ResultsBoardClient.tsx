@@ -12,6 +12,7 @@ type RankEntry = {
   rank: number; teamId: string; teamName: string;
   contingentName: string; contingentShortName: string | null;
   contingentLogo: string | null;
+  stateId: string | null; stateName: string | null;
   totalScore: number; bestTime: number | null;
   members: { id: string; name: string }[];
 };
@@ -569,6 +570,9 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [needsPasscode, setNeedsPasscode] = useState(false);
   const [spotlight, setSpotlight] = useState<RankEntry | null>(null);
   const [showCompModal, setShowCompModal] = useState(false);
+  const [viewMode, setViewMode] = useState<"national" | "state">("national");
+  const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [showStateModal, setShowStateModal] = useState(false);
   const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
 
   // Try public access first (no passcode), or restore stored passcode
@@ -686,6 +690,28 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
 
   const activeResult = data.competitions.find(c => c.id === activeComp) ?? data.competitions[0];
 
+  // Unique states present in this competition's rankings
+  const availableStates = activeResult
+    ? Array.from(
+        new Map(
+          activeResult.rankings
+            .filter(r => r.stateId && r.stateName)
+            .map(r => [r.stateId!, r.stateName!])
+        ).entries()
+      ).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+    : [];
+
+  // Rankings after applying view filter, re-ranked from 1 within the filtered set
+  const filteredRankings: RankEntry[] = (() => {
+    if (!activeResult) return [];
+    if (viewMode === "national") return activeResult.rankings;
+    const stateId = selectedState ?? availableStates[0]?.id ?? null;
+    if (!stateId) return activeResult.rankings;
+    return activeResult.rankings
+      .filter(r => r.stateId === stateId)
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+  })();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
       <SparkleCanvas />
@@ -783,7 +809,86 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
         </div>
       )}
 
-      {!activeResult || activeResult.rankings.length === 0 ? (
+      {/* National / State toggle */}
+      {activeResult && availableStates.length > 0 && (
+        <div className="max-w-4xl mx-auto px-6 pb-4 flex items-center justify-center gap-2">
+          <button
+            onClick={() => setViewMode("national")}
+            className={cn(
+              "px-5 py-1.5 rounded-full text-xs font-bold transition-all",
+              viewMode === "national"
+                ? "bg-amber-500 text-black shadow-lg"
+                : "text-white/40 hover:text-white/70 bg-white/5 hover:bg-white/10"
+            )}
+          >
+            Kebangsaan
+          </button>
+          <button
+            onClick={() => { setViewMode("state"); setShowStateModal(true); }}
+            className={cn(
+              "px-5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5",
+              viewMode === "state"
+                ? "bg-sky-500 text-white shadow-lg"
+                : "text-white/40 hover:text-white/70 bg-white/5 hover:bg-white/10"
+            )}
+          >
+            Negeri
+            {viewMode === "state" && (
+              <span className="font-normal opacity-80">
+                — {selectedState
+                  ? availableStates.find(s => s.id === selectedState)?.name
+                  : availableStates[0]?.name}
+              </span>
+            )}
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </button>
+        </div>
+      )}
+
+      {/* State picker modal */}
+      {showStateModal && (
+        <div
+          className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setShowStateModal(false)}
+        >
+          <div
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+              <p className="text-sm font-bold text-white/60 uppercase tracking-widest">Pilih Negeri</p>
+              <button onClick={() => setShowStateModal(false)} className="text-white/30 hover:text-white transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
+              {availableStates.map(s => {
+                const active = (selectedState ?? availableStates[0]?.id) === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    className={cn(
+                      "w-full text-left px-5 py-4 flex items-center gap-4 transition-colors",
+                      active ? "bg-sky-600/20 hover:bg-sky-600/30" : "hover:bg-white/5"
+                    )}
+                    onClick={() => { setSelectedState(s.id); setViewMode("state"); setShowStateModal(false); }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("font-semibold truncate", active ? "text-white" : "text-white/60")}>{s.name}</p>
+                      <p className="text-xs text-white/30 mt-0.5">
+                        {activeResult?.rankings.filter(r => r.stateId === s.id).length} pasukan
+                      </p>
+                    </div>
+                    {active && <div className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!activeResult || filteredRankings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3 text-white/30">
           <Trophy className="h-12 w-12" />
           <p className="text-sm">Tiada keputusan direkodkan lagi.</p>
@@ -791,27 +896,26 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       ) : (
         <div className="max-w-4xl mx-auto pb-12">
           {/* Top 3 podium */}
-          {activeResult.rankings.length >= 2 && (
-            <Podium rankings={activeResult.rankings} onSelect={openSpotlight} />
+          {filteredRankings.length >= 2 && (
+            <Podium rankings={filteredRankings} onSelect={openSpotlight} />
           )}
 
           {/* Rank 1 only */}
-          {activeResult.rankings.length === 1 && (
+          {filteredRankings.length === 1 && (
             <div
               className="flex flex-col items-center gap-4 py-8 cursor-pointer group"
-              onClick={() => openSpotlight(activeResult.rankings[0])}
+              onClick={() => openSpotlight(filteredRankings[0])}
             >
-              <ContingentLogo logo={activeResult.rankings[0].contingentLogo} name={activeResult.rankings[0].contingentName} size="xl" />
+              <ContingentLogo logo={filteredRankings[0].contingentLogo} name={filteredRankings[0].contingentName} size="xl" />
               <div className="text-center transition-transform group-hover:scale-105 duration-200">
-                <p className="text-4xl font-black">{activeResult.rankings[0].teamName}</p>
-                <p className="text-white/60 mt-1">{activeResult.rankings[0].contingentName}</p>
-                <p className="text-5xl font-black text-amber-300 mt-3">{activeResult.rankings[0].totalScore.toFixed(1)}</p>
+                <p className="text-4xl font-black">{filteredRankings[0].teamName}</p>
+                <p className="text-white/60 mt-1">{filteredRankings[0].contingentName}</p>
               </div>
             </div>
           )}
 
           {/* Rest of rankings */}
-          <RankingsTable rankings={activeResult.rankings} onSelect={openSpotlight} />
+          <RankingsTable rankings={filteredRankings} onSelect={openSpotlight} />
         </div>
       )}
 

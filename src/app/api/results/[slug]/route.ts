@@ -9,6 +9,8 @@ interface RankingEntry {
   contingentName: string;
   contingentShortName: string | null;
   contingentLogo: string | null;
+  stateId: string | null;
+  stateName: string | null;
   totalScore: number;
   bestTime: number | null;
   members: { id: string; name: string }[];
@@ -149,6 +151,8 @@ export async function POST(
             shortName: true,
             logoUrl: true,
             contingentType: true,
+            stateId: true,
+            state: { select: { id: true, name: true } },
           },
         },
       },
@@ -164,6 +168,8 @@ export async function POST(
         contingentName: team.contingent.name,
         contingentShortName: team.contingent.shortName ?? null,
         contingentLogo: team.contingent.logoUrl ?? null,
+        stateId: team.contingent.stateId ?? null,
+        stateName: team.contingent.state?.name ?? null,
         totalScore: agg.totalScore,
         bestTime: agg.bestTime,
         members: team.members.map(m => ({ id: m.participant.id, name: m.participant.name })),
