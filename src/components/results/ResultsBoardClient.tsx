@@ -146,13 +146,7 @@ function TeamSpotlight({
           {/* Team name */}
           <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg">{entry.teamName}</p>
 
-          {/* Score + time */}
-          <div className="flex items-center gap-4 text-sm">
-            <span className={cn("font-black text-2xl", rankColor(entry.rank))}>{entry.totalScore.toFixed(1)}</span>
-            {entry.bestTime != null && (
-              <span className="text-sky-300 font-mono text-sm">{fmtTime(entry.bestTime)}</span>
-            )}
-          </div>
+
 
           {/* Members */}
           {entry.members.length > 0 && (
