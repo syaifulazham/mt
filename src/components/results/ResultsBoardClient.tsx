@@ -109,14 +109,17 @@ function TeamSpotlight({
         }
       `}</style>
 
-      {/* Winner figures — bottom-left: 2, 5, 1 overlapping */}
-      <div className="absolute bottom-0 left-0 z-10 pointer-events-none" style={{ width: "380px", height: "420px" }}>
+      {/* Winner figures — bottom-left: 5 (back), 2 + 1 (front) */}
+      <div className="absolute bottom-0 left-0 z-10 pointer-events-none" style={{ width: "420px", height: "500px" }}>
+        {/* 5 — back layer, largest */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/2.png" alt="" className="absolute bottom-0 left-0 select-none" style={{ width: "130px" }} />
+        <img src="/winner/5.png" alt="" className="absolute bottom-0 select-none" style={{ width: "380px", left: "20px", zIndex: 0 }} />
+        {/* 2 — front left */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/5.png" alt="" className="absolute bottom-0 select-none" style={{ width: "260px", left: "80px" }} />
+        <img src="/winner/2.png" alt="" className="absolute bottom-0 left-0 select-none" style={{ width: "130px", zIndex: 1 }} />
+        {/* 1 — front right */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/1.png" alt="" className="absolute bottom-0 select-none" style={{ width: "170px", left: "230px" }} />
+        <img src="/winner/1.png" alt="" className="absolute bottom-0 select-none" style={{ width: "160px", left: "240px", zIndex: 1 }} />
       </div>
 
       {/* Winner figures — bottom-right: 3, 4 (jumping) */}
