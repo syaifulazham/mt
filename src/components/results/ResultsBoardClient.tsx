@@ -158,7 +158,7 @@ function TeamSpotlight({
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-3">
               <div className="h-px w-12 bg-white/20" />
-              <p className={cn("text-3xl md:text-4xl font-black tracking-wide uppercase drop-shadow-lg", rankColor(entry.rank))}>
+              <p className="text-3xl md:text-4xl font-black tracking-wide uppercase drop-shadow-lg text-amber-400">
                 {tempatLabel(entry.rank)}
               </p>
               <div className="h-px w-12 bg-white/20" />
@@ -170,7 +170,7 @@ function TeamSpotlight({
           <div className="flex flex-col items-center gap-3">
             <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
             <div>
-              <p className="text-white text-2xl md:text-3xl font-black tracking-wide uppercase drop-shadow-lg">
+              <p className="text-amber-400 text-2xl md:text-3xl font-black tracking-wide uppercase drop-shadow-lg">
                 {entry.contingentName}
               </p>
               {entry.contingentShortName && (
