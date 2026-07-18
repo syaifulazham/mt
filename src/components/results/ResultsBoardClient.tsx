@@ -112,11 +112,11 @@ function TeamSpotlight({
       {/* Winner figures — bottom-left: 1, 2, 5 (static) */}
       <div className="absolute bottom-0 left-0 z-10 flex items-end pointer-events-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/1.png" alt="" className="w-28 md:w-36 select-none" />
+        <img src="/winner/2.png" alt="" className="w-20 md:w-28 select-none" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/2.png" alt="" className="w-28 md:w-36 select-none -ml-4" />
+        <img src="/winner/1.png" alt="" className="w-28 md:w-36 select-none -ml-4" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/5.png" alt="" className="w-28 md:w-36 select-none -ml-4" />
+        <img src="/winner/5.png" alt="" className="w-36 md:w-44 select-none -ml-4" />
       </div>
 
       {/* Winner figures — bottom-right: 3, 4 (jumping) */}
