@@ -317,9 +317,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [passcode, setPasscode] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [restoring, setRestoring] = useState(() =>
-    typeof window !== "undefined" && !!sessionStorage.getItem(`results_pc_${slug}`)
-  );
+  const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<BoardData | null>(null);
   const [activeComp, setActiveComp] = useState("");
