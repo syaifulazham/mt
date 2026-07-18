@@ -196,10 +196,10 @@ function TeamSpotlight({
       {/* Winner figures — bottom-right: 3, 4 (jumping) */}
       <div className="absolute bottom-16 right-0 z-10 flex items-end pointer-events-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/3.png" alt="" className="w-28 md:w-36 select-none"
+        <img src="/winner/3.png" alt="" className="w-36 md:w-48 select-none"
           style={{ animation: "jump1 1.6s ease-in-out infinite" }} />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/4.png" alt="" className="w-28 md:w-36 select-none -ml-4"
+        <img src="/winner/4.png" alt="" className="w-36 md:w-48 select-none -ml-4"
           style={{ animation: "jump2 1.6s ease-in-out 0.25s infinite" }} />
       </div>
 
