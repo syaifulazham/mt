@@ -17,16 +17,17 @@ function generatePasscode(): string {
 
 // GET /api/v2/organizer/events/[id]/results-endpoints
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { id: eventId } = await params;
+  const isWalkIn = req.nextUrl.searchParams.get("isWalkIn") === "true";
 
   const rows = await db.resultsEndpoint.findMany({
-    where: { eventId },
+    where: { eventId, isWalkIn },
     orderBy: { createdAt: "desc" },
   });
 
@@ -52,6 +53,7 @@ export async function POST(
     label?: string;
     requirePasscode?: boolean;
     competitionIds?: string[];
+    isWalkIn?: boolean;
   };
 
   const routeSlug = randomBytes(10).toString("hex");
@@ -63,6 +65,7 @@ export async function POST(
       routeSlug,
       passcode,
       label: body.label?.trim() || null,
+      isWalkIn: body.isWalkIn ?? false,
       competitionIds: body.competitionIds ?? [],
     },
   });

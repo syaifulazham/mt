@@ -3,10 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
+type JudgingTemplateSummary = {
+  id: string; name: string; code: string; description: string | null;
+  _count: { criterions: number };
+};
 
 type WalkInEndpointItem = {
   id: string; routeSlug: string; passcode: string; label: string | null; active: boolean; createdAt: string | Date;
@@ -97,6 +102,16 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [revealedEpIds,     setRevealedEpIds]     = useState<Set<string>>(new Set());
   const [togglingPortal,    setTogglingPortal]    = useState(false);
 
+  // ── Judging templates ──
+  const [assignedTemplates,   setAssignedTemplates]   = useState<JudgingTemplateSummary[]>([]);
+  const [allTemplates,        setAllTemplates]        = useState<JudgingTemplateSummary[]>([]);
+  const [templatesLoading,    setTemplatesLoading]    = useState(false);
+  const [templatePickerOpen,  setTemplatePickerOpen]  = useState(false);
+  const [assigningTemplateId, setAssigningTemplateId] = useState<string | null>(null);
+  const [removingTemplateId,  setRemovingTemplateId]  = useState<string | null>(null);
+  const [removeConfirm, setRemoveConfirm] = useState<{ template: JudgingTemplateSummary; code: string } | null>(null);
+  const [removeConfirmInput, setRemoveConfirmInput] = useState("");
+
   const loadRegistrations = useCallback(async (wicId: string, filter: string) => {
     setLoading(true);
     const sp = new URLSearchParams();
@@ -110,6 +125,70 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (selectedWic) loadRegistrations(selectedWic.id, statusFilter); }, [selectedWic, statusFilter, loadRegistrations]);
+
+  // Load judging templates when a walk-in competition is selected
+  useEffect(() => {
+    if (!selectedWic) return;
+    setAssignedTemplates([]);
+    setAllTemplates([]);
+    setTemplatesLoading(true);
+    Promise.all([
+      fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates`),
+      fetch("/api/v2/organizer/judging/templates"),
+    ]).then(async ([aRes, allRes]) => {
+      const [aJson, allJson] = await Promise.all([aRes.json(), allRes.json()]);
+      setAssignedTemplates(aJson.data ?? []);
+      setAllTemplates(allJson.templates ?? []);
+    }).finally(() => setTemplatesLoading(false));
+  }, [selectedWic, event.id]);
+
+  // Close template picker when clicking outside
+  useEffect(() => {
+    if (!templatePickerOpen) return;
+    function handler() { setTemplatePickerOpen(false); }
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [templatePickerOpen]);
+
+  async function assignTemplate(templateId: string) {
+    if (!selectedWic) return;
+    setAssigningTemplateId(templateId);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ judgingTemplateId: templateId }) }
+      );
+      if (res.ok) {
+        const tpl = allTemplates.find(t => t.id === templateId);
+        if (tpl) setAssignedTemplates(prev => [...prev, tpl]);
+        setTemplatePickerOpen(false);
+      }
+    } finally {
+      setAssigningTemplateId(null);
+    }
+  }
+
+  function confirmRemove(template: JudgingTemplateSummary) {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const code = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    setRemoveConfirm({ template, code });
+    setRemoveConfirmInput("");
+  }
+
+  async function executeRemove() {
+    if (!selectedWic || !removeConfirm) return;
+    setRemovingTemplateId(removeConfirm.template.id);
+    setRemoveConfirm(null);
+    try {
+      await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates/${removeConfirm.template.id}`,
+        { method: "DELETE" }
+      );
+      setAssignedTemplates(prev => prev.filter(t => t.id !== removeConfirm.template.id));
+    } finally {
+      setRemovingTemplateId(null);
+    }
+  }
 
   async function updateStatus(reg: Registration, status: string) {
     setUpdating(reg.id);
@@ -433,6 +512,88 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                         </>
                       )}
                     </div>
+
+                    {/* Judging Templates */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                          <Gavel className="h-3.5 w-3.5" /> Judging Templates
+                        </p>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setTemplatePickerOpen(v => !v); }}
+                            className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add template
+                            <ChevronDown className="h-3 w-3" />
+                          </button>
+                          {templatePickerOpen && (
+                            <div className="absolute right-0 top-6 z-50 w-72 rounded-lg border bg-white shadow-lg overflow-hidden">
+                              <div className="px-3 py-2 border-b text-xs font-semibold text-zinc-500 bg-zinc-50">
+                                Available Templates
+                              </div>
+                              <div className="max-h-56 overflow-y-auto">
+                                {allTemplates.filter(t => !assignedTemplates.some(a => a.id === t.id)).length === 0 ? (
+                                  <p className="px-3 py-4 text-xs text-zinc-400 text-center">All templates already assigned.</p>
+                                ) : (
+                                  allTemplates
+                                    .filter(t => !assignedTemplates.some(a => a.id === t.id))
+                                    .map(t => (
+                                      <button
+                                        key={t.id}
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); assignTemplate(t.id); }}
+                                        disabled={assigningTemplateId === t.id}
+                                        className="w-full text-left px-3 py-2.5 hover:bg-violet-50 border-b last:border-0 flex items-center gap-2"
+                                      >
+                                        {assigningTemplateId === t.id
+                                          ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400 shrink-0" />
+                                          : <Gavel className="h-3.5 w-3.5 text-zinc-300 shrink-0" />
+                                        }
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-medium text-zinc-800 truncate">{t.name}</p>
+                                          <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} criteria</p>
+                                        </div>
+                                      </button>
+                                    ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {templatesLoading ? (
+                        <div className="flex items-center gap-2 py-3 text-xs text-zinc-400">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading templates…
+                        </div>
+                      ) : assignedTemplates.length === 0 ? (
+                        <p className="text-xs text-zinc-400 italic py-1">No judging templates assigned.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {assignedTemplates.map(t => (
+                            <div key={t.id} className="flex items-center gap-2 rounded-md border border-violet-100 bg-violet-50 px-3 py-2">
+                              <Gavel className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-violet-800 truncate">{t.name}</p>
+                                <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} criteria</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => confirmRemove(t)}
+                                disabled={removingTemplateId === t.id}
+                                className="p-0.5 rounded hover:bg-violet-100 shrink-0"
+                              >
+                                {removingTemplateId === t.id
+                                  ? <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+                                  : <X className="h-3 w-3 text-violet-400" />
+                                }
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -557,6 +718,59 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           competitionName={selectedWic?.competition.name ?? ""}
           onClose={() => setQrTarget(null)}
         />
+      )}
+
+      {/* Template removal confirmation modal */}
+      {removeConfirm && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setRemoveConfirm(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Gavel className="h-4 w-4 text-red-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-900 text-sm">Buang Judging Template?</p>
+                <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                  Anda akan membuang <span className="font-semibold text-zinc-700">{removeConfirm.template.name}</span> daripada pertandingan ini.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-4 py-3 text-center space-y-1">
+              <p className="text-[11px] text-zinc-400 uppercase tracking-widest">Taip kod ini untuk sahkan</p>
+              <p className="text-2xl font-black font-mono tracking-[0.35em] text-zinc-800 select-none">
+                {removeConfirm.code}
+              </p>
+            </div>
+
+            <input
+              autoFocus
+              type="text"
+              maxLength={5}
+              value={removeConfirmInput}
+              onChange={e => setRemoveConfirmInput(e.target.value.toUpperCase())}
+              onKeyDown={e => { if (e.key === "Enter" && removeConfirmInput === removeConfirm.code) executeRemove(); }}
+              placeholder="_ _ _ _ _"
+              className="w-full text-center font-mono tracking-[0.35em] text-lg border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-red-300 focus:border-red-400 uppercase"
+            />
+
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setRemoveConfirm(null)}
+                className="flex-1 px-4 py-2 rounded-lg border text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors">
+                Batal
+              </button>
+              <button type="button"
+                onClick={executeRemove}
+                disabled={removeConfirmInput !== removeConfirm.code}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                Buang
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

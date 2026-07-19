@@ -494,8 +494,9 @@ model Event {
   prerequisites       EventPrerequisite[] @relation("EventPrerequisites")
   asPrerequisiteOf    EventPrerequisite[] @relation("EventAsPrerequisite")
   eventCompetitions   EventCompetition[]
-  walkInCompetitions  EventWalkInCompetition[]
+  walkInCompetitions   EventWalkInCompetition[]
   walkInEndpoints      WalkInEndpoint[]
+  walkInJudgingEndpoints WalkInJudgingEndpoint[]
   teamEvents           TeamEvent[]
   resultsEndpoints     ResultsEndpoint[]
   attendanceEndpoints  AttendanceEndpoint[]
@@ -598,8 +599,10 @@ model EventWalkInCompetition {
 
   event         Event       @relation(fields: [eventId],       references: [id], onDelete: Cascade)
   competition   Competition @relation(fields: [competitionId], references: [id])
-  registrations WalkInRegistration[]
-  endpoints     WalkInEndpoint[]
+  registrations    WalkInRegistration[]
+  endpoints        WalkInEndpoint[]
+  judgingTemplates EventWalkInCompetitionJudgingTemplate[]
+  judgingEndpoints WalkInJudgingEndpoint[]
 
   @@unique([eventId, competitionId])
   @@map("event_walkin_competitions")
@@ -621,6 +624,52 @@ model WalkInEndpoint {
   @@map("walkin_endpoints")
 }
 
+enum WalkInJudgingEndpointStatus {
+  ACTIVE
+  CLOSED
+}
+
+model WalkInJudgingEndpoint {
+  id                  String                      @id @default(cuid())
+  eventId             String
+  walkInCompetitionId String
+  judgingTemplateId   String
+  routeSlug           String                      @unique
+  passcode            String
+  label               String?
+  status              WalkInJudgingEndpointStatus @default(ACTIVE)
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  event             Event                  @relation(fields: [eventId],             references: [id], onDelete: Cascade)
+  walkInCompetition EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
+  judgingTemplate   JudgingTemplate        @relation(fields: [judgingTemplateId],   references: [id], onDelete: Cascade)
+  scores            WalkInJudgingScore[]
+
+  @@index([walkInCompetitionId])
+  @@map("walkin_judging_endpoints")
+}
+
+model WalkInJudgingScore {
+  id                      String   @id @default(cuid())
+  walkInJudgingEndpointId String
+  walkInRegistrationId    String
+  criterionId             String
+  score                   Float?
+  timeSeconds             Int?
+  optionIds               String[]
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  walkInJudgingEndpoint WalkInJudgingEndpoint @relation(fields: [walkInJudgingEndpointId], references: [id], onDelete: Cascade)
+  walkInRegistration    WalkInRegistration    @relation(fields: [walkInRegistrationId],    references: [id], onDelete: Cascade)
+  criterion             JudgingCriterion      @relation(fields: [criterionId],             references: [id], onDelete: Cascade)
+
+  @@unique([walkInJudgingEndpointId, walkInRegistrationId, criterionId])
+  @@index([walkInJudgingEndpointId])
+  @@map("walkin_judging_scores")
+}
+
 model WalkInRegistration {
   id                  String       @id @default(cuid())
   walkInCompetitionId String
@@ -636,6 +685,7 @@ model WalkInRegistration {
   walkInCompetition EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
   participant       Participant            @relation(fields: [participantId],       references: [id])
   contingent        Contingent             @relation(fields: [contingentId],        references: [id])
+  judgingScores     WalkInJudgingScore[]
 
   @@unique([walkInCompetitionId, participantId])
   @@map("walkin_registrations")
@@ -664,6 +714,19 @@ model EventCompetitionJudgingTemplate {
 
   @@unique([eventCompetitionId, judgingTemplateId])
   @@map("event_competition_judging_templates")
+}
+
+model EventWalkInCompetitionJudgingTemplate {
+  id                  String   @id @default(cuid())
+  walkInCompetitionId String
+  judgingTemplateId   String
+  createdAt           DateTime @default(now())
+
+  walkInCompetition EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
+  judgingTemplate   JudgingTemplate        @relation(fields: [judgingTemplateId],   references: [id], onDelete: Cascade)
+
+  @@unique([walkInCompetitionId, judgingTemplateId])
+  @@map("event_walkin_competition_judging_templates")
 }
 
 model CompetitionTargetGroup {
@@ -823,9 +886,11 @@ model JudgingTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  criterions        JudgingCriterion[]
-  eventCompetitions EventCompetitionJudgingTemplate[]
-  judgingTasks      JudgingTask[]
+  criterions           JudgingCriterion[]
+  eventCompetitions    EventCompetitionJudgingTemplate[]
+  walkInCompetitions   EventWalkInCompetitionJudgingTemplate[]
+  walkInJudgingEndpoints WalkInJudgingEndpoint[]
+  judgingTasks         JudgingTask[]
 
   @@map("judging_templates")
 }
@@ -865,6 +930,7 @@ model JudgingCriterion {
   template JudgingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   options  JudgingOption[]
   scores   JudgingScore[]
+  walkInJudgingScores WalkInJudgingScore[]
 
   @@index([templateId])
   @@map("judging_criterions")
@@ -919,6 +985,7 @@ model ResultsEndpoint {
   passcode       String?
   label          String?
   status         ResultsEndpointStatus @default(ACTIVE)
+  isWalkIn       Boolean               @default(false)
   competitionIds String[]
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
