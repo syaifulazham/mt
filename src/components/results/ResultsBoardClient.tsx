@@ -63,7 +63,7 @@ function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name
   if (logo && !err) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={logo} alt={name} onError={() => setErr(true)}
-      className={cn(cls, "rounded-full object-cover border-2 border-white/20 shadow-lg")} />;
+      className={cn(cls, "rounded-xl object-contain border-2 border-white/20 shadow-lg bg-white/10 p-1")} />;
   }
   return <ShieldFallback cls={cls} />;
 }
@@ -336,11 +336,15 @@ function WaveCanvas({ isWalkIn = false }: { isWalkIn?: boolean }) {
 function TeamSpotlight({
   entry,
   eventName,
+  competitionCode,
+  competitionName,
   onClose,
   isWalkIn = false,
 }: {
   entry: RankEntry;
   eventName: string;
+  competitionCode?: string;
+  competitionName?: string;
   onClose: () => void;
   isWalkIn?: boolean;
 }) {
@@ -355,6 +359,9 @@ function TeamSpotlight({
       className={cn("fixed inset-0 z-[100] flex flex-col overflow-y-auto", isWalkIn ? "bg-gradient-to-br from-purple-950 via-violet-900 to-indigo-900" : "bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800")}
       onClick={onClose}
     >
+      {/* Geometric isometric cube wireframe texture */}
+      <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.15]"
+        style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='100' height='173.2' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M50 0 L100 28.87 L100 86.6 L50 115.47 L0 86.6 L0 28.87 Z' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M50 0 L50 57.74' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M0 28.87 L50 57.74' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M100 28.87 L50 57.74' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M50 57.74 L50 115.47' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='0.5'/%3E%3Cpath d='M50 57.74 L0 86.6' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='0.5'/%3E%3Cpath d='M50 57.74 L100 86.6' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='0.5'/%3E%3Cpath d='M50 115.47 L100 144.34 L100 173.2' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='0.5'/%3E%3Cpath d='M50 115.47 L0 144.34 L0 173.2' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='0.5'/%3E%3C/svg%3E\")", backgroundRepeat: "repeat", backgroundSize: "100px 173.2px" }} />
       <style>{`
         @keyframes jump1 {
           0%, 100% { transform: translateY(0); }
@@ -366,7 +373,32 @@ function TeamSpotlight({
           40%       { transform: translateY(-22px); }
           60%       { transform: translateY(-12px); }
         }
+        @keyframes spotlightSweep1 {
+          0%   { transform: rotate(-15deg); opacity: 0.4; }
+          50%  { transform: rotate(15deg); opacity: 0.7; }
+          100% { transform: rotate(-15deg); opacity: 0.4; }
+        }
+        @keyframes spotlightSweep2 {
+          0%   { transform: rotate(10deg); opacity: 0.3; }
+          50%  { transform: rotate(-20deg); opacity: 0.6; }
+          100% { transform: rotate(10deg); opacity: 0.3; }
+        }
+        @keyframes spotlightSweep3 {
+          0%   { transform: rotate(-5deg); opacity: 0.35; }
+          50%  { transform: rotate(25deg); opacity: 0.55; }
+          100% { transform: rotate(-5deg); opacity: 0.35; }
+        }
       `}</style>
+
+      {/* Spotlight shower effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]">
+        <div className="absolute -top-20 left-[15%] w-[200px] h-[800px] origin-top"
+          style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 70%)", clipPath: "polygon(40% 0%, 60% 0%, 100% 100%, 0% 100%)", animation: "spotlightSweep1 6s ease-in-out infinite" }} />
+        <div className="absolute -top-20 left-[50%] w-[180px] h-[750px] origin-top"
+          style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 65%)", clipPath: "polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)", animation: "spotlightSweep2 8s ease-in-out infinite" }} />
+        <div className="absolute -top-20 right-[15%] w-[160px] h-[700px] origin-top"
+          style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 60%)", clipPath: "polygon(38% 0%, 62% 0%, 100% 100%, 0% 100%)", animation: "spotlightSweep3 7s ease-in-out infinite" }} />
+      </div>
 
       <WaveCanvas isWalkIn={isWalkIn} />
 
@@ -403,7 +435,7 @@ function TeamSpotlight({
 
       {/* Content — stop propagation so clicks inside don't close */}
       <div
-        className="relative z-10 flex flex-col items-center justify-between min-h-screen px-6 py-10 gap-6"
+        className="relative z-10 flex flex-col items-center justify-start min-h-screen px-6 pt-10 pb-0 gap-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top: Techlympics logo + event name */}
@@ -411,6 +443,9 @@ function TeamSpotlight({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-mt.svg" alt="Techlympics" className="h-24 w-auto" style={{ filter: "drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white) drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white)" }} />
           <p className="text-white font-black tracking-widest text-center max-w-xs uppercase">{eventName}</p>
+          {competitionName && (
+            <p className="text-white/60 text-lg font-bold tracking-wide text-center uppercase">{competitionCode} {competitionName}</p>
+          )}
         </div>
 
         {/* Middle: rank + team info */}
@@ -419,18 +454,20 @@ function TeamSpotlight({
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-3">
               <div className="h-px w-12 bg-white/20" />
-              <p className="text-3xl md:text-4xl font-black tracking-wide uppercase drop-shadow-lg text-amber-400">
+              <p className="text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg text-amber-400">
                 {tempatLabel(entry.rank)}
               </p>
               <div className="h-px w-12 bg-white/20" />
             </div>
-            <p className="text-white/30 text-xs font-mono">#{entry.rank}</p>
           </div>
+
+          {/* Team name */}
+          <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg" style={{ WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
 
           {/* Contingent logo + state flag + name */}
           <div className="flex flex-col items-center gap-3">
             <div className="flex items-center gap-5">
-              <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
+              <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="lg" />
               {entry.stateFlag && (
                 <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/40 shadow-lg shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -439,35 +476,27 @@ function TeamSpotlight({
               )}
             </div>
             <div>
-              <p className="text-amber-400 text-2xl md:text-3xl font-black tracking-wide uppercase drop-shadow-lg" style={{ WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
+              <p className="text-amber-400 text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg" style={{ WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
                 {entry.contingentName}
               </p>
-              {entry.contingentShortName && (
-                <p className="text-white/50 text-sm mt-0.5">{entry.contingentShortName}</p>
-              )}
             </div>
           </div>
-
-          {/* Team name */}
-          <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg">{entry.teamName}</p>
 
 
 
           {/* Members */}
-          {entry.members.length > 0 && (
-            <div className="mt-2 w-full max-w-xs text-center">
-              <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-3">Ahli Pasukan</p>
-              <ul className="space-y-1.5">
-                {entry.members.map((m) => (
-                  <li key={m.id} className="text-sm text-white/80 font-medium uppercase">{m.name}</li>
-                ))}
-              </ul>
+          {!isWalkIn && entry.members.length > 0 && (
+            <div className="mt-2 flex flex-col items-center gap-1.5">
+              <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-2">Ahli Pasukan</p>
+              {entry.members.map((m) => (
+                <p key={m.id} className="text-base text-white/80 font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
+              ))}
             </div>
           )}
         </div>
 
         {/* Bottom: partner logos */}
-        <div className="w-full -mx-6 px-6 py-4 bg-black/40 flex flex-wrap justify-center items-center gap-5">
+        <div className="w-screen -mx-6 px-6 py-3 bg-black/40 flex flex-wrap justify-center items-center gap-5 mt-auto">
           {PARTNER_LOGOS.map((f) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="h-8 w-auto opacity-60" />
@@ -1000,6 +1029,8 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
         <TeamSpotlight
           entry={spotlight}
           eventName={data.event.name}
+          competitionCode={activeResult?.code}
+          competitionName={activeResult?.name}
           onClose={() => setSpotlight(null)}
           isWalkIn={isWalkIn}
         />
