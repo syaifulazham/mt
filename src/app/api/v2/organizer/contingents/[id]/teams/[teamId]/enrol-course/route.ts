@@ -45,23 +45,29 @@ export async function POST(
   try {
     // 1. Ensure the LMS user account exists with the correct email
     let lmsUserId = team.lmsUserId;
-    if (!lmsUserId) {
-      const check = await eptimEdu.userExists(username);
-      if (check?.exists) {
-        lmsUserId = check.user.id;
-      } else {
-        const password = Array.from({ length: 6 }, () =>
-          "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[
-            Math.floor(Math.random() * 55)
-          ]).join("");
-        const created = await eptimEdu.createUser({
-          username,
-          password,
-          name: team.name,
-          email: team.email,
-        });
-        lmsUserId = created.id;
+    const check = await eptimEdu.userExists(username);
+    if (check?.exists) {
+      lmsUserId = lmsUserId ?? check.user.id;
+      // Fix email on existing account if force re-enrolling
+      if (force && team.email) {
+        try {
+          await eptimEdu.updateUser(username, { email: team.email, name: team.name });
+        } catch {
+          // updateUser may not be supported — continue with enrolment
+        }
       }
+    } else {
+      const password = Array.from({ length: 6 }, () =>
+        "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[
+          Math.floor(Math.random() * 55)
+        ]).join("");
+      const created = await eptimEdu.createUser({
+        username,
+        password,
+        name: team.name,
+        email: team.email,
+      });
+      lmsUserId = created.id;
     }
 
     // 2. Check if already enrolled in this specific course
