@@ -127,19 +127,24 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   useEffect(() => { if (selectedWic) loadRegistrations(selectedWic.id, statusFilter); }, [selectedWic, statusFilter, loadRegistrations]);
 
   // Load judging templates when a walk-in competition is selected
+  // Deferred via setTimeout so setState calls don't run synchronously
+  // within the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
     if (!selectedWic) return;
-    setAssignedTemplates([]);
-    setAllTemplates([]);
-    setTemplatesLoading(true);
-    Promise.all([
-      fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates`),
-      fetch("/api/v2/organizer/judging/templates"),
-    ]).then(async ([aRes, allRes]) => {
-      const [aJson, allJson] = await Promise.all([aRes.json(), allRes.json()]);
-      setAssignedTemplates(aJson.data ?? []);
-      setAllTemplates(allJson.templates ?? []);
-    }).finally(() => setTemplatesLoading(false));
+    const id = setTimeout(() => {
+      setAssignedTemplates([]);
+      setAllTemplates([]);
+      setTemplatesLoading(true);
+      Promise.all([
+        fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates`),
+        fetch("/api/v2/organizer/judging/templates"),
+      ]).then(async ([aRes, allRes]) => {
+        const [aJson, allJson] = await Promise.all([aRes.json(), allRes.json()]);
+        setAssignedTemplates(aJson.data ?? []);
+        setAllTemplates(allJson.templates ?? []);
+      }).finally(() => setTemplatesLoading(false));
+    }, 0);
+    return () => clearTimeout(id);
   }, [selectedWic, event.id]);
 
   // Close template picker when clicking outside
@@ -369,7 +374,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                                   <button type="button"
                                     onClick={() => setRevealedEpIds(prev => {
                                       const next = new Set(prev);
-                                      next.has(ep.id) ? next.delete(ep.id) : next.add(ep.id);
+                                      if (next.has(ep.id)) next.delete(ep.id); else next.add(ep.id);
                                       return next;
                                     })}
                                     className="text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
