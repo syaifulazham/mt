@@ -20,7 +20,7 @@ type RankEntry = {
 type CompetitionResult = { id: string; name: string; code: string; targetGroups: { code: string; name: string }[]; rankings: RankEntry[] };
 
 type BoardData = {
-  endpoint: { id: string; label: string | null; status: string };
+  endpoint: { id: string; label: string | null; status: string; isWalkIn?: boolean };
   event:    { id: string; name: string; scope: string; startDate: string | null; endDate: string | null };
   competitions: CompetitionResult[];
 };
@@ -215,14 +215,21 @@ function SparkleCanvas() {
 
 // ── Animated wave background ──────────────────────────────────────────────────
 
-const WAVES = [
+const WAVES_DEFAULT = [
   { color: "rgba(30,  120, 255, 0.55)", glow: "rgba(30, 120, 255, 0.4)",  speed: 0.40, amp: 65, freq: 0.90, yOff: 0.42, width: 16 },
   { color: "rgba(0,   220, 200, 0.50)", glow: "rgba(0,  220, 200, 0.35)", speed: 0.28, amp: 85, freq: 0.65, yOff: 0.50, width: 13 },
   { color: "rgba(50,  200,  80, 0.48)", glow: "rgba(50, 200,  80, 0.30)", speed: 0.50, amp: 55, freq: 1.05, yOff: 0.56, width: 11 },
   { color: "rgba(255, 170,   0, 0.45)", glow: "rgba(255,170,   0, 0.30)", speed: 0.35, amp: 72, freq: 0.75, yOff: 0.53, width: 10 },
 ];
 
-function WaveCanvas() {
+const WAVES_PURPLE = [
+  { color: "rgba(168, 85, 247, 0.55)", glow: "rgba(168, 85, 247, 0.4)",  speed: 0.40, amp: 65, freq: 0.90, yOff: 0.42, width: 16 },
+  { color: "rgba(139, 92, 246, 0.50)", glow: "rgba(139, 92, 246, 0.35)", speed: 0.28, amp: 85, freq: 0.65, yOff: 0.50, width: 13 },
+  { color: "rgba(192, 132, 252, 0.48)", glow: "rgba(192, 132, 252, 0.30)", speed: 0.50, amp: 55, freq: 1.05, yOff: 0.56, width: 11 },
+  { color: "rgba(236, 72, 153, 0.45)", glow: "rgba(236, 72, 153, 0.30)", speed: 0.35, amp: 72, freq: 0.75, yOff: 0.53, width: 10 },
+];
+
+function WaveCanvas({ isWalkIn = false }: { isWalkIn?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -248,7 +255,8 @@ function WaveCanvas() {
       const H = canvas.height;
       ctx.clearRect(0, 0, W, H);
 
-      for (const w of WAVES) {
+      const waves = isWalkIn ? WAVES_PURPLE : WAVES_DEFAULT;
+      for (const w of waves) {
         // Precompute wave points once, reused across passes
         const pts: [number, number][] = [];
         for (let x = 0; x <= W; x += 3) {
@@ -329,10 +337,12 @@ function TeamSpotlight({
   entry,
   eventName,
   onClose,
+  isWalkIn = false,
 }: {
   entry: RankEntry;
   eventName: string;
   onClose: () => void;
+  isWalkIn?: boolean;
 }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -342,7 +352,7 @@ function TeamSpotlight({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 overflow-y-auto"
+      className={cn("fixed inset-0 z-[100] flex flex-col overflow-y-auto", isWalkIn ? "bg-gradient-to-br from-purple-950 via-violet-900 to-indigo-900" : "bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800")}
       onClick={onClose}
     >
       <style>{`
@@ -358,7 +368,7 @@ function TeamSpotlight({
         }
       `}</style>
 
-      <WaveCanvas />
+      <WaveCanvas isWalkIn={isWalkIn} />
 
       {/* Winner figures — bottom-left: 5 (back), 2 + 1 (front) */}
       <div className="absolute bottom-0 left-0 z-10 pointer-events-none" style={{ width: "420px", height: "500px" }}>
@@ -697,6 +707,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
 
   if (!data) return null;
 
+  const isWalkIn = data.endpoint.isWalkIn ?? false;
   const activeResult = data.competitions.find(c => c.id === activeComp) ?? data.competitions[0];
 
   // Unique states present in this competition's rankings
@@ -722,7 +733,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   })();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+    <div className={cn("min-h-screen text-white", isWalkIn ? "bg-gradient-to-br from-purple-950 via-violet-900 to-indigo-950" : "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950")}>
       <SparkleCanvas />
 
       {/* Header */}
@@ -990,6 +1001,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
           entry={spotlight}
           eventName={data.event.name}
           onClose={() => setSpotlight(null)}
+          isWalkIn={isWalkIn}
         />
       )}
     </div>

@@ -303,6 +303,7 @@ export async function POST(
       id: endpoint.id,
       label: endpoint.label,
       status: endpoint.status,
+      isWalkIn: endpoint.isWalkIn,
     },
     event: {
       id: endpoint.event.id,
