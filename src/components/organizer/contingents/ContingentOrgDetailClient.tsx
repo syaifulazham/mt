@@ -850,14 +850,14 @@ function TeamsTab({ contingentId, teams }: {
     setEnrolledMap((prev) => ({ ...prev, [teamId]: new Set(ids) }));
   }
 
-  async function handleEnrol(teamId: string, courseId: string) {
+  async function handleEnrol(teamId: string, courseId: string, force = false) {
     setEnrolling({ teamId, courseId });
     setEnrolError(null);
     try {
       const res = await fetch(
         `/api/v2/organizer/contingents/${contingentId}/teams/${teamId}/enrol-course`,
         { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId }) },
+          body: JSON.stringify({ courseId, force }) },
       );
       const json = await res.json();
       if (!res.ok) {
@@ -1025,8 +1025,21 @@ function TeamsTab({ contingentId, teams }: {
                                         {!ec.courseId ? (
                                           <span className="text-zinc-300">—</span>
                                         ) : enrolled ? (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2 py-0.5 text-green-700 font-medium">
-                                            <Check className="h-3 w-3" /> Enrolled
+                                          <span className="inline-flex items-center gap-2">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2 py-0.5 text-green-700 font-medium">
+                                              <Check className="h-3 w-3" /> Enrolled
+                                            </span>
+                                            <button
+                                              type="button"
+                                              disabled={!!enrolling}
+                                              onClick={() => handleEnrol(t.id, ec.courseId!, true)}
+                                              className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-2 py-0.5 text-zinc-500 font-medium hover:bg-zinc-50 hover:text-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                              title="Force re-enrol with correct email"
+                                            >
+                                              {(enrolling?.teamId === t.id && enrolling?.courseId === ec.courseId)
+                                                ? <><Loader2 className="h-3 w-3 animate-spin" /> Re-enrolling…</>
+                                                : "Re-enrol"}
+                                            </button>
                                           </span>
                                         ) : (
                                           /* Pulsing ring wrapper */

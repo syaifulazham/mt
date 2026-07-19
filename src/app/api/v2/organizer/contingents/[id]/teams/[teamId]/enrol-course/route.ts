@@ -25,7 +25,7 @@ export async function POST(
     return NextResponse.json({ error: "EptimEdu is not configured on this server." }, { status: 503 });
 
   const { id: contingentId, teamId } = await params;
-  const { courseId } = await req.json();
+  const { courseId, force } = await req.json();
 
   if (!courseId)
     return NextResponse.json({ error: "MISSING_COURSE_ID" }, { status: 400 });
@@ -75,7 +75,7 @@ export async function POST(
       .map((e) => (e as { courseId?: string })?.courseId)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
 
-    if (enrolledCourseIds.includes(courseId)) {
+    if (enrolledCourseIds.includes(courseId) && !force) {
       // Already enrolled — persist state and return success
       await db.team.update({
         where: { id: teamId },
@@ -84,10 +84,11 @@ export async function POST(
       return NextResponse.json({ success: true, username, alreadyEnrolled: true });
     }
 
-    // 3. Enrol in the course
+    // 3. Enrol in the course (force re-enrol handles 409 gracefully)
     const result = await eptimEdu.enrol(username, courseId, {
       name: team.name,
       email: team.email,
+      force: !!force,
     });
 
     await db.team.update({
