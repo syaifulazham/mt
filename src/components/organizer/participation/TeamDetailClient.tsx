@@ -60,7 +60,7 @@ export function TeamDetailClient({ data }: { data: TeamDetail }) {
               <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", TYPE_COLORS[data.contingent.contingentType] ?? "bg-zinc-100 text-zinc-500")}>
                 {data.contingent.contingentType}
               </span>
-              <span className="text-sm text-zinc-500">{data.contingent.name}</span>
+              <a href={`/organizer/contingents/${data.contingent.id}`} className="text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors">{data.contingent.name}</a>
               {data.contingent.shortName && <span className="text-xs text-zinc-400">({data.contingent.shortName})</span>}
             </div>
             {data.competition.participationType === "TEAM" && (
