@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   // enrol() also auto-provisions the LMS account if it doesn't exist yet.
   if (courseId) {
     try {
-      const enrolResult = await eptimEdu.enrol(username, courseId, { force: true, name: team.name });
+      const enrolResult = await eptimEdu.enrol(username, courseId, { force: true, name: team.name, email: team.email });
       // If this was the first enrolment, persist the new lmsUserId
       if (enrolResult?.userId && !team.lmsUserId) {
         db.team.update({

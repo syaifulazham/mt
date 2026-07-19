@@ -43,15 +43,57 @@ export async function POST(
   const username = emailToUsername(team.email);
 
   try {
-    const result = await eptimEdu.enrol(username, courseId, { name: team.name });
+    // 1. Ensure the LMS user account exists with the correct email
+    let lmsUserId = team.lmsUserId;
+    if (!lmsUserId) {
+      const check = await eptimEdu.userExists(username);
+      if (check?.exists) {
+        lmsUserId = check.user.id;
+      } else {
+        const password = Array.from({ length: 6 }, () =>
+          "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[
+            Math.floor(Math.random() * 55)
+          ]).join("");
+        const created = await eptimEdu.createUser({
+          username,
+          password,
+          name: team.name,
+          email: team.email,
+        });
+        lmsUserId = created.id;
+      }
+    }
 
-    if (!result?.userId)
-      throw new Error("Enrolment call succeeded but EptimEdu returned no userId.");
+    // 2. Check if already enrolled in this specific course
+    const enrolments = await eptimEdu.getUserEnrolments(username);
+    const raw: unknown[] = Array.isArray(enrolments)
+      ? enrolments
+      : Array.isArray(enrolments?.enrolments)
+        ? enrolments.enrolments
+        : [];
+    const enrolledCourseIds = raw
+      .map((e) => (e as { courseId?: string })?.courseId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+    if (enrolledCourseIds.includes(courseId)) {
+      // Already enrolled — persist state and return success
+      await db.team.update({
+        where: { id: teamId },
+        data: { lmsUserId, lmsCourseEnrolled: true },
+      });
+      return NextResponse.json({ success: true, username, alreadyEnrolled: true });
+    }
+
+    // 3. Enrol in the course
+    const result = await eptimEdu.enrol(username, courseId, {
+      name: team.name,
+      email: team.email,
+    });
 
     await db.team.update({
       where: { id: teamId },
       data: {
-        lmsUserId:         team.lmsUserId ?? result.userId,
+        lmsUserId:         lmsUserId ?? result?.userId,
         lmsCourseEnrolled: true,
       },
     });

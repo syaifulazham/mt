@@ -100,6 +100,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       const result = await eptimEdu.enrol(username, team.competition.eptimEduCourseId, {
         password,
         name: team.name,
+        email: team.email ?? undefined,
       });
       if (!result?.userId) throw new Error("Enrolment succeeded but no userId returned");
       lmsUserId = result.userId;
