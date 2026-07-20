@@ -303,16 +303,19 @@ function TokenInfoModal({
   }, [onClose]);
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
-    fetch(`/api/v2/walkin/viblock-token/${encodeURIComponent(token)}`)
-      .then(r => r.json().then(j => ({ ok: r.ok, j })))
-      .then(({ ok, j }) => {
-        if (!ok) throw new Error(j.error ?? "Failed");
-        setInfo(j);
-      })
-      .catch(e => setError(e.message ?? "Gagal mendapatkan maklumat token."))
-      .finally(() => setLoading(false));
+    const id = setTimeout(() => {
+      setLoading(true);
+      setError("");
+      fetch(`/api/v2/walkin/viblock-token/${encodeURIComponent(token)}`)
+        .then(r => r.json().then(j => ({ ok: r.ok, j })))
+        .then(({ ok, j }) => {
+          if (!ok) throw new Error(j.error ?? "Failed");
+          setInfo(j);
+        })
+        .catch(e => setError(e.message ?? "Gagal mendapatkan maklumat token."))
+        .finally(() => setLoading(false));
+    }, 0);
+    return () => clearTimeout(id);
   }, [token]);
 
   return createPortal(
