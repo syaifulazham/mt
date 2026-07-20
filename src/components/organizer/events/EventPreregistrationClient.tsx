@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
   ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download, ListChecks,
-  CheckSquare, Square, X,
+  CheckSquare, Square, X, UserPlus,
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
@@ -102,6 +102,17 @@ type StateStat = {
   participants:      number;
   male:              number;
   female:            number;
+};
+
+type SearchTeam = {
+  id: string;
+  teamName: string;
+  contingentName: string | null;
+  stateName: string | null;
+  competitionCode: string;
+  competitionName: string;
+  members: number;
+  alreadyRegistered: boolean;
 };
 
 const PAGE_SIZE = 50;
@@ -296,6 +307,17 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     | { phase: "success"; added: number; skipped: number }
     | { phase: "error"; message: string };
   const [prereqModal, setPrereqModal] = useState<PrereqModalState | null>(null);
+
+  // Add-teams search modal
+  type AddTeamsModalState =
+    | { phase: "searching" }
+    | { phase: "picking"; results: SearchTeam[]; selectedIds: Set<string>; searchQ: string; searchCompId: string }
+    | { phase: "saving" }
+    | { phase: "success"; added: number; skipped: number; ineligible: number }
+    | { phase: "error"; message: string };
+  const [addTeamsModal, setAddTeamsModal] = useState<AddTeamsModalState | null>(null);
+  const [addSearchQ, setAddSearchQ] = useState("");
+  const [addSearchCompId, setAddSearchCompId] = useState("");
 
   // List tab toggle
   const [listTab, setListTab] = useState<"participants" | "teams" | "trainers">("teams");
@@ -683,6 +705,60 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }
 
+  // Add-teams modal: open
+  function openAddTeamsModal() {
+    setAddSearchQ("");
+    setAddSearchCompId("");
+    setAddTeamsModal({ phase: "searching" });
+  }
+
+  // Add-teams modal: search
+  async function handleAddTeamsSearch(searchQ: string, searchCompId: string) {
+    if (searchQ.trim().length < 2) return;
+    try {
+      const sp = new URLSearchParams({ q: searchQ.trim() });
+      if (searchCompId) sp.set("competitionId", searchCompId);
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/preregistration/search-teams?${sp}`,
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      const results: SearchTeam[] = json.data ?? [];
+      setAddTeamsModal({
+        phase: "picking",
+        results,
+        selectedIds: new Set<string>(),
+        searchQ,
+        searchCompId,
+      });
+    } catch (e: unknown) {
+      setAddTeamsModal({ phase: "error", message: e instanceof Error ? e.message : "Gagal mencari pasukan." });
+    }
+  }
+
+  // Add-teams modal: confirm add
+  async function handleConfirmAddTeams(selectedIds: Set<string>) {
+    if (selectedIds.size === 0) return;
+    setAddTeamsModal({ phase: "saving" });
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/preregistration/add-teams`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamIds: [...selectedIds] }),
+        },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Ralat");
+      setAddTeamsModal({ phase: "success", added: json.added, skipped: json.skipped, ineligible: json.ineligible });
+      loadTeams();
+      loadStats();
+    } catch (e: unknown) {
+      setAddTeamsModal({ phase: "error", message: e instanceof Error ? e.message : "Gagal menambah pasukan." });
+    }
+  }
+
   const selectedCount      = teams.filter(t => t.selected).length;
   const totalPages         = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const teamsTotalPages    = Math.max(1, Math.ceil(teamsTotal / PAGE_SIZE));
@@ -918,6 +994,18 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <ListChecks className="h-3.5 w-3.5" />}
             Muat dari prasyarat
+          </button>
+        )}
+
+        {/* Add teams (teams tab) */}
+        {listTab === "teams" && (
+          <button
+            onClick={openAddTeamsModal}
+            title="Cari dan tambah pasukan ke acara ini"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 border border-emerald-200 transition-colors"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Tambah Pasukan
           </button>
         )}
       </div>
@@ -1551,6 +1639,272 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                   <button
                     onClick={handleLoadFromPrerequisite}
                     className="flex-1 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition-colors"
+                  >
+                    Cuba Lagi
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* Add-teams search modal */}
+      {addTeamsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className={`bg-white rounded-2xl shadow-xl w-full mx-auto flex flex-col ${
+            addTeamsModal.phase === "picking" ? "max-w-2xl max-h-[90vh]" : "max-w-sm"
+          }`}>
+
+            {/* Searching phase — search form */}
+            {addTeamsModal.phase === "searching" && (
+              <div className="p-6 space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900">Tambah Pasukan</h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">Cari pasukan layak untuk ditambah ke acara ini</p>
+                  </div>
+                  <button onClick={() => setAddTeamsModal(null)} className="rounded-lg p-1.5 hover:bg-zinc-100 transition-colors">
+                    <X className="h-4 w-4 text-zinc-500" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-600 block mb-1">Nama pasukan atau kontingen</label>
+                    <input
+                      type="text"
+                      value={addSearchQ}
+                      placeholder="Taipkan sekurang-kurangnya 2 aksara…"
+                      onChange={(e) => setAddSearchQ(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAddTeamsSearch(addSearchQ, addSearchCompId); }}
+                      className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      autoFocus
+                    />
+                  </div>
+                  {competitions.length > 0 && (
+                    <div>
+                      <label className="text-xs font-medium text-zinc-600 block mb-1">Pertandingan (pilihan)</label>
+                      <select
+                        value={addSearchCompId}
+                        onChange={(e) => setAddSearchCompId(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200 bg-white"
+                      >
+                        <option value="">Semua pertandingan acara ini</option>
+                        {competitions.map((c) => (
+                          <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAddTeamsModal(null)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={() => handleAddTeamsSearch(addSearchQ, addSearchCompId)}
+                    disabled={addSearchQ.trim().length < 2}
+                    className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Search className="h-3.5 w-3.5" /> Cari
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Saving */}
+            {addTeamsModal.phase === "saving" && (
+              <div className="p-6 flex flex-col items-center gap-3 py-10">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 text-emerald-500 animate-spin" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-zinc-900">Mendaftarkan pasukan…</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Sila tunggu sebentar</p>
+                </div>
+              </div>
+            )}
+
+            {/* Picking — search results */}
+            {addTeamsModal.phase === "picking" && (() => {
+              const { results, selectedIds, searchQ: lastQ } = addTeamsModal;
+              const pickable = results.filter(t => !t.alreadyRegistered);
+              const allSelected = pickable.length > 0 && pickable.every(t => selectedIds.has(t.id));
+
+              function toggleTeam(id: string) {
+                setAddTeamsModal(prev => {
+                  if (prev?.phase !== "picking") return prev;
+                  const next = new Set(prev.selectedIds);
+                  next.has(id) ? next.delete(id) : next.add(id);
+                  return { ...prev, selectedIds: next };
+                });
+              }
+
+              function toggleAll() {
+                setAddTeamsModal(prev => {
+                  if (prev?.phase !== "picking") return prev;
+                  const pickableIds = prev.results.filter(t => !t.alreadyRegistered).map(t => t.id);
+                  const next = allSelected ? new Set<string>() : new Set(pickableIds);
+                  return { ...prev, selectedIds: next };
+                });
+              }
+
+              return (
+                <>
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-900">Hasil Carian</h3>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        {results.length} pasukan ditemui · {selectedIds.size} dipilih
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setAddTeamsModal({ phase: "searching" })}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-zinc-200 hover:bg-zinc-50 transition-colors text-zinc-600"
+                      >
+                        <Search className="h-3.5 w-3.5" /> Cari lagi
+                      </button>
+                      {pickable.length > 0 && (
+                        <button
+                          onClick={toggleAll}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-zinc-200 hover:bg-zinc-50 transition-colors text-zinc-600"
+                        >
+                          {allSelected
+                            ? <><CheckSquare className="h-3.5 w-3.5 text-emerald-600" /> Nyah-pilih Semua</>
+                            : <><Square className="h-3.5 w-3.5" /> Pilih Semua</>}
+                        </button>
+                      )}
+                      <button onClick={() => setAddTeamsModal(null)} className="rounded-lg p-1.5 hover:bg-zinc-100 transition-colors">
+                        <X className="h-4 w-4 text-zinc-500" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Results list */}
+                  <div className="overflow-y-auto flex-1 divide-y">
+                    {results.length === 0 ? (
+                      <p className="px-5 py-8 text-sm text-zinc-400 text-center">
+                        Tiada pasukan layak ditemui untuk &ldquo;{lastQ}&rdquo;
+                      </p>
+                    ) : results.map(t => (
+                      <label
+                        key={t.id}
+                        className={`flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-colors ${
+                          t.alreadyRegistered
+                            ? "opacity-50 cursor-default bg-zinc-50"
+                            : selectedIds.has(t.id)
+                              ? "bg-emerald-50 hover:bg-emerald-100"
+                              : "hover:bg-zinc-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={t.alreadyRegistered || selectedIds.has(t.id)}
+                          disabled={t.alreadyRegistered}
+                          onChange={() => !t.alreadyRegistered && toggleTeam(t.id)}
+                          className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-zinc-900 truncate">{t.teamName}</p>
+                          <p className="text-xs text-zinc-400 truncate">{t.contingentName ?? "—"} · {t.stateName ?? "—"}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{t.competitionCode}</span>
+                          <p className="text-xs text-zinc-400 mt-0.5">{t.members} ahli</p>
+                        </div>
+                        {t.alreadyRegistered && (
+                          <span className="text-xs text-emerald-600 font-medium shrink-0">Sudah daftar</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between gap-3 px-5 py-4 border-t shrink-0">
+                    <button
+                      onClick={() => setAddTeamsModal(null)}
+                      className="px-4 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={() => handleConfirmAddTeams(selectedIds)}
+                      disabled={selectedIds.size === 0}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Tambah {selectedIds.size} pasukan
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* Success */}
+            {addTeamsModal.phase === "success" && (
+              <div className="p-6 space-y-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <UserPlus className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900">Pasukan Berjaya Ditambah</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">Pasukan telah didaftarkan ke acara ini.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-center">
+                    <p className="text-2xl font-bold tabular-nums text-emerald-700">{addTeamsModal.added}</p>
+                    <p className="text-xs text-emerald-600 mt-0.5">Ditambah</p>
+                  </div>
+                  <div className="rounded-xl bg-zinc-50 border border-zinc-100 px-4 py-3 text-center">
+                    <p className="text-2xl font-bold tabular-nums text-zinc-500">{addTeamsModal.skipped}</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">Sudah wujud</p>
+                  </div>
+                  <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-center">
+                    <p className="text-2xl font-bold tabular-nums text-amber-600">{addTeamsModal.ineligible}</p>
+                    <p className="text-xs text-amber-500 mt-0.5">Tidak layak</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAddTeamsModal(null)}
+                  className="w-full px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
+                >
+                  Tutup
+                </button>
+              </div>
+            )}
+
+            {/* Error */}
+            {addTeamsModal.phase === "error" && (
+              <div className="p-6 space-y-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
+                    <X className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900">Gagal</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">{addTeamsModal.message}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAddTeamsModal(null)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    onClick={openAddTeamsModal}
+                    className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
                   >
                     Cuba Lagi
                   </button>
