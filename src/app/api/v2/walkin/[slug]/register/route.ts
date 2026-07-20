@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { viblockCompetitionRegister, viblockConfigured } from "@/lib/viblock";
 
 export async function POST(
   req: NextRequest,
@@ -27,7 +28,7 @@ export async function POST(
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId, eventId: endpoint.eventId },
-    select: { id: true, maxSlots: true, _count: { select: { registrations: true } } },
+    select: { id: true, maxSlots: true, useViblockarena: true, _count: { select: { registrations: true } } },
   });
   if (!wic) return NextResponse.json({ error: "COMPETITION_NOT_FOUND" }, { status: 404 });
   if (wic.maxSlots > 0 && wic._count.registrations >= wic.maxSlots)
@@ -35,9 +36,32 @@ export async function POST(
 
   const participant = await db.participant.findUnique({
     where: { id: participantId },
-    select: { id: true, contingentId: true },
+    select: {
+      id: true, name: true, contingentId: true,
+      contingent: {
+        select: {
+          name: true,
+          state: { select: { name: true } },
+        },
+      },
+    },
   });
   if (!participant) return NextResponse.json({ error: "PARTICIPANT_NOT_FOUND" }, { status: 404 });
+
+  // Register to Viblock Arena if configured and enabled
+  let viblockToken: string | null = null;
+  if (wic.useViblockarena && viblockConfigured()) {
+    try {
+      const vRes = await viblockCompetitionRegister({
+        sector: participant.contingent?.name ?? "",
+        region: participant.contingent?.state?.name ?? "",
+        name:   participant.name,
+      });
+      viblockToken = vRes.token;
+    } catch (e) {
+      console.error("[viblock] competition register failed:", e);
+    }
+  }
 
   try {
     const reg = await db.walkInRegistration.create({
@@ -49,9 +73,10 @@ export async function POST(
         method:       "COUNTER",
         registeredBy: registeredBy?.trim() || null,
         confirmedAt:  new Date(),
+        viblockToken,
       },
     });
-    return NextResponse.json({ data: reg }, { status: 201 });
+    return NextResponse.json({ data: { ...reg, viblockToken } }, { status: 201 });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
       return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });

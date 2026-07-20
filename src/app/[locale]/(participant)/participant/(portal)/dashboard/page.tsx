@@ -112,7 +112,7 @@ export default async function DashboardPage() {
   // Existing walk-in registrations for this participant
   const existingRegs = await db.walkInRegistration.findMany({
     where: { participantId: session.participantId },
-    select: { id: true, walkInCompetitionId: true, status: true },
+    select: { id: true, walkInCompetitionId: true, status: true, viblockToken: true },
   });
 
   // Serialize
@@ -150,9 +150,9 @@ export default async function DashboardPage() {
     competition: wic.competition,
   }));
 
-  const existingRegistrations: Record<string, { id: string; status: string }> = {};
+  const existingRegistrations: Record<string, { id: string; status: string; viblockToken: string | null }> = {};
   for (const r of existingRegs) {
-    existingRegistrations[r.walkInCompetitionId] = { id: r.id, status: r.status };
+    existingRegistrations[r.walkInCompetitionId] = { id: r.id, status: r.status, viblockToken: r.viblockToken };
   }
 
   return (

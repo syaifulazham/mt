@@ -14,15 +14,26 @@ export async function PATCH(
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { wicId } = await params;
 
-  const { picName, picContact, maxSlots, publishToPortal } = await req.json();
+  const { picName, picContact, maxSlots, publishToPortal, useViblockarena, useDronearena, viblockChallengeId, viblockChallengeLocked, judgingTemplatesLocked } = await req.json();
+
+  // Mutual exclusivity: turning one on turns the other off
+  let viblock = useViblockarena !== undefined ? Boolean(useViblockarena) : undefined;
+  let drone   = useDronearena   !== undefined ? Boolean(useDronearena)   : undefined;
+  if (viblock === true)  drone   = false;
+  if (drone   === true)  viblock = false;
 
   const wic = await db.eventWalkInCompetition.update({
     where: { id: wicId },
     data: {
-      ...(picName        !== undefined && { picName:        picName?.trim()    || null }),
-      ...(picContact     !== undefined && { picContact:     picContact?.trim() || null }),
-      ...(maxSlots       !== undefined && { maxSlots:       Number(maxSlots)   || 0 }),
-      ...(publishToPortal !== undefined && { publishToPortal: Boolean(publishToPortal) }),
+      ...(picName             !== undefined && { picName:            picName?.trim()    || null }),
+      ...(picContact          !== undefined && { picContact:         picContact?.trim() || null }),
+      ...(maxSlots            !== undefined && { maxSlots:           Number(maxSlots)   || 0 }),
+      ...(publishToPortal     !== undefined && { publishToPortal:    Boolean(publishToPortal) }),
+      ...(viblock             !== undefined && { useViblockarena:    viblock }),
+      ...(drone               !== undefined && { useDronearena:      drone }),
+      ...(viblockChallengeId     !== undefined && { viblockChallengeId:     viblockChallengeId || null }),
+      ...(viblockChallengeLocked !== undefined && { viblockChallengeLocked: Boolean(viblockChallengeLocked) }),
+      ...(judgingTemplatesLocked !== undefined && { judgingTemplatesLocked: Boolean(judgingTemplatesLocked) }),
     },
   });
   return NextResponse.json({ data: wic });

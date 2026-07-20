@@ -25,7 +25,7 @@ export default async function WalkInManagePage({
         orderBy: { createdAt: "asc" },
         select: {
           id: true, competitionId: true, picName: true, maxSlots: true,
-          publishToPortal: true,
+          publishToPortal: true, useViblockarena: true, viblockChallengeId: true, viblockChallengeLocked: true, judgingTemplatesLocked: true,
           competition: { select: { id: true, code: true, name: true } },
           _count: { select: { registrations: true } },
           endpoints: {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { viblockCompetitionRegister, viblockConfigured } from "@/lib/viblock";
 
 // POST — confirm a PENDING portal registration by scanning QR at the counter
 export async function POST(
@@ -24,16 +25,23 @@ export async function POST(
   const reg = await db.walkInRegistration.findUnique({
     where: { id: registrationId },
     select: {
-      id: true, walkInCompetitionId: true, status: true, confirmedAt: true,
+      id: true, walkInCompetitionId: true, participantId: true, status: true, confirmedAt: true, viblockToken: true,
       participant: {
         select: {
           name: true, ic: true, gender: true, eduLevel: true, classGrade: true,
+          contingent: {
+            select: {
+              name: true,
+              state: { select: { name: true } },
+            },
+          },
         },
       },
       contingent: { select: { name: true, shortName: true, logoUrl: true } },
       walkInCompetition: {
         select: {
           eventId: true,
+          useViblockarena: true,
           competition: { select: { code: true, name: true } },
           event: { select: { name: true } },
         },
@@ -53,14 +61,29 @@ export async function POST(
   }
 
   const alreadyConfirmed = reg.status === "CONFIRMED";
+  let viblockToken: string | null = reg.viblockToken;
 
   if (!alreadyConfirmed) {
     if (reg.status !== "PENDING")
       return NextResponse.json({ error: "CANNOT_CONFIRM", message: `Status adalah ${reg.status}` }, { status: 409 });
 
+    // Register to Viblock Arena if configured, enabled, and not already registered
+    if (!viblockToken && reg.walkInCompetition?.useViblockarena && viblockConfigured()) {
+      try {
+        const vRes = await viblockCompetitionRegister({
+          sector: reg.participant.contingent?.name ?? reg.contingent.name,
+          region: reg.participant.contingent?.state?.name ?? "",
+          name:   reg.participant.name,
+        });
+        viblockToken = vRes.token;
+      } catch (e) {
+        console.error("[viblock] competition register on confirm failed:", e);
+      }
+    }
+
     await db.walkInRegistration.update({
       where: { id: registrationId },
-      data: { status: "CONFIRMED", confirmedAt: new Date() },
+      data: { status: "CONFIRMED", confirmedAt: new Date(), viblockToken },
     });
   }
 
@@ -68,6 +91,7 @@ export async function POST(
     data: {
       id:             reg.id,
       alreadyConfirmed,
+      viblockToken,
       participantName: reg.participant.name,
       ic:              reg.participant.ic ? `••••••-••-${reg.participant.ic.slice(-4)}` : null,
       gender:          reg.participant.gender,

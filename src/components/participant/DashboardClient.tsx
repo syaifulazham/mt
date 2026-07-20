@@ -70,7 +70,7 @@ type Props = {
   competitions: CompetitionEntry[];
   totalCompetitions: number;
   walkInCompetitions: WalkInEntry[];
-  existingRegistrations: Record<string, { id: string; status: string }>;
+  existingRegistrations: Record<string, { id: string; status: string; viblockToken: string | null }>;
 };
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -278,7 +278,7 @@ export function DashboardClient({
   walkInCompetitions,
   existingRegistrations,
 }: Props) {
-  const [registrations, setRegistrations] = useState<Record<string, { id: string; status: string }>>(existingRegistrations);
+  const [registrations, setRegistrations] = useState<Record<string, { id: string; status: string; viblockToken: string | null }>>(existingRegistrations);
   const [registerTarget, setRegisterTarget] = useState<WalkInEntry | null>(null);
   const [registering, setRegistering]     = useState(false);
   const [registerErr, setRegisterErr]     = useState("");
@@ -600,11 +600,19 @@ export function DashboardClient({
                       {reg && (
                         <div className="px-4 pb-3">
                           {reg.status === "CONFIRMED" ? (
-                            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
-                              <PartyPopper className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                                Kehadiran anda telah disahkan. Selamat bersaing — semoga berjaya!
-                              </p>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                                <PartyPopper className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                                  Kehadiran anda telah disahkan. Selamat bersaing — semoga berjaya!
+                                </p>
+                              </div>
+                              {reg.viblockToken && (
+                                <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800">
+                                  <span className="text-xs font-medium text-violet-600 dark:text-violet-400 shrink-0">Viblock Arena Token:</span>
+                                  <span className="text-sm font-bold font-mono tracking-widest text-violet-800 dark:text-violet-200">{reg.viblockToken}</span>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">

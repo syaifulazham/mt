@@ -593,9 +593,14 @@ model EventWalkInCompetition {
   picName         String?
   picContact      String?
   maxSlots        Int      @default(0)
-  publishToPortal Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  publishToPortal  Boolean  @default(false)
+  useViblockarena    Boolean  @default(false)
+  useDronearena      Boolean  @default(false)
+  viblockChallengeId     String?
+  viblockChallengeLocked Boolean  @default(false)
+  judgingTemplatesLocked Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   event         Event       @relation(fields: [eventId],       references: [id], onDelete: Cascade)
   competition   Competition @relation(fields: [competitionId], references: [id])
@@ -679,6 +684,7 @@ model WalkInRegistration {
   method              WalkInMethod @default(PORTAL)
   registeredBy        String?
   confirmedAt         DateTime?
+  viblockToken        String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 

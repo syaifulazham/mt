@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,10 +19,14 @@ type WalkInEndpointItem = {
 
 type WalkInCompSummary = {
   id: string; competitionId: string; picName: string | null; maxSlots: number;
-  publishToPortal: boolean;
+  publishToPortal: boolean; useViblockarena: boolean; viblockChallengeId: string | null; viblockChallengeLocked: boolean; judgingTemplatesLocked: boolean;
   competition: { id: string; code: string; name: string };
   _count: { registrations: number };
   endpoints: WalkInEndpointItem[];
+};
+
+type ViblockChallenge = {
+  id: string; name: string; description: string | null; challenge_mode: string; status: string; order_index: number;
 };
 
 type EventSummary = {
@@ -112,6 +116,14 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [removeConfirm, setRemoveConfirm] = useState<{ template: JudgingTemplateSummary; code: string } | null>(null);
   const [removeConfirmInput, setRemoveConfirmInput] = useState("");
 
+  // ── Viblock challenges ──
+  const [viblockChallenges,       setViblockChallenges]       = useState<ViblockChallenge[]>([]);
+  const [viblockChallengesLoading, setViblockChallengesLoading] = useState(false);
+  const [savingChallenge,          setSavingChallenge]          = useState(false);
+  const [unlockConfirm,            setUnlockConfirm]            = useState<{ code: string; target: "viblock" | "judging" } | null>(null);
+  const [unlockInput,              setUnlockInput]              = useState("");
+  const [togglingLock,             setTogglingLock]             = useState(false);
+
   const loadRegistrations = useCallback(async (wicId: string, filter: string) => {
     setLoading(true);
     const sp = new URLSearchParams();
@@ -125,6 +137,70 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (selectedWic) loadRegistrations(selectedWic.id, statusFilter); }, [selectedWic, statusFilter, loadRegistrations]);
+
+  // Load viblock challenges when selected competition has viblock enabled
+  useEffect(() => {
+    if (!selectedWic?.useViblockarena) { setViblockChallenges([]); return; }
+    setViblockChallengesLoading(true);
+    fetch(`/api/v2/organizer/events/${event.id}/walkin/viblock-challenges`)
+      .then(r => r.json())
+      .then(j => setViblockChallenges(j.challenges ?? []))
+      .catch(() => setViblockChallenges([]))
+      .finally(() => setViblockChallengesLoading(false));
+  }, [selectedWic?.useViblockarena, event.id]);
+
+  async function setViblockChallenge(challengeId: string | null) {
+    if (!selectedWic) return;
+    setSavingChallenge(true);
+    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viblockChallengeId: challengeId }),
+    });
+    if (res.ok) updateWic(selectedWic.id, { viblockChallengeId: challengeId });
+    setSavingChallenge(false);
+  }
+
+  async function lockChallenge() {
+    if (!selectedWic) return;
+    setTogglingLock(true);
+    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viblockChallengeLocked: true }),
+    });
+    if (res.ok) updateWic(selectedWic.id, { viblockChallengeLocked: true });
+    setTogglingLock(false);
+  }
+
+  function requestUnlock(target: "viblock" | "judging") {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const code = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    setUnlockConfirm({ code, target });
+    setUnlockInput("");
+  }
+
+  async function executeUnlock() {
+    if (!selectedWic || !unlockConfirm) return;
+    setTogglingLock(true);
+    const field = unlockConfirm.target === "viblock" ? "viblockChallengeLocked" : "judgingTemplatesLocked";
+    setUnlockConfirm(null);
+    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: false }),
+    });
+    if (res.ok) updateWic(selectedWic.id, { [field]: false } as Partial<WalkInCompSummary>);
+    setTogglingLock(false);
+  }
+
+  async function lockJudgingTemplates() {
+    if (!selectedWic) return;
+    setTogglingLock(true);
+    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ judgingTemplatesLocked: true }),
+    });
+    if (res.ok) updateWic(selectedWic.id, { judgingTemplatesLocked: true });
+    setTogglingLock(false);
+  }
 
   // Load judging templates when a walk-in competition is selected
   // Deferred via setTimeout so setState calls don't run synchronously
@@ -518,54 +594,133 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                       )}
                     </div>
 
+                    {/* Viblock Arena Challenge */}
+                    {selectedWic.useViblockarena && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                            <Gamepad2 className="h-3.5 w-3.5" /> Viblock Arena Challenge
+                          </p>
+                          {selectedWic.viblockChallengeId && (
+                            <button
+                              type="button"
+                              onClick={selectedWic.viblockChallengeLocked ? () => requestUnlock("viblock") : lockChallenge}
+                              disabled={togglingLock}
+                              className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border transition-colors disabled:opacity-50 ${
+                                selectedWic.viblockChallengeLocked
+                                  ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                  : "border-zinc-200 bg-zinc-50 text-zinc-500 hover:bg-zinc-100"
+                              }`}
+                            >
+                              {selectedWic.viblockChallengeLocked
+                                ? <><Lock className="h-3 w-3" /> Locked</>
+                                : <><Unlock className="h-3 w-3" /> Lock</>}
+                            </button>
+                          )}
+                        </div>
+                        {viblockChallengesLoading ? (
+                          <div className="flex items-center gap-2 py-2 text-xs text-zinc-400">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading challenges…
+                          </div>
+                        ) : viblockChallenges.length === 0 ? (
+                          <p className="text-xs text-zinc-400 italic py-1">No challenges available from Viblock Arena.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <select
+                              value={selectedWic.viblockChallengeId ?? ""}
+                              onChange={(e) => setViblockChallenge(e.target.value || null)}
+                              disabled={savingChallenge || selectedWic.viblockChallengeLocked}
+                              className={`w-full text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 disabled:opacity-60 ${
+                                selectedWic.viblockChallengeLocked
+                                  ? "border-amber-200 bg-amber-50 cursor-not-allowed"
+                                  : "border-zinc-200 bg-white"
+                              }`}
+                            >
+                              <option value="">— Tiada challenge dipilih —</option>
+                              {viblockChallenges.map(ch => (
+                                <option key={ch.id} value={ch.id}>
+                                  {ch.name} ({ch.challenge_mode})
+                                </option>
+                              ))}
+                            </select>
+                            {selectedWic.viblockChallengeId && (
+                              <p className="text-[10px] text-violet-600">
+                                Challenge ID: <code className="font-mono">{selectedWic.viblockChallengeId}</code>
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Judging Templates */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-zinc-500 flex items-center gap-1.5">
                           <Gavel className="h-3.5 w-3.5" /> Judging Templates
                         </p>
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setTemplatePickerOpen(v => !v); }}
-                            className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
-                          >
-                            <Plus className="h-3.5 w-3.5" /> Add template
-                            <ChevronDown className="h-3 w-3" />
-                          </button>
-                          {templatePickerOpen && (
-                            <div className="absolute right-0 top-6 z-50 w-72 rounded-lg border bg-white shadow-lg overflow-hidden">
-                              <div className="px-3 py-2 border-b text-xs font-semibold text-zinc-500 bg-zinc-50">
-                                Available Templates
-                              </div>
-                              <div className="max-h-56 overflow-y-auto">
-                                {allTemplates.filter(t => !assignedTemplates.some(a => a.id === t.id)).length === 0 ? (
-                                  <p className="px-3 py-4 text-xs text-zinc-400 text-center">All templates already assigned.</p>
-                                ) : (
-                                  allTemplates
-                                    .filter(t => !assignedTemplates.some(a => a.id === t.id))
-                                    .map(t => (
-                                      <button
-                                        key={t.id}
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); assignTemplate(t.id); }}
-                                        disabled={assigningTemplateId === t.id}
-                                        className="w-full text-left px-3 py-2.5 hover:bg-violet-50 border-b last:border-0 flex items-center gap-2"
-                                      >
-                                        {assigningTemplateId === t.id
-                                          ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400 shrink-0" />
-                                          : <Gavel className="h-3.5 w-3.5 text-zinc-300 shrink-0" />
-                                        }
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-xs font-medium text-zinc-800 truncate">{t.name}</p>
-                                          <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} criteria</p>
-                                        </div>
-                                      </button>
-                                    ))
-                                )}
-                              </div>
-                            </div>
+                        <div className="flex items-center gap-2">
+                          {assignedTemplates.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={selectedWic.judgingTemplatesLocked ? () => requestUnlock("judging") : lockJudgingTemplates}
+                              disabled={togglingLock}
+                              className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border transition-colors disabled:opacity-50 ${
+                                selectedWic.judgingTemplatesLocked
+                                  ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                  : "border-zinc-200 bg-zinc-50 text-zinc-500 hover:bg-zinc-100"
+                              }`}
+                            >
+                              {selectedWic.judgingTemplatesLocked
+                                ? <><Lock className="h-3 w-3" /> Locked</>
+                                : <><Unlock className="h-3 w-3" /> Lock</>}
+                            </button>
                           )}
+                        {!selectedWic.judgingTemplatesLocked && (
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setTemplatePickerOpen(v => !v); }}
+                              className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Add template
+                              <ChevronDown className="h-3 w-3" />
+                            </button>
+                            {templatePickerOpen && (
+                              <div className="absolute right-0 top-6 z-50 w-72 rounded-lg border bg-white shadow-lg overflow-hidden">
+                                <div className="px-3 py-2 border-b text-xs font-semibold text-zinc-500 bg-zinc-50">
+                                  Available Templates
+                                </div>
+                                <div className="max-h-56 overflow-y-auto">
+                                  {allTemplates.filter(t => !assignedTemplates.some(a => a.id === t.id)).length === 0 ? (
+                                    <p className="px-3 py-4 text-xs text-zinc-400 text-center">All templates already assigned.</p>
+                                  ) : (
+                                    allTemplates
+                                      .filter(t => !assignedTemplates.some(a => a.id === t.id))
+                                      .map(t => (
+                                        <button
+                                          key={t.id}
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); assignTemplate(t.id); }}
+                                          disabled={assigningTemplateId === t.id}
+                                          className="w-full text-left px-3 py-2.5 hover:bg-violet-50 border-b last:border-0 flex items-center gap-2"
+                                        >
+                                          {assigningTemplateId === t.id
+                                            ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400 shrink-0" />
+                                            : <Gavel className="h-3.5 w-3.5 text-zinc-300 shrink-0" />
+                                          }
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-zinc-800 truncate">{t.name}</p>
+                                            <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} criteria</p>
+                                          </div>
+                                        </button>
+                                      ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         </div>
                       </div>
                       {templatesLoading ? (
@@ -583,17 +738,19 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                                 <p className="text-xs font-medium text-violet-800 truncate">{t.name}</p>
                                 <p className="text-[10px] text-zinc-400 font-mono">{t.code} · {t._count.criterions} criteria</p>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => confirmRemove(t)}
-                                disabled={removingTemplateId === t.id}
-                                className="p-0.5 rounded hover:bg-violet-100 shrink-0"
-                              >
-                                {removingTemplateId === t.id
-                                  ? <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
-                                  : <X className="h-3 w-3 text-violet-400" />
-                                }
-                              </button>
+                              {!selectedWic.judgingTemplatesLocked && (
+                                <button
+                                  type="button"
+                                  onClick={() => confirmRemove(t)}
+                                  disabled={removingTemplateId === t.id}
+                                  className="p-0.5 rounded hover:bg-violet-100 shrink-0"
+                                >
+                                  {removingTemplateId === t.id
+                                    ? <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+                                    : <X className="h-3 w-3 text-violet-400" />
+                                  }
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -771,6 +928,59 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                 disabled={removeConfirmInput !== removeConfirm.code}
                 className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 Buang
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Challenge unlock confirmation modal */}
+      {unlockConfirm && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setUnlockConfirm(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <Unlock className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-900 text-sm">Buka Kunci Challenge?</p>
+                <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                  Challenge yang dikunci menghalang perubahan tidak sengaja. Taip kod di bawah untuk buka kunci.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-4 py-3 text-center space-y-1">
+              <p className="text-[11px] text-zinc-400 uppercase tracking-widest">Taip kod ini untuk buka kunci</p>
+              <p className="text-2xl font-black font-mono tracking-[0.35em] text-zinc-800 select-none">
+                {unlockConfirm.code}
+              </p>
+            </div>
+
+            <input
+              autoFocus
+              type="text"
+              maxLength={5}
+              value={unlockInput}
+              onChange={e => setUnlockInput(e.target.value.toUpperCase())}
+              onKeyDown={e => { if (e.key === "Enter" && unlockInput === unlockConfirm.code) executeUnlock(); }}
+              placeholder="_ _ _ _ _"
+              className="w-full text-center font-mono tracking-[0.35em] text-lg border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 uppercase"
+            />
+
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setUnlockConfirm(null)}
+                className="flex-1 px-4 py-2 rounded-lg border text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors">
+                Batal
+              </button>
+              <button type="button"
+                onClick={executeUnlock}
+                disabled={unlockInput !== unlockConfirm.code}
+                className="flex-1 px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                Buka Kunci
               </button>
             </div>
           </div>
