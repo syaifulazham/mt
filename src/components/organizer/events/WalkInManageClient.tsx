@@ -139,14 +139,18 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   useEffect(() => { if (selectedWic) loadRegistrations(selectedWic.id, statusFilter); }, [selectedWic, statusFilter, loadRegistrations]);
 
   // Load viblock challenges when selected competition has viblock enabled
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (!selectedWic?.useViblockarena) { setViblockChallenges([]); return; }
-    setViblockChallengesLoading(true);
-    fetch(`/api/v2/organizer/events/${event.id}/walkin/viblock-challenges`)
-      .then(r => r.json())
-      .then(j => setViblockChallenges(j.challenges ?? []))
-      .catch(() => setViblockChallenges([]))
-      .finally(() => setViblockChallengesLoading(false));
+    const id = setTimeout(() => {
+      setViblockChallengesLoading(true);
+      fetch(`/api/v2/organizer/events/${event.id}/walkin/viblock-challenges`)
+        .then(r => r.json())
+        .then(j => setViblockChallenges(j.challenges ?? []))
+        .catch(() => setViblockChallenges([]))
+        .finally(() => setViblockChallengesLoading(false));
+    }, 0);
+    return () => clearTimeout(id);
   }, [selectedWic?.useViblockarena, event.id]);
 
   async function setViblockChallenge(challengeId: string | null) {
