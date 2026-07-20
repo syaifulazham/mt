@@ -26,6 +26,19 @@ export async function GET(
     },
   });
 
+  // Include viblockToken in response
+  const data = rows.map(r => ({
+    id: r.id,
+    status: r.status,
+    method: r.method,
+    registeredBy: r.registeredBy,
+    confirmedAt: r.confirmedAt,
+    createdAt: r.createdAt,
+    viblockToken: r.viblockToken,
+    participant: r.participant,
+    contingent: r.contingent,
+  }));
+
   const counts = await db.walkInRegistration.groupBy({
     by: ["status"],
     where: { walkInCompetitionId: wicId },
@@ -34,5 +47,5 @@ export async function GET(
 
   const stats = Object.fromEntries(counts.map(c => [c.status, c._count._all]));
 
-  return NextResponse.json({ data: rows, stats });
+  return NextResponse.json({ data, stats });
 }

@@ -91,6 +91,7 @@ export default async function DashboardPage() {
     select: {
       id: true,
       maxSlots: true,
+      useViblockarena: true,
       _count: { select: { registrations: true } },
       event: {
         select: {
@@ -136,9 +137,10 @@ export default async function DashboardPage() {
   }));
 
   const walkInData = walkInLinks.map((wic) => ({
-    id:            wic.id,
-    maxSlots:      wic.maxSlots,
-    registrations: wic._count.registrations,
+    id:              wic.id,
+    maxSlots:        wic.maxSlots,
+    useViblockarena: wic.useViblockarena,
+    registrations:   wic._count.registrations,
     event: {
       id:        wic.event.id,
       name:      wic.event.name,

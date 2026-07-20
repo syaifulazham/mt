@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ type Registration = {
   registeredBy: string | null;
   confirmedAt: string | null;
   createdAt: string;
+  viblockToken: string | null;
   participant: { id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null };
   contingent:  { id: string; name: string; shortName: string | null };
 };
@@ -137,6 +138,67 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (selectedWic) loadRegistrations(selectedWic.id, statusFilter); }, [selectedWic, statusFilter, loadRegistrations]);
+
+  // Auto-refresh registrations every 30s
+  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (refreshRef.current) clearInterval(refreshRef.current);
+    if (!selectedWic) return;
+    refreshRef.current = setInterval(() => {
+      loadRegistrations(selectedWic.id, statusFilter);
+    }, 30_000);
+    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+  }, [selectedWic, statusFilter, loadRegistrations]);
+
+  const [viblockActionId, setViblockActionId] = useState<string | null>(null);
+
+  async function viblockRegisterParticipant(regId: string) {
+    if (!selectedWic) return;
+    setViblockActionId(regId);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/viblock`, { method: "POST" });
+      const j = await res.json();
+      if (res.ok) {
+        setRegistrations(prev => prev.map(r => r.id === regId ? { ...r, viblockToken: j.token } : r));
+      }
+    } finally {
+      setViblockActionId(null);
+    }
+  }
+
+  async function viblockRenewParticipantToken(regId: string) {
+    if (!selectedWic) return;
+    setViblockActionId(regId);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/viblock`, { method: "PATCH" });
+      const j = await res.json();
+      if (res.ok) {
+        setRegistrations(prev => prev.map(r => r.id === regId ? { ...r, viblockToken: j.token } : r));
+      }
+    } finally {
+      setViblockActionId(null);
+    }
+  }
+
+  const [viblockTokenView, setViblockTokenView] = useState<{ regId: string; token: string } | null>(null);
+  const [viblockTokenInfo, setViblockTokenInfo] = useState<{ token: string; name: string; is_used: boolean; used_at: string | null; created_at: string } | null>(null);
+  const [viblockTokenLoading, setViblockTokenLoading] = useState(false);
+
+  async function viblockViewToken(regId: string, token: string) {
+    if (!selectedWic) return;
+    setViblockTokenView({ regId, token });
+    setViblockTokenInfo(null);
+    setViblockTokenLoading(true);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/viblock`);
+      if (res.ok) {
+        const j = await res.json();
+        setViblockTokenInfo(j);
+      }
+    } finally {
+      setViblockTokenLoading(false);
+    }
+  }
 
   // Load viblock challenges when selected competition has viblock enabled
   useEffect(() => {
@@ -779,18 +841,30 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                   ))}
                 </div>
 
-                {/* Status filter */}
-                <div className="flex items-center gap-1">
-                  {statusTabs.map(s => (
-                    <button key={s} type="button"
-                      onClick={() => setStatusFilter(s)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                        statusFilter === s ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-                      }`}
-                    >
-                      {s === "ALL" ? "Semua" : s}
-                    </button>
-                  ))}
+                {/* Status filter + refresh */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    {statusTabs.map(s => (
+                      <button key={s} type="button"
+                        onClick={() => setStatusFilter(s)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          statusFilter === s ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                        }`}
+                      >
+                        {s === "ALL" ? "Semua" : s}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => selectedWic && loadRegistrations(selectedWic.id, statusFilter)}
+                    disabled={loading}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-xs font-medium text-zinc-600 hover:bg-zinc-100 transition-colors disabled:opacity-50"
+                    title="Muat semula senarai"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                    Muat Semula
+                  </button>
                 </div>
 
                 {/* Registration table */}
@@ -804,16 +878,17 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Kaedah</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Status</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Masa Daftar</th>
+                        {selectedWic?.useViblockarena && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Viblock</th>}
                         {canWrite && <th className="px-4 py-3 w-32" />}
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {loading ? (
-                        <tr><td colSpan={7} className="px-4 py-10 text-center text-zinc-400">
+                        <tr><td colSpan={selectedWic?.useViblockarena ? 8 : 7} className="px-4 py-10 text-center text-zinc-400">
                           <Loader2 className="h-5 w-5 animate-spin mx-auto" />
                         </td></tr>
                       ) : registrations.length === 0 ? (
-                        <tr><td colSpan={7} className="px-4 py-10 text-center text-xs text-zinc-400">
+                        <tr><td colSpan={selectedWic?.useViblockarena ? 8 : 7} className="px-4 py-10 text-center text-xs text-zinc-400">
                           Tiada pendaftaran{statusFilter !== "ALL" ? ` dengan status ${statusFilter}` : ""}.
                         </td></tr>
                       ) : registrations.map((reg, i) => (
@@ -839,6 +914,39 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                           <td className="px-4 py-3 text-xs text-zinc-400">
                             {new Date(reg.createdAt).toLocaleString("ms-MY", { dateStyle: "short", timeStyle: "short" })}
                           </td>
+                          {selectedWic?.useViblockarena && (
+                            <td className="px-4 py-3">
+                              {reg.viblockToken ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">
+                                    <Gamepad2 className="h-3 w-3" />
+                                    {reg.viblockToken}
+                                  </span>
+                                  <button type="button" onClick={() => viblockViewToken(reg.id, reg.viblockToken!)}
+                                    disabled={viblockActionId === reg.id}
+                                    className="p-1 rounded text-violet-500 hover:text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-40" title="Lihat token">
+                                    <Eye className="h-3.5 w-3.5" />
+                                  </button>
+                                  {canWrite && (
+                                    <button type="button" onClick={() => viblockRenewParticipantToken(reg.id)}
+                                      disabled={viblockActionId === reg.id}
+                                      className="p-1 rounded text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-40" title="Renew token">
+                                      {viblockActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                    </button>
+                                  )}
+                                </div>
+                              ) : canWrite ? (
+                                <button type="button" onClick={() => viblockRegisterParticipant(reg.id)}
+                                  disabled={viblockActionId === reg.id}
+                                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors disabled:opacity-40">
+                                  {viblockActionId === reg.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gamepad2 className="h-3 w-3" />}
+                                  Daftar
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-zinc-400 italic">Belum didaftar</span>
+                              )}
+                            </td>
+                          )}
                           {canWrite && (
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1.5">
@@ -883,6 +991,65 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           competitionName={selectedWic?.competition.name ?? ""}
           onClose={() => setQrTarget(null)}
         />
+      )}
+
+      {/* Viblock token info modal */}
+      {viblockTokenView && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setViblockTokenView(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <Gamepad2 className="h-5 w-5 text-violet-600" />
+                <p className="font-semibold text-zinc-900 text-sm">Viblock Arena Token</p>
+              </div>
+              <button onClick={() => setViblockTokenView(null)} className="text-zinc-400 hover:text-zinc-700">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {viblockTokenLoading ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
+                <Loader2 className="h-4 w-4 animate-spin" /> Memuat maklumat token…
+              </div>
+            ) : viblockTokenInfo ? (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-violet-50 border border-violet-200 px-4 py-4 text-center">
+                  <p className="text-[10px] uppercase tracking-widest text-violet-500 mb-1">Token</p>
+                  <p className="text-3xl font-black font-mono tracking-[0.3em] text-violet-800">{viblockTokenInfo.token}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg border border-zinc-100 px-3 py-2">
+                    <p className="text-[10px] text-zinc-400 uppercase">Nama</p>
+                    <p className="font-medium text-zinc-800 truncate">{viblockTokenInfo.name}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-100 px-3 py-2">
+                    <p className="text-[10px] text-zinc-400 uppercase">Status</p>
+                    <p className={`font-medium ${viblockTokenInfo.is_used ? "text-amber-600" : "text-emerald-600"}`}>
+                      {viblockTokenInfo.is_used ? "Sudah digunakan" : "Belum digunakan"}
+                    </p>
+                  </div>
+                </div>
+                {viblockTokenInfo.used_at && (
+                  <p className="text-[10px] text-zinc-400 text-center">
+                    Digunakan: {new Date(viblockTokenInfo.used_at).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}
+                  </p>
+                )}
+                <p className="text-[10px] text-zinc-400 text-center">
+                  Dicipta: {new Date(viblockTokenInfo.created_at).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400 text-center py-4">Gagal mendapatkan maklumat token.</p>
+            )}
+
+            <Button size="sm" variant="outline" onClick={() => setViblockTokenView(null)} className="w-full">
+              Tutup
+            </Button>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {/* Template removal confirmation modal */}

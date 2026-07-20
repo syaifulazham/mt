@@ -16,6 +16,8 @@ import {
   QrCode,
   Loader2,
   PartyPopper,
+  Gamepad2,
+  Eye,
 } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
@@ -51,6 +53,7 @@ type CompetitionEntry = {
 type WalkInEntry = {
   id: string;
   maxSlots: number;
+  useViblockarena: boolean;
   registrations: number;
   event: {
     id: string;
@@ -267,6 +270,127 @@ function QrModal({
   );
 }
 
+/* ── TokenInfoModal ────────────────────────────────────────────────────── */
+
+type ViblockTokenInfo = {
+  token: string;
+  event_name: string;
+  name: string;
+  sector: string;
+  region: string;
+  is_used: boolean;
+  used_at: string | null;
+  created_at: string;
+};
+
+function TokenInfoModal({
+  token,
+  onClose,
+}: {
+  token: string;
+  onClose: () => void;
+}) {
+  const [info, setInfo] = useState<ViblockTokenInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    fetch(`/api/v2/walkin/viblock-token/${encodeURIComponent(token)}`)
+      .then(r => r.json().then(j => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        if (!ok) throw new Error(j.error ?? "Failed");
+        setInfo(j);
+      })
+      .catch(e => setError(e.message ?? "Gagal mendapatkan maklumat token."))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.5)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-2xl p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Gamepad2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            <h2 className="text-base font-bold dark:text-zinc-100">Viblock Arena Token</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Memuat maklumat token…
+          </div>
+        ) : error ? (
+          <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-xs text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        ) : info ? (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 px-4 py-4 text-center">
+              <p className="text-[10px] uppercase tracking-widest text-violet-500 dark:text-violet-400 mb-1">Token</p>
+              <p className="text-3xl font-black font-mono tracking-[0.3em] text-violet-800 dark:text-violet-200">{info.token}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-lg border border-zinc-100 dark:border-zinc-700 px-3 py-2">
+                <p className="text-[10px] text-zinc-400 uppercase">Nama</p>
+                <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate">{info.name}</p>
+              </div>
+              <div className="rounded-lg border border-zinc-100 dark:border-zinc-700 px-3 py-2">
+                <p className="text-[10px] text-zinc-400 uppercase">Sektor</p>
+                <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate">{info.sector}</p>
+              </div>
+              <div className="rounded-lg border border-zinc-100 dark:border-zinc-700 px-3 py-2">
+                <p className="text-[10px] text-zinc-400 uppercase">Wilayah</p>
+                <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate">{info.region}</p>
+              </div>
+              <div className="rounded-lg border border-zinc-100 dark:border-zinc-700 px-3 py-2">
+                <p className="text-[10px] text-zinc-400 uppercase">Status</p>
+                <p className={`font-medium ${info.is_used ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  {info.is_used ? "Sudah digunakan" : "Belum digunakan"}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-zinc-400 text-center">
+              Dicipta: {new Date(info.created_at).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}
+            </p>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-4 py-2 text-sm font-medium transition-colors"
+        >
+          Tutup
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /* ── Main component ────────────────────────────────────────────────────── */
 
 export function DashboardClient({
@@ -283,6 +407,7 @@ export function DashboardClient({
   const [registering, setRegistering]     = useState(false);
   const [registerErr, setRegisterErr]     = useState("");
   const [qrTarget, setQrTarget]           = useState<{ id: string; name: string } | null>(null);
+  const [tokenTarget, setTokenTarget]     = useState<string | null>(null);
 
   const handleRegister = useCallback(async () => {
     if (!registerTarget) return;
@@ -607,11 +732,17 @@ export function DashboardClient({
                                   Kehadiran anda telah disahkan. Selamat bersaing — semoga berjaya!
                                 </p>
                               </div>
-                              {reg.viblockToken && (
-                                <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800">
-                                  <span className="text-xs font-medium text-violet-600 dark:text-violet-400 shrink-0">Viblock Arena Token:</span>
+                              {reg.viblockToken && wic.useViblockarena && (
+                                <button
+                                  type="button"
+                                  onClick={() => setTokenTarget(reg.viblockToken)}
+                                  className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors w-full text-left"
+                                >
+                                  <Gamepad2 className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                                  <span className="flex-1 text-xs font-medium text-violet-600 dark:text-violet-400">Viblock Arena Token</span>
                                   <span className="text-sm font-bold font-mono tracking-widest text-violet-800 dark:text-violet-200">{reg.viblockToken}</span>
-                                </div>
+                                  <Eye className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -655,6 +786,12 @@ export function DashboardClient({
           registrationId={qrTarget.id}
           competitionName={qrTarget.name}
           onClose={() => setQrTarget(null)}
+        />
+      )}
+      {tokenTarget && (
+        <TokenInfoModal
+          token={tokenTarget}
+          onClose={() => setTokenTarget(null)}
         />
       )}
     </div>

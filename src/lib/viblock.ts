@@ -108,9 +108,51 @@ export async function viblockGetChallenges(status?: string): Promise<{
   return req(`/challenges${params}`);
 }
 
+/**
+ * Look up a competition token's info. Public endpoint (no X-API-Key).
+ */
+export async function viblockGetToken(token: string): Promise<{
+  token: string;
+  registration_id: string;
+  event_id: string;
+  event_name: string;
+  event_status: string;
+  sector: string;
+  region: string;
+  name: string;
+  user_id: string;
+  created_at: string;
+  used_at: string | null;
+  is_used: boolean;
+}> {
+  return pubReq(`/competition/tokens/${encodeURIComponent(token)}`);
+}
+
+/**
+ * Renew a competition token — issues a new token for the same player.
+ */
+export async function viblockRenewToken(token: string): Promise<{
+  old_token: string;
+  token: string;
+  registration_id: string;
+  event_id: string;
+  sector: string;
+  region: string;
+  name: string;
+  user_id: string;
+  created_at: string;
+}> {
+  return pubReq(`/competition/tokens/${encodeURIComponent(token)}/renew`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export const viblock = {
   configured: viblockConfigured,
   competitionRegister: viblockCompetitionRegister,
   getChallenges: viblockGetChallenges,
+  getToken: viblockGetToken,
+  renewToken: viblockRenewToken,
   health: () => req("/health"),
 };

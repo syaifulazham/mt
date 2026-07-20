@@ -530,6 +530,102 @@ participate in the event's challenges.
 
 ---
 
+#### GET `/competition/tokens/:token` — Read assigned token info
+
+Returns the registration details for a given competition token. Public
+endpoint (no `X-API-Key` required). Useful for an organizer kiosk to look
+up which player a token belongs to and whether it has already been
+redeemed.
+
+**Path**
+
+| Part | Description |
+| --- | --- |
+| `:token` | The 5-char competition token (URL-encoded if needed) |
+
+**Response (`200`)**
+
+```json
+{
+  "token": "K7Q2M",
+  "registration_id": "...",
+  "event_id": "...",
+  "event_name": "Regional Finals 2026",
+  "event_status": "published",
+  "sector": "SMK Taman Tun",
+  "region": "KL",
+  "name": "Asha Rahman",
+  "user_id": "...",
+  "created_at": "2026-07-20T...",
+  "used_at": null,
+  "is_used": false
+}
+```
+
+**Errors**
+
+| Code | Meaning |
+| --- | --- |
+| `404` | Token not found, or its event not found |
+| `400` | The event is not in competition mode |
+
+`used_at` is `null` when the token has never been redeemed; once set,
+`is_used` is `true` and the token can no longer be used to mint a session
+(see `/competition/session` single-use enforcement).
+
+---
+
+#### POST `/competition/tokens/:token/renew` — Renew a token
+
+Issues a **new** 5-char token for the same registration/player, replacing
+the old one. The old token is invalidated immediately and `used_at` is
+cleared, so the new token can be redeemed for a fresh session. Use this
+when a competitor loses their token, or after a token has been consumed
+and the player needs another attempt.
+
+**Path**
+
+| Part | Description |
+| --- | --- |
+| `:token` | The 5-char competition token to renew (URL-encoded if needed) |
+
+**Body**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `event_id` | uuid | no | Optional scope check (token is globally unique) |
+
+**Response (`200`)**
+
+```json
+{
+  "old_token": "K7Q2M",
+  "token": "R9P3X",
+  "registration_id": "...",
+  "event_id": "...",
+  "sector": "SMK Taman Tun",
+  "region": "KL",
+  "name": "Asha Rahman",
+  "user_id": "...",
+  "created_at": "2026-07-20T..."
+}
+```
+
+**Errors**
+
+| Code | Meaning |
+| --- | --- |
+| `404` | Token not found, or its event not found |
+| `400` | The event is not in competition mode |
+| `500` | Failed to generate a unique new token |
+
+The new token uses the same alphabet and uniqueness rules as
+`/competition/register`. The synthetic auth user's email is updated to
+match the new token so `/competition/session` continues to work without
+any client-side changes.
+
+---
+
 ### 8.4 Quick start (curl)
 
 ```bash
@@ -549,6 +645,16 @@ curl -s -X POST "$BASE/competition/session" \
   -H "Content-Type: application/json" \
   -d '{"token":"K7Q2M"}'
 # -> { "access_token": "...", "refresh_token": "...", ... }
+
+# 4. Read assigned token info (public, no API key)
+curl -s "$BASE/competition/tokens/K7Q2M"
+# -> { "token": "K7Q2M", "name": "Asha Rahman", "is_used": false, ... }
+
+# 5. Renew a token (issue a new token for the same player)
+curl -s -X POST "$BASE/competition/tokens/K7Q2M/renew" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# -> { "old_token": "K7Q2M", "token": "R9P3X", ... }
 ```
 
 ---
