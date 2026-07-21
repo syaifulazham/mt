@@ -75,6 +75,7 @@ export async function POST(
         confirmedAt:  new Date(),
         viblockToken,
       },
+      select: { id: true, status: true },
     });
     return NextResponse.json({ data: { ...reg, viblockToken } }, { status: 201 });
   } catch (e: unknown) {

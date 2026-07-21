@@ -96,6 +96,7 @@ export async function GET(
     if (resolvedWicId) {
       alreadyRegistered = await db.walkInRegistration.findUnique({
         where: { walkInCompetitionId_participantId: { walkInCompetitionId: resolvedWicId, participantId: p.id } },
+        select: { id: true, status: true },
       });
     }
 
