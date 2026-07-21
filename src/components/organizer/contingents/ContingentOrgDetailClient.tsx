@@ -1320,7 +1320,12 @@ function AddParticipantDialog({
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
 
-  useEffect(() => { if (open) { setForm(BLANK_FORM); setError(null); } }, [open]);
+  useEffect(() => {
+    if (open) {
+      const id = setTimeout(() => { setForm(BLANK_FORM); setError(null); }, 0);
+      return () => clearTimeout(id);
+    }
+  }, [open]);
 
   function handleIcChange(val: string) {
     const parsed = parseIcData(val);
@@ -1460,8 +1465,11 @@ function BulkUploadDialog({
 
   useEffect(() => {
     if (open) {
-      setPhase("upload"); setCsvText(""); setPreview([]); setCleaned([]);
-      setErrors([]); setSaving(false); setErr("");
+      const id = setTimeout(() => {
+        setPhase("upload"); setCsvText(""); setPreview([]); setCleaned([]);
+        setErrors([]); setSaving(false); setErr("");
+      }, 0);
+      return () => clearTimeout(id);
     }
   }, [open]);
 
@@ -1920,7 +1928,7 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
   function toggleSelect(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }
