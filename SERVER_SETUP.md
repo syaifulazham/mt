@@ -175,3 +175,5 @@ sudo tail -30 /var/log/nginx/error.log
 | `EPTIM_URL` | Eptim base URL |
 | `EPTIMEDU_API_KEY` | EptimEdu API key |
 | `EPTIMEDU_BASE_URL` | EptimEdu base URL |
+| `WALKIN_EPTIM_VIBLOCK_URL` | Viblock Arena base URL |
+| `WALKIN_EPTIM_VIBLOCK_API_KEY` | Viblock Arena API key |
