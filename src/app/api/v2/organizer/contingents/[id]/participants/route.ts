@@ -1,6 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { Gender, EduLevel } from "@prisma/client";
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+
+  const contingent = await db.contingent.findUnique({ where: { id }, select: { id: true } });
+  if (!contingent) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const body = await req.json();
+  const { name, ic, email, phoneNumber, gender, age, eduLevel, classGrade, className, ppki } = body;
+
+  if (!name?.trim() || !gender || !eduLevel)
+    return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
+
+  const created = await db.participant.create({
+    data: {
+      contingentId: id,
+      name:        name.trim(),
+      ic:          ic          || null,
+      email:       email       || null,
+      phoneNumber: phoneNumber || null,
+      gender:      gender      as Gender,
+      age:         age ? Number(age) : null,
+      eduLevel:    eduLevel    as EduLevel,
+      classGrade:  classGrade  || null,
+      className:   className   || null,
+      status:      "ACTIVE",
+      ppki:        Boolean(ppki),
+    },
+    select: {
+      id: true, name: true, ic: true, email: true, phoneNumber: true,
+      gender: true, age: true, eduLevel: true, classGrade: true, className: true,
+      status: true, ppki: true, createdAt: true,
+    },
+  });
+
+  return NextResponse.json({ data: created }, { status: 201 });
+}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getOrganizerSession();

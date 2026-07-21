@@ -6,7 +6,7 @@ import {
   ArrowLeft, Users, UserCheck, Trophy,
   Search, Pencil, ChevronLeft, ChevronRight,
   School as SchoolIcon, Building2, MapPin, Loader2, X, Check, Trash2, AlertTriangle,
-  ChevronDown,
+  ChevronDown, Plus, Upload, Sparkles, Download,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -1268,6 +1268,405 @@ function TrainersTab({ contingentId }: { contingentId: string }) {
   );
 }
 
+// ─── IC parsing helpers ───────────────────────────────────────────────────────
+
+type Gender   = "MALE" | "FEMALE";
+type EduLevel = "KINDERGARTEN" | "PRIMARY" | "SECONDARY" | "YOUTH";
+
+function parseIcData(ic: string): { gender?: Gender; age?: number; eduLevel?: EduLevel; classGrade?: string } {
+  const digits = ic.replace(/\D/g, "");
+  if (digits.length !== 12) return {};
+
+  const yy = parseInt(digits.substring(0, 2), 10);
+  const mm = parseInt(digits.substring(2, 4), 10);
+  const dd = parseInt(digits.substring(4, 6), 10);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return {};
+
+  const currentYear = new Date().getFullYear();
+  const birthYear   = yy <= currentYear % 100 ? 2000 + yy : 1900 + yy;
+  const age         = currentYear - birthYear;
+  const gender: Gender = parseInt(digits[11], 10) % 2 === 1 ? "MALE" : "FEMALE";
+
+  let eduLevel: EduLevel;
+  let classGrade: string | undefined;
+  if      (age >= 5 && age <= 6)  { eduLevel = "KINDERGARTEN"; classGrade = age <= 5 ? "Prasekolah 5thn" : "Prasekolah 6thn"; }
+  else if (age >= 7 && age <= 12) { eduLevel = "PRIMARY";      classGrade = `Darjah ${age - 6}`; }
+  else if (age >= 13 && age <= 17){ eduLevel = "SECONDARY";    classGrade = `Tingkatan ${age - 12}`; }
+  else                             { eduLevel = "YOUTH"; }
+
+  return { gender, age, eduLevel, classGrade };
+}
+
+// ─── Add Participant Dialog ───────────────────────────────────────────────────
+
+type ParticipantForm = {
+  name: string; ic: string; email: string; phoneNumber: string;
+  gender: string; age: number | null; eduLevel: string;
+  classGrade: string; className: string; ppki: boolean;
+};
+
+const BLANK_FORM: ParticipantForm = {
+  name: "", ic: "", email: "", phoneNumber: "",
+  gender: "MALE", age: null, eduLevel: "SECONDARY",
+  classGrade: "", className: "", ppki: false,
+};
+
+function AddParticipantDialog({
+  contingentId, open, onClose, onAdded,
+}: {
+  contingentId: string; open: boolean; onClose: () => void; onAdded: (p: Participant) => void;
+}) {
+  const [form, setForm] = useState<ParticipantForm>(BLANK_FORM);
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState<string | null>(null);
+
+  useEffect(() => { if (open) { setForm(BLANK_FORM); setError(null); } }, [open]);
+
+  function handleIcChange(val: string) {
+    const parsed = parseIcData(val);
+    setForm((f) => ({
+      ...f, ic: val,
+      ...(parsed.gender    ? { gender:    parsed.gender }    : {}),
+      ...(parsed.age       ? { age:       parsed.age }       : {}),
+      ...(parsed.eduLevel  ? { eduLevel:  parsed.eduLevel }  : {}),
+      ...(parsed.classGrade ? { classGrade: parsed.classGrade } : {}),
+    }));
+  }
+
+  async function handleSave() {
+    setSaving(true); setError(null);
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/participants`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Save failed"); return; }
+      onAdded(json.data); onClose();
+    } catch { setError("Network error"); }
+    finally   { setSaving(false); }
+  }
+
+  const f   = (k: keyof ParticipantForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((p) => ({ ...p, [k]: e.target.value }));
+  const sel = (k: keyof ParticipantForm) => (e: React.ChangeEvent<HTMLSelectElement>) =>
+    setForm((p) => ({ ...p, [k]: e.target.value }));
+  const selCls = "mt-1 block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Participant</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-4 px-6 py-4 text-sm max-h-[70vh] overflow-y-auto">
+          <div className="col-span-2">
+            <Label>Name *</Label>
+            <Input value={form.name} onChange={f("name")} className="mt-1" placeholder="Full name" />
+          </div>
+          <div>
+            <Label>IC / Passport</Label>
+            <Input value={form.ic} onChange={(e) => handleIcChange(e.target.value)} className="mt-1" placeholder="12-digit IC" />
+          </div>
+          <div>
+            <Label>Phone</Label>
+            <Input value={form.phoneNumber} onChange={f("phoneNumber")} className="mt-1" />
+          </div>
+          <div className="col-span-2">
+            <Label>Email</Label>
+            <Input value={form.email} onChange={f("email")} className="mt-1" />
+          </div>
+          <div>
+            <Label>Gender *</Label>
+            <select value={form.gender} onChange={sel("gender")} className={selCls}>
+              <option value="MALE">MALE</option>
+              <option value="FEMALE">FEMALE</option>
+            </select>
+          </div>
+          <div>
+            <Label>Age</Label>
+            <Input type="number" value={form.age ?? ""} onChange={(e) => setForm((p) => ({ ...p, age: e.target.value ? Number(e.target.value) : null }))} className="mt-1" />
+          </div>
+          <div>
+            <Label>Education Level *</Label>
+            <select value={form.eduLevel} onChange={sel("eduLevel")} className={selCls}>
+              {EDU_OPTIONS.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Class Grade</Label>
+            <Input value={form.classGrade} onChange={f("classGrade")} className="mt-1" placeholder="e.g. Darjah 5" />
+          </div>
+          <div>
+            <Label>Class Name</Label>
+            <Input value={form.className} onChange={f("className")} className="mt-1" placeholder="e.g. Cerdas" />
+          </div>
+          <div className="flex items-center gap-2 mt-5">
+            <input type="checkbox" id="add-ppki" checked={form.ppki} onChange={(e) => setForm((p) => ({ ...p, ppki: e.target.checked }))} />
+            <Label htmlFor="add-ppki">PPKI</Label>
+          </div>
+        </div>
+        {error && <p className="px-6 pb-2 text-red-600 text-sm">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !form.name.trim() || !form.gender || !form.eduLevel}>
+            {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-1" />Saving…</> : "Add Participant"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Bulk Upload Dialog ───────────────────────────────────────────────────────
+
+type BulkPhase = "upload" | "preview" | "cleaning" | "confirm" | "done";
+
+type CleanRow = {
+  name: string; ic: string | null; email: string | null; phoneNumber: string | null;
+  gender: string; age: number | null; eduLevel: string;
+  classGrade: string | null; className: string | null;
+  ethnicity: string | null; ppki: boolean;
+};
+
+function parseCsvText(text: string): string[][] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  return lines.map((line) => {
+    const cells: string[] = [];
+    let cur = "", inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === "," && !inQ) { cells.push(cur.trim()); cur = ""; }
+      else { cur += ch; }
+    }
+    cells.push(cur.trim());
+    return cells;
+  });
+}
+
+function BulkUploadDialog({
+  contingentId, open, onClose, onDone,
+}: {
+  contingentId: string; open: boolean; onClose: () => void; onDone: (count: number) => void;
+}) {
+  const [phase, setPhase]   = useState<BulkPhase>("upload");
+  const [csvText, setCsvText] = useState("");
+  const [preview, setPreview] = useState<string[][]>([]);
+  const [cleaned, setCleaned] = useState<CleanRow[]>([]);
+  const [errors,  setErrors]  = useState<string[]>([]);
+  const [saving,  setSaving]  = useState(false);
+  const [err,     setErr]     = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setPhase("upload"); setCsvText(""); setPreview([]); setCleaned([]);
+      setErrors([]); setSaving(false); setErr("");
+    }
+  }, [open]);
+
+  function handleFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      setCsvText(text);
+      setPreview(parseCsvText(text).slice(0, 6));
+      setPhase("preview");
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  async function handleClean() {
+    setPhase("cleaning"); setErr("");
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/participants/bulk`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvText }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErr(json.error ?? "AI cleaning failed"); setPhase("preview"); return; }
+      setCleaned(json.data ?? []);
+      setErrors(json.errors ?? []);
+      setPhase("confirm");
+    } catch { setErr("Network error"); setPhase("preview"); }
+  }
+
+  async function handleConfirm() {
+    setSaving(true); setErr("");
+    try {
+      const res  = await fetch(`/api/v2/organizer/contingents/${contingentId}/participants/bulk-confirm`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: cleaned }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErr(json.error ?? "Import failed"); setSaving(false); return; }
+      setPhase("done");
+      onDone(json.created ?? cleaned.length);
+    } catch { setErr("Network error"); setSaving(false); }
+  }
+
+  const SAMPLE_CSV = `name,ic,gender,age,eduLevel,classGrade,className,email,phoneNumber,ppki
+Ahmad Bin Ali,010203042345,MALE,15,SECONDARY,Tingkatan 3,Wawasan,ahmad@email.com,0123456789,
+Siti Binti Lim,020405046789,FEMALE,14,SECONDARY,Tingkatan 2,Bestari,,,`;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5 text-zinc-500" />
+            Bulk Upload Participants
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 text-sm">
+
+          {/* Step indicator */}
+          <div className="flex items-center gap-1 text-xs text-zinc-400">
+            {(["upload","preview","cleaning","confirm","done"] as BulkPhase[]).map((s, i, arr) => (
+              <span key={s} className="flex items-center gap-1">
+                <span className={phase === s ? "font-semibold text-zinc-700" : ""}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </span>
+                {i < arr.length - 1 && <span>›</span>}
+              </span>
+            ))}
+          </div>
+
+          {phase === "upload" && (
+            <div className="space-y-4">
+              <div
+                onClick={() => fileRef.current?.click()}
+                className="border-2 border-dashed border-zinc-300 rounded-xl p-8 text-center cursor-pointer hover:border-zinc-400 transition-colors"
+              >
+                <Upload className="h-8 w-8 text-zinc-300 mx-auto mb-2" />
+                <p className="font-medium text-zinc-600">Click to upload CSV</p>
+                <p className="text-xs text-zinc-400 mt-1">UTF-8 encoded, comma-separated</p>
+              </div>
+              <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+
+              <div className="rounded-lg border bg-zinc-50 p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Sample CSV format</p>
+                  <button
+                    onClick={() => { const a = document.createElement("a"); a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(SAMPLE_CSV)}`; a.download = "participants-template.csv"; a.click(); }}
+                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <Download className="h-3 w-3" /> Download template
+                  </button>
+                </div>
+                <pre className="text-[10px] text-zinc-500 overflow-x-auto whitespace-pre">{SAMPLE_CSV}</pre>
+              </div>
+            </div>
+          )}
+
+          {phase === "preview" && (
+            <div className="space-y-3">
+              <p className="text-zinc-600">Preview (first 6 rows). AI will clean and normalize all data.</p>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-xs">
+                  <tbody>
+                    {preview.map((row, i) => (
+                      <tr key={i} className={i === 0 ? "bg-zinc-100 font-semibold" : "border-t"}>
+                        {row.map((cell, j) => (
+                          <td key={j} className="px-2 py-1.5 whitespace-nowrap max-w-[120px] truncate">{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {err && <p className="text-red-600 text-xs">{err}</p>}
+            </div>
+          )}
+
+          {phase === "cleaning" && (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <Sparkles className="h-8 w-8 text-violet-500 animate-pulse" />
+              <p className="font-medium text-zinc-700">AI is cleaning and normalizing your data…</p>
+              <p className="text-xs text-zinc-400">This may take a few seconds</p>
+            </div>
+          )}
+
+          {phase === "confirm" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-green-600" />
+                <p className="font-medium text-zinc-700">{cleaned.length} participant{cleaned.length !== 1 ? "s" : ""} ready to import</p>
+              </div>
+              {errors.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
+                  <p className="text-xs font-semibold text-amber-700">{errors.length} row{errors.length !== 1 ? "s" : ""} skipped:</p>
+                  {errors.map((e, i) => <p key={i} className="text-xs text-amber-600">• {e}</p>)}
+                </div>
+              )}
+              <div className="overflow-x-auto rounded-lg border max-h-64">
+                <table className="w-full text-xs">
+                  <thead className="bg-zinc-50 sticky top-0">
+                    <tr>
+                      {["Name","IC","Gender","Age","Level","Grade","Class","PPKI"].map((h) => (
+                        <th key={h} className="px-2 py-1.5 text-left font-semibold text-zinc-500 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {cleaned.map((r, i) => (
+                      <tr key={i} className="hover:bg-zinc-50">
+                        <td className="px-2 py-1.5 whitespace-nowrap font-medium">{r.name}</td>
+                        <td className="px-2 py-1.5 font-mono">{r.ic ?? "—"}</td>
+                        <td className="px-2 py-1.5">{r.gender}</td>
+                        <td className="px-2 py-1.5">{r.age ?? "—"}</td>
+                        <td className="px-2 py-1.5">{r.eduLevel}</td>
+                        <td className="px-2 py-1.5">{r.classGrade ?? "—"}</td>
+                        <td className="px-2 py-1.5">{r.className ?? "—"}</td>
+                        <td className="px-2 py-1.5">{r.ppki ? "✓" : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {err && <p className="text-red-600 text-xs">{err}</p>}
+            </div>
+          )}
+
+          {phase === "done" && (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+                <Check className="h-6 w-6 text-green-600" />
+              </div>
+              <p className="font-semibold text-zinc-700">Import complete!</p>
+              <p className="text-xs text-zinc-400">{cleaned.length} participants added to this contingent.</p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 pb-4">
+          {phase === "upload" && <Button variant="outline" onClick={onClose}>Cancel</Button>}
+          {phase === "preview" && (
+            <>
+              <Button variant="outline" onClick={() => setPhase("upload")}>Back</Button>
+              <Button onClick={handleClean} className="gap-1.5">
+                <Sparkles className="h-4 w-4" /> Clean with AI
+              </Button>
+            </>
+          )}
+          {phase === "cleaning" && <Button variant="outline" disabled>Processing…</Button>}
+          {phase === "confirm" && (
+            <>
+              <Button variant="outline" onClick={() => setPhase("preview")} disabled={saving}>Back</Button>
+              <Button onClick={handleConfirm} disabled={saving || cleaned.length === 0} className="gap-1.5">
+                {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Importing…</> : `Import ${cleaned.length} participants`}
+              </Button>
+            </>
+          )}
+          {phase === "done" && <Button onClick={onClose}>Close</Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Edit Participant Dialog ──────────────────────────────────────────────────
 
 function EditParticipantDialog({
@@ -1476,6 +1875,8 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
   const [editing, setEditing] = useState<Participant | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false);
+  const [addOpen,  setAddOpen]  = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(async (q: string, p: number) => {
@@ -1498,6 +1899,22 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
 
   function handleSaved(updated: Participant) {
     setResult((prev) => prev ? { ...prev, data: prev.data.map((p) => p.id === updated.id ? updated : p) } : prev);
+  }
+
+  function handleAdded(p: Participant) {
+    setResult((prev) => prev
+      ? { ...prev, total: prev.total + 1, data: [p, ...prev.data].slice(0, pageSize) }
+      : prev
+    );
+    setAddOpen(false);
+  }
+
+  function handleBulkDone(count: number) {
+    // Refresh from page 1 to show new entries
+    setPage(1);
+    fetchPage(search, 1);
+    setBulkOpen(false);
+    void count;
   }
 
   function toggleSelect(id: string) {
@@ -1557,9 +1974,25 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
           </button>
         ) : null}
 
-        <span className="text-sm text-zinc-400 ml-auto">
-          {result ? `${result.total.toLocaleString()} participant${result.total !== 1 ? "s" : ""}` : ""}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-sm text-zinc-400">
+            {result ? `${result.total.toLocaleString()} participant${result.total !== 1 ? "s" : ""}` : ""}
+          </span>
+          <button
+            onClick={() => setBulkOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 text-sm text-violet-700 transition-colors"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Bulk Upload
+          </button>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-sm text-blue-700 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Participant
+          </button>
+        </div>
       </div>
 
       {/* Legend */}
@@ -1674,6 +2107,16 @@ function ParticipantsTab({ contingentId }: { contingentId: string }) {
           </div>
         )}
       </div>
+
+      <AddParticipantDialog
+        contingentId={contingentId}
+        open={addOpen} onClose={() => setAddOpen(false)} onAdded={handleAdded}
+      />
+
+      <BulkUploadDialog
+        contingentId={contingentId}
+        open={bulkOpen} onClose={() => setBulkOpen(false)} onDone={handleBulkDone}
+      />
 
       <EditParticipantDialog
         key={editing?.id ?? "none"}
