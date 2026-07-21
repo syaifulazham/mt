@@ -132,6 +132,20 @@ export async function DELETE(
   try {
     const body = await req.json();
     const teamIds: string[] = Array.isArray(body?.teamIds) ? body.teamIds : [];
+    const acceptance: string | undefined = body?.acceptance;
+
+    // Remove by acceptance status (e.g. all PENDING teams)
+    if (acceptance && teamIds.length === 0) {
+      const VALID_ACCEPTANCE = ["PENDING", "HOLD", "ACCEPT", "REJECT"];
+      if (!VALID_ACCEPTANCE.includes(acceptance))
+        return NextResponse.json({ error: "INVALID_ACCEPTANCE" }, { status: 400 });
+
+      const result = await db.teamEvent.deleteMany({
+        where: { eventId, acceptance },
+      });
+      return NextResponse.json({ success: true, removed: result.count });
+    }
+
     if (teamIds.length === 0) return NextResponse.json({ error: "NO_TEAMS" }, { status: 400 });
 
     await db.teamEvent.deleteMany({

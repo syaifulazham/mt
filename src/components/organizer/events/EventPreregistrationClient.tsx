@@ -285,6 +285,9 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
 
   // Unregister confirmation modal
   const [confirmModal, setConfirmModal] = useState<{ code: string; input: string } | null>(null);
+  // Remove pending teams
+  const [removePendingModal, setRemovePendingModal] = useState<{ code: string; input: string } | null>(null);
+  const [removingPending, setRemovingPending] = useState(false);
 
   // Prerequisite tally check
   type PrereqCheckResult = {
@@ -613,6 +616,33 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       alert("Gagal nyah-daftar. Sila cuba lagi.");
     } finally {
       setUnregistering(false);
+    }
+  }
+
+  function openRemovePendingModal() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const code = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    setRemovePendingModal({ code, input: "" });
+  }
+
+  async function confirmRemovePending() {
+    if (!removePendingModal || removePendingModal.input !== removePendingModal.code) return;
+    setRemovePendingModal(null);
+    setRemovingPending(true);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acceptance: "PENDING" }),
+      });
+      if (!res.ok) throw new Error("Ralat");
+      setSelectedTeamIds(new Set());
+      loadTeams();
+      loadStats();
+    } catch {
+      alert("Gagal membuang pasukan PENDING. Sila cuba lagi.");
+    } finally {
+      setRemovingPending(false);
     }
   }
 
@@ -979,6 +1009,21 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <Trash2 className="h-3.5 w-3.5" />}
             Nyah-daftar {selectedTeamIds.size} pasukan
+          </button>
+        )}
+
+        {/* Remove all PENDING teams */}
+        {listTab === "teams" && (
+          <button
+            onClick={openRemovePendingModal}
+            disabled={removingPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 border border-amber-200 transition-colors"
+            title="Buang semua pasukan dengan status PENDING"
+          >
+            {removingPending
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Trash2 className="h-3.5 w-3.5" />}
+            Buang Pending
           </button>
         )}
 
@@ -1398,6 +1443,57 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                 className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Nyah-daftar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Pending confirmation modal */}
+      {removePendingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-5">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+                <Trash2 className="h-4.5 w-4.5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900">Buang Pasukan PENDING</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Semua pasukan dengan status penerimaan <span className="font-semibold text-amber-700">PENDING</span> akan dikeluarkan dari acara ini. Tindakan ini tidak boleh dibatalkan.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-4 py-3 text-center space-y-1">
+              <p className="text-xs text-zinc-400">Taip kod berikut untuk mengesahkan:</p>
+              <p className="text-2xl font-bold tracking-[0.3em] text-zinc-900 font-mono select-all">{removePendingModal.code}</p>
+            </div>
+
+            <input
+              type="text"
+              value={removePendingModal.input}
+              onChange={(e) => setRemovePendingModal(m => m ? { ...m, input: e.target.value.toUpperCase() } : null)}
+              placeholder="Taip kod di sini…"
+              maxLength={5}
+              autoFocus
+              className="w-full text-center text-lg font-mono tracking-[0.3em] border border-zinc-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-300 uppercase"
+              onKeyDown={(e) => { if (e.key === "Enter" && removePendingModal.input === removePendingModal.code) confirmRemovePending(); }}
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRemovePendingModal(null)}
+                className="flex-1 px-3 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmRemovePending}
+                disabled={removePendingModal.input !== removePendingModal.code}
+                className="flex-1 px-3 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Buang Pending
               </button>
             </div>
           </div>
