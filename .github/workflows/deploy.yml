@@ -215,7 +215,8 @@ jobs:
             echo "── Migrating database ──"
             for migration in \
               20260520000000_add_missing_tables_and_columns \
-              20260620000001_add_drone_access_team_events_prerequisites; do
+              20260620000001_add_drone_access_team_events_prerequisites \
+              20260721000001_add_walkin_viblock_judging_columns; do
               docker run --rm \
                 --network host \
                 --env-file /opt/mt/.env.production \
