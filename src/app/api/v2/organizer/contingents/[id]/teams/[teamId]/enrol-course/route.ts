@@ -108,6 +108,9 @@ export async function POST(
     return NextResponse.json({ success: true, username });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "EptimEdu API error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const upstreamStatus = (err as { status?: number })?.status;
+    const upstreamBody   = (err as { body?: unknown })?.body;
+    console.error("[enrol-course] EptimEdu error:", { message, upstreamStatus, upstreamBody });
+    return NextResponse.json({ error: message, upstreamStatus, upstreamBody }, { status: 502 });
   }
 }

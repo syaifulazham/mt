@@ -1,6 +1,6 @@
 const BASE_URL      = process.env.EPTIMEDU_BASE_URL ?? "";
 const API_KEY       = process.env.EPTIMEDU_API_KEY  ?? "";
-const TIMEOUT_MS    = parseInt(process.env.EPTIMEDU_TIMEOUT_MS ?? "8000", 10);
+const TIMEOUT_MS    = parseInt(process.env.EPTIMEDU_TIMEOUT_MS ?? "15000", 10);
 
 export function eptimEduConfigured() {
   return !!API_KEY && !!BASE_URL;
@@ -34,7 +34,14 @@ async function req(path: string, options?: RequestInit) {
 export const eptimEdu = {
   courses: () => req("/api/v1/courses"),
 
-  userExists: (username: string) => req(`/api/v1/users/${encodeURIComponent(username)}`),
+  userExists: async (username: string) => {
+    try {
+      return await req(`/api/v1/users/${encodeURIComponent(username)}`);
+    } catch (e: unknown) {
+      if ((e as { status?: number })?.status === 404) return null;
+      throw e;
+    }
+  },
 
   createUser: (data: { username: string; password: string; name?: string; email?: string }) =>
     req("/api/v1/users", { method: "POST", body: JSON.stringify(data) }),
@@ -51,8 +58,14 @@ export const eptimEdu = {
       body: JSON.stringify({ username, courseId, ...(opts ?? {}) }),
     }),
 
-  getUserEnrolments: (username: string) =>
-    req(`/api/v1/users/${encodeURIComponent(username)}/enrolments`),
+  getUserEnrolments: async (username: string) => {
+    try {
+      return await req(`/api/v1/users/${encodeURIComponent(username)}/enrolments`);
+    } catch (e: unknown) {
+      if ((e as { status?: number })?.status === 404) return [];
+      throw e;
+    }
+  },
 
   getUserSubmissions: (username: string, courseId: string) =>
     req(`/api/v1/users/${encodeURIComponent(username)}/courses/${encodeURIComponent(courseId)}/submissions`),
