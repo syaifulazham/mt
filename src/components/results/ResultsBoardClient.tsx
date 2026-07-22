@@ -391,7 +391,7 @@ function TeamSpotlight({
         {/* Top center: Jata Negara */}
         <div className="flex justify-center pt-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo/Jata-01.png" alt="Jata Negara" className="h-40 w-auto" style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 12px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(255,255,255,0.1))" }} />
+          <img src="/logos-white/Jata-01-white.png" alt="Jata Negara" className="h-40 w-auto" style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 12px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(255,255,255,0.1))" }} />
         </div>
 
         {/* Main two-column area */}
