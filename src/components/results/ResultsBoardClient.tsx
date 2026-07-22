@@ -387,7 +387,7 @@ function TeamSpotlight({
       <WaveCanvas isWalkIn={isWalkIn} />
 
       {/* Winner figures — bottom-left: 5 (back), 2 + 1 (front) */}
-      <div className="absolute bottom-0 left-0 z-10 pointer-events-none" style={{ width: "420px", height: "500px" }}>
+      <div className="absolute bottom-0 left-0 z-10 pointer-events-none opacity-30" style={{ width: "420px", height: "500px" }}>
         {/* 5 — back layer, largest */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/winner/5.png" alt="" className="absolute bottom-0 select-none" style={{ width: "460px", left: "20px", zIndex: 0 }} />
@@ -409,24 +409,28 @@ function TeamSpotlight({
 
       {/* Content — stop propagation so clicks inside don't close */}
       <div
-        className="relative z-10 flex flex-col items-center justify-start min-h-screen px-6 pt-10 pb-0 gap-6"
+        className="relative z-10 flex flex-col min-h-screen"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top: Techlympics logo + event name */}
-        <div className="flex flex-col items-center gap-3 pt-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mt.svg" alt="Techlympics" className="h-36 w-auto brightness-0 invert" />
-          <p className="text-white font-black tracking-widest text-center uppercase text-2xl md:text-3xl whitespace-nowrap" style={{ fontFamily: "var(--font-poppins)" }}>{eventName}</p>
-          {competitionName && (
-            <p className="text-white text-2xl md:text-3xl font-bold tracking-wide text-center uppercase" style={{ fontFamily: "var(--font-poppins)" }}>{competitionCode} {competitionName}</p>
-          )}
-        </div>
+        {/* Main two-column area */}
+        <div className="flex flex-1 items-center">
 
-        {/* Middle: rank + team info */}
-        <div className="flex flex-col items-center gap-5 text-center">
-          {/* Rank label */}
-          <div className="flex flex-col items-center gap-1">
+          {/* Left: logo + event name + competition name */}
+          <div className="flex flex-col items-center justify-center gap-5 flex-1 px-8 py-10 text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="h-48 w-auto" />
+            <p className="text-white font-black tracking-widest uppercase text-2xl md:text-3xl whitespace-nowrap drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{eventName}</p>
+            {competitionName && (
+              <p className="text-white text-2xl md:text-3xl font-bold tracking-wide uppercase drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{competitionCode} {competitionName}</p>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="w-px self-stretch bg-white/10 my-10" />
+
+          {/* Right: rank (top) + contingent logo + state flag + contingent name + team name + members */}
+          <div className="flex flex-col items-center justify-start gap-5 flex-1 px-8 py-10 text-center">
+            {/* Rank label — top of right column */}
             <div className="flex items-center gap-3">
               <div className="h-px w-12 bg-white/20" />
               <p className="text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg text-amber-400" style={{ fontFamily: "var(--font-poppins)" }}>
@@ -434,13 +438,7 @@ function TeamSpotlight({
               </p>
               <div className="h-px w-12 bg-white/20" />
             </div>
-          </div>
-
-          {/* Team name */}
-          <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
-
-          {/* Contingent logo + state flag + name */}
-          <div className="flex flex-col items-center gap-3">
+            {/* Contingent logo + state flag */}
             <div className="flex items-center gap-5">
               <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="lg" />
               {entry.stateFlag && (
@@ -450,28 +448,26 @@ function TeamSpotlight({
                 </div>
               )}
             </div>
-            <div>
-              <p className="text-amber-400 text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
-                {entry.contingentName}
-              </p>
-            </div>
+            {/* Contingent name */}
+            <p className="text-amber-400 text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
+              {entry.contingentName}
+            </p>
+            {/* Team name */}
+            <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
+            {/* Members */}
+            {!isWalkIn && entry.members.length > 0 && (
+              <div className="flex flex-col items-center gap-1.5">
+                <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-1">Ahli Pasukan</p>
+                {entry.members.map((m) => (
+                  <p key={m.id} className="text-base md:text-lg text-white font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
+                ))}
+              </div>
+            )}
           </div>
-
-
-
-          {/* Members */}
-          {!isWalkIn && entry.members.length > 0 && (
-            <div className="mt-2 flex flex-col items-center gap-1.5">
-              <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-2">Ahli Pasukan</p>
-              {entry.members.map((m) => (
-                <p key={m.id} className="text-base md:text-lg text-white font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Bottom: partner logos */}
-        <div className="w-screen -mx-6 px-6 py-3 bg-black/40 flex flex-wrap justify-center items-center gap-5 mt-auto">
+        <div className="w-screen px-6 py-3 bg-black/40 flex flex-wrap justify-center items-center gap-5">
           {PARTNER_LOGOS.map((f) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="h-8 w-auto opacity-60" />
