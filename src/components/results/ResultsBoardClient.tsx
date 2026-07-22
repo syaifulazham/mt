@@ -576,15 +576,6 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [showStateModal, setShowStateModal] = useState(false);
   const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
 
-  useEffect(() => {
-    const els = [document.documentElement, document.body];
-    if (spotlight) {
-      els.forEach(el => { el.style.overflow = "hidden"; });
-    } else {
-      els.forEach(el => { el.style.overflow = ""; });
-    }
-    return () => { els.forEach(el => { el.style.overflow = ""; }); };
-  }, [spotlight]);
 
   // Try public access first (no passcode), or restore stored passcode
   useEffect(() => {
@@ -962,7 +953,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
           <p className="text-sm">Tiada keputusan direkodkan lagi.</p>
         </div>
       ) : (
-        <div className={`max-w-4xl mx-auto pb-12 transition-opacity duration-300 ${spotlight ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+        <div className={spotlight ? "hidden" : "max-w-4xl mx-auto pb-12"}>
           {/* Top 3 podium */}
           {filteredRankings.length >= 2 && (
             <Podium rankings={filteredRankings} onSelect={openSpotlight} />
