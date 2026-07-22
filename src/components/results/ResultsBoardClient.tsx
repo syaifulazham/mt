@@ -32,28 +32,6 @@ function fmtTime(s: number) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-function ShieldFallback({ cls }: { cls: string }) {
-  return (
-    <div className={cn(cls, "flex items-center justify-center rounded-full bg-gradient-to-br from-white/15 to-white/5 border-2 border-white/20 shadow-lg")}>
-      <svg viewBox="0 0 24 24" fill="none" className="w-3/5 h-3/5" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M12 2L3 6v6c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V6L12 2z"
-          fill="rgba(255,255,255,0.25)"
-          stroke="rgba(255,255,255,0.6)"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M9 12l2 2 4-4"
-          stroke="rgba(255,255,255,0.8)"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
-  );
-}
 
 function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name: string; size?: "sm" | "md" | "lg" | "xl" }) {
   const [err, setErr] = useState(false);
@@ -63,7 +41,7 @@ function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name
   if (!logo || err) return null;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={logo} alt={name} onError={() => setErr(true)}
-    className={cn(cls, "rounded-xl object-contain border-2 border-white/20 shadow-lg bg-white/10 p-1")} />;
+    className={cn(cls, "rounded-xl object-contain shadow-lg bg-white/10 p-1")} />;
 }
 
 // ── Rank label (Malay ordinal) ─────────────────────────────────────────────────
@@ -410,6 +388,12 @@ function TeamSpotlight({
         className="relative z-10 flex flex-col min-h-screen"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Top center: Jata Negara */}
+        <div className="flex justify-center pt-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo/Jata-01.png" alt="Jata Negara" className="h-40 w-auto" style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 12px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(255,255,255,0.1))" }} />
+        </div>
+
         {/* Main two-column area */}
         <div className="flex flex-1 items-center">
 
@@ -440,7 +424,7 @@ function TeamSpotlight({
             <div className="flex items-center gap-6">
               <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
               {entry.stateFlag && (
-                <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white/40 shadow-lg shrink-0">
+                <div className="w-32 h-20 rounded-lg overflow-hidden border-2 border-white/40 shadow-lg shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={entry.stateFlag} alt={entry.stateName ?? "State"} className="w-full h-full object-cover" />
                 </div>
