@@ -577,8 +577,13 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
 
   useEffect(() => {
-    document.body.style.overflow = spotlight ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    const els = [document.documentElement, document.body];
+    if (spotlight) {
+      els.forEach(el => { el.style.overflow = "hidden"; });
+    } else {
+      els.forEach(el => { el.style.overflow = ""; });
+    }
+    return () => { els.forEach(el => { el.style.overflow = ""; }); };
   }, [spotlight]);
 
   // Try public access first (no passcode), or restore stored passcode
