@@ -75,12 +75,6 @@ function tempatLabel(rank: number): string {
   return `Tempat ${named[rank] ?? `Ke-${rank}`}`;
 }
 
-function rankColor(rank: number): string {
-  if (rank === 1) return "text-amber-300";
-  if (rank === 2) return "text-slate-300";
-  if (rank === 3) return "text-orange-400";
-  return "text-white/80";
-}
 
 // ── Partner logos ──────────────────────────────────────────────────────────────
 
@@ -363,16 +357,6 @@ function TeamSpotlight({
       <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.15]"
         style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='100' height='173.2' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M50 0 L100 28.87 L100 86.6 L50 115.47 L0 86.6 L0 28.87 Z' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M50 0 L50 57.74' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M0 28.87 L50 57.74' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M100 28.87 L50 57.74' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='0.5'/%3E%3Cpath d='M50 57.74 L50 115.47' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='0.5'/%3E%3Cpath d='M50 57.74 L0 86.6' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='0.5'/%3E%3Cpath d='M50 57.74 L100 86.6' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='0.5'/%3E%3Cpath d='M50 115.47 L100 144.34 L100 173.2' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='0.5'/%3E%3Cpath d='M50 115.47 L0 144.34 L0 173.2' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='0.5'/%3E%3C/svg%3E\")", backgroundRepeat: "repeat", backgroundSize: "100px 173.2px" }} />
       <style>{`
-        @keyframes jump1 {
-          0%, 100% { transform: translateY(0); }
-          40%       { transform: translateY(-18px); }
-          60%       { transform: translateY(-10px); }
-        }
-        @keyframes jump2 {
-          0%, 100% { transform: translateY(0); }
-          40%       { transform: translateY(-22px); }
-          60%       { transform: translateY(-12px); }
-        }
         @keyframes spotlightSweep1 {
           0%   { transform: rotate(-15deg); opacity: 0.4; }
           50%  { transform: rotate(15deg); opacity: 0.7; }
@@ -415,16 +399,6 @@ function TeamSpotlight({
         <img src="/winner/1.png" alt="" className="absolute bottom-0 select-none" style={{ width: "160px", left: "240px", zIndex: 1, filter: "drop-shadow(0 4px 40px rgba(0,0,0,0.5)) drop-shadow(0 12px 60px rgba(0,0,0,0.35)) drop-shadow(0 0 80px rgba(0,0,0,0.25))" }} />
       </div>
 
-      {/* Winner figures — bottom-right: 3, 4 (jumping) */}
-      <div className="absolute bottom-16 right-0 z-10 flex items-end pointer-events-none">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/3.png" alt="" className="w-36 md:w-48 select-none ml-8"
-          style={{ animation: "jump1 1.6s ease-in-out infinite" }} />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/winner/4.png" alt="" className="w-36 md:w-48 select-none -ml-4"
-          style={{ animation: "jump2 1.6s ease-in-out 0.25s infinite" }} />
-      </div>
-
       {/* Close button */}
       <button
         className="absolute top-4 right-4 z-[200] text-white/50 hover:text-white transition-colors"
@@ -441,10 +415,11 @@ function TeamSpotlight({
         {/* Top: Techlympics logo + event name */}
         <div className="flex flex-col items-center gap-3 pt-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mt.svg" alt="Techlympics" className="h-24 w-auto" style={{ filter: "drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white) drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white)" }} />
-          <p className="text-white font-black tracking-widest text-center max-w-xs uppercase">{eventName}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mt.svg" alt="Techlympics" className="h-36 w-auto brightness-0 invert" />
+          <p className="text-white font-black tracking-widest text-center uppercase text-2xl md:text-3xl whitespace-nowrap" style={{ fontFamily: "var(--font-poppins)" }}>{eventName}</p>
           {competitionName && (
-            <p className="text-white/60 text-lg font-bold tracking-wide text-center uppercase">{competitionCode} {competitionName}</p>
+            <p className="text-white text-2xl md:text-3xl font-bold tracking-wide text-center uppercase" style={{ fontFamily: "var(--font-poppins)" }}>{competitionCode} {competitionName}</p>
           )}
         </div>
 
@@ -454,7 +429,7 @@ function TeamSpotlight({
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-3">
               <div className="h-px w-12 bg-white/20" />
-              <p className="text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg text-amber-400">
+              <p className="text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg text-amber-400" style={{ fontFamily: "var(--font-poppins)" }}>
                 {tempatLabel(entry.rank)}
               </p>
               <div className="h-px w-12 bg-white/20" />
@@ -462,7 +437,7 @@ function TeamSpotlight({
           </div>
 
           {/* Team name */}
-          <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg" style={{ WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
+          <p className="text-white text-2xl md:text-3xl font-black drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
 
           {/* Contingent logo + state flag + name */}
           <div className="flex flex-col items-center gap-3">
@@ -476,7 +451,7 @@ function TeamSpotlight({
               )}
             </div>
             <div>
-              <p className="text-amber-400 text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg" style={{ WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
+              <p className="text-amber-400 text-xl md:text-2xl font-black tracking-wide uppercase drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
                 {entry.contingentName}
               </p>
             </div>
@@ -489,7 +464,7 @@ function TeamSpotlight({
             <div className="mt-2 flex flex-col items-center gap-1.5">
               <p className="text-white/30 text-[10px] font-bold uppercase tracking-widest mb-2">Ahli Pasukan</p>
               {entry.members.map((m) => (
-                <p key={m.id} className="text-base text-white/80 font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
+                <p key={m.id} className="text-base md:text-lg text-white font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
               ))}
             </div>
           )}
