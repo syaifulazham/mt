@@ -60,12 +60,10 @@ function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name
   const sizeMap = { sm: "w-8 h-8", md: "w-12 h-12", lg: "w-16 h-16", xl: "w-24 h-24" };
   const cls = sizeMap[size];
 
-  if (logo && !err) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={logo} alt={name} onError={() => setErr(true)}
-      className={cn(cls, "rounded-xl object-contain border-2 border-white/20 shadow-lg bg-white/10 p-1")} />;
-  }
-  return <ShieldFallback cls={cls} />;
+  if (!logo || err) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={logo} alt={name} onError={() => setErr(true)}
+    className={cn(cls, "rounded-xl object-contain border-2 border-white/20 shadow-lg bg-white/10 p-1")} />;
 }
 
 // ── Rank label (Malay ordinal) ─────────────────────────────────────────────────
@@ -593,6 +591,11 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
   const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
+
+  useEffect(() => {
+    document.body.style.overflow = spotlight ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [spotlight]);
 
   // Try public access first (no passcode), or restore stored passcode
   useEffect(() => {
