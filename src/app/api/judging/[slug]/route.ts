@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       teamEvents: { some: { eventId: ec.event.id } },
     },
     include: {
-      contingent:  { select: { name: true, contingentType: true } },
+      contingent:  { select: { name: true, contingentType: true, state: { select: { name: true } } } },
       members: {
         include: { participant: { select: { name: true, gender: true, eduLevel: true, age: true, classGrade: true, className: true } } },
         orderBy: { createdAt: "asc" },
@@ -85,6 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       name: t.name,
       contingent: t.contingent.name,
       contingentType: t.contingent.contingentType,
+      stateName: t.contingent.state?.name ?? null,
       memberCount: t.members.length,
       members: t.members.map(m => ({
         name: m.participant.name,

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Gavel, Loader2, Eye, EyeOff, Users, Lock, Trophy, Tag,
-  ChevronDown, ChevronUp, ClipboardPen, RefreshCw,
+  ChevronDown, ChevronUp, ClipboardPen, RefreshCw, Search, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ type Criterion = {
 };
 type Team = {
   id: string; name: string; contingent: string; contingentType: string;
-  memberCount: number; members: Member[];
+  stateName: string | null; memberCount: number; members: Member[];
 };
 type ScoreRow = {
   id: string; judgingTaskId: string; teamId: string; criterionId: string;
@@ -190,6 +190,8 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
   const [error,    setError]    = useState("");
   const [data,     setData]     = useState<BoardData | null>(null);
   const [scores,   setScores]   = useState<ScoreRow[]>([]);
+  const [q,        setQ]        = useState("");
+  const [stateFilter, setStateFilter] = useState("");
 
   // On mount: check sessionStorage and auto-verify if a passcode is stored
   useEffect(() => {
@@ -306,8 +308,17 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
     isTeamScored(criterions, scores.filter(s => s.teamId === t.id))
   ).length;
 
+  const states = [...new Set(data.teams.map(t => t.stateName).filter(Boolean) as string[])].sort();
+
+  const qLower = q.trim().toLowerCase();
+  const filteredTeams = data.teams.filter(t => {
+    if (stateFilter && t.stateName !== stateFilter) return false;
+    if (qLower && !t.name.toLowerCase().includes(qLower) && !t.contingent.toLowerCase().includes(qLower)) return false;
+    return true;
+  });
+
   // Scored teams first by total score desc (time asc as tie-break), unscored at bottom
-  const sortedTeams = [...data.teams].sort((a, b) => {
+  const sortedTeams = [...filteredTeams].sort((a, b) => {
     const aScored = isTeamScored(criterions, scores.filter(s => s.teamId === a.id));
     const bScored = isTeamScored(criterions, scores.filter(s => s.teamId === b.id));
     if (aScored && !bScored) return -1;
@@ -359,8 +370,41 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
         </div>
       </div>
 
+      {/* Filter bar */}
+      <div className="max-w-5xl mx-auto px-4 pt-4 pb-2 flex flex-wrap gap-2 items-center">
+        {/* Search */}
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400 pointer-events-none" />
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Cari pasukan atau kontingen…"
+            className="w-full pl-9 pr-8 py-2 text-sm border rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+          />
+          {q && (
+            <button onClick={() => setQ("")} className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {/* State filter */}
+        {states.length > 0 && (
+          <select
+            value={stateFilter}
+            onChange={e => setStateFilter(e.target.value)}
+            className="px-3 py-2 text-sm border rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+          >
+            <option value="">Semua Negeri</option>
+            {states.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+        {(q || stateFilter) && (
+          <span className="text-xs text-zinc-400">{sortedTeams.length} / {data.teams.length} pasukan</span>
+        )}
+      </div>
+
       {/* Teams table */}
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto px-4 py-2">
         {data.teams.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-zinc-400 gap-3">
             <Users className="h-10 w-10 text-zinc-200" />
