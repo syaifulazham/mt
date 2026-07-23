@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown } from "lucide-react";
+import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -33,14 +33,14 @@ function fmtTime(s: number) {
 }
 
 
-function ContingentLogo({ logo, name, size = "md" }: { logo: string | null; name: string; size?: "sm" | "md" | "lg" | "xl" }) {
+function ContingentLogo({ logo, name, size = "md", style }: { logo: string | null; name: string; size?: "sm" | "md" | "lg" | "xl"; style?: React.CSSProperties }) {
   const [err, setErr] = useState(false);
   const sizeMap = { sm: "w-8 h-8", md: "w-12 h-12", lg: "w-16 h-16", xl: "w-24 h-24" };
   const cls = sizeMap[size];
 
   if (!logo || err) return null;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={logo} alt={name} onError={() => setErr(true)}
+  return <img src={logo} alt={name} onError={() => setErr(true)} style={style}
     className={cn(cls, "rounded-xl object-contain shadow-lg bg-white/10 p-1")} />;
 }
 
@@ -310,6 +310,7 @@ function TeamSpotlight({
   competitionName,
   onClose,
   isWalkIn = false,
+  scale = 1,
 }: {
   entry: RankEntry;
   eventName: string;
@@ -317,6 +318,7 @@ function TeamSpotlight({
   competitionName?: string;
   onClose: () => void;
   isWalkIn?: boolean;
+  scale?: number;
 }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -391,7 +393,7 @@ function TeamSpotlight({
         {/* Top center: Jata Negara */}
         <div className="flex justify-center pt-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logos-white/Jata-01-white.png" alt="Jata Negara" className="h-40 w-auto" style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 12px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(255,255,255,0.1))" }} />
+          <img src="/logos-white/Jata-01-white.png" alt="Jata Negara" className="w-auto" style={{ height: `${scale * 10}rem`, filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 12px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(255,255,255,0.1))" }} />
         </div>
 
         {/* Main two-column area */}
@@ -400,10 +402,10 @@ function TeamSpotlight({
           {/* Left: logo + event name + competition name */}
           <div className="flex flex-col items-center justify-center gap-5 flex-1 px-8 py-10 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="h-64 w-auto" />
-            <p className="text-white font-black tracking-widest uppercase text-3xl md:text-4xl whitespace-nowrap drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{eventName}</p>
+            <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="w-auto" style={{ height: `${scale * 16}rem` }} />
+            <p className="text-white font-black tracking-widest uppercase whitespace-nowrap drop-shadow-lg" style={{ fontSize: `${scale * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{eventName}</p>
             {competitionName && (
-              <p className="text-white text-3xl md:text-4xl font-bold tracking-wide uppercase drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{competitionCode} {competitionName}</p>
+              <p className="text-white font-bold tracking-wide uppercase drop-shadow-lg" style={{ fontSize: `${scale * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{competitionCode} {competitionName}</p>
             )}
           </div>
 
@@ -415,33 +417,33 @@ function TeamSpotlight({
             {/* Rank label — top of right column */}
             <div className="flex items-center gap-3">
               <div className="h-px w-16 bg-white/20" />
-              <p className="text-2xl md:text-3xl font-black tracking-wide uppercase drop-shadow-lg text-amber-400" style={{ fontFamily: "var(--font-poppins)" }}>
+              <p className="font-black tracking-wide uppercase drop-shadow-lg text-amber-400" style={{ fontSize: `${scale * 1.875}rem`, fontFamily: "var(--font-poppins)" }}>
                 {tempatLabel(entry.rank)}
               </p>
               <div className="h-px w-16 bg-white/20" />
             </div>
             {/* Contingent logo + state flag */}
             <div className="flex items-center gap-6">
-              <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" />
+              <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" style={{ width: `${scale * 6}rem`, height: `${scale * 6}rem` }} />
               {entry.stateFlag && (
-                <div className="w-32 h-20 rounded-lg overflow-hidden border-2 border-white/40 shadow-lg shrink-0">
+                <div className="rounded-lg overflow-hidden border-2 border-white/40 shadow-lg shrink-0" style={{ width: `${scale * 8}rem`, height: `${scale * 5}rem` }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={entry.stateFlag} alt={entry.stateName ?? "State"} className="w-full h-full object-cover" />
                 </div>
               )}
             </div>
             {/* Contingent name */}
-            <p className="text-amber-400 text-2xl md:text-3xl font-black tracking-wide uppercase drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
+            <p className="text-amber-400 font-black tracking-wide uppercase drop-shadow-lg" style={{ fontSize: `${scale * 1.875}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
               {entry.contingentName}
             </p>
             {/* Team name */}
-            <p className="text-white text-3xl md:text-4xl font-black drop-shadow-lg" style={{ fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
+            <p className="text-white font-black drop-shadow-lg" style={{ fontSize: `${scale * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
             {/* Members */}
             {!isWalkIn && entry.members.length > 0 && (
               <div className="flex flex-col items-center gap-2">
                 <p className="text-white/30 text-xs font-bold uppercase tracking-widest mb-1">Ahli Pasukan</p>
                 {entry.members.map((m) => (
-                  <p key={m.id} className="text-lg md:text-xl text-white font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
+                  <p key={m.id} className="text-white font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ fontSize: `${scale * 1.25}rem`, WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
                 ))}
               </div>
             )}
@@ -452,7 +454,7 @@ function TeamSpotlight({
         <div className="w-screen px-6 py-3 bg-black/40 flex flex-wrap justify-center items-center gap-5">
           {PARTNER_LOGOS.map((f) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="h-8 w-auto opacity-60" />
+            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="w-auto opacity-60" style={{ height: `${scale * 2}rem` }} />
           ))}
         </div>
       </div>
@@ -574,6 +576,20 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [viewMode, setViewMode] = useState<"national" | "state">("national");
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [showScalePanel, setShowScalePanel] = useState(false);
+  const scalePanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showScalePanel) return;
+    function handleClick(e: MouseEvent) {
+      if (scalePanelRef.current && !scalePanelRef.current.contains(e.target as Node)) {
+        setShowScalePanel(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showScalePanel]);
   const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
 
 
@@ -987,8 +1003,45 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
           competitionName={activeResult?.name}
           onClose={() => setSpotlight(null)}
           isWalkIn={isWalkIn}
+          scale={scale}
         />
       )}
+
+      {/* Scale FAB */}
+      <div ref={scalePanelRef} className="fixed bottom-6 left-6 z-[150] flex flex-col items-start gap-2">
+        {showScalePanel && (
+          <div
+            className="bg-black/70 backdrop-blur-sm rounded-2xl px-4 py-3 flex flex-col gap-3 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-4">
+              <span className="text-white/60 text-xs font-semibold">Saiz</span>
+              <span className="text-white text-xs font-mono">{Math.round(scale * 100)}%</span>
+              {scale !== 1 && (
+                <button onClick={() => setScale(1)} className="text-white/40 hover:text-white text-[10px]">
+                  Set semula
+                </button>
+              )}
+            </div>
+            <input
+              type="range"
+              min={0.5}
+              max={1.5}
+              step={0.05}
+              value={scale}
+              onChange={e => setScale(parseFloat(e.target.value))}
+              className="w-36 accent-violet-400"
+            />
+          </div>
+        )}
+        <button
+          onClick={() => setShowScalePanel(v => !v)}
+          className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm text-white/50 hover:text-white flex items-center justify-center shadow-lg transition-colors"
+          title="Laraskan saiz"
+        >
+          <SlidersHorizontal className="h-5 w-5" />
+        </button>
+      </div>
     </div>
   );
 }
