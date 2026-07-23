@@ -27,6 +27,7 @@ type EndpointInfo = {
 
 type ScanResult = {
   contingentName: string;
+  contingentShortName: string | null;
   logoUrl: string | null;
   teams: number;
   participants: number;
@@ -193,6 +194,9 @@ function GreetingOverlay({
           >
             {result.contingentName}
           </h1>
+          {result.contingentShortName && (
+            <p className="text-white/60 text-lg font-semibold mt-1">{result.contingentShortName}</p>
+          )}
           <div className="flex items-center justify-center gap-1.5 mt-1">
             <CheckCircle2 className="h-4 w-4 text-emerald-400" />
             <span className="text-emerald-400 text-sm font-semibold">Kehadiran direkodkan</span>
@@ -617,8 +621,11 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
                   />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white truncate">
-                      {c.shortName ?? c.name}
+                      {c.name}
                     </p>
+                    {c.shortName && (
+                      <p className="text-[11px] text-white/50 truncate">{c.shortName}</p>
+                    )}
                     <p className="text-[11px]" style={{ color: "rgba(255,255,255,.35)" }}>
                       {c.teams.length} pasukan · {c.teams.reduce((s, t) => s + t.members, 0)} peserta · {c.trainers} jurulatih
                     </p>

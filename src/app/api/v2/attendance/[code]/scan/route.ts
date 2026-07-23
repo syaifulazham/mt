@@ -61,7 +61,8 @@ export async function POST(
   const participants = teamEvents.reduce((s, te) => s + te.team._count.members, 0);
 
   return NextResponse.json({
-    contingentName: contingent.shortName ?? contingent.name,
+    contingentName: contingent.name,
+    contingentShortName: contingent.shortName ?? null,
     logoUrl:        contingent.logoUrl,
     teams:          count,
     participants,
