@@ -55,12 +55,12 @@ function tempatLabel(rank: number): string {
 // ── Partner logos ──────────────────────────────────────────────────────────────
 
 const PARTNER_LOGOS = [
-  "madani-white.svg",
   "might-white.svg",
   "motto-white.svg",
+  "madani-white.svg",
+  "visit-my-white.svg",
   "my-book-of-record-white.svg",
   "rakan-muda-white.svg",
-  "visit-my-white.svg",
 ];
 
 // ── Sparkle celebration canvas ────────────────────────────────────────────────
@@ -426,9 +426,9 @@ function TeamSpotlight({
             <div className="flex items-center gap-6">
               <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" style={{ width: `${scale * 6}rem`, height: `${scale * 6}rem` }} />
               {entry.stateFlag && (
-                <div className="rounded-lg overflow-hidden border-2 border-white/40 shadow-lg shrink-0" style={{ width: `${scale * 8}rem`, height: `${scale * 5}rem` }}>
+                <div className="rounded-lg overflow-hidden shrink-0" style={{ width: `${scale * 8}rem`, height: `${scale * 5}rem` }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={entry.stateFlag} alt={entry.stateName ?? "State"} className="w-full h-full object-cover" />
+                  <img src={entry.stateFlag} alt={entry.stateName ?? "State"} className="w-full h-full object-contain" style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.3)" }} />
                 </div>
               )}
             </div>
@@ -451,10 +451,11 @@ function TeamSpotlight({
         </div>
 
         {/* Bottom: partner logos */}
-        <div className="w-screen px-6 py-3 bg-black/40 flex flex-wrap justify-center items-center gap-5">
+        <div className="w-screen px-6 py-3 bg-black/40 flex flex-wrap justify-center items-center gap-10">
+          <p className="text-white/40 text-[10px] font-bold tracking-widest uppercase leading-tight text-right">RAKAN<br />STRATEGIK</p>
           {PARTNER_LOGOS.map((f) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="w-auto opacity-60" style={{ height: `${scale * 2}rem` }} />
+            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="w-auto opacity-60" style={{ height: `${scale * 2.4}rem` }} />
           ))}
         </div>
       </div>
