@@ -20,16 +20,16 @@ type RankEntry = {
   totalScore: number; bestTime: number | null;
 };
 
-type StateRankEntry = {
-  rank: number; stateId: string; stateName: string;
-  totalScore: number; bestTime: number | null; teamCount: number;
+type StateGroup = {
+  stateId: string; stateName: string; bestScore: number;
+  teams: RankEntry[];
 };
 
 type CompetitionRanking = {
   id: string; name: string; code: string;
   targetGroup: { id: string; code: string; name: string } | null;
   rankings: RankEntry[];
-  stateRankings: StateRankEntry[];
+  stateGroups: StateGroup[];
 };
 
 type Endpoint = {
@@ -261,9 +261,9 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
 
   // Determine which rows to render
-  const useStateRankings = isZone && (activeRanking?.stateRankings.length ?? 0) > 0;
-  const hasData = useStateRankings
-    ? (activeRanking?.stateRankings.length ?? 0) > 0
+  const useStateGroups = isZone && (activeRanking?.stateGroups.length ?? 0) > 0;
+  const hasData = useStateGroups
+    ? (activeRanking?.stateGroups.length ?? 0) > 0
     : (activeRanking?.rankings.length ?? 0) > 0;
 
   return (
@@ -305,36 +305,62 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
           <div className="py-12 text-center text-sm text-zinc-400">
             Tiada markah direkodkan lagi untuk pertandingan ini.
           </div>
-        ) : useStateRankings ? (
-          /* State-level rankings (ZONE scope) */
+        ) : useStateGroups ? (
+          /* Teams grouped by state (ZONE scope) */
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-zinc-50/40 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
                   <th className="px-4 py-2.5 text-center w-12">#</th>
-                  <th className="px-4 py-2.5">Negeri</th>
-                  <th className="px-4 py-2.5 text-center w-20">Pasukan</th>
+                  <th className="px-4 py-2.5">Pasukan</th>
+                  <th className="px-4 py-2.5">Kontinjen</th>
                   <th className="px-4 py-2.5 text-center w-24">Markah</th>
-                  <th className="px-4 py-2.5 text-center w-20">Masa Terbaik</th>
+                  <th className="px-4 py-2.5 text-center w-20">Masa</th>
                 </tr>
               </thead>
               <tbody>
-                {activeRanking.stateRankings.map((r) => (
-                  <tr key={r.stateId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
-                    r.rank <= 3 && "bg-amber-50/30")}>
-                    <td className="px-4 py-3 text-center">
-                      {MEDAL[r.rank]
-                        ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
-                        : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-zinc-800">{r.stateName}</td>
-                    <td className="px-4 py-3 text-center text-xs text-zinc-400">{r.teamCount}</td>
-                    <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
-                    <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
-                      {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
-                    </td>
-                  </tr>
+                {activeRanking.stateGroups.map((group) => (
+                  <>
+                    {/* State group header row */}
+                    <tr key={`hdr-${group.stateId}`} className="bg-zinc-100 border-b border-zinc-200">
+                      <td colSpan={5} className="px-4 py-1.5">
+                        <span className="text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
+                          {group.stateName}
+                        </span>
+                      </td>
+                    </tr>
+                    {/* Teams within this state */}
+                    {group.teams.map((r) => (
+                      <tr key={r.teamId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
+                        r.rank <= 3 && "bg-amber-50/30")}>
+                        <td className="px-4 py-3 text-center">
+                          {MEDAL[r.rank]
+                            ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
+                            : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
+                          }
+                        </td>
+                        <td className="px-4 py-3 font-medium text-zinc-800">{r.teamName}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {r.contingentLogo
+                              // eslint-disable-next-line @next/next/no-img-element
+                              ? <img src={r.contingentLogo} alt="" className="w-6 h-6 rounded-full object-cover border" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                              : <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500">
+                                  {r.contingentName.slice(0, 2).toUpperCase()}
+                                </div>
+                            }
+                            <span className="text-sm text-zinc-600 truncate max-w-[200px] cursor-default" title={r.contingentFullName}>
+                              {r.contingentName}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
+                          {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </>
                 ))}
               </tbody>
             </table>
