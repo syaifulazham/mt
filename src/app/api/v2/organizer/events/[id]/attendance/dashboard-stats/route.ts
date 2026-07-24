@@ -26,7 +26,7 @@ export async function GET(
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
 
   const teamEvents = await db.teamEvent.findMany({
-    where: { eventId, acceptance: "ACCEPT" },
+    where: { eventId, acceptance: "ACCEPT", team: { status: "ACTIVE" } },
     select: {
       id: true,
       attendedAt: true,
@@ -34,7 +34,7 @@ export async function GET(
         select: {
           id: true,
           contingentId: true,
-          members: { select: { id: true } },
+          members: { select: { participantId: true } },
           competition: {
             select: {
               targetGroups: {
@@ -96,12 +96,19 @@ export async function GET(
     }
   }
 
-  const teamsTotal     = teamEvents.length;
-  const teamsPresent   = teamEvents.filter((te) => te.attendedAt).length;
-  const participantsTotal   = teamEvents.reduce((s, te) => s + te.team.members.length, 0);
-  const participantsPresent = teamEvents
-    .filter((te) => te.attendedAt)
-    .reduce((s, te) => s + te.team.members.length, 0);
+  const teamsTotal   = teamEvents.length;
+  const teamsPresent = teamEvents.filter((te) => te.attendedAt).length;
+
+  const allPids     = new Set<string>();
+  const presentPids = new Set<string>();
+  for (const te of teamEvents) {
+    for (const m of te.team.members) {
+      allPids.add(m.participantId);
+      if (te.attendedAt) presentPids.add(m.participantId);
+    }
+  }
+  const participantsTotal   = allPids.size;
+  const participantsPresent = presentPids.size;
 
   // ── By target group ───────────────────────────────────────────────────────
 
@@ -110,7 +117,7 @@ export async function GET(
     contingentIds: Set<string>; presentContingentIds: Set<string>;
     managerIds: Set<string>; presentManagerIds: Set<string>;
     teamsTotal: number; teamsPresent: number;
-    participantsTotal: number; participantsPresent: number;
+    participantIds: Set<string>; presentParticipantIds: Set<string>;
   };
 
   const tgMap = new Map<string, TgAcc>();
@@ -127,7 +134,8 @@ export async function GET(
         managerIds:           new Set(),
         presentManagerIds:    new Set(),
         teamsTotal: 0, teamsPresent: 0,
-        participantsTotal: 0, participantsPresent: 0,
+        participantIds:        new Set(),
+        presentParticipantIds: new Set(),
       });
     }
 
@@ -140,8 +148,10 @@ export async function GET(
     }
     g.teamsTotal++;
     if (te.attendedAt) g.teamsPresent++;
-    g.participantsTotal   += te.team.members.length;
-    if (te.attendedAt) g.participantsPresent += te.team.members.length;
+    for (const m of te.team.members) {
+      g.participantIds.add(m.participantId);
+      if (te.attendedAt) g.presentParticipantIds.add(m.participantId);
+    }
   }
 
   const byTargetGroup = [...tgMap.values()]
@@ -153,7 +163,7 @@ export async function GET(
       contingents:  { total: g.contingentIds.size,        present: g.presentContingentIds.size },
       managers:     { total: g.managerIds.size,            present: g.presentManagerIds.size },
       teams:        { total: g.teamsTotal,                 present: g.teamsPresent },
-      participants: { total: g.participantsTotal,          present: g.participantsPresent },
+      participants: { total: g.participantIds.size,          present: g.presentParticipantIds.size },
     }));
 
   // ── Contingent locations ──────────────────────────────────────────────────

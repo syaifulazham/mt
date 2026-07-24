@@ -64,6 +64,7 @@ export interface FinalProgramData {
     sabah: number;
     sarawak: number;
   };
+  trainerCount: number;
   stateStats: StateStat[];
   rendahComps: CompStat[];
   menengahComps: CompStat[];
@@ -131,6 +132,9 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
           participant: { select: { id: true, gender: true, ethnicity: true } },
         },
       },
+      trainers: {
+        select: { trainerId: true },
+      },
     },
   });
 
@@ -179,6 +183,9 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
   const menengahTDs = tds.filter(t => t.level === "MENENGAH");
   const beliaTDs   = tds.filter(t => t.level === "BELIA");
   const schoolTDs  = [...rendahTDs, ...menengahTDs];
+
+  // unique trainers across all active event teams
+  const trainerCount = new Set(teams.flatMap(t => t.trainers.map(tr => tr.trainerId))).size;
 
   const uniquePids = (list: TD[]) => new Set(list.flatMap(t => t.members.map(m => m.id)));
   const genderStat = (list: TD[], g: string) =>
@@ -309,6 +316,7 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     locationLabel: event.zone?.name ?? event.state?.name ?? event.name.toUpperCase(),
     regSummary,
     walkInSummary,
+    trainerCount,
     schoolMale, schoolFemale, beliaMale, beliaFemale,
     ethnicityStats,
     stateStats,
