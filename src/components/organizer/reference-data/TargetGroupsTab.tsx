@@ -79,6 +79,7 @@ export function TargetGroupsTab() {
   const [deleteTarget, setDeleteTarget] = useState<TargetGroup | null>(null);
   const [sectionLocked, setSectionLocked] = useState(false);
   const [lockDialogOpen, setLockDialogOpen] = useState(false);
+  const [lockError, setLockError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,8 +103,8 @@ export function TargetGroupsTab() {
 
   useEffect(() => {
     fetch("/api/v2/organizer/reference-data/section-lock/target-groups")
-      .then((r) => r.json())
-      .then((j) => setSectionLocked(j.locked ?? false))
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((j) => setSectionLocked(j.locked === true))
       .catch(() => {});
   }, []);
 
@@ -230,12 +231,21 @@ export function TargetGroupsTab() {
 
   async function handleToggleLock() {
     const next = !sectionLocked;
-    await fetch("/api/v2/organizer/reference-data/section-lock/target-groups", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ locked: next }),
-    });
-    setSectionLocked(next);
+    setLockError("");
+    try {
+      const res = await fetch("/api/v2/organizer/reference-data/section-lock/target-groups", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locked: next }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      setSectionLocked(next);
+    } catch (e: unknown) {
+      setLockError(e instanceof Error ? e.message : "Gagal menyimpan status kunci.");
+    }
   }
 
   const pages = Math.ceil(total / PAGE_SIZE);
@@ -282,6 +292,12 @@ export function TargetGroupsTab() {
         <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Seksyen ini dikunci. Tiada penambahan, pengeditan atau pemadaman dibenarkan.
+        </div>
+      )}
+
+      {lockError && (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
+          {lockError}
         </div>
       )}
 
