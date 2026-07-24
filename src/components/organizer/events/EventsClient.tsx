@@ -1855,20 +1855,23 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false 
               const isOnline    = ev.scope.startsWith("ONLINE");
               const isArchived  = ev.status === "ARCHIVE";
               const isPublished = ev.status === "PUBLISHED";
+              const isCompleted = ev.status === "COMPLETED";
               return (
                 <div key={ev.id}
                   className={cn(
                     "group flex cursor-pointer border-b last:border-0 transition-colors",
                     isArchived
                       ? selected?.id === ev.id ? "bg-zinc-200" : "hover:bg-zinc-100 opacity-60"
-                      : isPublished
-                        ? selected?.id === ev.id ? "bg-emerald-100" : "bg-emerald-50/70 hover:bg-emerald-100"
-                        : selected?.id === ev.id ? "bg-blue-50" : "hover:bg-zinc-50"
+                      : isCompleted
+                        ? selected?.id === ev.id ? "bg-purple-100" : "bg-purple-50/70 hover:bg-purple-100"
+                        : isPublished
+                          ? selected?.id === ev.id ? "bg-emerald-100" : "bg-emerald-50/70 hover:bg-emerald-100"
+                          : selected?.id === ev.id ? "bg-blue-50" : "hover:bg-zinc-50"
                   )}
                   onClick={() => selectEvent(ev)}
                 >
                   <div className="w-2.5 shrink-0 self-stretch"
-                    style={{ background: isArchived ? "#a1a1aa" : isPublished ? "#10b981" : isOnline ? "#7c3aed" : "#0ea5e9" }} />
+                    style={{ background: isArchived ? "#a1a1aa" : isCompleted ? "#7c3aed" : isPublished ? "#10b981" : isOnline ? "#7c3aed" : "#0ea5e9" }} />
                   <div className="flex-1 min-w-0 px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
                       {isPublished && (
@@ -1876,6 +1879,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false 
                       )}
                       <p className={cn("text-xs font-medium truncate",
                         isArchived  ? "text-zinc-400 line-through" :
+                        isCompleted ? "text-purple-800" :
                         isPublished ? "text-emerald-800" :
                         selected?.id === ev.id ? "text-blue-700" : "text-zinc-800"
                       )}>{ev.name}</p>
