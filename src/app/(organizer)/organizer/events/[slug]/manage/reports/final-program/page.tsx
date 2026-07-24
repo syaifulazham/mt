@@ -4,6 +4,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
 import Link from "next/link";
+import { Fragment } from "react";
 import { ArrowLeft } from "lucide-react";
 import { PrintButton } from "@/components/organizer/events/PrintButton";
 
@@ -721,7 +722,7 @@ export default async function FinalProgramReportPage({
                 const totalTeams = sg.comps.reduce((s, c) => s + c.teams, 0);
                 const totalPax   = sg.comps.reduce((s, c) => s + c.participants, 0);
                 return (
-                  <>
+                  <Fragment key={sg.stateName}>
                     {sg.comps.map((c, ci) => (
                       <tr key={`${sg.stateName}-${c.code}`} className={ci % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                         {ci === 0 && (
@@ -743,7 +744,7 @@ export default async function FinalProgramReportPage({
                       <td className="px-3 py-1.5 text-center border">{totalTeams}</td>
                       <td className="px-3 py-1.5 text-center border">{totalPax}</td>
                     </tr>
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
