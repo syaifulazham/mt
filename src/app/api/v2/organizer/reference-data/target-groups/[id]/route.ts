@@ -10,7 +10,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
-  const { code, name, schoolLevel, ageGroup, minAge, maxAge, classGrades, ppki } = await req.json();
+  const { code, name, schoolLevel, ageGroup, minAge, maxAge, classGrades, ppki, locked } = await req.json();
+
+  const current = await db.targetGroup.findUnique({ where: { id } });
+  if (!current) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+  if (current.locked && locked === undefined)
+    return NextResponse.json({ error: "LOCKED" }, { status: 423 });
+
   try {
     const tg = await db.targetGroup.update({
       where: { id },
@@ -23,6 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(maxAge !== undefined && { maxAge: Number(maxAge) }),
         ...(Array.isArray(classGrades) && { classGrades }),
         ...(ppki !== undefined && { ppki: Boolean(ppki) }),
+        ...(locked !== undefined && { locked: Boolean(locked) }),
       },
     });
     return NextResponse.json({ data: tg });
@@ -40,6 +48,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const tg = await db.targetGroup.findUnique({ where: { id } });
   if (!tg) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (tg.locked) return NextResponse.json({ error: "LOCKED" }, { status: 423 });
   await db.targetGroup.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }

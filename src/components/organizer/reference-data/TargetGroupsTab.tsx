@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, CalendarDays, GraduationCap } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, CalendarDays, GraduationCap, Lock, LockOpen } from "lucide-react";
 import { PushKbButton } from "./PushKbButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DeleteDialog } from "./DeleteDialog";
+import { LockConfirmDialog } from "./LockConfirmDialog";
 
 type TargetGroup = {
   id: string;
@@ -19,6 +20,7 @@ type TargetGroup = {
   maxAge: number;
   classGrades: string[];
   ppki: boolean;
+  locked: boolean;
 };
 
 type GroupBy = "age" | "grades";
@@ -76,6 +78,7 @@ export function TargetGroupsTab() {
   const [formError, setFormError] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<TargetGroup | null>(null);
+  const [lockTarget,   setLockTarget]   = useState<TargetGroup | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -218,6 +221,16 @@ export function TargetGroupsTab() {
     load();
   }
 
+  async function handleToggleLock() {
+    if (!lockTarget) return;
+    await fetch(`/api/v2/organizer/reference-data/target-groups/${lockTarget.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locked: !lockTarget.locked }),
+    });
+    load();
+  }
+
   const pages = Math.ceil(total / PAGE_SIZE);
   const gradeOptions = GRADE_OPTIONS[form.schoolLevel] ?? [];
   const canUseGrades = gradeOptions.length > 0;
@@ -268,9 +281,14 @@ export function TargetGroupsTab() {
               <tr><td colSpan={7} className="px-3 py-8 text-center text-zinc-400">No target groups found.</td></tr>
             )}
             {!loading && data.map((tg) => (
-              <tr key={tg.id} className="border-b last:border-0 hover:bg-zinc-50">
+              <tr key={tg.id} className={`border-b last:border-0 hover:bg-zinc-50 ${tg.locked ? "bg-amber-50/40" : ""}`}>
                 <td className="px-3 py-2 font-mono text-xs">{tg.code}</td>
-                <td className="px-3 py-2 font-medium">{tg.name}</td>
+                <td className="px-3 py-2 font-medium">
+                  <div className="flex items-center gap-1.5">
+                    {tg.locked && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
+                    {tg.name}
+                  </div>
+                </td>
                 <td className="px-3 py-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${LEVEL_STYLES[tg.schoolLevel] ?? "bg-zinc-100 text-zinc-600"}`}>
                     {tg.schoolLevel}
@@ -295,10 +313,13 @@ export function TargetGroupsTab() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(tg)} className="p-1 rounded hover:bg-zinc-100">
+                    <button onClick={() => setLockTarget(tg)} className="p-1 rounded hover:bg-zinc-100" title={tg.locked ? "Buka kunci" : "Kunci"}>
+                      {tg.locked ? <LockOpen className="h-3.5 w-3.5 text-amber-500" /> : <Lock className="h-3.5 w-3.5 text-zinc-400" />}
+                    </button>
+                    <button onClick={() => openEdit(tg)} disabled={tg.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Pencil className="h-3.5 w-3.5 text-zinc-500" />
                     </button>
-                    <button onClick={() => setDeleteTarget(tg)} className="p-1 rounded hover:bg-zinc-100">
+                    <button onClick={() => setDeleteTarget(tg)} disabled={tg.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Trash2 className="h-3.5 w-3.5 text-red-400" />
                     </button>
                   </div>
@@ -525,6 +546,14 @@ export function TargetGroupsTab() {
         onConfirm={handleDelete}
         title={`Delete "${deleteTarget?.name}"?`}
         description="This will permanently remove the target group."
+      />
+
+      <LockConfirmDialog
+        open={!!lockTarget}
+        itemName={lockTarget?.name ?? ""}
+        isLocked={lockTarget?.locked ?? false}
+        onConfirm={handleToggleLock}
+        onClose={() => setLockTarget(null)}
       />
 
       <div className="mt-4 flex justify-start">

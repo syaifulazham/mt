@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, Upload, Link, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, Upload, Link, X, Lock, LockOpen } from "lucide-react";
 import { PushKbButton } from "./PushKbButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DeleteDialog } from "./DeleteDialog";
+import { LockConfirmDialog } from "./LockConfirmDialog";
 
 type Theme = {
   id: string;
@@ -15,6 +16,7 @@ type Theme = {
   color: string | null;
   logoUrl: string | null;
   description: string | null;
+  locked: boolean;
 };
 
 const PAGE_SIZE = 20;
@@ -47,6 +49,7 @@ export function ThemesTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Theme | null>(null);
+  const [lockTarget,   setLockTarget]   = useState<Theme | null>(null);
   const [loadError, setLoadError]       = useState("");
 
   const load = useCallback(async () => {
@@ -193,6 +196,16 @@ export function ThemesTab() {
     load();
   }
 
+  async function handleToggleLock() {
+    if (!lockTarget) return;
+    await fetch(`/api/v2/organizer/reference-data/themes/${lockTarget.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locked: !lockTarget.locked }),
+    });
+    load();
+  }
+
   const pages = Math.ceil(total / PAGE_SIZE);
   const effectivePreview = previewUrl || form.logoUrl;
 
@@ -238,14 +251,19 @@ export function ThemesTab() {
               <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400">No themes found.</td></tr>
             )}
             {!loading && data.map((t) => (
-              <tr key={t.id} className="border-b last:border-0 hover:bg-zinc-50">
+              <tr key={t.id} className={`border-b last:border-0 hover:bg-zinc-50 ${t.locked ? "bg-amber-50/40" : ""}`}>
                 <td className="px-3 py-2">
                   <div
                     className="w-6 h-6 rounded-full border border-zinc-200 flex-shrink-0"
                     style={{ backgroundColor: t.color ?? "#e4e4e7" }}
                   />
                 </td>
-                <td className="px-3 py-2 font-medium">{t.name}</td>
+                <td className="px-3 py-2 font-medium">
+                  <div className="flex items-center gap-1.5">
+                    {t.locked && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
+                    {t.name}
+                  </div>
+                </td>
                 <td className="px-3 py-2 text-zinc-500 max-w-[220px] truncate">
                   {t.description ?? <span className="text-zinc-300">—</span>}
                 </td>
@@ -259,10 +277,13 @@ export function ThemesTab() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(t)} className="p-1 rounded hover:bg-zinc-100">
+                    <button onClick={() => setLockTarget(t)} className="p-1 rounded hover:bg-zinc-100" title={t.locked ? "Buka kunci" : "Kunci"}>
+                      {t.locked ? <LockOpen className="h-3.5 w-3.5 text-amber-500" /> : <Lock className="h-3.5 w-3.5 text-zinc-400" />}
+                    </button>
+                    <button onClick={() => openEdit(t)} disabled={t.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Pencil className="h-3.5 w-3.5 text-zinc-500" />
                     </button>
-                    <button onClick={() => setDeleteTarget(t)} className="p-1 rounded hover:bg-zinc-100">
+                    <button onClick={() => setDeleteTarget(t)} disabled={t.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Trash2 className="h-3.5 w-3.5 text-red-400" />
                     </button>
                   </div>
@@ -451,6 +472,14 @@ export function ThemesTab() {
         onConfirm={handleDelete}
         title={`Delete theme "${deleteTarget?.name}"?`}
         description="This will permanently remove the theme."
+      />
+
+      <LockConfirmDialog
+        open={!!lockTarget}
+        itemName={lockTarget?.name ?? ""}
+        isLocked={lockTarget?.locked ?? false}
+        onConfirm={handleToggleLock}
+        onClose={() => setLockTarget(null)}
       />
 
       <div className="mt-4 flex justify-start">

@@ -18,7 +18,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
-  const { name, code, flagUrl } = await req.json();
+  const { name, code, flagUrl, locked } = await req.json();
+
+  const current = await db.state.findUnique({ where: { id } });
+  if (!current) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+  // Block edits on locked records (except toggling the lock itself)
+  if (current.locked && locked === undefined)
+    return NextResponse.json({ error: "LOCKED" }, { status: 423 });
+
   try {
     const state = await db.state.update({
       where: { id },
@@ -26,6 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(name    && { name:    name.trim() }),
         ...(code    && { code:    code.trim().toUpperCase() }),
         ...(flagUrl !== undefined && { flagUrl: flagUrl || null }),
+        ...(locked  !== undefined && { locked:  Boolean(locked) }),
       },
     });
     return NextResponse.json({ data: state });
@@ -41,6 +50,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const state = await db.state.findUnique({ where: { id }, include: { _count: { select: { schools: true, contingents: true } } } });
   if (!state) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (state.locked) return NextResponse.json({ error: "LOCKED" }, { status: 423 });
   if (state._count.schools > 0 || state._count.contingents > 0)
     return NextResponse.json({ error: "HAS_DEPENDENTS" }, { status: 409 });
   await db.state.delete({ where: { id } });

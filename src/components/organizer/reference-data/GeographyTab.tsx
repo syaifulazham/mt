@@ -1,19 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight, Loader2, Upload, Lock, LockOpen } from "lucide-react";
 import { PushKbButton } from "./PushKbButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DeleteDialog } from "./DeleteDialog";
+import { LockConfirmDialog } from "./LockConfirmDialog";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type State = { id: string; name: string; code: string; flagUrl: string | null; _count: { schools: number; higherInstitutions: number } };
+type State = { id: string; name: string; code: string; flagUrl: string | null; locked: boolean; _count: { schools: number; higherInstitutions: number } };
 type ZoneStateEntry = { state: { id: string; name: string } };
-type Zone  = { id: string; name: string; states: ZoneStateEntry[] };
+type Zone  = { id: string; name: string; locked: boolean; states: ZoneStateEntry[] };
 function zoneStateNames(states: ZoneStateEntry[]) {
   return states.map((s) => s.state.name).join(", ") || "—";
 }
@@ -38,6 +39,7 @@ function StatesPane() {
   const [formError, setFormError] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<State | null>(null);
+  const [lockTarget,   setLockTarget]   = useState<State | null>(null);
 
   const PAGE_SIZE = 15;
 
@@ -97,6 +99,16 @@ function StatesPane() {
     load();
   }
 
+  async function handleToggleLock() {
+    if (!lockTarget) return;
+    await fetch(`/api/v2/organizer/reference-data/states/${lockTarget.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locked: !lockTarget.locked }),
+    });
+    load();
+  }
+
   const pages = Math.ceil(total / PAGE_SIZE);
 
   return (
@@ -128,20 +140,26 @@ function StatesPane() {
               <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400">No states found.</td></tr>
             )}
             {!loading && data.map((s) => (
-              <tr key={s.id} className="border-b last:border-0 hover:bg-zinc-50">
+              <tr key={s.id} className={`border-b last:border-0 hover:bg-zinc-50 ${s.locked ? "bg-amber-50/40" : ""}`}>
                 <td className="px-3 py-2 w-10">
                   {s.flagUrl
                     ? <img src={s.flagUrl} alt={s.code} className="h-6 w-14 shrink-0 object-cover rounded-sm border border-zinc-200" /> /* eslint-disable-line @next/next/no-img-element */
                     : <div className="h-6 w-14 shrink-0 rounded-sm bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[9px] text-zinc-400 font-mono">{s.code}</div>
                   }
                 </td>
-                <td className="px-3 py-2">{s.name}</td>
+                <td className="px-3 py-2 flex items-center gap-1.5">
+                  {s.locked && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
+                  {s.name}
+                </td>
                 <td className="px-3 py-2 font-mono text-xs">{s.code}</td>
                 <td className="px-3 py-2 text-center text-zinc-500">{s._count.schools}</td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(s)} className="p-1 rounded hover:bg-zinc-100"><Pencil className="h-3.5 w-3.5 text-zinc-500" /></button>
-                    <button onClick={() => setDeleteTarget(s)} className="p-1 rounded hover:bg-zinc-100"><Trash2 className="h-3.5 w-3.5 text-red-400" /></button>
+                    <button onClick={() => setLockTarget(s)} className="p-1 rounded hover:bg-zinc-100" title={s.locked ? "Buka kunci" : "Kunci"}>
+                      {s.locked ? <LockOpen className="h-3.5 w-3.5 text-amber-500" /> : <Lock className="h-3.5 w-3.5 text-zinc-400" />}
+                    </button>
+                    <button onClick={() => openEdit(s)} disabled={s.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed"><Pencil className="h-3.5 w-3.5 text-zinc-500" /></button>
+                    <button onClick={() => setDeleteTarget(s)} disabled={s.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 className="h-3.5 w-3.5 text-red-400" /></button>
                   </div>
                 </td>
               </tr>
@@ -221,6 +239,14 @@ function StatesPane() {
         description="This will permanently remove the state. This action cannot be undone."
       />
 
+      <LockConfirmDialog
+        open={!!lockTarget}
+        itemName={lockTarget?.name ?? ""}
+        isLocked={lockTarget?.locked ?? false}
+        onConfirm={handleToggleLock}
+        onClose={() => setLockTarget(null)}
+      />
+
       <div className="mt-4 flex justify-start">
         <PushKbButton entityType="reference/zones" label="Zones" />
       </div>
@@ -252,6 +278,7 @@ function ZonesPane() {
   const [pickerError,    setPickerError]    = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<Zone | null>(null);
+  const [lockTarget,   setLockTarget]   = useState<Zone | null>(null);
 
   const PAGE_SIZE = 15;
 
@@ -343,6 +370,16 @@ function ZonesPane() {
     load();
   }
 
+  async function handleToggleLock() {
+    if (!lockTarget) return;
+    await fetch(`/api/v2/organizer/reference-data/zones/${lockTarget.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locked: !lockTarget.locked }),
+    });
+    load();
+  }
+
   const pages = Math.ceil(total / PAGE_SIZE);
 
   // Available states for picker: current zone's states + states not assigned to any zone
@@ -376,13 +413,17 @@ function ZonesPane() {
             {loading && <tr><td colSpan={3} className="px-3 py-8 text-center text-zinc-400"><Loader2 className="h-5 w-5 animate-spin inline" /></td></tr>}
             {!loading && data.length === 0 && <tr><td colSpan={3} className="px-3 py-8 text-center text-zinc-400">No zones found.</td></tr>}
             {!loading && data.map((z) => (
-              <tr key={z.id} className="border-b last:border-0 hover:bg-zinc-50">
-                <td className="px-3 py-2 font-medium">{z.name}</td>
+              <tr key={z.id} className={`border-b last:border-0 hover:bg-zinc-50 ${z.locked ? "bg-amber-50/40" : ""}`}>
+                <td className="px-3 py-2 font-medium flex items-center gap-1.5">
+                  {z.locked && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
+                  {z.name}
+                </td>
                 <td className="px-3 py-2">
                   <button
-                    onClick={() => openPicker(z)}
-                    className="text-left text-zinc-500 hover:text-blue-600 hover:underline underline-offset-2 transition-colors"
-                    title="Click to assign states"
+                    onClick={() => !z.locked && openPicker(z)}
+                    disabled={z.locked}
+                    className="text-left text-zinc-500 hover:text-blue-600 hover:underline underline-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                    title={z.locked ? "Rekod dikunci" : "Click to assign states"}
                   >
                     {z.states.length === 0
                       ? <span className="text-zinc-300 italic">— click to assign</span>
@@ -391,8 +432,11 @@ function ZonesPane() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(z)} className="p-1 rounded hover:bg-zinc-100"><Pencil className="h-3.5 w-3.5 text-zinc-500" /></button>
-                    <button onClick={() => setDeleteTarget(z)} className="p-1 rounded hover:bg-zinc-100"><Trash2 className="h-3.5 w-3.5 text-red-400" /></button>
+                    <button onClick={() => setLockTarget(z)} className="p-1 rounded hover:bg-zinc-100" title={z.locked ? "Buka kunci" : "Kunci"}>
+                      {z.locked ? <LockOpen className="h-3.5 w-3.5 text-amber-500" /> : <Lock className="h-3.5 w-3.5 text-zinc-400" />}
+                    </button>
+                    <button onClick={() => openEdit(z)} disabled={z.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed"><Pencil className="h-3.5 w-3.5 text-zinc-500" /></button>
+                    <button onClick={() => setDeleteTarget(z)} disabled={z.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 className="h-3.5 w-3.5 text-red-400" /></button>
                   </div>
                 </td>
               </tr>
@@ -476,6 +520,14 @@ function ZonesPane() {
         onConfirm={handleDelete}
         title={`Delete zone "${deleteTarget?.name}"?`}
         description="This will permanently remove the zone. This action cannot be undone."
+      />
+
+      <LockConfirmDialog
+        open={!!lockTarget}
+        itemName={lockTarget?.name ?? ""}
+        isLocked={lockTarget?.locked ?? false}
+        onConfirm={handleToggleLock}
+        onClose={() => setLockTarget(null)}
       />
 
       <div className="mt-4 flex justify-start">
