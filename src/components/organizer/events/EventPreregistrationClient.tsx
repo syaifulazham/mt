@@ -63,6 +63,7 @@ type EventSummary = {
   name: string;
   slug: string;
   scope: string;
+  status: string;
   zoneStates: { id: string; name: string }[];
   prerequisites: { prerequisite: { id: string; name: string; slug: string } }[];
 };
@@ -262,6 +263,8 @@ function StateTable({ rows }: { rows: StateStat[] }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function EventPreregistrationClient({ event }: { event: EventSummary }) {
+  const isCompleted = event.status === "COMPLETED";
+
   // Participants state
   const [rows, setRows]       = useState<Participant[]>([]);
   const [total, setTotal]     = useState(0);
@@ -1060,7 +1063,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         {listTab === "teams" && (
           <button
             onClick={openRemovePendingModal}
-            disabled={removingPending}
+            disabled={removingPending || isCompleted}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 border border-amber-200 transition-colors"
             title="Buang semua pasukan dengan status PENDING"
           >
@@ -1075,7 +1078,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         {listTab === "teams" && (event.prerequisites?.length ?? 0) > 0 && (
           <button
             onClick={handleLoadFromPrerequisite}
-            disabled={prereqModal?.phase === "loading"}
+            disabled={prereqModal?.phase === "loading" || isCompleted}
             title={`Daftar pasukan terpilih dari acara prasyarat (${event.prerequisites!.map(p => p.prerequisite.name).join(", ")})`}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 border border-indigo-200 transition-colors"
           >
@@ -1090,6 +1093,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         {listTab === "teams" && (event.prerequisites?.length ?? 0) > 0 && (
           <button
             onClick={() => { setPendingStateFilter(prereqStateFilter); setShowStateFilterConfig((v) => !v); }}
+            disabled={isCompleted}
             title="Konfigurasi penapis negeri untuk muat dari prasyarat"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               prereqStateFilter.length > 0
@@ -1106,6 +1110,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         {listTab === "teams" && (
           <button
             onClick={openAddTeamsModal}
+            disabled={isCompleted}
             title="Cari dan tambah pasukan ke acara ini"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 border border-emerald-200 transition-colors"
           >
@@ -1197,7 +1202,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       )}
 
       {/* Prerequisite tally banner */}
-      {prereqCheck && !prereqCheck.isTallied && !prereqCheckDismissed && (
+      {prereqCheck && !prereqCheck.isTallied && !prereqCheckDismissed && !isCompleted && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
           <span className="text-amber-500 mt-0.5 shrink-0">⚠</span>
           <div className="flex-1 min-w-0">

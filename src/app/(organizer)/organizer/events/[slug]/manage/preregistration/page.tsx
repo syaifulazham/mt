@@ -26,6 +26,7 @@ export default async function EventPreregistrationPage({
       name: true,
       slug: true,
       scope: true,
+      status: true,
       prerequisites: {
         select: { prerequisite: { select: { id: true, name: true, slug: true } } },
       },
@@ -54,6 +55,7 @@ export default async function EventPreregistrationPage({
           name:          event.name,
           slug:          event.slug,
           scope:         event.scope,
+          status:        event.status,
           zoneStates,
           prerequisites: event.prerequisites,
         }}
