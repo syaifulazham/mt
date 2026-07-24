@@ -8,7 +8,6 @@ import { computeFinalProgramData } from "@/lib/reports/finalProgramData";
 import Link from "next/link";
 import { Fragment } from "react";
 import { ArrowLeft, MapPin, Mars, Venus } from "lucide-react";
-import { PrintButton } from "@/components/organizer/events/PrintButton";
 import { FinalProgramExportButtons } from "@/components/organizer/events/FinalProgramExportButtons";
 
 export const metadata: Metadata = { title: "Laporan Akhir Program" };
@@ -104,9 +103,8 @@ export default async function FinalProgramReportPage({
               </div>
             )}
           </div>
-          <div className="flex flex-col items-end gap-2 shrink-0 print:hidden">
+          <div className="shrink-0 print:hidden">
             <FinalProgramExportButtons eventId={event.id} />
-            <PrintButton />
           </div>
         </div>
       </div>
