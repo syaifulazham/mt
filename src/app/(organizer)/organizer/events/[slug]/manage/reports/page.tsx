@@ -39,7 +39,7 @@ const REPORTS = [
     icon: FileText,
     title: "Laporan Akhir Program",
     description: "Ringkasan keseluruhan program termasuk keputusan dan pencapaian.",
-    href: null,
+    href: "final-program",
     color: "text-amber-600",
     bg: "bg-amber-50",
     border: "border-amber-200",
