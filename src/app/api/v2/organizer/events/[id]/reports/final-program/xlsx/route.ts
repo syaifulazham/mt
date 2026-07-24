@@ -66,7 +66,9 @@ function applyCell(
 // ─── Single-sheet builder ─────────────────────────────────────────────────────
 function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   const ws = wb.addWorksheet("Laporan Akhir Program");
-  const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
+  const pesertaUtama  = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants;
+  const jumlahPeserta = pesertaUtama + d.walkInSummary.total;
+  const grandTotal    = jumlahPeserta + d.trainerCount;
 
   // 9 columns — wide enough for the state-detail section
   ws.columns = [
@@ -111,6 +113,31 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   titleCell.alignment = center;
   ws.getRow(r).height = 28;
   r++;
+  spacer();
+
+  // ═══ RINGKASAN KESELURUHAN ═════════════════════════════════════════════════
+  sectionHeader(`Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`);
+
+  ws.mergeCells(r, 1, r, COLS - 1);
+  applyHeader(ws.getCell(r, 1), "Kategori Penyertaan / Penglibatan", C.slate700);
+  applyHeader(ws.getCell(r, COLS), "Jumlah", C.slate700);
+  ws.getRow(r).height = 18; r++;
+
+  const overallRows: [string, number | string, string][] = [
+    ["1. Peserta Utama",    nv(pesertaUtama),           C.white],
+    ["2. Peserta Walk-in",  nv(d.walkInSummary.total),  C.slate50],
+    ["3. Jurulatih",        nv(d.trainerCount),         C.white],
+  ];
+  for (const [label, value, bg] of overallRows) {
+    ws.mergeCells(r, 1, r, COLS - 1);
+    applyCell(ws.getCell(r, 1), label, bg, left);
+    applyCell(ws.getCell(r, COLS), value, bg, right, true);
+    ws.getRow(r).height = 16; r++;
+  }
+  ws.mergeCells(r, 1, r, COLS - 1);
+  applyCell(ws.getCell(r, 1), "JUMLAH KESELURUHAN PENYERTAAN DAN PENGLIBATAN", C.slate900, left, true, C.white);
+  applyCell(ws.getCell(r, COLS), grandTotal, C.slate900, right, true, C.white);
+  ws.getRow(r).height = 20; r++;
   spacer();
 
   // ═══ SECTION 1: RINGKASAN ══════════════════════════════════════════════════
@@ -161,7 +188,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   // Grand total banner
   ws.mergeCells(r, 1, r, 3);
   applyCell(ws.getCell(r, 1), "JUMLAH KESELURUHAN PESERTA (Berdaftar + Walk-In)", C.slate900, left, true, C.white);
-  applyCell(ws.getCell(r, 4), grandTotal, C.slate900, center, true, C.white);
+  applyCell(ws.getCell(r, 4), jumlahPeserta, C.slate900, center, true, C.white);
   ws.getRow(r).height = 20; r++;
 
   // Gender
@@ -307,7 +334,9 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
 // ─── Multi-sheet builder (existing logic, updated palette) ────────────────────
 function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
-  const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
+  const pesertaUtama  = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants;
+  const jumlahPeserta = pesertaUtama + d.walkInSummary.total;
+  const grandTotal    = jumlahPeserta + d.trainerCount;
   const nv = (v: number) => v === 0 ? "" : v;
   const pct = (n: number, total: number) => total ? +(n / total * 100).toFixed(1) : "";
 
@@ -387,10 +416,10 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell("C13"), nv(d.walkInSummary.beliaParticipants),  C.white, center);
     applyCell(ws.getCell("D13"), nv(d.walkInSummary.total), C.white, center, true);
 
-    // Grand total
+    // Grand total (peserta only, no trainers)
     ws.mergeCells("A15:C15");
     applyCell(ws.getCell("A15"), "JUMLAH KESELURUHAN (Berdaftar + Walk-In)", C.slate900, left, true, C.white);
-    applyCell(ws.getCell("D15"), grandTotal, C.slate900, center, true, C.white);
+    applyCell(ws.getCell("D15"), jumlahPeserta, C.slate900, center, true, C.white);
     ws.getRow(15).height = 20;
 
     // Gender — school
@@ -416,6 +445,34 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell("A25"), "Perempuan", C.rose50, left, true, "9F1239");
     applyCell(ws.getCell("B25"), nv(d.beliaFemale), C.rose50, center, true, "9F1239");
     applyCell(ws.getCell("C25"), pct(d.beliaFemale, d.beliaMale + d.beliaFemale), C.rose50, center, false, "9F1239");
+
+    // Ringkasan Keseluruhan block (rows 27–32)
+    ws.mergeCells("A27:D27");
+    applyMasthead(ws.getCell("A27"), `Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`);
+    ws.getRow(27).height = 22;
+
+    ws.mergeCells("A28:C28");
+    applyHeader(ws.getCell("A28"), "Kategori Penyertaan / Penglibatan", C.slate700);
+    applyHeader(ws.getCell("D28"), "Jumlah", C.slate700);
+    ws.getRow(28).height = 18;
+
+    const mkRows: [string, number | string, string][] = [
+      ["1. Peserta Utama",   nv(pesertaUtama),          C.white],
+      ["2. Peserta Walk-in", nv(d.walkInSummary.total), C.slate50],
+      ["3. Jurulatih",       nv(d.trainerCount),        C.white],
+    ];
+    mkRows.forEach(([label, val, bg], i) => {
+      const row = 29 + i;
+      ws.mergeCells(`A${row}:C${row}`);
+      applyCell(ws.getCell(`A${row}`), label, bg, left);
+      applyCell(ws.getCell(`D${row}`), val,   bg, right, true);
+      ws.getRow(row).height = 16;
+    });
+
+    ws.mergeCells("A32:C32");
+    applyCell(ws.getCell("A32"), "JUMLAH KESELURUHAN PENYERTAAN DAN PENGLIBATAN", C.slate900, left, true, C.white);
+    applyCell(ws.getCell("D32"), grandTotal, C.slate900, right, true, C.white);
+    ws.getRow(32).height = 20;
   }
 
   // ── Sheet 2: Terperinci ───────────────────────────────────────────────────

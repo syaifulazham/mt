@@ -145,7 +145,9 @@ export async function GET(
   if (!data) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const d = data;
-  const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
+  const pesertaUtama  = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants;
+  const jumlahPeserta = pesertaUtama + d.walkInSummary.total;
+  const grandTotal    = jumlahPeserta + d.trainerCount;
   const generated  = new Date().toLocaleDateString("ms-MY", { day: "2-digit", month: "long", year: "numeric" });
 
   // ── Logo ────────────────────────────────────────────────────────────────────
@@ -216,6 +218,34 @@ export async function GET(
   }
   coverChildren.push(GAP);
 
+  // ── 0. Ringkasan Keseluruhan ────────────────────────────────────────────────
+  const overallTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
+    rows: [
+      new TableRow({ children: [
+        hCell("Kategori Penyertaan / Penglibatan"),
+        hCell("Jumlah"),
+      ]}),
+      new TableRow({ children: [
+        dCell("1. Peserta Utama", WHITE, AlignmentType.LEFT),
+        dCell(nv(pesertaUtama), WHITE, AlignmentType.RIGHT, true),
+      ]}),
+      new TableRow({ children: [
+        dCell("2. Peserta Walk-in", SLATE_50, AlignmentType.LEFT),
+        dCell(nv(d.walkInSummary.total), SLATE_50, AlignmentType.RIGHT, true),
+      ]}),
+      new TableRow({ children: [
+        dCell("3. Jurulatih", WHITE, AlignmentType.LEFT),
+        dCell(nv(d.trainerCount), WHITE, AlignmentType.RIGHT, true),
+      ]}),
+      new TableRow({ children: [
+        dCell("JUMLAH KESELURUHAN PENYERTAAN DAN PENGLIBATAN", SLATE_900, AlignmentType.LEFT, true, WHITE),
+        dCell(String(grandTotal.toLocaleString()), SLATE_900, AlignmentType.RIGHT, true, WHITE),
+      ]}),
+    ],
+  });
+
   // ── 1. Ringkasan ────────────────────────────────────────────────────────────
   const summaryTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -268,7 +298,7 @@ export async function GET(
         dCell("JUMLAH KESELURUHAN (Berdaftar + Walk-In)", SLATE_900, AlignmentType.LEFT, true, WHITE),
         dCell("", SLATE_900),
         dCell("", SLATE_900),
-        dCell(nv(grandTotal), SLATE_900, AlignmentType.RIGHT, true, WHITE),
+        dCell(nv(jumlahPeserta), SLATE_900, AlignmentType.RIGHT, true, WHITE),
       ]}),
     ],
   });
@@ -449,6 +479,11 @@ export async function GET(
       },
       children: [
         ...coverChildren,
+
+        sectionMasthead("Ringkasan Keseluruhan", `Penyertaan dan Penglibatan — ${d.locationLabel}`),
+        SMALL_GAP,
+        overallTable,
+        GAP,
 
         sectionMasthead("Seksyen 1", "Ringkasan Penyertaan"),
         SMALL_GAP,
