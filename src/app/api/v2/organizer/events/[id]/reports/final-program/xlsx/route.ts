@@ -1,58 +1,548 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
-import { computeFinalProgramData } from "@/lib/reports/finalProgramData";
+import { computeFinalProgramData, type FinalProgramData } from "@/lib/reports/finalProgramData";
 import ExcelJS from "exceljs";
 
-// ─── colour palette ────────────────────────────────────────────────────────────
+// ─── Colour palette ───────────────────────────────────────────────────────────
 const C = {
-  darkBg:   "1E293B",
-  darkText: "FFFFFF",
-  blueBg:   "1D4ED8",
-  blueText: "FFFFFF",
-  lblue:    "DBEAFE",
-  green:    "D1FAE5",
-  yellow:   "FEF9C3",
-  blue:     "DBEAFE",
-  grey:     "F1F5F9",
+  // Tabloid theme
+  slate900: "0F172A",
+  slate800: "1E293B",
+  slate700: "334155",
+  slate400: "94A3B8",
+  slate200: "E2E8F0",
+  slate100: "F1F5F9",
+  slate50:  "F8FAFC",
   white:    "FFFFFF",
-  orange:   "FED7AA",
-  totBg:    "1E3A8A",
-  totText:  "FFFFFF",
+  // Level accents
+  indigo800: "3730A3", indigo100: "E0E7FF", indigo50: "EEF2FF",
+  amber800:  "92400E", amber100:  "FEF3C7", amber50:  "FFFBEB",
+  teal800:   "115E59", teal100:   "CCFBF1", teal50:   "F0FDFA",
+  rose50:    "FFF1F2",
 };
 
 type Fill = ExcelJS.Fill;
 type Alignment = Partial<ExcelJS.Alignment>;
-type Border = Partial<ExcelJS.Borders>;
 
-const solidFill = (hex: string): Fill => ({ type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex } });
-const thinBorder: Border = {
-  top:    { style: "thin", color: { argb: "FFCBD5E1" } },
-  bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
-  left:   { style: "thin", color: { argb: "FFCBD5E1" } },
-  right:  { style: "thin", color: { argb: "FFCBD5E1" } },
-};
+const solidFill  = (hex: string): Fill => ({ type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex } });
 const center: Alignment = { vertical: "middle", horizontal: "center", wrapText: true };
 const left:   Alignment = { vertical: "middle", horizontal: "left",   wrapText: true };
 const right:  Alignment = { vertical: "middle", horizontal: "right" };
 
-function applyHeader(cell: ExcelJS.Cell, text: string, bg = C.blueBg) {
+function nv(v: number): number | string { return v === 0 ? "" : v; }
+function pct(n: number, total: number)  { return total ? +(n / total * 100).toFixed(1) : ""; }
+
+// Header cell — slate-700 bg, white bold text
+function applyHeader(cell: ExcelJS.Cell, text: string, bg = C.slate700) {
   cell.value = text;
   cell.fill  = solidFill(bg);
-  cell.font  = { bold: true, color: { argb: "FF" + C.blueText }, size: 10 };
+  cell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
   cell.alignment = center;
-  cell.border = thinBorder;
 }
 
-function applyCell(cell: ExcelJS.Cell, value: string | number, bg = C.white, align: Alignment = left, bold = false, color = "374151") {
+// Masthead cell — slate-900, white bold ALL CAPS
+function applyMasthead(cell: ExcelJS.Cell, text: string, bg = C.slate900) {
+  cell.value = text.toUpperCase();
+  cell.fill  = solidFill(bg);
+  cell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+  cell.alignment = center;
+}
+
+// Data cell
+function applyCell(
+  cell: ExcelJS.Cell,
+  value: string | number,
+  bg = C.white,
+  align: Alignment = left,
+  bold = false,
+  color = C.slate900,
+) {
   cell.value = value;
   cell.fill  = solidFill(bg);
   cell.font  = { size: 10, bold, color: { argb: "FF" + color } };
   cell.alignment = align;
-  cell.border = thinBorder;
 }
 
+// ─── Single-sheet builder ─────────────────────────────────────────────────────
+function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
+  const ws = wb.addWorksheet("Laporan Akhir Program");
+  const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
+
+  // 9 columns — wide enough for the state-detail section
+  ws.columns = [
+    { width: 32 }, { width: 16 }, { width: 14 }, { width: 16 },
+    { width: 14 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
+  ];
+
+  let r = 1;
+  const COLS = 9; // total columns
+
+  // Helper: merge A–I and apply masthead
+  function sectionHeader(title: string, eyebrow?: string) {
+    ws.mergeCells(r, 1, r, COLS);
+    const cell = ws.getCell(r, 1);
+    cell.value = eyebrow ? `${eyebrow.toUpperCase()}  ·  ${title.toUpperCase()}` : title.toUpperCase();
+    cell.fill  = solidFill(C.slate900);
+    cell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: false };
+    ws.getRow(r).height = 24;
+    r++;
+  }
+
+  function subHeader(title: string, colSpan = COLS) {
+    ws.mergeCells(r, 1, r, colSpan);
+    const cell = ws.getCell(r, 1);
+    cell.value = title.toUpperCase();
+    cell.fill  = solidFill(C.slate800);
+    cell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+    cell.alignment = left;
+    ws.getRow(r).height = 18;
+    r++;
+  }
+
+  function spacer(rows = 1) { r += rows; }
+
+  // ── Document title ──────────────────────────────────────────────────────────
+  ws.mergeCells(r, 1, r, COLS);
+  const titleCell = ws.getCell(r, 1);
+  titleCell.value = `LAPORAN AKHIR PROGRAM — ${d.eventName.toUpperCase()}`;
+  titleCell.fill  = solidFill(C.slate900);
+  titleCell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 13 };
+  titleCell.alignment = center;
+  ws.getRow(r).height = 28;
+  r++;
+  spacer();
+
+  // ═══ SECTION 1: RINGKASAN ══════════════════════════════════════════════════
+  sectionHeader("Ringkasan Penyertaan", "Seksyen 1");
+  subHeader("Berdaftar", 4);
+
+  // sub-col headers
+  applyHeader(ws.getCell(r, 1), "Kategori", C.slate700);
+  applyHeader(ws.getCell(r, 2), "Pelajar",  C.slate700);
+  applyHeader(ws.getCell(r, 3), "Belia",    C.slate700);
+  applyHeader(ws.getCell(r, 4), "Jumlah",   C.slate700);
+  ws.getRow(r).height = 18; r++;
+
+  const regRows: [string, number | string, number | string, number | string, string][] = [
+    ["Kontinjen Sekolah / Belia",
+      nv(d.regSummary.schoolContingents), nv(d.regSummary.beliaContingents),
+      nv(d.regSummary.schoolContingents + d.regSummary.beliaContingents), C.slate100],
+    ["  ↳ Sekolah Rendah",  nv(d.regSummary.rendahContingents),   "—", nv(d.regSummary.rendahContingents),   C.indigo50],
+    ["  ↳ Sekolah Menengah",nv(d.regSummary.menengahContingents), "—", nv(d.regSummary.menengahContingents), C.amber50],
+    ["  ↳ Belia",           "—", nv(d.regSummary.beliaContingents),    nv(d.regSummary.beliaContingents),    C.teal50],
+    ["Jumlah Pasukan",      nv(d.regSummary.schoolTeams), nv(d.regSummary.beliaTeams),
+      nv(d.regSummary.schoolTeams + d.regSummary.beliaTeams), C.white],
+    ["Jumlah Peserta (Berdaftar)", nv(d.regSummary.schoolParticipants), nv(d.regSummary.beliaParticipants),
+      nv(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants), C.slate50],
+  ];
+  for (const [label, a, b, tot, bg] of regRows) {
+    applyCell(ws.getCell(r, 1), label, bg, left, label === "Kontinjen Sekolah / Belia");
+    applyCell(ws.getCell(r, 2), a,     bg, center);
+    applyCell(ws.getCell(r, 3), b,     bg, center);
+    applyCell(ws.getCell(r, 4), tot,   bg, center, label.startsWith("Jumlah"));
+    r++;
+  }
+
+  spacer();
+  subHeader("Walk-In", 4);
+  applyHeader(ws.getCell(r, 1), "Kategori", C.slate700);
+  applyHeader(ws.getCell(r, 2), "Pelajar",  C.slate700);
+  applyHeader(ws.getCell(r, 3), "Belia",    C.slate700);
+  applyHeader(ws.getCell(r, 4), "Jumlah",   C.slate700);
+  ws.getRow(r).height = 18; r++;
+  applyCell(ws.getCell(r, 1), "Jumlah Peserta (Walk-In)", C.white, left);
+  applyCell(ws.getCell(r, 2), nv(d.walkInSummary.schoolParticipants), C.white, center);
+  applyCell(ws.getCell(r, 3), nv(d.walkInSummary.beliaParticipants),  C.white, center);
+  applyCell(ws.getCell(r, 4), nv(d.walkInSummary.total), C.white, center, true);
+  r++;
+
+  spacer();
+  // Grand total banner
+  ws.mergeCells(r, 1, r, 3);
+  applyCell(ws.getCell(r, 1), "JUMLAH KESELURUHAN PESERTA (Berdaftar + Walk-In)", C.slate900, left, true, C.white);
+  applyCell(ws.getCell(r, 4), grandTotal, C.slate900, center, true, C.white);
+  ws.getRow(r).height = 20; r++;
+
+  // Gender
+  spacer();
+  for (const [label, male, female, maleT, femaleT] of [
+    ["Jantina Pelajar Sekolah", d.schoolMale, d.schoolFemale, d.schoolMale + d.schoolFemale, d.schoolMale + d.schoolFemale],
+    ["Jantina Belia",           d.beliaMale,  d.beliaFemale,  d.beliaMale + d.beliaFemale,   d.beliaMale + d.beliaFemale],
+  ] as [string, number, number, number, number][]) {
+    subHeader(label, 4);
+    applyHeader(ws.getCell(r, 1), "Jantina",  C.slate700);
+    applyHeader(ws.getCell(r, 2), "Bilangan", C.slate700);
+    applyHeader(ws.getCell(r, 3), "%",        C.slate700);
+    ws.getRow(r).height = 16; r++;
+    applyCell(ws.getCell(r, 1), "Lelaki",    C.indigo50, left, true, C.indigo800);
+    applyCell(ws.getCell(r, 2), nv(male),    C.indigo50, center, true, C.indigo800);
+    applyCell(ws.getCell(r, 3), pct(male, maleT), C.indigo50, center, false, C.indigo800);
+    r++;
+    applyCell(ws.getCell(r, 1), "Perempuan", C.rose50, left, true, "9F1239");
+    applyCell(ws.getCell(r, 2), nv(female),  C.rose50, center, true, "9F1239");
+    applyCell(ws.getCell(r, 3), pct(female, femaleT), C.rose50, center, false, "9F1239");
+    r++;
+    spacer();
+  }
+
+  // ═══ SECTION 2: KAUM ═══════════════════════════════════════════════════════
+  sectionHeader("Jumlah Peserta Mengikut Kaum", "Seksyen 2 — Bagi Laporan KBS / Rakan Muda");
+  const ethnCols = [
+    { label: "Melayu",    value: d.ethnicityStats.melayu },
+    { label: "Cina",      value: d.ethnicityStats.cina },
+    { label: "India",     value: d.ethnicityStats.india },
+    { label: "Org. Asli", value: d.ethnicityStats.orgAsli },
+    { label: "Sabah",     value: d.ethnicityStats.sabah },
+    { label: "Sarawak",   value: d.ethnicityStats.sarawak },
+    { label: "Lain-Lain", value: d.ethnicityStats.lainLain },
+  ];
+  const ethnTotal = ethnCols.reduce((s, c) => s + c.value, 0);
+  ethnCols.forEach((c, i) => applyHeader(ws.getCell(r, i + 1), c.label));
+  ws.getRow(r).height = 18; r++;
+  ethnCols.forEach((c, i) => {
+    applyCell(ws.getCell(r, i + 1), nv(c.value), C.white, center, true);
+  });
+  r++;
+  ethnCols.forEach((c, i) => {
+    applyCell(ws.getCell(r, i + 1), pct(c.value, ethnTotal), C.slate50, center, false, C.slate400);
+  });
+  r++;
+  ws.mergeCells(r, 1, r, ethnCols.length);
+  applyCell(ws.getCell(r, 1), `Jumlah: ${ethnTotal}`, C.slate900, right, true, C.white);
+  r++;
+  spacer();
+
+  // ═══ SECTION 3: STATE DETAIL ════════════════════════════════════════════════
+  sectionHeader("Laporan Terperinci Mengikut Negeri", "Seksyen 3");
+  const stateHdrs = ["Negeri", "Kont. Sekolah", "Sek. Rendah", "Sek. Menengah", "Kont. Belia", "Pasukan", "Peserta", "Lelaki", "Perempuan"];
+  stateHdrs.forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+  ws.getRow(r).height = 18; r++;
+  d.stateStats.forEach((s, i) => {
+    const bg = i % 2 === 0 ? C.white : C.slate50;
+    applyCell(ws.getCell(r, 1), s.stateName,     C.slate700, left, true, C.white);
+    applyCell(ws.getCell(r, 2), nv(s.schoolC),   bg, center, true);
+    applyCell(ws.getCell(r, 3), nv(s.rendahC),   bg, center);
+    applyCell(ws.getCell(r, 4), nv(s.menengahC), bg, center);
+    applyCell(ws.getCell(r, 5), nv(s.beliaC),    bg, center);
+    applyCell(ws.getCell(r, 6), nv(s.totalTeams),  bg, center, true);
+    applyCell(ws.getCell(r, 7), nv(s.participants),bg, center, true);
+    applyCell(ws.getCell(r, 8), nv(s.male),      bg, center);
+    applyCell(ws.getCell(r, 9), nv(s.female),    bg, center);
+    r++;
+  });
+  const tot = d.stateStats.reduce((acc, s) => ({
+    schoolC: acc.schoolC + s.schoolC, rendahC: acc.rendahC + s.rendahC,
+    menengahC: acc.menengahC + s.menengahC, beliaC: acc.beliaC + s.beliaC,
+    totalTeams: acc.totalTeams + s.totalTeams, participants: acc.participants + s.participants,
+    male: acc.male + s.male, female: acc.female + s.female,
+  }), { schoolC: 0, rendahC: 0, menengahC: 0, beliaC: 0, totalTeams: 0, participants: 0, male: 0, female: 0 });
+  [["JUMLAH", C.white], [tot.schoolC, C.white], [tot.rendahC, C.white], [tot.menengahC, C.white],
+   [tot.beliaC, C.white], [tot.totalTeams, C.white], [tot.participants, C.white], [tot.male, C.white], [tot.female, C.white]]
+    .forEach(([v, _], i) => applyCell(ws.getCell(r, i + 1), typeof v === "number" ? nv(v) : v, C.slate900, i === 0 ? left : center, true, C.white));
+  ws.getRow(r).height = 18; r++;
+  spacer();
+
+  // ═══ SECTION 4: BY EDUCATION LEVEL ═════════════════════════════════════════
+  sectionHeader("Penyertaan Mengikut Tahap Pendidikan", "Seksyen 4");
+  ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+  ws.getRow(r).height = 18; r++;
+  const levelGroups = [
+    { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
+    { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
+    { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
+  ];
+  for (const g of levelGroups) {
+    if (!g.comps.length) continue;
+    ws.mergeCells(r, 1, r, 5);
+    applyCell(ws.getCell(r, 1), g.label, g.hBg, left, true, C.white);
+    ws.getRow(r).height = 16; r++;
+    g.comps.forEach((c, i) => {
+      const bg = i % 2 === 0 ? g.rBg : C.white;
+      applyCell(ws.getCell(r, 1), "", bg);
+      applyCell(ws.getCell(r, 2), c.code, bg, center);
+      applyCell(ws.getCell(r, 3), c.name, bg, left);
+      applyCell(ws.getCell(r, 4), nv(c.teams), bg, center);
+      applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
+      r++;
+    });
+    const subT = g.comps.reduce((s, c) => s + c.teams, 0);
+    const subP = g.comps.reduce((s, c) => s + c.participants, 0);
+    applyCell(ws.getCell(r, 1), "", g.tBg);
+    applyCell(ws.getCell(r, 2), "", g.tBg);
+    applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);
+    applyCell(ws.getCell(r, 4), nv(subT), g.tBg, center, true);
+    applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
+    r++; spacer();
+  }
+
+  // ═══ SECTION 5: BY STATE × COMPETITION ══════════════════════════════════════
+  sectionHeader("Penyertaan Mengikut Negeri", "Seksyen 5");
+  ["Negeri", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+  ws.getRow(r).height = 18; r++;
+  d.stateCompStats.forEach((sg, si) => {
+    const rowBg = si % 2 === 0 ? C.white : C.slate50;
+    ws.mergeCells(r, 1, r, 5);
+    applyCell(ws.getCell(r, 1), sg.stateName, C.slate700, left, true, C.white);
+    ws.getRow(r).height = 16; r++;
+    sg.comps.forEach((c, i) => {
+      const bg = i % 2 === 0 ? rowBg : C.white;
+      applyCell(ws.getCell(r, 1), "", bg);
+      applyCell(ws.getCell(r, 2), c.code, bg, center);
+      applyCell(ws.getCell(r, 3), c.name, bg, left);
+      applyCell(ws.getCell(r, 4), nv(c.teams), bg, center);
+      applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
+      r++;
+    });
+    const subT = sg.comps.reduce((s, c) => s + c.teams, 0);
+    const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
+    applyCell(ws.getCell(r, 1), "", C.slate200);
+    applyCell(ws.getCell(r, 2), "", C.slate200);
+    applyCell(ws.getCell(r, 3), `Jumlah ${sg.stateName}`, C.slate200, right, true);
+    applyCell(ws.getCell(r, 4), nv(subT), C.slate200, center, true);
+    applyCell(ws.getCell(r, 5), nv(subP), C.slate200, center, true);
+    r++;
+  });
+}
+
+// ─── Multi-sheet builder (existing logic, updated palette) ────────────────────
+function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
+  const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
+  const nv = (v: number) => v === 0 ? "" : v;
+  const pct = (n: number, total: number) => total ? +(n / total * 100).toFixed(1) : "";
+
+  // ── Sheet 1: Ringkasan ────────────────────────────────────────────────────
+  {
+    const ws = wb.addWorksheet("Ringkasan");
+    ws.columns = [
+      { width: 36 }, { width: 14 }, { width: 14 }, { width: 14 },
+      { width: 2  },
+      { width: 16 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
+    ];
+
+    ws.mergeCells("A1:D1");
+    applyMasthead(ws.getCell("A1"), `Ringkasan Penyertaan — ${d.locationLabel}`);
+    ws.getRow(1).height = 22;
+
+    // Ethnicity title (right side)
+    ws.mergeCells("F1:L1");
+    applyMasthead(ws.getCell("F1"), "Bagi Laporan KBS — Rakan Muda", C.slate800);
+
+    ws.mergeCells("A2:D2");
+    applyMasthead(ws.getCell("A2"), "Berdaftar", C.slate800);
+    ws.getRow(2).height = 18;
+
+    applyHeader(ws.getCell("B3"), "Pelajar");
+    applyHeader(ws.getCell("C3"), "Belia");
+    applyHeader(ws.getCell("D3"), "Jumlah");
+
+    // Kaum header (right side, row 2–3)
+    ws.mergeCells("F2:L2");
+    applyMasthead(ws.getCell("F2"), "Jumlah Peserta Mengikut Kaum", C.slate700);
+    const ethnCols2 = ["F","G","H","I","J","K","L"];
+    const ethnLabels = ["Melayu","Cina","India","Org. Asli","Sabah","Sarawak","Lain-Lain"];
+    ethnCols2.forEach((col, i) => applyHeader(ws.getCell(`${col}3`), ethnLabels[i]));
+
+    // Kaum values (row 4)
+    const ethnTotal2 = d.ethnicityStats.melayu + d.ethnicityStats.cina + d.ethnicityStats.india +
+      d.ethnicityStats.orgAsli + d.ethnicityStats.sabah + d.ethnicityStats.sarawak + d.ethnicityStats.lainLain;
+    const ethnVals = [d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
+      d.ethnicityStats.orgAsli, d.ethnicityStats.sabah, d.ethnicityStats.sarawak, d.ethnicityStats.lainLain];
+    ethnCols2.forEach((col, i) => {
+      applyCell(ws.getCell(`${col}4`), nv(ethnVals[i]), C.white, center, true);
+    });
+    ethnCols2.forEach((col, i) => {
+      applyCell(ws.getCell(`${col}5`), pct(ethnVals[i], ethnTotal2), C.slate50, center, false, C.slate400);
+    });
+    ws.mergeCells("F6:L6");
+    applyCell(ws.getCell("F6"), `Jumlah: ${ethnTotal2}`, C.slate900, right, true, C.white);
+    ws.getRow(4).height = 18;
+
+    // Berdaftar data (A-D)
+    const bRows: [string, string|number, string|number, string|number, string, boolean][] = [
+      ["Kontinjen Sekolah / Belia", nv(d.regSummary.schoolContingents), nv(d.regSummary.beliaContingents), nv(d.regSummary.schoolContingents + d.regSummary.beliaContingents), C.slate100, true],
+      ["  ↳ Sekolah Rendah",  nv(d.regSummary.rendahContingents),   "—", nv(d.regSummary.rendahContingents),   C.indigo50, false],
+      ["  ↳ Sekolah Menengah",nv(d.regSummary.menengahContingents), "—", nv(d.regSummary.menengahContingents), C.amber50, false],
+      ["  ↳ Belia",           "—", nv(d.regSummary.beliaContingents), nv(d.regSummary.beliaContingents),       C.teal50, false],
+      ["Jumlah Pasukan",      nv(d.regSummary.schoolTeams), nv(d.regSummary.beliaTeams), nv(d.regSummary.schoolTeams + d.regSummary.beliaTeams), C.white, true],
+      ["Jumlah Peserta (Berdaftar)", nv(d.regSummary.schoolParticipants), nv(d.regSummary.beliaParticipants), nv(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants), C.slate50, true],
+    ];
+    bRows.forEach(([label, a, b, tot, bg, bold], i) => {
+      const row = i + 4;
+      applyCell(ws.getCell(`A${row}`), label, bg, left, bold);
+      applyCell(ws.getCell(`B${row}`), a,     bg, center, bold);
+      applyCell(ws.getCell(`C${row}`), b,     bg, center);
+      applyCell(ws.getCell(`D${row}`), tot,   bg, center, bold);
+    });
+
+    // Walk-in
+    ws.mergeCells("A11:D11");
+    applyMasthead(ws.getCell("A11"), "Walk-In", C.slate800);
+    ws.getRow(11).height = 18;
+    applyHeader(ws.getCell("B12"), "Pelajar");
+    applyHeader(ws.getCell("C12"), "Belia");
+    applyHeader(ws.getCell("D12"), "Jumlah");
+    applyCell(ws.getCell("A13"), "Jumlah Peserta (Walk-In)", C.white, left);
+    applyCell(ws.getCell("B13"), nv(d.walkInSummary.schoolParticipants), C.white, center);
+    applyCell(ws.getCell("C13"), nv(d.walkInSummary.beliaParticipants),  C.white, center);
+    applyCell(ws.getCell("D13"), nv(d.walkInSummary.total), C.white, center, true);
+
+    // Grand total
+    ws.mergeCells("A15:C15");
+    applyCell(ws.getCell("A15"), "JUMLAH KESELURUHAN (Berdaftar + Walk-In)", C.slate900, left, true, C.white);
+    applyCell(ws.getCell("D15"), grandTotal, C.slate900, center, true, C.white);
+    ws.getRow(15).height = 20;
+
+    // Gender — school
+    ws.mergeCells("A17:D17");
+    applyMasthead(ws.getCell("A17"), "Jantina Pelajar Sekolah (Rendah & Menengah)", C.slate800);
+    ws.getRow(17).height = 18;
+    applyHeader(ws.getCell("B18"), "Bilangan"); applyHeader(ws.getCell("C18"), "%");
+    applyCell(ws.getCell("A19"), "Lelaki",    C.indigo50, left, true, C.indigo800);
+    applyCell(ws.getCell("B19"), nv(d.schoolMale), C.indigo50, center, true, C.indigo800);
+    applyCell(ws.getCell("C19"), pct(d.schoolMale, d.schoolMale + d.schoolFemale), C.indigo50, center, false, C.indigo800);
+    applyCell(ws.getCell("A20"), "Perempuan", C.rose50, left, true, "9F1239");
+    applyCell(ws.getCell("B20"), nv(d.schoolFemale), C.rose50, center, true, "9F1239");
+    applyCell(ws.getCell("C20"), pct(d.schoolFemale, d.schoolMale + d.schoolFemale), C.rose50, center, false, "9F1239");
+
+    // Gender — belia
+    ws.mergeCells("A22:D22");
+    applyMasthead(ws.getCell("A22"), "Jantina Belia", C.slate800);
+    ws.getRow(22).height = 18;
+    applyHeader(ws.getCell("B23"), "Bilangan"); applyHeader(ws.getCell("C23"), "%");
+    applyCell(ws.getCell("A24"), "Lelaki",    C.indigo50, left, true, C.indigo800);
+    applyCell(ws.getCell("B24"), nv(d.beliaMale), C.indigo50, center, true, C.indigo800);
+    applyCell(ws.getCell("C24"), pct(d.beliaMale, d.beliaMale + d.beliaFemale), C.indigo50, center, false, C.indigo800);
+    applyCell(ws.getCell("A25"), "Perempuan", C.rose50, left, true, "9F1239");
+    applyCell(ws.getCell("B25"), nv(d.beliaFemale), C.rose50, center, true, "9F1239");
+    applyCell(ws.getCell("C25"), pct(d.beliaFemale, d.beliaMale + d.beliaFemale), C.rose50, center, false, "9F1239");
+  }
+
+  // ── Sheet 2: Terperinci ───────────────────────────────────────────────────
+  {
+    const ws = wb.addWorksheet("Laporan Terperinci");
+    ws.columns = [
+      { width: 28 }, { width: 18 }, { width: 14 }, { width: 16 },
+      { width: 14 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
+    ];
+    ws.mergeCells("A1:I1");
+    applyMasthead(ws.getCell("A1"), `Laporan Terperinci — ${d.locationLabel}`);
+    ws.getRow(1).height = 22;
+
+    ["Negeri","Kont. Sekolah","Sek. Rendah","Sek. Menengah","Kont. Belia","Pasukan","Peserta","Lelaki","Perempuan"]
+      .forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
+    ws.getRow(2).height = 20;
+
+    d.stateStats.forEach((s, i) => {
+      const bg = i % 2 === 0 ? C.white : C.slate50;
+      const r = i + 3;
+      applyCell(ws.getCell(r, 1), s.stateName,     C.slate700, left, true, C.white);
+      applyCell(ws.getCell(r, 2), nv(s.schoolC),   bg, center, true);
+      applyCell(ws.getCell(r, 3), nv(s.rendahC),   bg, center);
+      applyCell(ws.getCell(r, 4), nv(s.menengahC), bg, center);
+      applyCell(ws.getCell(r, 5), nv(s.beliaC),    bg, center);
+      applyCell(ws.getCell(r, 6), nv(s.totalTeams),  bg, center, true);
+      applyCell(ws.getCell(r, 7), nv(s.participants),bg, center, true);
+      applyCell(ws.getCell(r, 8), nv(s.male),      bg, center);
+      applyCell(ws.getCell(r, 9), nv(s.female),    bg, center);
+    });
+
+    const tr = d.stateStats.length + 3;
+    const tot = d.stateStats.reduce((acc, s) => ({
+      schoolC: acc.schoolC + s.schoolC, rendahC: acc.rendahC + s.rendahC,
+      menengahC: acc.menengahC + s.menengahC, beliaC: acc.beliaC + s.beliaC,
+      totalTeams: acc.totalTeams + s.totalTeams, participants: acc.participants + s.participants,
+      male: acc.male + s.male, female: acc.female + s.female,
+    }), { schoolC: 0, rendahC: 0, menengahC: 0, beliaC: 0, totalTeams: 0, participants: 0, male: 0, female: 0 });
+    [["JUMLAH"], [nv(tot.schoolC)],[nv(tot.rendahC)],[nv(tot.menengahC)],[nv(tot.beliaC)],
+     [nv(tot.totalTeams)],[nv(tot.participants)],[nv(tot.male)],[nv(tot.female)]]
+      .forEach(([v], i) => applyCell(ws.getCell(tr, i + 1), v, C.slate900, i === 0 ? left : center, true, C.white));
+    ws.getRow(tr).height = 18;
+  }
+
+  // ── Sheet 3: Mengikut Tahap ───────────────────────────────────────────────
+  {
+    const ws = wb.addWorksheet("Mengikut Tahap Pendidikan");
+    ws.columns = [{ width: 22 }, { width: 12 }, { width: 44 }, { width: 12 }, { width: 14 }];
+    ws.mergeCells("A1:E1");
+    applyMasthead(ws.getCell("A1"), "Penyertaan Mengikut Tahap Pendidikan");
+    ws.getRow(1).height = 22;
+    ["Tahap Pendidikan","Kod","Pertandingan","Pasukan","Peserta"]
+      .forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
+    ws.getRow(2).height = 18;
+
+    let r = 3;
+    const levelGroups = [
+      { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
+      { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
+      { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
+    ];
+    for (const g of levelGroups) {
+      if (!g.comps.length) continue;
+      ws.mergeCells(r, 1, r, 5);
+      applyCell(ws.getCell(r, 1), g.label, g.hBg, left, true, C.white);
+      ws.getRow(r).height = 16; r++;
+      g.comps.forEach((c, i) => {
+        const bg = i % 2 === 0 ? g.rBg : C.white;
+        applyCell(ws.getCell(r, 1), "", bg);
+        applyCell(ws.getCell(r, 2), c.code, bg, center);
+        applyCell(ws.getCell(r, 3), c.name, bg, left);
+        applyCell(ws.getCell(r, 4), nv(c.teams), bg, center);
+        applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
+        r++;
+      });
+      const subT = g.comps.reduce((s, c) => s + c.teams, 0);
+      const subP = g.comps.reduce((s, c) => s + c.participants, 0);
+      applyCell(ws.getCell(r, 1), "", g.tBg);
+      applyCell(ws.getCell(r, 2), "", g.tBg);
+      applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);
+      applyCell(ws.getCell(r, 4), nv(subT), g.tBg, center, true);
+      applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
+      r += 2;
+    }
+  }
+
+  // ── Sheet 4: Mengikut Negeri ──────────────────────────────────────────────
+  {
+    const ws = wb.addWorksheet("Mengikut Negeri");
+    ws.columns = [{ width: 26 }, { width: 12 }, { width: 44 }, { width: 12 }, { width: 14 }];
+    ws.mergeCells("A1:E1");
+    applyMasthead(ws.getCell("A1"), "Penyertaan Mengikut Negeri");
+    ws.getRow(1).height = 22;
+    ["Negeri","Kod","Pertandingan","Pasukan","Peserta"]
+      .forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
+    ws.getRow(2).height = 18;
+
+    let r = 3;
+    d.stateCompStats.forEach((sg, si) => {
+      const rowBg = si % 2 === 0 ? C.white : C.slate50;
+      ws.mergeCells(r, 1, r, 5);
+      applyCell(ws.getCell(r, 1), sg.stateName, C.slate700, left, true, C.white);
+      ws.getRow(r).height = 16; r++;
+      sg.comps.forEach((c, i) => {
+        const bg = i % 2 === 0 ? rowBg : C.white;
+        applyCell(ws.getCell(r, 1), "", bg);
+        applyCell(ws.getCell(r, 2), c.code, bg, center);
+        applyCell(ws.getCell(r, 3), c.name, bg, left);
+        applyCell(ws.getCell(r, 4), nv(c.teams), bg, center);
+        applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
+        r++;
+      });
+      const subT = sg.comps.reduce((s, c) => s + c.teams, 0);
+      const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
+      applyCell(ws.getCell(r, 1), "", C.slate200);
+      applyCell(ws.getCell(r, 2), "", C.slate200);
+      applyCell(ws.getCell(r, 3), `Jumlah ${sg.stateName}`, C.slate200, right, true);
+      applyCell(ws.getCell(r, 4), nv(subT), C.slate200, center, true);
+      applyCell(ws.getCell(r, 5), nv(subP), C.slate200, center, true);
+      r += 2;
+    });
+  }
+}
+
+// ─── Route ────────────────────────────────────────────────────────────────────
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getOrganizerSession();
@@ -62,316 +552,21 @@ export async function GET(
   const data = await computeFinalProgramData(eventId);
   if (!data) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
+  const mode = new URL(req.url).searchParams.get("mode") ?? "multi";
+
   const wb = new ExcelJS.Workbook();
   wb.creator = "Techlympics";
   wb.created = new Date();
 
-  const d = data;
-  const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
-  const pct = (n: number, total: number) => total ? +(n / total * 100).toFixed(1) : 0;
-  const n = (v: number) => v.toLocaleString("ms-MY");
-
-  // ── Sheet 1: Ringkasan ─────────────────────────────────────────────────────
-  {
-    const ws = wb.addWorksheet("Ringkasan");
-    ws.columns = [
-      { width: 36 }, { width: 14 }, { width: 14 }, { width: 14 },
-      { width: 2  },
-      { width: 16 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
-    ];
-
-    // Title
-    ws.mergeCells("A1:D1");
-    const titleCell = ws.getCell("A1");
-    titleCell.value = `RINGKASAN LAPORAN STATISTIK PENYERTAAN — ${d.locationLabel.toUpperCase()}`;
-    titleCell.fill  = solidFill(C.darkBg);
-    titleCell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-    titleCell.alignment = center;
-    ws.getRow(1).height = 22;
-
-    // Right side title
-    ws.mergeCells("F1:L1");
-    const rightTitle = ws.getCell("F1");
-    rightTitle.value = "BAGI LAPORAN KE KBS DIBAWAH INISIATIF RAKAN MUDA";
-    rightTitle.fill  = solidFill("065F46");
-    rightTitle.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    rightTitle.alignment = center;
-
-    // BERDAFTAR header
-    ws.mergeCells("A2:D2");
-    applyHeader(ws.getCell("A2"), "BERDAFTAR", C.darkBg);
-    ws.getRow(2).height = 18;
-
-    // Column sub-headers
-    applyHeader(ws.getCell("B3"), "Pelajar");
-    applyHeader(ws.getCell("C3"), "Belia");
-    applyHeader(ws.getCell("D3"), "Jumlah");
-
-    // Ethnicity sub-headers
-    const ethnCols = ["F", "G", "H", "I", "J", "K", "L"];
-    const ethnLabels = ["Melayu", "Cina", "India", "Org. Asli", "Lain-Lain", "Sabah", "Sarawak"];
-    ws.mergeCells("F2:L2");
-    const ethnHead = ws.getCell("F2");
-    ethnHead.value = "JUMLAH PESERTA MENGIKUT KAUM";
-    ethnHead.fill  = solidFill("047857");
-    ethnHead.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    ethnHead.alignment = center;
-    ethnCols.forEach((col, i) => applyHeader(ws.getCell(`${col}3`), ethnLabels[i], "047857"));
-
-    // Ethnicity values
-    const ethnVals = [d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
-      d.ethnicityStats.orgAsli, d.ethnicityStats.lainLain, d.ethnicityStats.sabah, d.ethnicityStats.sarawak];
-    ethnCols.forEach((col, i) => applyCell(ws.getCell(`${col}4`), ethnVals[i], C.green, center, true, "065F46"));
-    ws.getRow(4).height = 18;
-
-    // Contingent row
-    let r = 4;
-    applyCell(ws.getCell(`A${r}`), "Kontinjen Sekolah / Belia", C.grey, left, true);
-    applyCell(ws.getCell(`B${r}`), d.regSummary.schoolContingents, C.grey, center, true);
-    applyCell(ws.getCell(`C${r}`), d.regSummary.beliaContingents,  C.grey, center, true);
-    applyCell(ws.getCell(`D${r}`), d.regSummary.schoolContingents + d.regSummary.beliaContingents, C.grey, center, true);
-
-    r = 5;
-    applyCell(ws.getCell(`A${r}`), "  Sekolah Rendah",    C.green, left);
-    applyCell(ws.getCell(`B${r}`), d.regSummary.rendahContingents, C.green, center);
-    applyCell(ws.getCell(`C${r}`), "—", C.green, center);
-    applyCell(ws.getCell(`D${r}`), d.regSummary.rendahContingents, C.green, center);
-
-    r = 6;
-    applyCell(ws.getCell(`A${r}`), "  Sekolah Menengah",  C.yellow, left);
-    applyCell(ws.getCell(`B${r}`), d.regSummary.menengahContingents, C.yellow, center);
-    applyCell(ws.getCell(`C${r}`), "—", C.yellow, center);
-    applyCell(ws.getCell(`D${r}`), d.regSummary.menengahContingents, C.yellow, center);
-
-    r = 7;
-    applyCell(ws.getCell(`A${r}`), "  Belia",             C.blue, left);
-    applyCell(ws.getCell(`B${r}`), "—", C.blue, center);
-    applyCell(ws.getCell(`C${r}`), d.regSummary.beliaContingents, C.blue, center);
-    applyCell(ws.getCell(`D${r}`), d.regSummary.beliaContingents, C.blue, center);
-
-    r = 8;
-    applyCell(ws.getCell(`A${r}`), "Jumlah Pasukan", C.white, left);
-    applyCell(ws.getCell(`B${r}`), d.regSummary.schoolTeams, C.white, center);
-    applyCell(ws.getCell(`C${r}`), d.regSummary.beliaTeams,  C.white, center);
-    applyCell(ws.getCell(`D${r}`), d.regSummary.schoolTeams + d.regSummary.beliaTeams, C.white, center, true);
-
-    r = 9;
-    applyCell(ws.getCell(`A${r}`), "Jumlah Peserta (Berdaftar)", C.white, left);
-    applyCell(ws.getCell(`B${r}`), d.regSummary.schoolParticipants, C.white, center);
-    applyCell(ws.getCell(`C${r}`), d.regSummary.beliaParticipants,  C.white, center);
-    applyCell(ws.getCell(`D${r}`), d.regSummary.schoolParticipants + d.regSummary.beliaParticipants, C.white, center, true);
-
-    // WALK-IN
-    r = 11;
-    ws.mergeCells(`A${r}:D${r}`);
-    applyHeader(ws.getCell(`A${r}`), "WALK-IN", C.darkBg);
-    ws.getRow(r).height = 18;
-
-    r = 12;
-    applyHeader(ws.getCell("B12"), "Pelajar");
-    applyHeader(ws.getCell("C12"), "Belia");
-    applyHeader(ws.getCell("D12"), "Jumlah");
-
-    r = 13;
-    applyCell(ws.getCell(`A${r}`), "Jumlah Peserta (Walk-In)", C.white, left);
-    applyCell(ws.getCell(`B${r}`), d.walkInSummary.schoolParticipants || "—", C.white, center);
-    applyCell(ws.getCell(`C${r}`), d.walkInSummary.beliaParticipants  || "—", C.white, center);
-    applyCell(ws.getCell(`D${r}`), d.walkInSummary.total || "—", C.white, center, true);
-
-    // BERDAFTAR + WALK IN
-    r = 15;
-    ws.mergeCells(`A${r}:C${r}`);
-    applyCell(ws.getCell(`A${r}`), "JUMLAH PESERTA KESELURUHAN (Berdaftar + Walk-In)", C.orange, left, true);
-    applyCell(ws.getCell(`D${r}`), grandTotal, C.orange, center, true);
-    ws.getRow(r).height = 20;
-
-    // Gender — school
-    r = 17;
-    ws.mergeCells(`A${r}:D${r}`);
-    applyHeader(ws.getCell(`A${r}`), "JANTINA PELAJAR SEKOLAH (RENDAH & MENENGAH)", C.darkBg);
-    ws.getRow(r).height = 18;
-
-    r = 18;
-    applyHeader(ws.getCell("B18"), "Bilangan"); applyHeader(ws.getCell("C18"), "%");
-
-    r = 19;
-    applyCell(ws.getCell(`A${r}`), "Lelaki",    "BFDBFE", left);
-    applyCell(ws.getCell(`B${r}`), d.schoolMale,    "BFDBFE", center, true);
-    applyCell(ws.getCell(`C${r}`), pct(d.schoolMale, d.schoolMale + d.schoolFemale), "BFDBFE", center);
-
-    r = 20;
-    applyCell(ws.getCell(`A${r}`), "Perempuan", "FBCFE8", left);
-    applyCell(ws.getCell(`B${r}`), d.schoolFemale,  "FBCFE8", center, true);
-    applyCell(ws.getCell(`C${r}`), pct(d.schoolFemale, d.schoolMale + d.schoolFemale), "FBCFE8", center);
-
-    // Gender — belia
-    r = 22;
-    ws.mergeCells(`A${r}:D${r}`);
-    applyHeader(ws.getCell(`A${r}`), "JANTINA BELIA", C.darkBg);
-    ws.getRow(r).height = 18;
-
-    r = 23;
-    applyHeader(ws.getCell("B23"), "Bilangan"); applyHeader(ws.getCell("C23"), "%");
-
-    r = 24;
-    applyCell(ws.getCell(`A${r}`), "Lelaki",    "BFDBFE", left);
-    applyCell(ws.getCell(`B${r}`), d.beliaMale,    "BFDBFE", center, true);
-    applyCell(ws.getCell(`C${r}`), pct(d.beliaMale, d.beliaMale + d.beliaFemale), "BFDBFE", center);
-
-    r = 25;
-    applyCell(ws.getCell(`A${r}`), "Perempuan", "FBCFE8", left);
-    applyCell(ws.getCell(`B${r}`), d.beliaFemale,  "FBCFE8", center, true);
-    applyCell(ws.getCell(`C${r}`), pct(d.beliaFemale, d.beliaMale + d.beliaFemale), "FBCFE8", center);
-  }
-
-  // ── Sheet 2: Terperinci (by state) ────────────────────────────────────────
-  {
-    const ws = wb.addWorksheet("Laporan Terperinci");
-    ws.columns = [
-      { width: 28 }, { width: 18 }, { width: 14 }, { width: 16 },
-      { width: 14 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
-    ];
-
-    ws.mergeCells("A1:I1");
-    applyHeader(ws.getCell("A1"), `LAPORAN TERPERINCI STATISTIK PENYERTAAN — ${d.locationLabel.toUpperCase()}`, C.darkBg);
-    ws.getRow(1).height = 22;
-
-    const hdrs2 = ["NEGERI", "KONTINJEN SEKOLAH", "SEKOLAH RENDAH", "SEKOLAH MENENGAH",
-                   "KONTINJEN BELIA", "PASUKAN", "PESERTA", "LELAKI", "PEREMPUAN"];
-    hdrs2.forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
-    ws.getRow(2).height = 20;
-
-    const STATE_FILLS = ["FED7AA", "FEF9C3", "D1FAE5", "DBEAFE", "EDE9FE", "FCE7F3", "CCFBF1", "FEE2E2"];
-    d.stateStats.forEach((s, i) => {
-      const r = i + 3;
-      const bg = STATE_FILLS[i % STATE_FILLS.length];
-      applyCell(ws.getCell(r, 1), s.stateName,    bg, left, true);
-      applyCell(ws.getCell(r, 2), s.schoolC,       bg, center, true);
-      applyCell(ws.getCell(r, 3), s.rendahC,       bg, center);
-      applyCell(ws.getCell(r, 4), s.menengahC,     bg, center);
-      applyCell(ws.getCell(r, 5), s.beliaC,        bg, center);
-      applyCell(ws.getCell(r, 6), s.totalTeams,    bg, center, true);
-      applyCell(ws.getCell(r, 7), s.participants,  bg, center, true);
-      applyCell(ws.getCell(r, 8), s.male,          bg, center);
-      applyCell(ws.getCell(r, 9), s.female,        bg, center);
-    });
-
-    // Totals
-    const tr = d.stateStats.length + 3;
-    const tot = d.stateStats.reduce((acc, s) => ({
-      schoolC:   acc.schoolC   + s.schoolC,
-      rendahC:   acc.rendahC   + s.rendahC,
-      menengahC: acc.menengahC + s.menengahC,
-      beliaC:    acc.beliaC    + s.beliaC,
-      totalTeams: acc.totalTeams + s.totalTeams,
-      participants: acc.participants + s.participants,
-      male:  acc.male  + s.male,
-      female: acc.female + s.female,
-    }), { schoolC: 0, rendahC: 0, menengahC: 0, beliaC: 0, totalTeams: 0, participants: 0, male: 0, female: 0 });
-
-    applyCell(ws.getCell(tr, 1), "JUMLAH",       C.totBg, left, true, C.totText);
-    applyCell(ws.getCell(tr, 2), tot.schoolC,    C.totBg, center, true, C.totText);
-    applyCell(ws.getCell(tr, 3), tot.rendahC,    C.totBg, center, true, C.totText);
-    applyCell(ws.getCell(tr, 4), tot.menengahC,  C.totBg, center, true, C.totText);
-    applyCell(ws.getCell(tr, 5), tot.beliaC,     C.totBg, center, true, C.totText);
-    applyCell(ws.getCell(tr, 6), tot.totalTeams, C.totBg, center, true, C.totText);
-    applyCell(ws.getCell(tr, 7), tot.participants, C.totBg, center, true, C.totText);
-    applyCell(ws.getCell(tr, 8), tot.male,       C.totBg, center, true, C.totText);
-    applyCell(ws.getCell(tr, 9), tot.female,     C.totBg, center, true, C.totText);
-    ws.getRow(tr).height = 18;
-  }
-
-  // ── Sheet 3: Mengikut Tahap ────────────────────────────────────────────────
-  {
-    const ws = wb.addWorksheet("Mengikut Tahap Pendidikan");
-    ws.columns = [{ width: 22 }, { width: 12 }, { width: 44 }, { width: 12 }, { width: 14 }];
-
-    ws.mergeCells("A1:E1");
-    applyHeader(ws.getCell("A1"), "1. PENYERTAAN MENGIKUT TAHAP PENDIDIKAN", C.darkBg);
-    ws.getRow(1).height = 22;
-
-    const hdrs3 = ["TAHAP PENDIDIKAN", "KOD", "PERTANDINGAN", "PASUKAN", "PESERTA"];
-    hdrs3.forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
-    ws.getRow(2).height = 18;
-
-    let r = 3;
-    const groups = [
-      { label: "Sekolah Rendah",    comps: d.rendahComps,   bg: C.green,  totBg: "A7F3D0" },
-      { label: "Sekolah Menengah",  comps: d.menengahComps, bg: C.yellow, totBg: "FDE68A" },
-      { label: "Belia",             comps: d.beliaComps,    bg: C.blue,   totBg: "BFDBFE" },
-    ];
-    for (const g of groups) {
-      if (!g.comps.length) continue;
-      ws.mergeCells(`A${r}:E${r}`);
-      applyCell(ws.getCell(`A${r}`), g.label, g.totBg, left, true);
-      ws.getRow(r).height = 16;
-      r++;
-      g.comps.forEach((c, i) => {
-        const rowBg = i % 2 === 0 ? C.white : C.grey;
-        applyCell(ws.getCell(r, 1), "",       rowBg, left);
-        applyCell(ws.getCell(r, 2), c.code,   rowBg, center);
-        applyCell(ws.getCell(r, 3), c.name,   rowBg, left);
-        applyCell(ws.getCell(r, 4), c.teams,  rowBg, center);
-        applyCell(ws.getCell(r, 5), c.participants, rowBg, center);
-        r++;
-      });
-      const subT = g.comps.reduce((s, c) => s + c.teams, 0);
-      const subP = g.comps.reduce((s, c) => s + c.participants, 0);
-      applyCell(ws.getCell(r, 1), "", g.totBg);
-      applyCell(ws.getCell(r, 2), "", g.totBg);
-      applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.totBg, right, true);
-      applyCell(ws.getCell(r, 4), subT, g.totBg, center, true);
-      applyCell(ws.getCell(r, 5), subP, g.totBg, center, true);
-      r += 2;
-    }
-  }
-
-  // ── Sheet 4: Mengikut Negeri × Pertandingan ───────────────────────────────
-  {
-    const ws = wb.addWorksheet("Mengikut Negeri");
-    ws.columns = [{ width: 26 }, { width: 12 }, { width: 44 }, { width: 12 }, { width: 14 }];
-
-    ws.mergeCells("A1:E1");
-    applyHeader(ws.getCell("A1"), "2. PENYERTAAN MENGIKUT NEGERI", C.darkBg);
-    ws.getRow(1).height = 22;
-
-    const hdrs4 = ["NEGERI", "KOD", "PERTANDINGAN", "PASUKAN", "PESERTA"];
-    hdrs4.forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
-    ws.getRow(2).height = 18;
-
-    const STATE_FILLS = ["FED7AA", "FEF9C3", "D1FAE5", "DBEAFE", "EDE9FE", "FCE7F3", "CCFBF1", "FEE2E2"];
-
-    let r = 3;
-    d.stateCompStats.forEach((sg, si) => {
-      const bg  = STATE_FILLS[si % STATE_FILLS.length];
-      ws.mergeCells(`A${r}:E${r}`);
-      applyCell(ws.getCell(`A${r}`), sg.stateName, bg, left, true);
-      ws.getRow(r).height = 16;
-      r++;
-
-      sg.comps.forEach((c, i) => {
-        const rowBg = i % 2 === 0 ? C.white : C.grey;
-        applyCell(ws.getCell(r, 1), "", rowBg);
-        applyCell(ws.getCell(r, 2), c.code, rowBg, center);
-        applyCell(ws.getCell(r, 3), c.name, rowBg, left);
-        applyCell(ws.getCell(r, 4), c.teams, rowBg, center);
-        applyCell(ws.getCell(r, 5), c.participants, rowBg, center);
-        r++;
-      });
-
-      const subT = sg.comps.reduce((s, c) => s + c.teams, 0);
-      const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
-      applyCell(ws.getCell(r, 1), "", bg);
-      applyCell(ws.getCell(r, 2), "", bg);
-      applyCell(ws.getCell(r, 3), `Jumlah ${sg.stateName}`, bg, right, true);
-      applyCell(ws.getCell(r, 4), subT, bg, center, true);
-      applyCell(ws.getCell(r, 5), subP, bg, center, true);
-      r += 2;
-    });
+  if (mode === "single") {
+    buildSingleSheet(wb, data);
+  } else {
+    buildMultiSheet(wb, data);
   }
 
   const buffer = await wb.xlsx.writeBuffer();
-  const safeName = `Laporan-Akhir-Program-${d.slug}.xlsx`;
+  const modeSuffix = mode === "single" ? "-single" : "";
+  const safeName = `Laporan-Akhir-Program-${data.slug}${modeSuffix}.xlsx`;
 
   return new NextResponse(buffer, {
     headers: {

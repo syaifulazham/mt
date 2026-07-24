@@ -11,43 +11,67 @@ import {
   PageOrientation, convertInchesToTwip, Header,
 } from "docx";
 
-// ─── colour palette ────────────────────────────────────────────────────────────
-const DARK   = "1E293B";
-const BLUE   = "1D4ED8";
-const LBLUE  = "DBEAFE";
-const GREY   = "F1F5F9";
-const GREEN  = "D1FAE5";
-const YELLOW = "FEF9C3";
-const ORANGE = "FED7AA";
-const WHITE  = "FFFFFF";
-const TOTBG  = "1E3A8A";
-const GRNCOL = "065F46";
+// ─── Tabloid colour palette ────────────────────────────────────────────────────
+const SLATE_900  = "0F172A";   // mastheads, grand-total rows
+const SLATE_800  = "1E293B";   // sub-headers
+const SLATE_700  = "334155";   // column headers, state-name cells
+const SLATE_400  = "94A3B8";   // eyebrow / muted text
+const SLATE_200  = "E2E8F0";   // sub-total rows
+const SLATE_100  = "F1F5F9";   // even data rows
+const SLATE_50   = "F8FAFC";   // alternate light row
+const WHITE      = "FFFFFF";
+const TEXT_DARK  = "0F172A";   // body text
 
-const BORDER = { style: BorderStyle.SINGLE, size: 4, color: "CBD5E1" } as const;
-const BORDERS = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+const INDIGO_800 = "3730A3";   // Sekolah Rendah label
+const INDIGO_50  = "EEF2FF";   // Rendah data rows / Lelaki
+const INDIGO_100 = "E0E7FF";   // Rendah sub-total
+const AMBER_800  = "92400E";   // Sekolah Menengah label
+const AMBER_50   = "FFFBEB";   // Menengah data rows
+const AMBER_100  = "FEF3C7";   // Menengah sub-total
+const TEAL_800   = "115E59";   // Belia label
+const TEAL_50    = "F0FDFA";   // Belia data rows
+const TEAL_100   = "CCFBF1";   // Belia sub-total
+const ROSE_50    = "FFF1F2";   // Perempuan
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type Shade = { fill: string; type: typeof ShadingType.CLEAR; color: "auto" };
 const shade = (fill: string): Shade => ({ type: ShadingType.CLEAR, fill, color: "auto" });
 
-function hCell(text: string, bg = BLUE, colspan = 1): TableCell {
+// No-border constant
+const NB = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } as const;
+const NO_BORDERS = { top: NB, bottom: NB, left: NB, right: NB };
+
+// Zero suppression
+function nv(value: number): string {
+  return value === 0 ? "" : value.toLocaleString();
+}
+
+function pct(num: number, total: number): string {
+  return total ? (num / total * 100).toFixed(1) + "%" : "";
+}
+
+// Column header cell — slate-700 background, white text
+function hCell(text: string, bg = SLATE_700, colspan = 1): TableCell {
   return new TableCell({
     columnSpan: colspan,
     children: [new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text, bold: true, color: WHITE, size: 18 })],
+      children: [new TextRun({ text: text.toUpperCase(), bold: true, color: WHITE, size: 16 })],
     })],
     shading: shade(bg),
-    borders: BORDERS,
+    borders: NO_BORDERS,
     margins: { top: 60, bottom: 60, left: 80, right: 80 },
   });
 }
 
+// Data cell
 function dCell(
   text: string | number,
   bg = WHITE,
   align: typeof AlignmentType[keyof typeof AlignmentType] = AlignmentType.LEFT,
   bold = false,
-  color = "374151",
+  color = TEXT_DARK,
   colspan = 1,
 ): TableCell {
   return new TableCell({
@@ -57,23 +81,57 @@ function dCell(
       children: [new TextRun({ text: String(text), size: 18, bold, color })],
     })],
     shading: shade(bg),
-    borders: BORDERS,
-    margins: { top: 40, bottom: 40, left: 80, right: 80 },
+    borders: NO_BORDERS,
+    margins: { top: 50, bottom: 50, left: 80, right: 80 },
   });
 }
 
-function sectionTitle(text: string): Paragraph {
-  return new Paragraph({
-    spacing: { before: 280, after: 100 },
-    children: [new TextRun({ text, bold: true, size: 22, color: BLUE })],
+// Dark masthead banner (eyebrow + title) — rendered as a single-cell full-width table
+function sectionMasthead(eyebrow: string, title: string): Table {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
+    rows: [new TableRow({
+      children: [new TableCell({
+        shading: shade(SLATE_900),
+        borders: NO_BORDERS,
+        margins: { top: 80, bottom: 80, left: 140, right: 140 },
+        children: [
+          ...(eyebrow ? [new Paragraph({
+            spacing: { after: 20 },
+            children: [new TextRun({ text: eyebrow.toUpperCase(), size: 14, color: SLATE_400, bold: true })],
+          })] : []),
+          new Paragraph({
+            children: [new TextRun({ text: title.toUpperCase(), size: 22, color: WHITE, bold: true })],
+          }),
+        ],
+      })],
+    })],
   });
 }
 
-function pct(n: number, total: number): string {
-  return total ? (n / total * 100).toFixed(1) + "%" : "0.0%";
+// Sub-section label (slate-800 bar)
+function subHeader(text: string): Table {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
+    rows: [new TableRow({
+      children: [new TableCell({
+        shading: shade(SLATE_800),
+        borders: NO_BORDERS,
+        margins: { top: 50, bottom: 50, left: 140, right: 140 },
+        children: [new Paragraph({
+          children: [new TextRun({ text: text.toUpperCase(), size: 16, color: WHITE, bold: true })],
+        })],
+      })],
+    })],
+  });
 }
 
-// ─── route ─────────────────────────────────────────────────────────────────────
+const GAP = new Paragraph({ spacing: { after: 160 }, children: [] });
+const SMALL_GAP = new Paragraph({ spacing: { after: 80 }, children: [] });
+
+// ─── Route ────────────────────────────────────────────────────────────────────
 
 export async function GET(
   _req: NextRequest,
@@ -90,28 +148,24 @@ export async function GET(
   const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
   const generated  = new Date().toLocaleDateString("ms-MY", { day: "2-digit", month: "long", year: "numeric" });
 
-  // ── Load logo (SVG → PNG via sharp/rsvg) ────────────────────────────────────
+  // ── Logo ────────────────────────────────────────────────────────────────────
   let logoImage: Buffer | undefined;
   try {
     const svgBuffer = readFileSync(join(process.cwd(), "public", "logo-mt.svg"));
-    logoImage = await sharp(svgBuffer)
-      .resize(320, null, { fit: "inside" })
-      .png()
-      .toBuffer();
+    logoImage = await sharp(svgBuffer).resize(320, null, { fit: "inside" }).png().toBuffer();
   } catch { /* skip if missing */ }
 
-  // ── Cover header table ──────────────────────────────────────────────────────
+  // ── Cover header ────────────────────────────────────────────────────────────
   const coverChildren: (Paragraph | Table)[] = [];
 
   if (logoImage) {
-    // Logo + title side by side in a table
     const logoCell = new TableCell({
-      width: { size: 1200, type: WidthType.DXA },
+      width: { size: 1400, type: WidthType.DXA },
       children: [new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [new ImageRun({ data: logoImage, transformation: { width: 160, height: 50 }, type: "png" })],
       })],
-      borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+      borders: NO_BORDERS,
       verticalAlign: "center",
     });
     const titleCell = new TableCell({
@@ -119,30 +173,30 @@ export async function GET(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 40, after: 0 },
-          children: [new TextRun({ text: "LAPORAN AKHIR PROGRAM", bold: true, size: 36, color: DARK })],
+          children: [new TextRun({ text: "LAPORAN AKHIR PROGRAM", bold: true, size: 36, color: SLATE_900 })],
         }),
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 60, after: 0 },
-          children: [new TextRun({ text: d.eventName.toUpperCase(), bold: true, size: 26, color: BLUE })],
+          children: [new TextRun({ text: d.eventName.toUpperCase(), bold: true, size: 26, color: SLATE_700 })],
         }),
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 60 },
           children: [
-            new TextRun({ text: d.locationLabel.toUpperCase(), size: 22, color: "64748B" }),
-            new TextRun({ text: "     |     ", size: 22, color: "CBD5E1" }),
-            new TextRun({ text: `Dijana: ${generated}`, size: 20, color: "9CA3AF" }),
+            new TextRun({ text: d.locationLabel.toUpperCase(), size: 20, color: SLATE_400 }),
+            new TextRun({ text: "     |     ", size: 20, color: SLATE_200 }),
+            new TextRun({ text: `Dijana: ${generated}`, size: 18, color: SLATE_400 }),
           ],
         }),
       ],
-      borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+      borders: NO_BORDERS,
       verticalAlign: "center",
     });
     coverChildren.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
-        borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
+        borders: NO_BORDERS,
         rows: [new TableRow({ children: [logoCell, titleCell] })],
       }),
     );
@@ -151,194 +205,224 @@ export async function GET(
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: 80 },
-        children: [new TextRun({ text: "LAPORAN AKHIR PROGRAM", bold: true, size: 36, color: DARK })],
+        children: [new TextRun({ text: "LAPORAN AKHIR PROGRAM", bold: true, size: 36, color: SLATE_900 })],
       }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: 60 },
-        children: [new TextRun({ text: d.eventName.toUpperCase(), bold: true, size: 26, color: BLUE })],
+        children: [new TextRun({ text: d.eventName.toUpperCase(), bold: true, size: 26, color: SLATE_700 })],
       }),
     );
   }
+  coverChildren.push(GAP);
 
-  coverChildren.push(new Paragraph({ spacing: { after: 240 }, children: [] }));
-
-  // ── 1. Ringkasan (summary) ─────────────────────────────────────────────────
+  // ── 1. Ringkasan ────────────────────────────────────────────────────────────
   const summaryTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
     rows: [
-      new TableRow({ children: [hCell("KATEGORI"), hCell("PELAJAR"), hCell("BELIA"), hCell("JUMLAH")] }),
+      new TableRow({ children: [hCell("Kategori"), hCell("Pelajar"), hCell("Belia"), hCell("Jumlah")] }),
       new TableRow({ children: [
-        dCell("Kontinjen Sekolah / Belia", GREY, AlignmentType.LEFT, true),
-        dCell(d.regSummary.schoolContingents, GREY, AlignmentType.RIGHT, true),
-        dCell(d.regSummary.beliaContingents,  GREY, AlignmentType.RIGHT, true),
-        dCell(d.regSummary.schoolContingents + d.regSummary.beliaContingents, GREY, AlignmentType.RIGHT, true),
+        dCell("Kontinjen Sekolah / Belia", SLATE_100, AlignmentType.LEFT, true),
+        dCell(nv(d.regSummary.schoolContingents), SLATE_100, AlignmentType.RIGHT, true),
+        dCell(nv(d.regSummary.beliaContingents),  SLATE_100, AlignmentType.RIGHT, true),
+        dCell(nv(d.regSummary.schoolContingents + d.regSummary.beliaContingents), SLATE_100, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
-        dCell("  Sekolah Rendah", GREEN), dCell(d.regSummary.rendahContingents, GREEN, AlignmentType.RIGHT), dCell("—", GREEN, AlignmentType.CENTER), dCell(d.regSummary.rendahContingents, GREEN, AlignmentType.RIGHT),
+        dCell("  ↳ Sekolah Rendah", INDIGO_50),
+        dCell(nv(d.regSummary.rendahContingents), INDIGO_50, AlignmentType.RIGHT),
+        dCell("—", INDIGO_50, AlignmentType.CENTER),
+        dCell(nv(d.regSummary.rendahContingents), INDIGO_50, AlignmentType.RIGHT),
       ]}),
       new TableRow({ children: [
-        dCell("  Sekolah Menengah", YELLOW), dCell(d.regSummary.menengahContingents, YELLOW, AlignmentType.RIGHT), dCell("—", YELLOW, AlignmentType.CENTER), dCell(d.regSummary.menengahContingents, YELLOW, AlignmentType.RIGHT),
+        dCell("  ↳ Sekolah Menengah", AMBER_50),
+        dCell(nv(d.regSummary.menengahContingents), AMBER_50, AlignmentType.RIGHT),
+        dCell("—", AMBER_50, AlignmentType.CENTER),
+        dCell(nv(d.regSummary.menengahContingents), AMBER_50, AlignmentType.RIGHT),
       ]}),
       new TableRow({ children: [
-        dCell("  Belia", LBLUE), dCell("—", LBLUE, AlignmentType.CENTER), dCell(d.regSummary.beliaContingents, LBLUE, AlignmentType.RIGHT), dCell(d.regSummary.beliaContingents, LBLUE, AlignmentType.RIGHT),
+        dCell("  ↳ Belia", TEAL_50),
+        dCell("—", TEAL_50, AlignmentType.CENTER),
+        dCell(nv(d.regSummary.beliaContingents), TEAL_50, AlignmentType.RIGHT),
+        dCell(nv(d.regSummary.beliaContingents), TEAL_50, AlignmentType.RIGHT),
       ]}),
       new TableRow({ children: [
         dCell("Jumlah Pasukan (Berdaftar)", WHITE),
-        dCell(d.regSummary.schoolTeams, WHITE, AlignmentType.RIGHT),
-        dCell(d.regSummary.beliaTeams,  WHITE, AlignmentType.RIGHT),
-        dCell(d.regSummary.schoolTeams + d.regSummary.beliaTeams, WHITE, AlignmentType.RIGHT, true),
+        dCell(nv(d.regSummary.schoolTeams), WHITE, AlignmentType.RIGHT),
+        dCell(nv(d.regSummary.beliaTeams),  WHITE, AlignmentType.RIGHT),
+        dCell(nv(d.regSummary.schoolTeams + d.regSummary.beliaTeams), WHITE, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
-        dCell("Jumlah Peserta (Berdaftar)", GREY),
-        dCell(d.regSummary.schoolParticipants, GREY, AlignmentType.RIGHT),
-        dCell(d.regSummary.beliaParticipants,  GREY, AlignmentType.RIGHT),
-        dCell(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants, GREY, AlignmentType.RIGHT, true),
+        dCell("Jumlah Peserta (Berdaftar)", SLATE_50),
+        dCell(nv(d.regSummary.schoolParticipants), SLATE_50, AlignmentType.RIGHT),
+        dCell(nv(d.regSummary.beliaParticipants),  SLATE_50, AlignmentType.RIGHT),
+        dCell(nv(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants), SLATE_50, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
         dCell("Jumlah Peserta (Walk-In)", WHITE),
-        dCell(d.walkInSummary.schoolParticipants || "—", WHITE, AlignmentType.RIGHT),
-        dCell(d.walkInSummary.beliaParticipants  || "—", WHITE, AlignmentType.RIGHT),
-        dCell(d.walkInSummary.total || "—", WHITE, AlignmentType.RIGHT, true),
+        dCell(nv(d.walkInSummary.schoolParticipants), WHITE, AlignmentType.RIGHT),
+        dCell(nv(d.walkInSummary.beliaParticipants),  WHITE, AlignmentType.RIGHT),
+        dCell(nv(d.walkInSummary.total), WHITE, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
-        dCell("JUMLAH KESELURUHAN (Berdaftar + Walk-In)", ORANGE, AlignmentType.LEFT, true),
-        dCell("", ORANGE),
-        dCell("", ORANGE),
-        dCell(grandTotal, ORANGE, AlignmentType.RIGHT, true, "92400E"),
+        dCell("JUMLAH KESELURUHAN (Berdaftar + Walk-In)", SLATE_900, AlignmentType.LEFT, true, WHITE),
+        dCell("", SLATE_900),
+        dCell("", SLATE_900),
+        dCell(nv(grandTotal), SLATE_900, AlignmentType.RIGHT, true, WHITE),
       ]}),
     ],
   });
 
   // ── 2. Gender ──────────────────────────────────────────────────────────────
   const genderTable = new Table({
-    width: { size: 60, type: WidthType.PERCENTAGE },
+    width: { size: 70, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
     rows: [
-      new TableRow({ children: [hCell("JANTINA"), hCell("PELAJAR SEKOLAH"), hCell("BELIA")] }),
+      new TableRow({ children: [hCell("Jantina"), hCell("Pelajar Sekolah"), hCell("Belia")] }),
       new TableRow({ children: [
-        dCell("Lelaki",    "BFDBFE", AlignmentType.LEFT, true),
-        dCell(`${d.schoolMale} (${pct(d.schoolMale, d.schoolMale + d.schoolFemale)})`, "BFDBFE", AlignmentType.RIGHT),
-        dCell(`${d.beliaMale} (${pct(d.beliaMale, d.beliaMale + d.beliaFemale)})`, "BFDBFE", AlignmentType.RIGHT),
+        dCell("Lelaki",    INDIGO_50, AlignmentType.LEFT, true),
+        dCell(`${nv(d.schoolMale)} (${pct(d.schoolMale, d.schoolMale + d.schoolFemale)})`, INDIGO_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.beliaMale)} (${pct(d.beliaMale, d.beliaMale + d.beliaFemale)})`,   INDIGO_50, AlignmentType.RIGHT),
       ]}),
       new TableRow({ children: [
-        dCell("Perempuan", "FBCFE8", AlignmentType.LEFT, true),
-        dCell(`${d.schoolFemale} (${pct(d.schoolFemale, d.schoolMale + d.schoolFemale)})`, "FBCFE8", AlignmentType.RIGHT),
-        dCell(`${d.beliaFemale} (${pct(d.beliaFemale, d.beliaMale + d.beliaFemale)})`, "FBCFE8", AlignmentType.RIGHT),
+        dCell("Perempuan", ROSE_50, AlignmentType.LEFT, true),
+        dCell(`${nv(d.schoolFemale)} (${pct(d.schoolFemale, d.schoolMale + d.schoolFemale)})`, ROSE_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.beliaFemale)} (${pct(d.beliaFemale, d.beliaMale + d.beliaFemale)})`,   ROSE_50, AlignmentType.RIGHT),
       ]}),
     ],
   });
 
-  // ── 3. Ethnicity ───────────────────────────────────────────────────────────
+  // ── 3. Ethnicity (KAUM) — Lain-Lain last ──────────────────────────────────
+  const ethnCols = [
+    { label: "Melayu",    value: d.ethnicityStats.melayu },
+    { label: "Cina",      value: d.ethnicityStats.cina },
+    { label: "India",     value: d.ethnicityStats.india },
+    { label: "Org. Asli", value: d.ethnicityStats.orgAsli },
+    { label: "Sabah",     value: d.ethnicityStats.sabah },
+    { label: "Sarawak",   value: d.ethnicityStats.sarawak },
+    { label: "Lain-Lain", value: d.ethnicityStats.lainLain },
+  ];
+  const ethnTotal = ethnCols.reduce((s, c) => s + c.value, 0);
   const ethnTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
     rows: [
-      new TableRow({ children: [
-        hCell("Melayu", GRNCOL), hCell("Cina", GRNCOL), hCell("India", GRNCOL),
-        hCell("Org. Asli", GRNCOL), hCell("Lain-Lain", GRNCOL), hCell("Sabah (Bumi)", GRNCOL), hCell("Sarawak (Bumi)", GRNCOL),
-      ]}),
-      new TableRow({ children: [
-        dCell(d.ethnicityStats.melayu,  GREEN, AlignmentType.CENTER, true),
-        dCell(d.ethnicityStats.cina,    GREEN, AlignmentType.CENTER, true),
-        dCell(d.ethnicityStats.india,   GREEN, AlignmentType.CENTER, true),
-        dCell(d.ethnicityStats.orgAsli, GREEN, AlignmentType.CENTER, true),
-        dCell(d.ethnicityStats.lainLain,GREEN, AlignmentType.CENTER, true),
-        dCell(d.ethnicityStats.sabah,   GREEN, AlignmentType.CENTER, true),
-        dCell(d.ethnicityStats.sarawak, GREEN, AlignmentType.CENTER, true),
-      ]}),
+      new TableRow({ children: ethnCols.map(c => hCell(c.label)) }),
+      new TableRow({ children: ethnCols.map(c => dCell(nv(c.value), WHITE, AlignmentType.CENTER, true)) }),
+      new TableRow({ children: ethnCols.map(c => dCell(
+        ethnTotal ? `${(c.value / ethnTotal * 100).toFixed(1)}%` : "",
+        SLATE_50, AlignmentType.CENTER, false, SLATE_400,
+      ))}),
+      new TableRow({ children: [dCell(
+        `Jumlah: ${nv(ethnTotal)}`, SLATE_900, AlignmentType.RIGHT, true, WHITE, ethnCols.length,
+      )]}),
     ],
   });
 
   // ── 4. State detail table ──────────────────────────────────────────────────
-  const STATE_FILLS = [ORANGE, YELLOW, GREEN, LBLUE, "EDE9FE", "FCE7F3", "CCFBF1", "FEE2E2"];
   const stateRows: TableRow[] = [
     new TableRow({ children: [
-      hCell("NEGERI"), hCell("KON. SEKOLAH"), hCell("RENDAH"), hCell("MENENGAH"),
-      hCell("KON. BELIA"), hCell("PASUKAN"), hCell("PESERTA"), hCell("LELAKI"), hCell("PEREMPUAN"),
+      hCell("Negeri"), hCell("Kont. Sekolah"), hCell("Sek. Rendah"), hCell("Sek. Menengah"),
+      hCell("Kont. Belia"), hCell("Pasukan"), hCell("Peserta"), hCell("Lelaki"), hCell("Perempuan"),
     ]}),
   ];
   d.stateStats.forEach((s: StateStat, i: number) => {
-    const bg = STATE_FILLS[i % STATE_FILLS.length];
+    const rowBg = i % 2 === 0 ? WHITE : SLATE_50;
     stateRows.push(new TableRow({ children: [
-      dCell(s.stateName,   bg, AlignmentType.LEFT, true),
-      dCell(s.schoolC,     bg, AlignmentType.RIGHT, true),
-      dCell(s.rendahC,     bg, AlignmentType.RIGHT),
-      dCell(s.menengahC,   bg, AlignmentType.RIGHT),
-      dCell(s.beliaC,      bg, AlignmentType.RIGHT),
-      dCell(s.totalTeams,  bg, AlignmentType.RIGHT, true),
-      dCell(s.participants,bg, AlignmentType.RIGHT, true),
-      dCell(s.male,        bg, AlignmentType.RIGHT),
-      dCell(s.female,      bg, AlignmentType.RIGHT),
+      dCell(s.stateName,    SLATE_700, AlignmentType.LEFT,  true, WHITE),
+      dCell(nv(s.schoolC),  rowBg, AlignmentType.RIGHT, true),
+      dCell(nv(s.rendahC),  rowBg, AlignmentType.RIGHT),
+      dCell(nv(s.menengahC),rowBg, AlignmentType.RIGHT),
+      dCell(nv(s.beliaC),   rowBg, AlignmentType.RIGHT),
+      dCell(nv(s.totalTeams),  rowBg, AlignmentType.RIGHT, true),
+      dCell(nv(s.participants),rowBg, AlignmentType.RIGHT, true),
+      dCell(nv(s.male),     rowBg, AlignmentType.RIGHT),
+      dCell(nv(s.female),   rowBg, AlignmentType.RIGHT),
     ]}));
   });
   const tot = d.stateStats.reduce((acc, s) => ({
-    schoolC: acc.schoolC + s.schoolC, rendahC: acc.rendahC + s.rendahC,
-    menengahC: acc.menengahC + s.menengahC, beliaC: acc.beliaC + s.beliaC,
-    totalTeams: acc.totalTeams + s.totalTeams, participants: acc.participants + s.participants,
-    male: acc.male + s.male, female: acc.female + s.female,
+    schoolC:    acc.schoolC    + s.schoolC,
+    rendahC:    acc.rendahC    + s.rendahC,
+    menengahC:  acc.menengahC  + s.menengahC,
+    beliaC:     acc.beliaC     + s.beliaC,
+    totalTeams: acc.totalTeams + s.totalTeams,
+    participants: acc.participants + s.participants,
+    male:       acc.male       + s.male,
+    female:     acc.female     + s.female,
   }), { schoolC: 0, rendahC: 0, menengahC: 0, beliaC: 0, totalTeams: 0, participants: 0, male: 0, female: 0 });
   stateRows.push(new TableRow({ children: [
-    dCell("JUMLAH", TOTBG, AlignmentType.LEFT, true, WHITE),
-    dCell(tot.schoolC, TOTBG, AlignmentType.RIGHT, true, WHITE),
-    dCell(tot.rendahC, TOTBG, AlignmentType.RIGHT, true, WHITE),
-    dCell(tot.menengahC, TOTBG, AlignmentType.RIGHT, true, WHITE),
-    dCell(tot.beliaC, TOTBG, AlignmentType.RIGHT, true, WHITE),
-    dCell(tot.totalTeams, TOTBG, AlignmentType.RIGHT, true, WHITE),
-    dCell(tot.participants, TOTBG, AlignmentType.RIGHT, true, WHITE),
-    dCell(tot.male, TOTBG, AlignmentType.RIGHT, true, WHITE),
-    dCell(tot.female, TOTBG, AlignmentType.RIGHT, true, WHITE),
+    dCell("JUMLAH",             SLATE_900, AlignmentType.LEFT,  true, WHITE),
+    dCell(nv(tot.schoolC),      SLATE_900, AlignmentType.RIGHT, true, WHITE),
+    dCell(nv(tot.rendahC),      SLATE_900, AlignmentType.RIGHT, true, WHITE),
+    dCell(nv(tot.menengahC),    SLATE_900, AlignmentType.RIGHT, true, WHITE),
+    dCell(nv(tot.beliaC),       SLATE_900, AlignmentType.RIGHT, true, WHITE),
+    dCell(nv(tot.totalTeams),   SLATE_900, AlignmentType.RIGHT, true, WHITE),
+    dCell(nv(tot.participants), SLATE_900, AlignmentType.RIGHT, true, WHITE),
+    dCell(nv(tot.male),         SLATE_900, AlignmentType.RIGHT, true, WHITE),
+    dCell(nv(tot.female),       SLATE_900, AlignmentType.RIGHT, true, WHITE),
   ]}));
-  const stateTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: stateRows });
+  const stateTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, rows: stateRows });
 
   // ── 5. By education level ──────────────────────────────────────────────────
   const levelRows: TableRow[] = [
-    new TableRow({ children: [hCell("TAHAP PENDIDIKAN"), hCell("KOD"), hCell("PERTANDINGAN"), hCell("PASUKAN"), hCell("PESERTA")] }),
+    new TableRow({ children: [hCell("Tahap Pendidikan"), hCell("Kod"), hCell("Pertandingan"), hCell("Pasukan"), hCell("Peserta")] }),
   ];
   const levelGroups = [
-    { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: "A7F3D0", rBg: GREEN  },
-    { label: "Sekolah Menengah", comps: d.menengahComps, hBg: "FDE68A", rBg: YELLOW },
-    { label: "Belia",            comps: d.beliaComps,    hBg: "93C5FD", rBg: LBLUE  },
+    { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100 },
+    { label: "Sekolah Menengah", comps: d.menengahComps, hBg: AMBER_800,  rBg: AMBER_50,   tBg: AMBER_100 },
+    { label: "Belia",            comps: d.beliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100 },
   ];
   for (const g of levelGroups) {
     if (!g.comps.length) continue;
-    levelRows.push(new TableRow({ children: [dCell(g.label, g.hBg, AlignmentType.LEFT, true, DARK, 5)] }));
+    levelRows.push(new TableRow({ children: [dCell(g.label, g.hBg, AlignmentType.LEFT, true, WHITE, 5)] }));
     g.comps.forEach((c: CompStat, i: number) => {
-      const bg = i % 2 === 0 ? WHITE : GREY;
+      const bg = i % 2 === 0 ? g.rBg : WHITE;
       levelRows.push(new TableRow({ children: [
-        dCell("", bg), dCell(c.code, bg, AlignmentType.CENTER), dCell(c.name, bg),
-        dCell(c.teams, bg, AlignmentType.RIGHT), dCell(c.participants, bg, AlignmentType.RIGHT),
+        dCell("", bg),
+        dCell(c.code, bg, AlignmentType.CENTER),
+        dCell(c.name, bg),
+        dCell(nv(c.teams), bg, AlignmentType.RIGHT),
+        dCell(nv(c.participants), bg, AlignmentType.RIGHT),
       ]}));
     });
     const subT = g.comps.reduce((s, c) => s + c.teams, 0);
     const subP = g.comps.reduce((s, c) => s + c.participants, 0);
     levelRows.push(new TableRow({ children: [
-      dCell("", g.hBg), dCell("", g.hBg), dCell(`Jumlah ${g.label}`, g.hBg, AlignmentType.RIGHT, true),
-      dCell(subT, g.hBg, AlignmentType.RIGHT, true), dCell(subP, g.hBg, AlignmentType.RIGHT, true),
+      dCell("", g.tBg), dCell("", g.tBg),
+      dCell(`Jumlah ${g.label}`, g.tBg, AlignmentType.RIGHT, true),
+      dCell(nv(subT), g.tBg, AlignmentType.RIGHT, true),
+      dCell(nv(subP), g.tBg, AlignmentType.RIGHT, true),
     ]}));
   }
-  const levelTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: levelRows });
+  const levelTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, rows: levelRows });
 
   // ── 6. By state × competition ──────────────────────────────────────────────
   const scRows: TableRow[] = [
-    new TableRow({ children: [hCell("NEGERI"), hCell("KOD"), hCell("PERTANDINGAN"), hCell("PASUKAN"), hCell("PESERTA")] }),
+    new TableRow({ children: [hCell("Negeri"), hCell("Kod"), hCell("Pertandingan"), hCell("Pasukan"), hCell("Peserta")] }),
   ];
   d.stateCompStats.forEach((sg, si) => {
-    const bg = STATE_FILLS[si % STATE_FILLS.length];
-    scRows.push(new TableRow({ children: [dCell(sg.stateName, bg, AlignmentType.LEFT, true, DARK, 5)] }));
+    const rowBg = si % 2 === 0 ? WHITE : SLATE_50;
+    scRows.push(new TableRow({ children: [dCell(sg.stateName, SLATE_700, AlignmentType.LEFT, true, WHITE, 5)] }));
     sg.comps.forEach((c, i) => {
-      const rowBg = i % 2 === 0 ? WHITE : GREY;
+      const bg = i % 2 === 0 ? rowBg : WHITE;
       scRows.push(new TableRow({ children: [
-        dCell("", rowBg), dCell(c.code, rowBg, AlignmentType.CENTER), dCell(c.name, rowBg),
-        dCell(c.teams, rowBg, AlignmentType.RIGHT), dCell(c.participants, rowBg, AlignmentType.RIGHT),
+        dCell("", bg),
+        dCell(c.code, bg, AlignmentType.CENTER),
+        dCell(c.name, bg),
+        dCell(nv(c.teams), bg, AlignmentType.RIGHT),
+        dCell(nv(c.participants), bg, AlignmentType.RIGHT),
       ]}));
     });
     const subT = sg.comps.reduce((s, c) => s + c.teams, 0);
     const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
     scRows.push(new TableRow({ children: [
-      dCell("", bg), dCell("", bg), dCell(`Jumlah ${sg.stateName}`, bg, AlignmentType.RIGHT, true),
-      dCell(subT, bg, AlignmentType.RIGHT, true), dCell(subP, bg, AlignmentType.RIGHT, true),
+      dCell("", SLATE_200), dCell("", SLATE_200),
+      dCell(`Jumlah ${sg.stateName}`, SLATE_200, AlignmentType.RIGHT, true),
+      dCell(nv(subT), SLATE_200, AlignmentType.RIGHT, true),
+      dCell(nv(subP), SLATE_200, AlignmentType.RIGHT, true),
     ]}));
   });
-  const scTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: scRows });
+  const scTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, rows: scRows });
 
   // ── Assemble document ──────────────────────────────────────────────────────
   const doc = new Document({
@@ -359,40 +443,47 @@ export async function GET(
         default: new Header({
           children: [new Paragraph({
             alignment: AlignmentType.RIGHT,
-            children: [new TextRun({ text: `${d.eventName}  |  Laporan Akhir Program`, size: 16, color: "94A3B8" })],
+            children: [new TextRun({ text: `${d.eventName}  |  Laporan Akhir Program`, size: 16, color: SLATE_400 })],
           })],
         }),
       },
       children: [
         ...coverChildren,
 
-        sectionTitle("1. Ringkasan Penyertaan"),
+        sectionMasthead("Seksyen 1", "Ringkasan Penyertaan"),
+        SMALL_GAP,
+        subHeader("Berdaftar"),
         summaryTable,
-        new Paragraph({ spacing: { after: 200 }, children: [] }),
+        GAP,
 
-        sectionTitle("2. Pecahan Jantina"),
+        sectionMasthead("Seksyen 2", "Pecahan Jantina"),
+        SMALL_GAP,
         genderTable,
-        new Paragraph({ spacing: { after: 200 }, children: [] }),
+        GAP,
 
-        sectionTitle("3. Pecahan Kaum (Bagi Laporan KBS / Rakan Muda)"),
+        sectionMasthead("Seksyen 3 — Bagi Laporan KBS / Rakan Muda", "Jumlah Peserta Mengikut Kaum"),
+        SMALL_GAP,
         ethnTable,
-        new Paragraph({ spacing: { after: 200 }, children: [] }),
+        GAP,
 
-        sectionTitle("4. Laporan Terperinci Mengikut Negeri"),
+        sectionMasthead("Seksyen 4", "Laporan Terperinci Mengikut Negeri"),
+        SMALL_GAP,
         stateTable,
-        new Paragraph({ spacing: { after: 200 }, children: [] }),
+        GAP,
 
-        sectionTitle("5. Penyertaan Mengikut Tahap Pendidikan"),
+        sectionMasthead("Seksyen 5", "Penyertaan Mengikut Tahap Pendidikan"),
+        SMALL_GAP,
         levelTable,
-        new Paragraph({ spacing: { after: 200 }, children: [] }),
+        GAP,
 
-        sectionTitle("6. Penyertaan Mengikut Negeri"),
+        sectionMasthead("Seksyen 6", "Penyertaan Mengikut Negeri"),
+        SMALL_GAP,
         scTable,
 
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 600 },
-          children: [new TextRun({ text: "— Tamat Laporan —", size: 18, color: "9CA3AF", italics: true })],
+          children: [new TextRun({ text: "— Tamat Laporan —", size: 18, color: SLATE_400, italics: true })],
         }),
       ],
     }],
