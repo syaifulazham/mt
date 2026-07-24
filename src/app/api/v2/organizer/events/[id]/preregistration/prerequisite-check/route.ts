@@ -2,11 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
+function getEffectiveStateId(
+  contingent: {
+    stateId: string | null;
+    school: { stateId: string | null } | null;
+    higherInstitution: { stateId: string | null } | null;
+  } | null,
+): string | null {
+  return contingent?.stateId
+    ?? contingent?.school?.stateId
+    ?? contingent?.higherInstitution?.stateId
+    ?? null;
+}
+
 /**
- * GET — Lightweight check: are all "selected" teams from prerequisite events
- *       already registered in this event?
+ * GET — Are all "selected" teams from prerequisite events already registered?
  *
- * Returns per-prerequisite counts so the UI can show a tally banner.
+ * Respects the event's state filter config (event_prereq_state_filter:{id})
+ * so the count matches what "Muat dari prasyarat" would load.
  */
 export async function GET(
   _req: NextRequest,
@@ -17,27 +30,57 @@ export async function GET(
 
   const { id: eventId } = await params;
 
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: {
-      prerequisites: {
-        select: {
-          prerequisite: { select: { id: true, name: true, slug: true } },
+  const [event, stateFilterSetting] = await Promise.all([
+    db.event.findUnique({
+      where: { id: eventId },
+      select: {
+        prerequisites: {
+          select: {
+            prerequisite: { select: { id: true, name: true, slug: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    db.appSetting.findUnique({ where: { key: `event_prereq_state_filter:${eventId}` } }),
+  ]);
+
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
   if (event.prerequisites.length === 0)
     return NextResponse.json({ isTallied: true, prerequisites: [], totalSelected: 0, totalRegistered: 0, missing: 0 });
 
-  // Collect all teams marked `selected=true` in each prerequisite event
+  const stateFilter: string[] = stateFilterSetting
+    ? (JSON.parse(stateFilterSetting.value) as string[])
+    : [];
+
   const prereqIds = event.prerequisites.map((p) => p.prerequisite.id);
 
-  const selectedTeamEvents = await db.teamEvent.findMany({
+  // Always fetch contingent state info so we can apply the filter when set
+  const rawTeamEvents = await db.teamEvent.findMany({
     where: { eventId: { in: prereqIds }, selected: true },
-    select: { teamId: true, eventId: true },
+    select: {
+      teamId: true,
+      eventId: true,
+      team: {
+        select: {
+          contingent: {
+            select: {
+              stateId: true,
+              school: { select: { stateId: true } },
+              higherInstitution: { select: { stateId: true } },
+            },
+          },
+        },
+      },
+    },
   });
+
+  // Apply state filter when configured
+  const selectedTeamEvents = stateFilter.length > 0
+    ? rawTeamEvents.filter((te) => {
+        const sid = getEffectiveStateId(te.team.contingent);
+        return sid !== null && stateFilter.includes(sid);
+      })
+    : rawTeamEvents;
 
   // Unique team IDs across all prerequisites
   const allSelectedIds = [...new Set(selectedTeamEvents.map((te) => te.teamId))];
@@ -56,9 +99,9 @@ export async function GET(
     const selectedForThis = selectedTeamEvents
       .filter((te) => te.eventId === pid)
       .map((te) => te.teamId);
-    const uniqueSelected   = [...new Set(selectedForThis)];
-    const registeredCount  = uniqueSelected.filter((id) => registeredSet.has(id)).length;
-    const missingCount     = uniqueSelected.length - registeredCount;
+    const uniqueSelected  = [...new Set(selectedForThis)];
+    const registeredCount = uniqueSelected.filter((id) => registeredSet.has(id)).length;
+    const missingCount    = uniqueSelected.length - registeredCount;
     return {
       id:             pid,
       name:           p.prerequisite.name,
