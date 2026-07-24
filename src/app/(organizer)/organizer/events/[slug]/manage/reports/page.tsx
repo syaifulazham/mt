@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import Link from "next/link";
-import { BarChart3, CheckSquare, UserCheck, FileText } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckSquare, UserCheck, FileText } from "lucide-react";
 
 export const metadata: Metadata = { title: "Laporan" };
 
@@ -55,8 +55,18 @@ export default async function EventReportsPage({ params }: { params: Promise<{ s
   return (
     <OrganizerShell userName={session.name} role={session.role}>
       <div className="p-6 max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Laporan</h1>
-        <p className="text-sm text-gray-500 mb-8">Pilih laporan untuk dilihat atau dimuat turun.</p>
+        <div className="flex items-start gap-3 mb-6">
+          <Link
+            href={`/organizer/events/${slug}/manage`}
+            className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Kembali
+          </Link>
+          <div>
+            <h1 className="text-lg font-bold text-zinc-900">Laporan</h1>
+            <p className="text-sm text-zinc-400">Pilih laporan untuk dilihat atau dimuat turun.</p>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {REPORTS.map((r) => {
