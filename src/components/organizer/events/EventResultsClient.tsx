@@ -16,8 +16,9 @@ import { cn } from "@/lib/utils";
 
 type RankEntry = {
   rank: number; teamId: string; teamName: string;
-  contingentName: string; contingentFullName: string; contingentLogo: string | null;
+  contingentName: string; contingentLogo: string | null;
   totalScore: number; bestTime: number | null;
+  selected: boolean;
 };
 
 type StateGroup = {
@@ -54,6 +55,29 @@ const MEDAL: Record<number, { icon: string; cls: string }> = {
 };
 
 const ZONE_SCOPES = ["ZONE", "ONLINE_ZONE"];
+
+// ── Switch toggle ──────────────────────────────────────────────────────────────
+
+function Switch({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "bg-emerald-500" : "bg-zinc-300",
+      )}
+    >
+      <span className={cn(
+        "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform duration-200",
+        checked ? "translate-x-4" : "translate-x-0",
+      )} />
+    </button>
+  );
+}
 
 // ── EndpointRow ────────────────────────────────────────────────────────────────
 
@@ -158,7 +182,6 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
   activeId: string;
   onSelect: (id: string) => void;
 }) {
-  // Group by target group, then sort each group by code
   type Group = { id: string | null; code: string | null; name: string | null; items: CompetitionRanking[] };
   const groupMap = new Map<string | null, Group>();
 
@@ -166,17 +189,11 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
   for (const c of sorted) {
     const key = c.targetGroup?.id ?? null;
     if (!groupMap.has(key)) {
-      groupMap.set(key, {
-        id: key,
-        code: c.targetGroup?.code ?? null,
-        name: c.targetGroup?.name ?? null,
-        items: [],
-      });
+      groupMap.set(key, { id: key, code: c.targetGroup?.code ?? null, name: c.targetGroup?.name ?? null, items: [] });
     }
     groupMap.get(key)!.items.push(c);
   }
 
-  // Sort groups by target group code (null/ungrouped last)
   const groups = [...groupMap.values()].sort((a, b) => {
     if (a.code === null) return 1;
     if (b.code === null) return -1;
@@ -184,7 +201,6 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
   });
 
   if (groups.length === 1 && groups[0].id === null) {
-    // No target groups — flat list
     return (
       <div className="flex gap-1 flex-wrap">
         {groups[0].items.map((c) => (
@@ -223,6 +239,24 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
   );
 }
 
+// ── Contingent cell ────────────────────────────────────────────────────────────
+
+function ContingentCell({ name, logo }: { name: string; logo: string | null }) {
+  return (
+    <div className="flex items-center gap-2">
+      {logo
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={logo} alt="" className="w-6 h-6 rounded-full object-cover border shrink-0"
+            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        : <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500 shrink-0">
+            {name.slice(0, 2).toUpperCase()}
+          </div>
+      }
+      <span className="text-sm text-zinc-600 truncate max-w-[200px]">{name}</span>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function EventResultsClient({ event, competitionRankings, endpoints: initialEndpoints, canWrite }: {
@@ -239,7 +273,37 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
   const [requirePasscode, setRequirePasscode] = useState(false);
   const [createErr, setCreateErr] = useState("");
 
+  // Selected state map — synced with preregistration page's TeamEvent.selected
+  const [selectedMap, setSelectedMap] = useState<Map<string, boolean>>(() => {
+    const m = new Map<string, boolean>();
+    for (const comp of competitionRankings) {
+      for (const r of comp.rankings) m.set(r.teamId, r.selected);
+      for (const g of comp.stateGroups) for (const r of g.teams) m.set(r.teamId, r.selected);
+    }
+    return m;
+  });
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+
   const isZone = ZONE_SCOPES.includes(event.scope);
+
+  async function toggleSelected(teamId: string) {
+    const current = selectedMap.get(teamId) ?? false;
+    const next = !current;
+    setSelectedMap((prev) => new Map(prev).set(teamId, next));
+    setTogglingIds((prev) => new Set(prev).add(teamId));
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, selected: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setSelectedMap((prev) => new Map(prev).set(teamId, current));
+    } finally {
+      setTogglingIds((prev) => { const s = new Set(prev); s.delete(teamId); return s; });
+    }
+  }
 
   async function handleCreate() {
     setCreating(true); setCreateErr("");
@@ -259,12 +323,52 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
   }
 
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
-
-  // Determine which rows to render
   const useStateGroups = isZone && (activeRanking?.stateGroups.length ?? 0) > 0;
   const hasData = useStateGroups
     ? (activeRanking?.stateGroups.length ?? 0) > 0
     : (activeRanking?.rankings.length ?? 0) > 0;
+
+  // Shared table headers
+  const thead = (
+    <tr className="border-b bg-zinc-50/40 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+      <th className="px-4 py-2.5 text-center w-12">#</th>
+      <th className="px-4 py-2.5">Pasukan</th>
+      <th className="px-4 py-2.5">Kontinjen</th>
+      <th className="px-4 py-2.5 text-center w-24">Markah</th>
+      <th className="px-4 py-2.5 text-center w-20">Masa</th>
+      <th className="px-4 py-2.5 text-center w-16">Pilih</th>
+    </tr>
+  );
+
+  function renderTeamRow(r: RankEntry) {
+    const isSelected = selectedMap.get(r.teamId) ?? false;
+    const isToggling = togglingIds.has(r.teamId);
+    return (
+      <tr key={r.teamId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
+        r.rank <= 3 && "bg-amber-50/30")}>
+        <td className="px-4 py-3 text-center">
+          {MEDAL[r.rank]
+            ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
+            : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
+          }
+        </td>
+        <td className="px-4 py-3 font-medium text-zinc-800">{r.teamName}</td>
+        <td className="px-4 py-3">
+          <ContingentCell name={r.contingentName} logo={r.contingentLogo} />
+        </td>
+        <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
+        <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
+          {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
+        </td>
+        <td className="px-4 py-3 text-center">
+          {isToggling
+            ? <Loader2 className="h-4 w-4 animate-spin text-zinc-400 mx-auto" />
+            : <Switch checked={isSelected} onChange={() => toggleSelected(r.teamId)} disabled={!canWrite} />
+          }
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -283,7 +387,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
         </div>
       </div>
 
-      {/* Live rankings preview */}
+      {/* Live rankings */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b bg-zinc-50 flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-sm font-semibold text-zinc-700 flex items-center gap-2 shrink-0">
@@ -293,12 +397,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
               : "Kedudukan Semasa"
             }
           </h2>
-          {/* Competition tabs grouped by target group */}
-          <CompetitionTabs
-            competitions={competitionRankings}
-            activeId={activeComp}
-            onSelect={setActiveComp}
-          />
+          <CompetitionTabs competitions={competitionRankings} activeId={activeComp} onSelect={setActiveComp} />
         </div>
 
         {!activeRanking || !hasData ? (
@@ -306,113 +405,30 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
             Tiada markah direkodkan lagi untuk pertandingan ini.
           </div>
         ) : useStateGroups ? (
-          /* Teams grouped by state (ZONE scope) */
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-zinc-50/40 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                  <th className="px-4 py-2.5 text-center w-12">#</th>
-                  <th className="px-4 py-2.5">Pasukan</th>
-                  <th className="px-4 py-2.5">Kontinjen</th>
-                  <th className="px-4 py-2.5 text-center w-24">Markah</th>
-                  <th className="px-4 py-2.5 text-center w-20">Masa</th>
-                </tr>
-              </thead>
+              <thead>{thead}</thead>
               <tbody>
                 {activeRanking.stateGroups.map((group) => (
                   <>
-                    {/* State group header row */}
                     <tr key={`hdr-${group.stateId}`} className="bg-zinc-100 border-b border-zinc-200">
-                      <td colSpan={5} className="px-4 py-1.5">
+                      <td colSpan={6} className="px-4 py-1.5">
                         <span className="text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
                           {group.stateName}
                         </span>
                       </td>
                     </tr>
-                    {/* Teams within this state */}
-                    {group.teams.map((r) => (
-                      <tr key={r.teamId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
-                        r.rank <= 3 && "bg-amber-50/30")}>
-                        <td className="px-4 py-3 text-center">
-                          {MEDAL[r.rank]
-                            ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
-                            : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
-                          }
-                        </td>
-                        <td className="px-4 py-3 font-medium text-zinc-800">{r.teamName}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            {r.contingentLogo
-                              // eslint-disable-next-line @next/next/no-img-element
-                              ? <img src={r.contingentLogo} alt="" className="w-6 h-6 rounded-full object-cover border" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                              : <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500">
-                                  {r.contingentName.slice(0, 2).toUpperCase()}
-                                </div>
-                            }
-                            <span className="text-sm text-zinc-600 truncate max-w-[200px] cursor-default" title={r.contingentFullName}>
-                              {r.contingentName}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
-                          {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
-                        </td>
-                      </tr>
-                    ))}
+                    {group.teams.map(renderTeamRow)}
                   </>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          /* Team-level rankings */
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-zinc-50/40 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                  <th className="px-4 py-2.5 text-center w-12">#</th>
-                  <th className="px-4 py-2.5">Pasukan</th>
-                  <th className="px-4 py-2.5">Kontinjen</th>
-                  <th className="px-4 py-2.5 text-center w-24">Markah</th>
-                  <th className="px-4 py-2.5 text-center w-20">Masa</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeRanking.rankings.map((r) => (
-                  <tr key={r.teamId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
-                    r.rank <= 3 && "bg-amber-50/30")}>
-                    <td className="px-4 py-3 text-center">
-                      {MEDAL[r.rank]
-                        ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
-                        : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3 font-medium text-zinc-800">{r.teamName}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {r.contingentLogo
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={r.contingentLogo} alt="" className="w-6 h-6 rounded-full object-cover border" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                          : <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500">
-                              {r.contingentName.slice(0, 2).toUpperCase()}
-                            </div>
-                        }
-                        <span
-                          className="text-sm text-zinc-600 truncate max-w-[200px] cursor-default"
-                          title={r.contingentFullName}
-                        >
-                          {r.contingentName}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
-                    <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
-                      {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              <thead>{thead}</thead>
+              <tbody>{activeRanking.rankings.map(renderTeamRow)}</tbody>
             </table>
           </div>
         )}

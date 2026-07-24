@@ -55,21 +55,22 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
   type RankEntry = {
     teamId: string; teamName: string;
-    contingentName: string; contingentFullName: string; contingentLogo: string | null;
+    contingentName: string; contingentLogo: string | null;
     totalScore: number; bestTime: number | null; rank: number;
+    selected: boolean;
   };
 
   type StateGroup = {
     stateId: string; stateName: string;
-    bestScore: number;  // used to order state groups
+    bestScore: number;
     teams: RankEntry[];
   };
 
   type CompetitionRankingOut = {
     id: string; name: string; code: string;
     targetGroup: { id: string; code: string; name: string } | null;
-    rankings: RankEntry[];       // flat list for non-zone scope
-    stateGroups: StateGroup[];   // per-state team groups for zone scope
+    rankings: RankEntry[];
+    stateGroups: StateGroup[];
   };
 
   const competitionRankings: CompetitionRankingOut[] = [];
@@ -97,30 +98,39 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       continue;
     }
 
-    const teams = await db.team.findMany({
-      where: { id: { in: [...scoreMap.keys()] } },
-      select: {
-        id: true,
-        name: true,
-        contingent: {
-          select: {
-            name: true,
-            shortName: true,
-            logoUrl: true,
-            stateId: true,
-            school: { select: { stateId: true } },
-            higherInstitution: { select: { stateId: true } },
+    const teamIds = [...scoreMap.keys()];
+
+    const [teams, teamEvents] = await Promise.all([
+      db.team.findMany({
+        where: { id: { in: teamIds } },
+        select: {
+          id: true,
+          name: true,
+          contingent: {
+            select: {
+              name: true,
+              logoUrl: true,
+              stateId: true,
+              school: { select: { stateId: true } },
+              higherInstitution: { select: { stateId: true } },
+            },
           },
         },
-      },
-    });
+      }),
+      db.teamEvent.findMany({
+        where: { eventId: event.id, teamId: { in: teamIds } },
+        select: { teamId: true, selected: true },
+      }),
+    ]);
 
-    // Compute sortable score for each team
+    const selectedMap = new Map(teamEvents.map((te) => [te.teamId, te.selected]));
+
     type TeamWithScore = {
       teamId: string; teamName: string;
-      contingentName: string; contingentFullName: string; contingentLogo: string | null;
+      contingentName: string; contingentLogo: string | null;
       totalScore: number; bestTime: number | null;
       effectiveStateId: string | null;
+      selected: boolean;
     };
 
     const teamsWithScores: TeamWithScore[] = teams.map((t) => {
@@ -129,12 +139,12 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       return {
         teamId: t.id,
         teamName: t.name,
-        contingentName: t.contingent.shortName ?? t.contingent.name,
-        contingentFullName: t.contingent.name,
+        contingentName: t.contingent.name,
         contingentLogo: t.contingent.logoUrl,
         totalScore: agg.total,
         bestTime: agg.minTime,
         effectiveStateId: sid,
+        selected: selectedMap.get(t.id) ?? false,
       };
     });
 
@@ -146,12 +156,10 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       return 0;
     }
 
-    // Flat team-level rankings (used for non-zone scope)
     const rankings: RankEntry[] = [...teamsWithScores]
       .sort(compareScore)
       .map((r, i) => ({ ...r, rank: i + 1 }));
 
-    // State-grouped rankings (used for zone scope)
     let stateGroups: StateGroup[] = [];
     if (isZoneScope) {
       const stateIdSet = new Set(teamsWithScores.map((t) => t.effectiveStateId).filter(Boolean) as string[]);
@@ -177,9 +185,10 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
           const bestScore = sortedTeams[0]?.totalScore ?? 0;
           return { stateId, stateName, bestScore, teams: sortedTeams };
         })
-        // Order state groups by their best team's score
-        .sort((a, b) => compareScore({ totalScore: a.bestScore, bestTime: a.teams[0]?.bestTime ?? null },
-                                     { totalScore: b.bestScore, bestTime: b.teams[0]?.bestTime ?? null }));
+        .sort((a, b) => compareScore(
+          { totalScore: a.bestScore, bestTime: a.teams[0]?.bestTime ?? null },
+          { totalScore: b.bestScore, bestTime: b.teams[0]?.bestTime ?? null },
+        ));
     }
 
     competitionRankings.push({
