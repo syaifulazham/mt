@@ -270,7 +270,7 @@ export default async function FinalProgramReportPage({
             <div className="overflow-hidden rounded-sm">
               <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
                 <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
-                  Bagi Laporan ke KBS — Inisiatif Rakan Muda
+                  Laporan Taburan Penyertaan Kaum
                 </span>
                 <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
                   Jumlah Peserta Mengikut Kaum

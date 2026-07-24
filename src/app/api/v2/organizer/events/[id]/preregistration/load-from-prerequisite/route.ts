@@ -31,9 +31,9 @@ export async function GET(
 
   const prerequisiteIds = event.prerequisites.map((p) => p.prerequisiteId);
 
-  // All teams registered to any prerequisite event
+  // Only selected teams from prerequisite events
   const prereqTeamEvents = await db.teamEvent.findMany({
-    where: { eventId: { in: prerequisiteIds } },
+    where: { eventId: { in: prerequisiteIds }, selected: true },
     select: {
       eventId: true,
       teamId: true,
