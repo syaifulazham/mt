@@ -25,13 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
 
-  const { name, stateIds, locked } = await req.json() as { name?: string; stateIds?: string[]; locked?: boolean };
-
-  const current = await db.zone.findUnique({ where: { id } });
-  if (!current) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-
-  if (current.locked && locked === undefined)
-    return NextResponse.json({ error: "LOCKED" }, { status: 423 });
+  const { name, stateIds } = await req.json() as { name?: string; stateIds?: string[] };
 
   const zone = await db.zone.update({
     where: { id },
@@ -43,7 +37,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           create: stateIds.map((sid) => ({ stateId: sid })),
         },
       }),
-      ...(locked !== undefined && { locked: Boolean(locked) }),
     },
     include: ZONE_INCLUDE,
   });
@@ -62,7 +55,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     include: { _count: { select: { schools: true, districts: true } } },
   });
   if (!zone) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  if (zone.locked) return NextResponse.json({ error: "LOCKED" }, { status: 423 });
   if (zone._count.schools > 0 || zone._count.districts > 0)
     return NextResponse.json({ error: "HAS_DEPENDENTS" }, { status: 409 });
 

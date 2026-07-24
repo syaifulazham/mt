@@ -20,7 +20,6 @@ type TargetGroup = {
   maxAge: number;
   classGrades: string[];
   ppki: boolean;
-  locked: boolean;
 };
 
 type GroupBy = "age" | "grades";
@@ -78,7 +77,8 @@ export function TargetGroupsTab() {
   const [formError, setFormError] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<TargetGroup | null>(null);
-  const [lockTarget,   setLockTarget]   = useState<TargetGroup | null>(null);
+  const [sectionLocked, setSectionLocked] = useState(false);
+  const [lockDialogOpen, setLockDialogOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +99,13 @@ export function TargetGroupsTab() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch("/api/v2/organizer/reference-data/section-lock/target-groups")
+      .then((r) => r.json())
+      .then((j) => setSectionLocked(j.locked ?? false))
+      .catch(() => {});
+  }, []);
 
   function openAdd() {
     setEditing(null);
@@ -222,13 +229,13 @@ export function TargetGroupsTab() {
   }
 
   async function handleToggleLock() {
-    if (!lockTarget) return;
-    await fetch(`/api/v2/organizer/reference-data/target-groups/${lockTarget.id}`, {
+    const next = !sectionLocked;
+    await fetch("/api/v2/organizer/reference-data/section-lock/target-groups", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ locked: !lockTarget.locked }),
+      body: JSON.stringify({ locked: next }),
     });
-    load();
+    setSectionLocked(next);
   }
 
   const pages = Math.ceil(total / PAGE_SIZE);
@@ -255,10 +262,28 @@ export function TargetGroupsTab() {
             className="pl-8"
           />
         </div>
-        <Button size="sm" onClick={openAdd}>
+        <Button size="sm" onClick={openAdd} disabled={sectionLocked}>
           <Plus className="h-4 w-4 mr-1" />Add Target Group
         </Button>
+        <button
+          onClick={() => setLockDialogOpen(true)}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors ${
+            sectionLocked
+              ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+              : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"
+          }`}
+        >
+          {sectionLocked ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+          {sectionLocked ? "Buka Kunci" : "Kunci"}
+        </button>
       </div>
+
+      {sectionLocked && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Seksyen ini dikunci. Tiada penambahan, pengeditan atau pemadaman dibenarkan.
+        </div>
+      )}
 
       <div className="rounded-md border overflow-hidden">
         <table className="w-full text-sm">
@@ -281,14 +306,9 @@ export function TargetGroupsTab() {
               <tr><td colSpan={7} className="px-3 py-8 text-center text-zinc-400">No target groups found.</td></tr>
             )}
             {!loading && data.map((tg) => (
-              <tr key={tg.id} className={`border-b last:border-0 hover:bg-zinc-50 ${tg.locked ? "bg-amber-50/40" : ""}`}>
+              <tr key={tg.id} className="border-b last:border-0 hover:bg-zinc-50">
                 <td className="px-3 py-2 font-mono text-xs">{tg.code}</td>
-                <td className="px-3 py-2 font-medium">
-                  <div className="flex items-center gap-1.5">
-                    {tg.locked && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
-                    {tg.name}
-                  </div>
-                </td>
+                <td className="px-3 py-2 font-medium">{tg.name}</td>
                 <td className="px-3 py-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${LEVEL_STYLES[tg.schoolLevel] ?? "bg-zinc-100 text-zinc-600"}`}>
                     {tg.schoolLevel}
@@ -313,13 +333,10 @@ export function TargetGroupsTab() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => setLockTarget(tg)} className="p-1 rounded hover:bg-zinc-100" title={tg.locked ? "Buka kunci" : "Kunci"}>
-                      {tg.locked ? <LockOpen className="h-3.5 w-3.5 text-amber-500" /> : <Lock className="h-3.5 w-3.5 text-zinc-400" />}
-                    </button>
-                    <button onClick={() => openEdit(tg)} disabled={tg.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
+                    <button onClick={() => openEdit(tg)} disabled={sectionLocked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Pencil className="h-3.5 w-3.5 text-zinc-500" />
                     </button>
-                    <button onClick={() => setDeleteTarget(tg)} disabled={tg.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
+                    <button onClick={() => setDeleteTarget(tg)} disabled={sectionLocked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Trash2 className="h-3.5 w-3.5 text-red-400" />
                     </button>
                   </div>
@@ -549,11 +566,11 @@ export function TargetGroupsTab() {
       />
 
       <LockConfirmDialog
-        open={!!lockTarget}
-        itemName={lockTarget?.name ?? ""}
-        isLocked={lockTarget?.locked ?? false}
+        open={lockDialogOpen}
+        itemName="Kumpulan Sasaran"
+        isLocked={sectionLocked}
         onConfirm={handleToggleLock}
-        onClose={() => setLockTarget(null)}
+        onClose={() => setLockDialogOpen(false)}
       />
 
       <div className="mt-4 flex justify-start">

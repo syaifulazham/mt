@@ -10,14 +10,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
-  const { name, color, logoUrl, description, locked } = await req.json();
-
-  const current = await db.theme.findUnique({ where: { id } });
-  if (!current) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-
-  if (current.locked && locked === undefined)
-    return NextResponse.json({ error: "LOCKED" }, { status: 423 });
-
+  const { name, color, logoUrl, description } = await req.json();
   try {
     const theme = await db.theme.update({
       where: { id },
@@ -26,7 +19,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(color       !== undefined && { color:       color?.trim()       || null }),
         ...(logoUrl     !== undefined && { logoUrl:     logoUrl?.trim()     || null }),
         ...(description !== undefined && { description: description?.trim() || null }),
-        ...(locked      !== undefined && { locked:      Boolean(locked) }),
       },
     });
     return NextResponse.json({ data: theme });
@@ -44,7 +36,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const theme = await db.theme.findUnique({ where: { id } });
   if (!theme) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  if (theme.locked) return NextResponse.json({ error: "LOCKED" }, { status: 423 });
   await db.theme.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }

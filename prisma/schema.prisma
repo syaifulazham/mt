@@ -129,13 +129,19 @@ model Country {
   @@map("countries")
 }
 
+model AppSetting {
+  key   String @id
+  value String
+
+  @@map("app_settings")
+}
+
 model State {
   id        String  @id @default(cuid())
   name      String
   code      String  @unique
   flagUrl   String?
   countryId String
-  locked    Boolean @default(false)
 
   country           Country             @relation(fields: [countryId], references: [id])
   zoneStates        ZoneState[]
@@ -148,9 +154,8 @@ model State {
 }
 
 model Zone {
-  id     String  @id @default(cuid())
-  name   String
-  locked Boolean @default(false)
+  id   String @id @default(cuid())
+  name String
 
   states      ZoneState[]
   districts   District[]
@@ -443,7 +448,6 @@ model TargetGroup {
   maxAge      Int      @default(0)
   classGrades String[] @default([])
   ppki        Boolean  @default(false)
-  locked      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -458,7 +462,6 @@ model Theme {
   color       String?
   logoUrl     String?
   description String?
-  locked      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

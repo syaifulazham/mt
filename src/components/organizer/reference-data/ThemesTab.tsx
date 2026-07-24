@@ -16,7 +16,6 @@ type Theme = {
   color: string | null;
   logoUrl: string | null;
   description: string | null;
-  locked: boolean;
 };
 
 const PAGE_SIZE = 20;
@@ -49,7 +48,8 @@ export function ThemesTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Theme | null>(null);
-  const [lockTarget,   setLockTarget]   = useState<Theme | null>(null);
+  const [sectionLocked, setSectionLocked] = useState(false);
+  const [lockDialogOpen, setLockDialogOpen] = useState(false);
   const [loadError, setLoadError]       = useState("");
 
   const load = useCallback(async () => {
@@ -76,6 +76,13 @@ export function ThemesTab() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch("/api/v2/organizer/reference-data/section-lock/themes")
+      .then((r) => r.json())
+      .then((j) => setSectionLocked(j.locked ?? false))
+      .catch(() => {});
+  }, []);
 
   function openAdd() {
     setEditing(null);
@@ -197,13 +204,13 @@ export function ThemesTab() {
   }
 
   async function handleToggleLock() {
-    if (!lockTarget) return;
-    await fetch(`/api/v2/organizer/reference-data/themes/${lockTarget.id}`, {
+    const next = !sectionLocked;
+    await fetch("/api/v2/organizer/reference-data/section-lock/themes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ locked: !lockTarget.locked }),
+      body: JSON.stringify({ locked: next }),
     });
-    load();
+    setSectionLocked(next);
   }
 
   const pages = Math.ceil(total / PAGE_SIZE);
@@ -221,10 +228,28 @@ export function ThemesTab() {
             className="pl-8"
           />
         </div>
-        <Button size="sm" onClick={openAdd}>
+        <Button size="sm" onClick={openAdd} disabled={sectionLocked}>
           <Plus className="h-4 w-4 mr-1" />Add Theme
         </Button>
+        <button
+          onClick={() => setLockDialogOpen(true)}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors ${
+            sectionLocked
+              ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+              : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"
+          }`}
+        >
+          {sectionLocked ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+          {sectionLocked ? "Buka Kunci" : "Kunci"}
+        </button>
       </div>
+
+      {sectionLocked && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Seksyen ini dikunci. Tiada penambahan, pengeditan atau pemadaman dibenarkan.
+        </div>
+      )}
 
       <div className="rounded-md border overflow-hidden">
         <table className="w-full text-sm">
@@ -251,19 +276,14 @@ export function ThemesTab() {
               <tr><td colSpan={5} className="px-3 py-8 text-center text-zinc-400">No themes found.</td></tr>
             )}
             {!loading && data.map((t) => (
-              <tr key={t.id} className={`border-b last:border-0 hover:bg-zinc-50 ${t.locked ? "bg-amber-50/40" : ""}`}>
+              <tr key={t.id} className="border-b last:border-0 hover:bg-zinc-50">
                 <td className="px-3 py-2">
                   <div
                     className="w-6 h-6 rounded-full border border-zinc-200 flex-shrink-0"
                     style={{ backgroundColor: t.color ?? "#e4e4e7" }}
                   />
                 </td>
-                <td className="px-3 py-2 font-medium">
-                  <div className="flex items-center gap-1.5">
-                    {t.locked && <Lock className="h-3 w-3 text-amber-500 shrink-0" />}
-                    {t.name}
-                  </div>
-                </td>
+                <td className="px-3 py-2 font-medium">{t.name}</td>
                 <td className="px-3 py-2 text-zinc-500 max-w-[220px] truncate">
                   {t.description ?? <span className="text-zinc-300">—</span>}
                 </td>
@@ -277,13 +297,10 @@ export function ThemesTab() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => setLockTarget(t)} className="p-1 rounded hover:bg-zinc-100" title={t.locked ? "Buka kunci" : "Kunci"}>
-                      {t.locked ? <LockOpen className="h-3.5 w-3.5 text-amber-500" /> : <Lock className="h-3.5 w-3.5 text-zinc-400" />}
-                    </button>
-                    <button onClick={() => openEdit(t)} disabled={t.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
+                    <button onClick={() => openEdit(t)} disabled={sectionLocked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Pencil className="h-3.5 w-3.5 text-zinc-500" />
                     </button>
-                    <button onClick={() => setDeleteTarget(t)} disabled={t.locked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
+                    <button onClick={() => setDeleteTarget(t)} disabled={sectionLocked} className="p-1 rounded hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed">
                       <Trash2 className="h-3.5 w-3.5 text-red-400" />
                     </button>
                   </div>
@@ -475,11 +492,11 @@ export function ThemesTab() {
       />
 
       <LockConfirmDialog
-        open={!!lockTarget}
-        itemName={lockTarget?.name ?? ""}
-        isLocked={lockTarget?.locked ?? false}
+        open={lockDialogOpen}
+        itemName="Tema"
+        isLocked={sectionLocked}
         onConfirm={handleToggleLock}
-        onClose={() => setLockTarget(null)}
+        onClose={() => setLockDialogOpen(false)}
       />
 
       <div className="mt-4 flex justify-start">
