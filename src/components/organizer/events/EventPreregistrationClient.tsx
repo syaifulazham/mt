@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
   ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download, ListChecks,
-  CheckSquare, Square, X, UserPlus,
+  CheckSquare, Square, X, UserPlus, Settings,
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
@@ -62,6 +62,8 @@ type EventSummary = {
   id: string;
   name: string;
   slug: string;
+  scope: string;
+  zoneStates: { id: string; name: string }[];
   prerequisites: { prerequisite: { id: string; name: string; slug: string } }[];
 };
 
@@ -311,6 +313,13 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     | { phase: "error"; message: string };
   const [prereqModal, setPrereqModal] = useState<PrereqModalState | null>(null);
 
+  // Prerequisite state filter config
+  const [prereqStateFilter, setPrereqStateFilter]           = useState<string[]>([]);
+  const [pendingStateFilter, setPendingStateFilter]         = useState<string[]>([]);
+  const [stateFilterSaving, setStateFilterSaving]           = useState(false);
+  const [stateFilterError, setStateFilterError]             = useState("");
+  const [showStateFilterConfig, setShowStateFilterConfig]   = useState(false);
+
   // Add-teams search modal
   type AddTeamsModalState =
     | { phase: "searching" }
@@ -490,6 +499,19 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       .catch(() => {});
   }, [event.id, event.prerequisites?.length]);
 
+  // Load state filter config
+  useEffect(() => {
+    if (!event.prerequisites?.length) return;
+    fetch(`/api/v2/organizer/events/${event.id}/preregistration/state-filter`)
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((j) => {
+        const ids: string[] = j.stateIds ?? [];
+        setPrereqStateFilter(ids);
+        setPendingStateFilter(ids);
+      })
+      .catch(() => {});
+  }, [event.id, event.prerequisites?.length]);
+
   // Load participants
   const load = useCallback(async () => {
     setLoading(true);
@@ -666,6 +688,28 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       // leave banner open; user can retry
     } finally {
       setLoadingMissing(false);
+    }
+  }
+
+  async function saveStateFilter() {
+    setStateFilterSaving(true);
+    setStateFilterError("");
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/preregistration/state-filter`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stateIds: pendingStateFilter }),
+        },
+      );
+      if (!res.ok) throw new Error("Gagal menyimpan konfigurasi");
+      setPrereqStateFilter(pendingStateFilter);
+      setShowStateFilterConfig(false);
+    } catch (e) {
+      setStateFilterError(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally {
+      setStateFilterSaving(false);
     }
   }
 
@@ -1042,6 +1086,22 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
           </button>
         )}
 
+        {/* State filter config toggle */}
+        {listTab === "teams" && (event.prerequisites?.length ?? 0) > 0 && (
+          <button
+            onClick={() => { setPendingStateFilter(prereqStateFilter); setShowStateFilterConfig((v) => !v); }}
+            title="Konfigurasi penapis negeri untuk muat dari prasyarat"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              prereqStateFilter.length > 0
+                ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"
+                : "bg-zinc-50 text-zinc-500 hover:bg-zinc-100 border-zinc-200"
+            }`}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            {prereqStateFilter.length > 0 ? `${prereqStateFilter.length} negeri` : "Penapis negeri"}
+          </button>
+        )}
+
         {/* Add teams (teams tab) */}
         {listTab === "teams" && (
           <button
@@ -1054,6 +1114,87 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
           </button>
         )}
       </div>
+
+      {/* State filter config panel */}
+      {listTab === "teams" && showStateFilterConfig && (event.prerequisites?.length ?? 0) > 0 && (() => {
+        const availableStates = event.zoneStates.length > 0 ? event.zoneStates : states;
+        return (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-blue-800">Penapis Negeri — Muat dari Prasyarat</p>
+              <button onClick={() => setShowStateFilterConfig(false)} className="text-blue-400 hover:text-blue-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="text-xs text-blue-700">
+              Pilih negeri yang dibenarkan apabila memuatkan pasukan dari prasyarat.
+              Biarkan semua tidak ditanda untuk memuatkan semua negeri.
+            </p>
+            {availableStates.length === 0 ? (
+              <p className="text-xs text-zinc-400 italic">Memuatkan senarai negeri…</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {availableStates.map((s) => (
+                  <label key={s.id} className="flex items-center gap-2 cursor-pointer text-xs text-zinc-700 hover:text-zinc-900">
+                    <input
+                      type="checkbox"
+                      checked={pendingStateFilter.includes(s.id)}
+                      onChange={(e) =>
+                        setPendingStateFilter((prev) =>
+                          e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id),
+                        )
+                      }
+                      className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            {stateFilterError && <p className="text-xs text-red-600">{stateFilterError}</p>}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={saveStateFilter}
+                disabled={stateFilterSaving}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {stateFilterSaving && <Loader2 className="h-3 w-3 animate-spin" />}
+                Simpan
+              </button>
+              <button
+                onClick={() => { setPendingStateFilter(prereqStateFilter); setShowStateFilterConfig(false); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
+              >
+                Batal
+              </button>
+              {pendingStateFilter.length > 0 && (
+                <button
+                  onClick={() => setPendingStateFilter([])}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-red-600 transition-colors ml-auto"
+                >
+                  Kosongkan pilihan
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* State filter active note */}
+      {prereqStateFilter.length > 0 && (event.prerequisites?.length ?? 0) > 0 && !showStateFilterConfig && (
+        <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700">
+          <span className="text-blue-500">⚙</span>
+          <span>
+            Penapis negeri aktif: hanya <strong>{prereqStateFilter.length} negeri</strong> akan dimuatkan dari prasyarat.
+          </span>
+          <button
+            onClick={() => { setPendingStateFilter(prereqStateFilter); setShowStateFilterConfig(true); }}
+            className="ml-auto text-blue-500 hover:text-blue-700 font-medium transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+      )}
 
       {/* Prerequisite tally banner */}
       {prereqCheck && !prereqCheck.isTallied && !prereqCheckDismissed && (

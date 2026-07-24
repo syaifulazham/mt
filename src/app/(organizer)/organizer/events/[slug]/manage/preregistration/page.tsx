@@ -7,6 +7,8 @@ import { EventPreregistrationClient } from "@/components/organizer/events/EventP
 
 export const metadata: Metadata = { title: "Pra-Pendaftaran" };
 
+const ZONE_SCOPES = ["ZONE", "ONLINE_ZONE"];
+
 export default async function EventPreregistrationPage({
   params,
 }: {
@@ -23,21 +25,36 @@ export default async function EventPreregistrationPage({
       id: true,
       name: true,
       slug: true,
+      scope: true,
       prerequisites: {
         select: { prerequisite: { select: { id: true, name: true, slug: true } } },
+      },
+      zone: {
+        select: {
+          states: {
+            select: { state: { select: { id: true, name: true } } },
+            orderBy: { state: { name: "asc" } },
+          },
+        },
       },
     },
   });
 
   if (!event) redirect("/organizer/events");
 
+  const zoneStates = ZONE_SCOPES.includes(event.scope)
+    ? (event.zone?.states.map((s) => s.state) ?? [])
+    : [];
+
   return (
     <OrganizerShell userName={session.name} role={session.role}>
       <EventPreregistrationClient
         event={{
-          id:           event.id,
-          name:         event.name,
-          slug:         event.slug,
+          id:            event.id,
+          name:          event.name,
+          slug:          event.slug,
+          scope:         event.scope,
+          zoneStates,
           prerequisites: event.prerequisites,
         }}
       />

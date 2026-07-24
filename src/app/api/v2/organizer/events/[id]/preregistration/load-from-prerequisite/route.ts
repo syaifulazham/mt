@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
+function getEffectiveStateId(
+  contingent: {
+    stateId: string | null;
+    school: { stateId: string | null } | null;
+    higherInstitution: { stateId: string | null } | null;
+  } | null,
+): string | null {
+  return contingent?.stateId
+    ?? contingent?.school?.stateId
+    ?? contingent?.higherInstitution?.stateId
+    ?? null;
+}
+
+async function loadStateFilter(eventId: string): Promise<string[]> {
+  const key = `event_prereq_state_filter:${eventId}`;
+  const setting = await db.appSetting.findUnique({ where: { key } });
+  return setting ? (JSON.parse(setting.value) as string[]) : [];
+}
+
 /**
  * GET — List teams from prerequisite events so the organizer can pick which
  *       ones to load.  Returns groups keyed by prerequisite event.
@@ -15,19 +34,23 @@ export async function GET(
 
   const { id: eventId } = await params;
 
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: {
-      prerequisites: {
-        select: {
-          prerequisiteId: true,
-          prerequisite: { select: { id: true, name: true } },
+  const [event, stateFilter] = await Promise.all([
+    db.event.findUnique({
+      where: { id: eventId },
+      select: {
+        prerequisites: {
+          select: {
+            prerequisiteId: true,
+            prerequisite: { select: { id: true, name: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    loadStateFilter(eventId),
+  ]);
+
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
-  if (event.prerequisites.length === 0) return NextResponse.json({ groups: [] });
+  if (event.prerequisites.length === 0) return NextResponse.json({ groups: [], stateFilter });
 
   const prerequisiteIds = event.prerequisites.map((p) => p.prerequisiteId);
 
@@ -43,15 +66,31 @@ export async function GET(
           name: true,
           _count: { select: { members: true } },
           competition: { select: { name: true, code: true } },
-          contingent: { select: { name: true, shortName: true } },
+          contingent: {
+            select: {
+              name: true,
+              shortName: true,
+              stateId: true,
+              school: { select: { stateId: true } },
+              higherInstitution: { select: { stateId: true } },
+            },
+          },
         },
       },
     },
     orderBy: { team: { name: "asc" } },
   });
 
+  // Apply state filter if configured
+  const filteredTeamEvents = stateFilter.length > 0
+    ? prereqTeamEvents.filter((te) => {
+        const sid = getEffectiveStateId(te.team.contingent);
+        return sid !== null && stateFilter.includes(sid);
+      })
+    : prereqTeamEvents;
+
   // Which teams are already registered to the target event?
-  const allTeamIds = prereqTeamEvents.map((te) => te.teamId);
+  const allTeamIds = filteredTeamEvents.map((te) => te.teamId);
   const alreadySet = new Set(
     (await db.teamEvent.findMany({
       where: { eventId, teamId: { in: allTeamIds } },
@@ -79,7 +118,7 @@ export async function GET(
   }
 
   const seen = new Set<string>();
-  for (const te of prereqTeamEvents) {
+  for (const te of filteredTeamEvents) {
     if (seen.has(te.teamId)) continue;
     seen.add(te.teamId);
     const group = groupMap.get(te.eventId);
@@ -95,13 +134,13 @@ export async function GET(
     });
   }
 
-  return NextResponse.json({ groups: [...groupMap.values()] });
+  return NextResponse.json({ groups: [...groupMap.values()], stateFilter });
 }
 
 /**
  * POST — Register teams from prerequisite events into this event.
  *        If body contains { teamIds: string[] }, only those are loaded.
- *        Otherwise falls back to all `selected = true` teams (legacy).
+ *        Otherwise falls back to all `selected = true` teams (with state filter applied).
  */
 export async function POST(
   req: NextRequest,
@@ -126,16 +165,38 @@ export async function POST(
   let teamIds: string[];
 
   if (body.teamIds && body.teamIds.length > 0) {
+    // Explicit selection from picker — trust the organizer's choice
     teamIds = body.teamIds;
   } else {
-    // Legacy: load all `selected = true` teams from prerequisites
+    // Legacy: load all `selected = true` teams (apply state filter)
+    const stateFilter = await loadStateFilter(eventId);
     const selectedTeamEvents = await db.teamEvent.findMany({
       where: { eventId: { in: prerequisiteIds }, selected: true },
-      select: { teamId: true },
+      select: {
+        teamId: true,
+        team: {
+          select: {
+            contingent: {
+              select: {
+                stateId: true,
+                school: { select: { stateId: true } },
+                higherInstitution: { select: { stateId: true } },
+              },
+            },
+          },
+        },
+      },
     });
-    if (selectedTeamEvents.length === 0)
-      return NextResponse.json({ added: 0, skipped: 0 });
-    teamIds = [...new Set(selectedTeamEvents.map((te) => te.teamId))];
+
+    const filtered = stateFilter.length > 0
+      ? selectedTeamEvents.filter((te) => {
+          const sid = getEffectiveStateId(te.team.contingent);
+          return sid !== null && stateFilter.includes(sid);
+        })
+      : selectedTeamEvents;
+
+    if (filtered.length === 0) return NextResponse.json({ added: 0, skipped: 0 });
+    teamIds = [...new Set(filtered.map((te) => te.teamId))];
   }
 
   // Find which are already registered to the current event
