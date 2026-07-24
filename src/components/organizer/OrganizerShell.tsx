@@ -12,8 +12,10 @@ export function OrganizerShell({
 }) {
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar userName={userName} role={role} />
-      <main className="flex-1 overflow-y-auto bg-zinc-50">
+      <div className="print:hidden">
+        <Sidebar userName={userName} role={role} />
+      </div>
+      <main className="flex-1 overflow-y-auto bg-zinc-50 print:overflow-visible">
         {children}
       </main>
     </div>
