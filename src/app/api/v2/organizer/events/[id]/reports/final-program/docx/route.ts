@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "fs";
 import { join } from "path";
+import sharp from "sharp";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { computeFinalProgramData } from "@/lib/reports/finalProgramData";
 import type { StateStat, CompStat } from "@/lib/reports/finalProgramData";
@@ -89,10 +90,14 @@ export async function GET(
   const grandTotal = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants + d.walkInSummary.total;
   const generated  = new Date().toLocaleDateString("ms-MY", { day: "2-digit", month: "long", year: "numeric" });
 
-  // ── Load logo ───────────────────────────────────────────────────────────────
+  // ── Load logo (SVG → PNG via sharp/rsvg) ────────────────────────────────────
   let logoImage: Buffer | undefined;
   try {
-    logoImage = readFileSync(join(process.cwd(), "public", "logo", "Jata-01.png"));
+    const svgBuffer = readFileSync(join(process.cwd(), "public", "logo-mt.svg"));
+    logoImage = await sharp(svgBuffer)
+      .resize(320, null, { fit: "inside" })
+      .png()
+      .toBuffer();
   } catch { /* skip if missing */ }
 
   // ── Cover header table ──────────────────────────────────────────────────────
@@ -104,7 +109,7 @@ export async function GET(
       width: { size: 1200, type: WidthType.DXA },
       children: [new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [new ImageRun({ data: logoImage, transformation: { width: 70, height: 62 }, type: "png" })],
+        children: [new ImageRun({ data: logoImage, transformation: { width: 160, height: 50 }, type: "png" })],
       })],
       borders: { top: { style: BorderStyle.NONE }, bottom: { style: BorderStyle.NONE }, left: { style: BorderStyle.NONE }, right: { style: BorderStyle.NONE } },
       verticalAlign: "center",
