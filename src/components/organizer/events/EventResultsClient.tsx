@@ -16,11 +16,21 @@ import { cn } from "@/lib/utils";
 
 type RankEntry = {
   rank: number; teamId: string; teamName: string;
-  contingentName: string; contingentLogo: string | null;
+  contingentName: string; contingentFullName: string; contingentLogo: string | null;
   totalScore: number; bestTime: number | null;
 };
 
-type CompetitionRanking = { id: string; name: string; code: string; rankings: RankEntry[] };
+type StateRankEntry = {
+  rank: number; stateId: string; stateName: string;
+  totalScore: number; bestTime: number | null; teamCount: number;
+};
+
+type CompetitionRanking = {
+  id: string; name: string; code: string;
+  targetGroup: { id: string; code: string; name: string } | null;
+  rankings: RankEntry[];
+  stateRankings: StateRankEntry[];
+};
 
 type Endpoint = {
   id: string; routeSlug: string; passcode: string | null;
@@ -42,6 +52,8 @@ const MEDAL: Record<number, { icon: string; cls: string }> = {
   2: { icon: "🥈", cls: "text-slate-400" },
   3: { icon: "🥉", cls: "text-orange-400" },
 };
+
+const ZONE_SCOPES = ["ZONE", "ONLINE_ZONE"];
 
 // ── EndpointRow ────────────────────────────────────────────────────────────────
 
@@ -139,6 +151,78 @@ function EndpointRow({ ep, eventId, onDelete, onStatusChange }: {
   );
 }
 
+// ── CompetitionTabs — grouped by target group, sorted by code ──────────────────
+
+function CompetitionTabs({ competitions, activeId, onSelect }: {
+  competitions: CompetitionRanking[];
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  // Group by target group, then sort each group by code
+  type Group = { id: string | null; code: string | null; name: string | null; items: CompetitionRanking[] };
+  const groupMap = new Map<string | null, Group>();
+
+  const sorted = [...competitions].sort((a, b) => a.code.localeCompare(b.code));
+  for (const c of sorted) {
+    const key = c.targetGroup?.id ?? null;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        id: key,
+        code: c.targetGroup?.code ?? null,
+        name: c.targetGroup?.name ?? null,
+        items: [],
+      });
+    }
+    groupMap.get(key)!.items.push(c);
+  }
+
+  // Sort groups by target group code (null/ungrouped last)
+  const groups = [...groupMap.values()].sort((a, b) => {
+    if (a.code === null) return 1;
+    if (b.code === null) return -1;
+    return a.code.localeCompare(b.code);
+  });
+
+  if (groups.length === 1 && groups[0].id === null) {
+    // No target groups — flat list
+    return (
+      <div className="flex gap-1 flex-wrap">
+        {groups[0].items.map((c) => (
+          <button key={c.id} onClick={() => onSelect(c.id)}
+            className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors",
+              activeId === c.id ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+            )}>
+            {c.code}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-3 flex-wrap items-start">
+      {groups.map((g) => (
+        <div key={g.id ?? "__none"} className="flex items-center gap-1">
+          {g.name && (
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide mr-0.5 whitespace-nowrap">
+              {g.code}
+            </span>
+          )}
+          {g.items.map((c) => (
+            <button key={c.id} onClick={() => onSelect(c.id)}
+              title={`${c.code} – ${c.name}`}
+              className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors",
+                activeId === c.id ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+              )}>
+              {c.code}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function EventResultsClient({ event, competitionRankings, endpoints: initialEndpoints, canWrite }: {
@@ -154,6 +238,8 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
   const [createLabel, setCreateLabel] = useState("");
   const [requirePasscode, setRequirePasscode] = useState(false);
   const [createErr, setCreateErr] = useState("");
+
+  const isZone = ZONE_SCOPES.includes(event.scope);
 
   async function handleCreate() {
     setCreating(true); setCreateErr("");
@@ -174,6 +260,12 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
 
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
 
+  // Determine which rows to render
+  const useStateRankings = isZone && (activeRanking?.stateRankings.length ?? 0) > 0;
+  const hasData = useStateRankings
+    ? (activeRanking?.stateRankings.length ?? 0) > 0
+    : (activeRanking?.rankings.length ?? 0) > 0;
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
@@ -193,30 +285,62 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
 
       {/* Live rankings preview */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b bg-zinc-50 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
-            <Medal className="h-4 w-4 text-rose-400" /> Kedudukan Semasa
+        <div className="px-5 py-3 border-b bg-zinc-50 flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-sm font-semibold text-zinc-700 flex items-center gap-2 shrink-0">
+            <Medal className="h-4 w-4 text-rose-400" />
+            {activeRanking
+              ? <span>Keputusan <span className="font-mono text-rose-600">{activeRanking.code}</span> {activeRanking.name}</span>
+              : "Kedudukan Semasa"
+            }
           </h2>
-          {/* Competition tabs */}
-          <div className="flex gap-1 flex-wrap">
-            {competitionRankings.map(c => (
-              <button key={c.id} onClick={() => setActiveComp(c.id)}
-                className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors",
-                  activeComp === c.id
-                    ? "bg-rose-600 text-white"
-                    : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-                )}>
-                {c.code}
-              </button>
-            ))}
-          </div>
+          {/* Competition tabs grouped by target group */}
+          <CompetitionTabs
+            competitions={competitionRankings}
+            activeId={activeComp}
+            onSelect={setActiveComp}
+          />
         </div>
 
-        {!activeRanking || activeRanking.rankings.length === 0 ? (
+        {!activeRanking || !hasData ? (
           <div className="py-12 text-center text-sm text-zinc-400">
             Tiada markah direkodkan lagi untuk pertandingan ini.
           </div>
+        ) : useStateRankings ? (
+          /* State-level rankings (ZONE scope) */
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-zinc-50/40 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                  <th className="px-4 py-2.5 text-center w-12">#</th>
+                  <th className="px-4 py-2.5">Negeri</th>
+                  <th className="px-4 py-2.5 text-center w-20">Pasukan</th>
+                  <th className="px-4 py-2.5 text-center w-24">Markah</th>
+                  <th className="px-4 py-2.5 text-center w-20">Masa Terbaik</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeRanking.stateRankings.map((r) => (
+                  <tr key={r.stateId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
+                    r.rank <= 3 && "bg-amber-50/30")}>
+                    <td className="px-4 py-3 text-center">
+                      {MEDAL[r.rank]
+                        ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
+                        : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-zinc-800">{r.stateName}</td>
+                    <td className="px-4 py-3 text-center text-xs text-zinc-400">{r.teamCount}</td>
+                    <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
+                    <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
+                      {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
+          /* Team-level rankings */
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -229,7 +353,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
                 </tr>
               </thead>
               <tbody>
-                {activeRanking.rankings.map(r => (
+                {activeRanking.rankings.map((r) => (
                   <tr key={r.teamId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
                     r.rank <= 3 && "bg-amber-50/30")}>
                     <td className="px-4 py-3 text-center">
@@ -248,7 +372,12 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
                               {r.contingentName.slice(0, 2).toUpperCase()}
                             </div>
                         }
-                        <span className="text-sm text-zinc-600 truncate max-w-[200px]">{r.contingentName}</span>
+                        <span
+                          className="text-sm text-zinc-600 truncate max-w-[200px] cursor-default"
+                          title={r.contingentFullName}
+                        >
+                          {r.contingentName}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
