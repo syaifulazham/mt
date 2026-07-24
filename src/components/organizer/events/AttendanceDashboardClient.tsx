@@ -1,11 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PieChart, Pie, Cell } from "recharts";
 import {
   Users, Building2, UserCheck, BookUser,
-  RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp, Play,
+  ArrowLeft, RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp, Play,
   FileSpreadsheet, FileText, LocateFixed, Save,
 } from "lucide-react";
 import type { ContingentLocation } from "./AttendanceDashboardMap";
@@ -1066,6 +1067,12 @@ export default function AttendanceDashboardClient({ event }: Props) {
         <div className="bg-zinc-900 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
+              <Link
+                href={`/organizer/events/${event.slug}/manage`}
+                className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors mb-2"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Kembali
+              </Link>
               <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-1">
                 Dashboard Kehadiran
               </p>
