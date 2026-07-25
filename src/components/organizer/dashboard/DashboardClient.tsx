@@ -21,6 +21,7 @@ type Stats = {
   primaryContingents: number;
   secondaryContingents: number;
   higherContingents: number;
+  higherContingentTotal: number;
   independentContingents: number;
   internationalContingents: number;
 };
@@ -357,7 +358,7 @@ export function DashboardClient({ userName }: { userName: string }) {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard label="Primary School"      value={stats.primaryContingents}      icon={BookOpen}      color="bg-emerald-400" />
           <StatCard label="Secondary School"    value={stats.secondaryContingents}    icon={GraduationCap} color="bg-blue-400"    />
-          <StatCard label="Higher Institution"  value={stats.higherContingents}       icon={School}        color="bg-purple-400"  />
+          <StatCard label="Higher Institution"  value={stats.higherContingents}       icon={School}        color="bg-purple-400"  sub={`${stats.higherContingentTotal} group management`} />
           <StatCard label="Independent"         value={stats.independentContingents}  icon={Briefcase}     color="bg-amber-400"   />
           <StatCard label="International"       value={stats.internationalContingents} icon={Users}        color="bg-rose-400"    />
         </div>
