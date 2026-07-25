@@ -8,6 +8,7 @@ import {
 import {
   Loader2, Trophy, Building2, UserCheck,
   GraduationCap, BookOpen, Briefcase, Users, School, X,
+  FileSpreadsheet, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -249,11 +250,14 @@ function ContingentModal({
 // ── State stats panel ──────────────────────────────────────────────────────────
 
 function StateStatsPanel({
-  detail, loading, onContingentTypeClick,
+  detail, loading, onContingentTypeClick, onDownloadExcel, onDownloadDocx, downloading,
 }: {
   detail: StateDetail | null;
   loading: boolean;
   onContingentTypeClick: (type: string, label: string, isSchool: boolean) => void;
+  onDownloadExcel: () => void;
+  onDownloadDocx: () => Promise<void>;
+  downloading: "excel" | "docx" | null;
 }) {
   if (loading) {
     return (
@@ -283,10 +287,34 @@ function StateStatsPanel({
 
   return (
     <div className="space-y-6">
-      {/* State heading */}
-      <div>
-        <h2 className="text-xl font-bold text-zinc-900">{state.name}</h2>
-        <p className="text-sm text-zinc-500 mt-0.5">State statistics</p>
+      {/* State heading + download buttons */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-zinc-900">{state.name}</h2>
+          <p className="text-sm text-zinc-500 mt-0.5">State statistics</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={onDownloadExcel}
+            disabled={!!downloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+          >
+            {downloading === "excel"
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <FileSpreadsheet className="h-3.5 w-3.5" />}
+            Excel
+          </button>
+          <button
+            onClick={() => { onDownloadDocx(); }}
+            disabled={!!downloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 disabled:opacity-50 transition-colors"
+          >
+            {downloading === "docx"
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <FileText className="h-3.5 w-3.5" />}
+            Word
+          </button>
+        </div>
       </div>
 
       {/* Primary stats */}
@@ -411,6 +439,7 @@ export function StateDashboardClient() {
   const [detail,        setDetail]        = useState<StateDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [modal,         setModal]         = useState<ModalInfo | null>(null);
+  const [downloading,   setDownloading]   = useState<"excel" | "docx" | null>(null);
 
   // Load state list
   useEffect(() => {
@@ -438,6 +467,25 @@ export function StateDashboardClient() {
   function handleContingentTypeClick(type: string, label: string, isSchool: boolean) {
     if (!selectedId || !detail) return;
     setModal({ stateId: selectedId, stateName: detail.state.name, type, label, isSchool });
+  }
+
+  function handleDownloadExcel() {
+    if (!detail || downloading) return;
+    setDownloading("excel");
+    import("@/lib/export/stateDashboardExport")
+      .then(({ exportStateExcel }) => exportStateExcel(detail))
+      .finally(() => setDownloading(null));
+  }
+
+  async function handleDownloadDocx() {
+    if (!detail || downloading) return;
+    setDownloading("docx");
+    try {
+      const { exportStateDocx } = await import("@/lib/export/stateDashboardExport");
+      await exportStateDocx(detail);
+    } finally {
+      setDownloading(null);
+    }
   }
 
   return (
@@ -490,6 +538,9 @@ export function StateDashboardClient() {
           detail={detail}
           loading={detailLoading}
           onContingentTypeClick={handleContingentTypeClick}
+          onDownloadExcel={handleDownloadExcel}
+          onDownloadDocx={handleDownloadDocx}
+          downloading={downloading}
         />
       </main>
 
