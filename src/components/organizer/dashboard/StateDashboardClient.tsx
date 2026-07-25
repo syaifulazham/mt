@@ -35,7 +35,7 @@ type Stats = {
   internationalContingents: number;
 };
 
-type ChartRow = { label: string; count: number };
+type ChartRow = { label: string; count: number; schools?: number };
 
 type StateDetail = {
   state: { id: string; name: string };

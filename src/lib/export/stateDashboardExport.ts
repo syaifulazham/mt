@@ -22,8 +22,8 @@ export type StateExportData = {
   charts: {
     byGender:        { label: string; count: number }[];
     byEthnicity:     { label: string; count: number }[];
-    byPpd:           { label: string; count: number }[];
-    bySchoolCategory:{ label: string; count: number }[];
+    byPpd:           { label: string; count: number; schools?: number }[];
+    bySchoolCategory:{ label: string; count: number; schools?: number }[];
   };
 };
 
@@ -200,28 +200,41 @@ function xlDataBar(ws: ExcelJS.Worksheet, fromRow: number, toRow: number, col = 
 
 /**
  * Render a breakdown table (title + col-headers + data rows + total + data bar).
+ * Pass 4 colHdrs to enable the "Jumlah Sekolah" column (label | schools | count | pct).
+ * titleEndCol lets the title merge wider than the data columns (e.g. full-sheet width).
  * Returns the next available row after the table.
  */
 function xlBreakdown(
-  ws:       ExcelJS.Worksheet,
-  row:      number,
-  startCol: number,
-  title:    string,
-  colHdrs:  string[],
-  rows:     { label: string; count: number }[],
+  ws:          ExcelJS.Worksheet,
+  row:         number,
+  startCol:    number,
+  title:       string,
+  colHdrs:     string[],
+  rows:        { label: string; count: number; schools?: number }[],
+  titleEndCol?: number,
 ): number {
-  const endCol   = startCol + colHdrs.length - 1;
-  const countCol = startCol + 1;
+  const has4    = colHdrs.length === 4;
+  const dataEnd = startCol + colHdrs.length - 1;
+  const mergeEnd = titleEndCol ?? dataEnd;
+  // participation count is col 3 when schools col present, otherwise col 2
+  const countCol = has4 ? startCol + 2 : startCol + 1;
   const total    = rows.reduce((s, r) => s + r.count, 0);
+  const schoolTotal = rows.reduce((s, r) => s + (r.schools ?? 0), 0);
 
-  xlTitleAt(ws, row++, startCol, endCol, title, XL.DARK, 11, 22);
+  xlTitleAt(ws, row++, startCol, mergeEnd, title, XL.DARK, 11, 22);
   xlColHeadersAt(ws, row++, startCol, colHdrs);
   const dataStart = row;
   rows.forEach((r, i) => {
-    xlDataRowAt(ws, row++, startCol, [r.label, r.count, pct(r.count, total)], i % 2 !== 0, 1);
+    const vals = has4
+      ? [r.label, r.schools ?? 0, r.count, pct(r.count, total)]
+      : [r.label, r.count, pct(r.count, total)];
+    xlDataRowAt(ws, row++, startCol, vals, i % 2 !== 0, 1);
   });
   if (rows.length > 0) xlDataBar(ws, dataStart, row - 1, countCol);
-  xlTotalRowAt(ws, row++, startCol, ["JUMLAH", total, "100.0%"]);
+  const totals = has4
+    ? ["JUMLAH", schoolTotal, total, "100.0%"]
+    : ["JUMLAH", total, "100.0%"];
+  xlTotalRowAt(ws, row++, startCol, totals);
   return row;
 }
 
@@ -245,10 +258,10 @@ export async function exportStateExcel(data: StateExportData): Promise<void> {
   const RC = 5; // right start col
   const TC = 7; // total cols
 
-  ws.getColumn(1).width = 36; // A – left label
-  ws.getColumn(2).width = 14; // B – left count
-  ws.getColumn(3).width = 12; // C – left pct
-  ws.getColumn(4).width = 3;  // D – spacer
+  ws.getColumn(1).width = 36; // A – label
+  ws.getColumn(2).width = 14; // B – schools / count
+  ws.getColumn(3).width = 14; // C – count / pct
+  ws.getColumn(4).width = 12; // D – pct (Block 3) / spacer (Blocks 1–2)
   ws.getColumn(5).width = 36; // E – right label
   ws.getColumn(6).width = 14; // F – right count
   ws.getColumn(7).width = 12; // G – right pct
@@ -325,24 +338,26 @@ export async function exportStateExcel(data: StateExportData): Promise<void> {
     rightRow++; // gap
   }
 
-  // Sync both columns before block 3
-  leftRow = rightRow = Math.max(leftRow, rightRow);
+  // ── Block 3 & 4: Full-width sequential — 4 columns (label, schools, count, pct)
+  // Both PPD and School Category use cols A:D with title spanning A:G
+  let row3 = Math.max(leftRow, rightRow);
 
-  // ── Block 3 LEFT: Kategori Sekolah ────────────────────────────────────────
   if (charts.bySchoolCategory.length > 0) {
-    leftRow = xlBreakdown(ws, leftRow, LC,
+    row3 = xlBreakdown(ws, row3, LC,
       "PENYERTAAN MENGIKUT KATEGORI SEKOLAH",
-      ["KATEGORI SEKOLAH", "BILANGAN", "PERATUSAN"],
+      ["KATEGORI SEKOLAH", "JLH. SEKOLAH", "PENYERTAAN", "PERATUSAN"],
       charts.bySchoolCategory,
+      TC, // title merges full width A:G
     );
+    row3++; // gap
   }
 
-  // ── Block 3 RIGHT: PPD / Daerah ───────────────────────────────────────────
   if (charts.byPpd.length > 0) {
-    rightRow = xlBreakdown(ws, rightRow, RC,
+    row3 = xlBreakdown(ws, row3, LC,
       "PENYERTAAN MENGIKUT PPD / DAERAH",
-      ["PPD / DAERAH", "BILANGAN", "PERATUSAN"],
+      ["PPD / DAERAH", "JLH. SEKOLAH", "PENYERTAAN", "PERATUSAN"],
       charts.byPpd,
+      TC, // title merges full width A:G
     );
   }
 
@@ -464,19 +479,23 @@ function wdGenderBar(
   });
 }
 
-// Clean 3-column breakdown table (no proportional bar cells — consistent column count)
+// Breakdown table: 3 columns, or 4 when rows carry a `schools` count.
 function wdBarChart(
-  rows: { label: string; count: number }[],
+  rows: { label: string; count: number; schools?: number }[],
   labelHeader = "KETERANGAN",
 ): Table {
-  const total = rows.reduce((s, r) => s + r.count, 0);
+  const total       = rows.reduce((s, r) => s + r.count, 0);
+  const hasSchools  = rows.some(r => r.schools !== undefined);
+  const schoolTotal = rows.reduce((s, r) => s + (r.schools ?? 0), 0);
+
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
       new TableRow({
         children: [
           wdHCell(labelHeader),
-          wdHCell("BILANGAN"),
+          ...(hasSchools ? [wdHCell("JLH. SEKOLAH")] : []),
+          wdHCell("PENYERTAAN"),
           wdHCell("PERATUSAN"),
         ],
       }),
@@ -485,6 +504,7 @@ function wdBarChart(
         return new TableRow({
           children: [
             wdDCell(r.label,           bg, AlignmentType.LEFT),
+            ...(hasSchools ? [wdDCell(n(r.schools ?? 0), bg, AlignmentType.RIGHT)] : []),
             wdDCell(n(r.count),        bg, AlignmentType.RIGHT),
             wdDCell(pct(r.count,total),bg, AlignmentType.RIGHT),
           ],
@@ -492,9 +512,10 @@ function wdBarChart(
       }),
       new TableRow({
         children: [
-          wdDCell("JUMLAH",  DC.LIGHT, AlignmentType.LEFT,  true),
-          wdDCell(n(total),  DC.LIGHT, AlignmentType.RIGHT, true),
-          wdDCell("100.0%",  DC.LIGHT, AlignmentType.RIGHT, true),
+          wdDCell("JUMLAH",       DC.LIGHT, AlignmentType.LEFT,  true),
+          ...(hasSchools ? [wdDCell(n(schoolTotal), DC.LIGHT, AlignmentType.RIGHT, true)] : []),
+          wdDCell(n(total),       DC.LIGHT, AlignmentType.RIGHT, true),
+          wdDCell("100.0%",       DC.LIGHT, AlignmentType.RIGHT, true),
         ],
       }),
     ],

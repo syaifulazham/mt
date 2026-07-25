@@ -79,6 +79,7 @@ export async function GET(
             contingentType: true,
             school: {
               select: {
+                id: true,
                 ppdCode: true,
                 districtId: true,
                 category: true,
@@ -110,6 +111,24 @@ export async function GET(
   ]);
 
   if (!state) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+  // Count distinct schools per PPD and per category (independent of competition eligibility)
+  const ppdSchoolIds: Record<string, Set<string>> = {};
+  const catSchoolIds: Record<string, Set<string>> = {};
+
+  for (const p of participants) {
+    if (p.contingent.contingentType !== "SCHOOL" || !p.contingent.school) continue;
+    const schoolId = p.contingent.school.id;
+    const ppdLabel =
+      p.contingent.school.district?.name ??
+      p.contingent.school.ppdCode ??
+      "Tiada PPD";
+    (ppdSchoolIds[ppdLabel] ??= new Set<string>()).add(schoolId);
+
+    const catKey   = p.contingent.school.category as string | null;
+    const catLabel = catKey ? (SCHOOL_CATEGORY_LABEL[catKey] ?? catKey) : "Tiada Kategori";
+    (catSchoolIds[catLabel] ??= new Set<string>()).add(schoolId);
+  }
 
   // Count participations (participant × eligible competition) with breakdowns
   const genderMap:    Record<string, number> = {};
@@ -156,11 +175,19 @@ export async function GET(
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
   const byPpd = Object.entries(ppdMap)
-    .map(([label, count]) => ({ label, count }))
+    .map(([label, count]) => ({
+      label,
+      count,
+      schools: ppdSchoolIds[label]?.size ?? 0,
+    }))
     .sort((a, b) => b.count - a.count);
 
   const bySchoolCategory = Object.entries(categoryMap)
-    .map(([label, count]) => ({ label, count }))
+    .map(([label, count]) => ({
+      label,
+      count,
+      schools: catSchoolIds[label]?.size ?? 0,
+    }))
     .sort((a, b) => b.count - a.count);
 
   return NextResponse.json({
