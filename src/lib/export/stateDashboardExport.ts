@@ -201,21 +201,18 @@ function xlDataBar(ws: ExcelJS.Worksheet, fromRow: number, toRow: number, col = 
 /**
  * Render a breakdown table (title + col-headers + data rows + total + data bar).
  * Pass 4 colHdrs to enable the "Jumlah Sekolah" column (label | schools | count | pct).
- * titleEndCol lets the title merge wider than the data columns (e.g. full-sheet width).
  * Returns the next available row after the table.
  */
 function xlBreakdown(
-  ws:          ExcelJS.Worksheet,
-  row:         number,
-  startCol:    number,
-  title:       string,
-  colHdrs:     string[],
-  rows:        { label: string; count: number; schools?: number }[],
-  titleEndCol?: number,
+  ws:       ExcelJS.Worksheet,
+  row:      number,
+  startCol: number,
+  title:    string,
+  colHdrs:  string[],
+  rows:     { label: string; count: number; schools?: number }[],
 ): number {
-  const has4    = colHdrs.length === 4;
-  const dataEnd = startCol + colHdrs.length - 1;
-  const mergeEnd = titleEndCol ?? dataEnd;
+  const has4     = colHdrs.length === 4;
+  const mergeEnd = startCol + colHdrs.length - 1;
   // participation count is col 3 when schools col present, otherwise col 2
   const countCol = has4 ? startCol + 2 : startCol + 1;
   const total    = rows.reduce((s, r) => s + r.count, 0);
@@ -238,7 +235,10 @@ function xlBreakdown(
   return row;
 }
 
-// ── Main Excel export — single sheet, two-column layout ────────────────────────
+// ── Main Excel export — two-column layout matching report snapshot ─────────────
+//
+// Left  (A:C, 3 cols): Statistik Utama → Kontingen → Bangsa/Etnik → Jantina
+// Right (E:H, 4 cols): Kategori Sekolah → PPD/Daerah
 
 export async function exportStateExcel(data: StateExportData): Promise<void> {
   const { state, stats, charts } = data;
@@ -253,35 +253,35 @@ export async function exportStateExcel(data: StateExportData): Promise<void> {
 
   const ws = wb.addWorksheet("Laporan");
 
-  // Layout: 7 columns — A:C (left table), D (spacer), E:G (right table)
   const LC = 1; // left start col
   const RC = 5; // right start col
-  const TC = 7; // total cols
+  const TC = 8; // total cols (A–H)
 
-  ws.getColumn(1).width = 36; // A – label
-  ws.getColumn(2).width = 14; // B – schools / count
-  ws.getColumn(3).width = 14; // C – count / pct
-  ws.getColumn(4).width = 12; // D – pct (Block 3) / spacer (Blocks 1–2)
-  ws.getColumn(5).width = 36; // E – right label
-  ws.getColumn(6).width = 14; // F – right count
-  ws.getColumn(7).width = 12; // G – right pct
+  ws.getColumn(1).width = 34; // A – left label
+  ws.getColumn(2).width = 14; // B – left count
+  ws.getColumn(3).width = 12; // C – left pct
+  ws.getColumn(4).width = 3;  // D – spacer
+  ws.getColumn(5).width = 30; // E – right label
+  ws.getColumn(6).width = 14; // F – Jlh. Sekolah
+  ws.getColumn(7).width = 14; // G – Penyertaan
+  ws.getColumn(8).width = 12; // H – Peratusan
 
-  // ── Full-width header (rows 1–3) ───────────────────────────────────────────
+  // ── Full-width header (rows 1–3, A:H) ─────────────────────────────────────
   xlTitleAt(ws, 1, LC, TC, "LAPORAN STATISTIK PENYERTAAN", XL.DARK, 14, 32);
   xlTitleAt(ws, 2, LC, TC, state.name.toUpperCase(),        XL.MID,  12, 26);
   xlTitleAt(ws, 3, LC, TC, `Dijana: ${generated}`,          XL.LIGHT, 9, 18);
   ws.getCell(3, LC).font = { size: 9, color: { argb: XL.SUBTEXT }, name: "Calibri" };
-  ws.getRow(4).height = 10; // gap
+  ws.getRow(4).height = 10;
 
   let leftRow  = 5;
   let rightRow = 5;
 
-  // ── Block 1 LEFT: Statistik Utama (summary counts) ────────────────────────
+  // ── LEFT 1: Statistik Utama ───────────────────────────────────────────────
   {
     const rows: [string, number][] = [
-      ["Jumlah Penyertaan",   stats.totalParticipation],
-      ["Jumlah Kontingen",    stats.totalContingents],
-      ["Pengurus Berdaftar",  stats.totalManagers],
+      ["Jumlah Penyertaan",  stats.totalParticipation],
+      ["Jumlah Kontingen",   stats.totalContingents],
+      ["Pengurus Berdaftar", stats.totalManagers],
     ];
     xlTitleAt(ws, leftRow++, LC, LC + 2, "STATISTIK UTAMA", XL.DARK, 11, 22);
     xlColHeadersAt(ws, leftRow++, LC, ["METRIK", "JUMLAH", ""]);
@@ -292,25 +292,14 @@ export async function exportStateExcel(data: StateExportData): Promise<void> {
     leftRow++; // gap
   }
 
-  // ── Block 1 RIGHT: Bangsa / Etnik ─────────────────────────────────────────
-  rightRow = xlBreakdown(ws, rightRow, RC,
-    "PENYERTAAN MENGIKUT BANGSA / ETNIK",
-    ["BANGSA / ETNIK", "BILANGAN", "PERATUSAN"],
-    charts.byEthnicity,
-  );
-  rightRow++; // gap
-
-  // Sync both columns before block 2
-  leftRow = rightRow = Math.max(leftRow, rightRow);
-
-  // ── Block 2 LEFT: Kontingen Mengikut Jenis ────────────────────────────────
+  // ── LEFT 2: Kontingen Mengikut Jenis ─────────────────────────────────────
   {
     const rows: [string, number][] = [
-      ["Sekolah Rendah",               stats.primaryContingents],
-      ["Sekolah Menengah",             stats.secondaryContingents],
-      ["Institusi Pengajian Tinggi",   stats.higherContingents],
-      ["Bebas",                        stats.independentContingents],
-      ["Antarabangsa",                 stats.internationalContingents],
+      ["Sekolah Rendah",              stats.primaryContingents],
+      ["Sekolah Menengah",            stats.secondaryContingents],
+      ["Institusi Pengajian Tinggi",  stats.higherContingents],
+      ["Bebas",                       stats.independentContingents],
+      ["Antarabangsa",                stats.internationalContingents],
     ];
     const total = rows.reduce((s, [, v]) => s + v, 0);
     xlTitleAt(ws, leftRow++, LC, LC + 2, "KONTINGEN MENGIKUT JENIS", XL.DARK, 11, 22);
@@ -324,40 +313,44 @@ export async function exportStateExcel(data: StateExportData): Promise<void> {
     leftRow++; // gap
   }
 
-  // ── Block 2 RIGHT: Pecahan Jantina ────────────────────────────────────────
+  // ── LEFT 3: Bangsa / Etnik ────────────────────────────────────────────────
+  if (charts.byEthnicity.length > 0) {
+    leftRow = xlBreakdown(ws, leftRow, LC,
+      "PENYERTAAN MENGIKUT BANGSA / ETNIK",
+      ["BANGSA / ETNIK", "BILANGAN", "PERATUSAN"],
+      charts.byEthnicity,
+    );
+    leftRow++; // gap
+  }
+
+  // ── LEFT 4: Pecahan Jantina ───────────────────────────────────────────────
   {
     const male   = charts.byGender.find(g => g.label === "Male")   ?? { count: 0 };
     const female = charts.byGender.find(g => g.label === "Female") ?? { count: 0 };
     const total  = male.count + female.count;
-
-    xlTitleAt(ws, rightRow++, RC, RC + 2, "PECAHAN JANTINA", XL.DARK, 11, 22);
-    xlColHeadersAt(ws, rightRow++, RC, ["JANTINA", "BILANGAN", "PERATUSAN"]);
-    xlColoredRow(ws, rightRow++, RC, "LELAKI",     male.count,   pct(male.count,   total), "FFE0EBFF", XL.MALE);
-    xlColoredRow(ws, rightRow++, RC, "PEREMPUAN",  female.count, pct(female.count, total), "FFFCE7F3", XL.FEMALE);
-    xlTotalRowAt(ws, rightRow++, RC, ["JUMLAH", total, "100.0%"]);
-    rightRow++; // gap
+    xlTitleAt(ws, leftRow++, LC, LC + 2, "PECAHAN JANTINA", XL.DARK, 11, 22);
+    xlColHeadersAt(ws, leftRow++, LC, ["JANTINA", "BILANGAN", "PERATUSAN"]);
+    xlColoredRow(ws, leftRow++, LC, "LELAKI",    male.count,   pct(male.count,   total), "FFE0EBFF", XL.MALE);
+    xlColoredRow(ws, leftRow++, LC, "PEREMPUAN", female.count, pct(female.count, total), "FFFCE7F3", XL.FEMALE);
+    xlTotalRowAt(ws, leftRow++, LC, ["JUMLAH", total, "100.0%"]);
   }
 
-  // ── Block 3 & 4: Full-width sequential — 4 columns (label, schools, count, pct)
-  // Both PPD and School Category use cols A:D with title spanning A:G
-  let row3 = Math.max(leftRow, rightRow);
-
+  // ── RIGHT 1: Kategori Sekolah (4-col: label | schools | count | pct) ──────
   if (charts.bySchoolCategory.length > 0) {
-    row3 = xlBreakdown(ws, row3, LC,
+    rightRow = xlBreakdown(ws, rightRow, RC,
       "PENYERTAAN MENGIKUT KATEGORI SEKOLAH",
       ["KATEGORI SEKOLAH", "JLH. SEKOLAH", "PENYERTAAN", "PERATUSAN"],
       charts.bySchoolCategory,
-      TC, // title merges full width A:G
     );
-    row3++; // gap
+    rightRow++; // gap
   }
 
+  // ── RIGHT 2: PPD / Daerah (4-col: label | schools | count | pct) ──────────
   if (charts.byPpd.length > 0) {
-    row3 = xlBreakdown(ws, row3, LC,
+    rightRow = xlBreakdown(ws, rightRow, RC,
       "PENYERTAAN MENGIKUT PPD / DAERAH",
       ["PPD / DAERAH", "JLH. SEKOLAH", "PENYERTAAN", "PERATUSAN"],
       charts.byPpd,
-      TC, // title merges full width A:G
     );
   }
 
