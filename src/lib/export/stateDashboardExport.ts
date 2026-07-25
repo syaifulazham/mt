@@ -183,7 +183,6 @@ function xlDataBar(ws: ExcelJS.Worksheet, fromRow: number, toRow: number, col = 
     rules: [
       // ExcelJS's xlsx WRITER reads cfvo/color at the rule top-level (flat),
       // not nested under dataBar. Nesting causes "forEach of undefined" crash.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       {
         type:      "dataBar",
         priority:  1,
@@ -193,6 +192,7 @@ function xlDataBar(ws: ExcelJS.Worksheet, fromRow: number, toRow: number, col = 
         showValue: true,
         minLength: 0,
         maxLength: 100,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     ],
   });
@@ -347,7 +347,7 @@ export async function exportStateExcel(data: StateExportData): Promise<void> {
 
   // ── RIGHT 2: PPD / Daerah (4-col: label | schools | count | pct) ──────────
   if (charts.byPpd.length > 0) {
-    rightRow = xlBreakdown(ws, rightRow, RC,
+    xlBreakdown(ws, rightRow, RC,
       "PENYERTAAN MENGIKUT PPD / DAERAH",
       ["PPD / DAERAH", "JLH. SEKOLAH", "PENYERTAAN", "PERATUSAN"],
       charts.byPpd,
