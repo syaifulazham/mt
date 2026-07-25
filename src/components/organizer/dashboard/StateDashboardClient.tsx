@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import {
   Loader2, Trophy, Building2, UserCheck,
-  GraduationCap, BookOpen, Briefcase, Users, School,
+  GraduationCap, BookOpen, Briefcase, Users, School, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,16 +46,37 @@ type StateDetail = {
   };
 };
 
+type ContingentItem = {
+  id: string;
+  name: string;
+  shortName: string | null;
+  ppd: string | null;
+  schoolName: string | null;
+  institutionName: string | null;
+};
+
+type ModalInfo = {
+  stateId: string;
+  stateName: string;
+  type: string;   // PRIMARY | SECONDARY | HIGHER | INDEPENDENT | INTERNATIONAL
+  label: string;  // display label for the modal title
+  isSchool: boolean;
+};
+
 // ── Stat card ──────────────────────────────────────────────────────────────────
 
 function StatCard({
-  label, value, icon: Icon, color, sub,
+  label, value, icon: Icon, color, sub, onClick,
 }: {
   label: string; value: number | string;
   icon: React.ElementType; color: string; sub?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="bg-white rounded-xl border shadow-sm p-5 flex items-start gap-4">
+  const inner = (
+    <div className={cn(
+      "bg-white rounded-xl border shadow-sm p-5 flex items-start gap-4",
+      onClick && "cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all",
+    )}>
       <div className={cn("p-2.5 rounded-lg shrink-0", color)}>
         <Icon className="h-5 w-5 text-white" />
       </div>
@@ -63,9 +84,14 @@ function StatCard({
         <p className="text-xs text-zinc-500 font-medium">{label}</p>
         <p className="text-2xl font-bold text-zinc-900 mt-0.5 tabular-nums">{value.toLocaleString()}</p>
         {sub && <p className="text-[11px] text-zinc-400 mt-0.5">{sub}</p>}
+        {onClick && <p className="text-[10px] text-blue-500 mt-1 font-medium">Lihat senarai →</p>}
       </div>
     </div>
   );
+
+  return onClick
+    ? <button type="button" onClick={onClick} className="text-left w-full">{inner}</button>
+    : inner;
 }
 
 // ── Chart card ─────────────────────────────────────────────────────────────────
@@ -121,9 +147,114 @@ function HorizBar({ label, count, max, color }: { label: string; count: number; 
   );
 }
 
+// ── Contingent list modal ──────────────────────────────────────────────────────
+
+function ContingentModal({
+  info, onClose,
+}: {
+  info: ModalInfo;
+  onClose: () => void;
+}) {
+  const [items, setItems]     = useState<ContingentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
+
+  // Component is keyed by stateId+type so it remounts fresh on each open.
+  // The initial useState(true) for loading is always correct; no synchronous
+  // setState needed inside the effect.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/v2/organizer/dashboard/states/${info.stateId}/contingents?type=${info.type}`)
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((j) => { if (!cancelled) setItems(j.data ?? []); })
+      .catch(() => { if (!cancelled) setError("Gagal memuatkan senarai."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+      {/* Dialog */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-zinc-50/80 shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900">{info.label}</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">{info.stateName}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-zinc-200 text-zinc-400 hover:text-zinc-700 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-300" />
+            </div>
+          ) : error ? (
+            <p className="text-sm text-red-500 text-center py-10">{error}</p>
+          ) : items.length === 0 ? (
+            <p className="text-sm text-zinc-400 italic text-center py-10">Tiada kontinjen ditemui.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-zinc-50 border-b z-10">
+                <tr className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                  <th className="px-5 py-3 text-left w-10">#</th>
+                  <th className="px-5 py-3 text-left">Nama Penuh</th>
+                  <th className="px-5 py-3 text-left w-36">Nama Singkat</th>
+                  {info.isSchool && (
+                    <th className="px-5 py-3 text-left w-40">PPD / Daerah</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((c, i) => (
+                  <tr key={c.id} className={cn("border-b last:border-0", i % 2 === 0 ? "bg-white" : "bg-zinc-50/40")}>
+                    <td className="px-5 py-3 text-zinc-400 text-xs tabular-nums">{i + 1}</td>
+                    <td className="px-5 py-3 font-medium text-zinc-800">{c.name}</td>
+                    <td className="px-5 py-3 text-zinc-500 text-xs">{c.shortName ?? "—"}</td>
+                    {info.isSchool && (
+                      <td className="px-5 py-3 text-zinc-500 text-xs">{c.ppd ?? "—"}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer count */}
+        {!loading && !error && items.length > 0 && (
+          <div className="px-6 py-3 border-t bg-zinc-50/80 shrink-0 text-xs text-zinc-400">
+            {items.length} kontinjen
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── State stats panel ──────────────────────────────────────────────────────────
 
-function StateStatsPanel({ detail, loading }: { detail: StateDetail | null; loading: boolean }) {
+function StateStatsPanel({
+  detail, loading, onContingentTypeClick,
+}: {
+  detail: StateDetail | null;
+  loading: boolean;
+  onContingentTypeClick: (type: string, label: string, isSchool: boolean) => void;
+}) {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
@@ -165,15 +296,35 @@ function StateStatsPanel({ detail, loading }: { detail: StateDetail | null; load
         <StatCard label="Registered Managers"  value={stats.totalManagers}      icon={UserCheck} color="bg-violet-500" />
       </div>
 
-      {/* Contingent breakdown */}
+      {/* Contingent breakdown — clickable */}
       <div>
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Contingents by Type</h3>
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard label="Primary School"     value={stats.primaryContingents}       icon={BookOpen}      color="bg-emerald-400" />
-          <StatCard label="Secondary School"   value={stats.secondaryContingents}     icon={GraduationCap} color="bg-blue-400"    />
-          <StatCard label="Higher Institution" value={stats.higherContingents}        icon={School}        color="bg-purple-400"  />
-          <StatCard label="Independent"        value={stats.independentContingents}   icon={Briefcase}     color="bg-amber-400"   />
-          <StatCard label="International"      value={stats.internationalContingents} icon={Users}         color="bg-rose-400"    />
+          <StatCard
+            label="Primary School" value={stats.primaryContingents}
+            icon={BookOpen} color="bg-emerald-400"
+            onClick={() => onContingentTypeClick("PRIMARY", "Sekolah Rendah", true)}
+          />
+          <StatCard
+            label="Secondary School" value={stats.secondaryContingents}
+            icon={GraduationCap} color="bg-blue-400"
+            onClick={() => onContingentTypeClick("SECONDARY", "Sekolah Menengah", true)}
+          />
+          <StatCard
+            label="Higher Institution" value={stats.higherContingents}
+            icon={School} color="bg-purple-400"
+            onClick={() => onContingentTypeClick("HIGHER", "Institusi Pengajian Tinggi", false)}
+          />
+          <StatCard
+            label="Independent" value={stats.independentContingents}
+            icon={Briefcase} color="bg-amber-400"
+            onClick={() => onContingentTypeClick("INDEPENDENT", "Bebas", false)}
+          />
+          <StatCard
+            label="International" value={stats.internationalContingents}
+            icon={Users} color="bg-rose-400"
+            onClick={() => onContingentTypeClick("INTERNATIONAL", "Antarabangsa", false)}
+          />
         </div>
       </div>
 
@@ -254,11 +405,12 @@ function StateStatsPanel({ detail, loading }: { detail: StateDetail | null; load
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function StateDashboardClient() {
-  const [states,         setStates]         = useState<StateListItem[]>([]);
-  const [statesLoading,  setStatesLoading]  = useState(true);
-  const [selectedId,     setSelectedId]     = useState<string | null>(null);
-  const [detail,         setDetail]         = useState<StateDetail | null>(null);
-  const [detailLoading,  setDetailLoading]  = useState(false);
+  const [states,        setStates]        = useState<StateListItem[]>([]);
+  const [statesLoading, setStatesLoading] = useState(true);
+  const [selectedId,    setSelectedId]    = useState<string | null>(null);
+  const [detail,        setDetail]        = useState<StateDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [modal,         setModal]         = useState<ModalInfo | null>(null);
 
   // Load state list
   useEffect(() => {
@@ -282,6 +434,11 @@ export function StateDashboardClient() {
       .then((json: StateDetail) => setDetail(json))
       .finally(() => setDetailLoading(false));
   }, [selectedId]);
+
+  function handleContingentTypeClick(type: string, label: string, isSchool: boolean) {
+    if (!selectedId || !detail) return;
+    setModal({ stateId: selectedId, stateName: detail.state.name, type, label, isSchool });
+  }
 
   return (
     <div className="flex h-full min-h-[70vh]">
@@ -329,8 +486,17 @@ export function StateDashboardClient() {
 
       {/* ── Right panel: stats ─────────────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto p-6">
-        <StateStatsPanel detail={detail} loading={detailLoading} />
+        <StateStatsPanel
+          detail={detail}
+          loading={detailLoading}
+          onContingentTypeClick={handleContingentTypeClick}
+        />
       </main>
+
+      {/* ── Contingent list modal ──────────────────────────────────────────── */}
+      {modal && (
+        <ContingentModal key={modal.stateId + modal.type} info={modal} onClose={() => setModal(null)} />
+      )}
     </div>
   );
 }
