@@ -181,19 +181,18 @@ function xlDataBar(ws: ExcelJS.Worksheet, fromRow: number, toRow: number, col = 
   ws.addConditionalFormatting({
     ref: `${colLetter}${fromRow}:${colLetter}${toRow}`,
     rules: [
-      // ExcelJS TypeScript defs are incomplete — runtime expects nested dataBar object
+      // ExcelJS's xlsx WRITER reads cfvo/color at the rule top-level (flat),
+      // not nested under dataBar. Nesting causes "forEach of undefined" crash.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       {
-        type:     "dataBar",
-        priority: 1,
-        dataBar: {
-          minLength: 0,
-          maxLength: 100,
-          showValue: true,
-          gradient:  true,
-          cfvo:      [{ type: "min" }, { type: "max" }],
-          color:     { argb: "FF085782" },
-        },
+        type:      "dataBar",
+        priority:  1,
+        cfvo:      [{ type: "min" }, { type: "max" }],
+        color:     { argb: "FF085782" },
+        gradient:  true,
+        showValue: true,
+        minLength: 0,
+        maxLength: 100,
       } as any,
     ],
   });
