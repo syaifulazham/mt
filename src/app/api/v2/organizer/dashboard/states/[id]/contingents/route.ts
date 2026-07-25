@@ -4,9 +4,8 @@ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 
 const TYPE_FILTER: Record<string, Prisma.ContingentWhereInput> = {
-  PRIMARY:       { contingentType: "SCHOOL",       school: { level: "PRIMARY"   } },
-  SECONDARY:     { contingentType: "SCHOOL",       school: { level: "SECONDARY" } },
-  HIGHER:        { contingentType: "HIGHER"       },
+  PRIMARY:       { contingentType: "SCHOOL", school: { level: "PRIMARY"   } },
+  SECONDARY:     { contingentType: "SCHOOL", school: { level: "SECONDARY" } },
   INDEPENDENT:   { contingentType: "INDEPENDENT"  },
   INTERNATIONAL: { contingentType: "INTERNATIONAL"},
 };
@@ -21,9 +20,35 @@ export async function GET(
   const { id: stateId } = await params;
   const type = req.nextUrl.searchParams.get("type") ?? "";
 
-  const typeFilter = TYPE_FILTER[type];
-  if (!typeFilter) return NextResponse.json({ error: "INVALID_TYPE" }, { status: 400 });
+  if (!["PRIMARY", "SECONDARY", "HIGHER", "INDEPENDENT", "INTERNATIONAL"].includes(type)) {
+    return NextResponse.json({ error: "INVALID_TYPE" }, { status: 400 });
+  }
 
+  // HIGHER: list unique higher institutions that have HIGHER contingents in this state
+  if (type === "HIGHER") {
+    const institutions = await db.higherInstitution.findMany({
+      where: {
+        contingents: {
+          some: { contingentType: "HIGHER", stateId },
+        },
+      },
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+    });
+
+    return NextResponse.json({
+      data: institutions.map((h) => ({
+        id:              h.id,
+        name:            h.name,
+        shortName:       h.code ?? null,
+        ppd:             null,
+        schoolName:      null,
+        institutionName: null,
+      })),
+    });
+  }
+
+  const typeFilter = TYPE_FILTER[type];
   const stateOR: Prisma.ContingentWhereInput["OR"] = [
     { stateId },
     { school: { stateId } },
@@ -42,7 +67,6 @@ export async function GET(
           district: { select: { name: true } },
         },
       },
-      higherInstitution: { select: { name: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -54,7 +78,7 @@ export async function GET(
       shortName:       c.shortName ?? null,
       ppd:             c.school?.district?.name ?? c.school?.ppdCode ?? null,
       schoolName:      c.school?.name ?? null,
-      institutionName: c.higherInstitution?.name ?? null,
+      institutionName: null,
     })),
   });
 }
