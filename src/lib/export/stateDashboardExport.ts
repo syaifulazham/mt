@@ -46,18 +46,18 @@ function pctNum(v: number, total: number) {
 function slug(name: string)         { return name.replace(/\s+/g, "-"); }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// EXCEL  (exceljs — corporate theme + data bars)
+// EXCEL  (exceljs — single sheet, two-column layout, corporate theme + data bars)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const XL = {
-  DARK:    "FF085782",   // primary brand dark blue
-  MID:     "FF1D6EA5",   // medium blue for sub-headers
-  ACCENT:  "FF0EA5E9",   // sky-500 for data bars
-  MALE:    "FF1D4ED8",   // blue-700 for male
-  FEMALE:  "FFDB2777",   // pink-600 for female
-  HEADER:  "FFFFFFFF",   // white text
-  LIGHT:   "FFD1E9F5",   // very light blue tint
-  ALT:     "FFF8FAFC",   // alternating row
+  DARK:    "FF085782",
+  MID:     "FF1D6EA5",
+  ACCENT:  "FF0EA5E9",
+  MALE:    "FF1D4ED8",
+  FEMALE:  "FFDB2777",
+  HEADER:  "FFFFFFFF",
+  LIGHT:   "FFD1E9F5",
+  ALT:     "FFF8FAFC",
   WHITE:   "FFFFFFFF",
   GREY:    "FFE2E8F0",
   TEXT:    "FF1F2937",
@@ -76,7 +76,6 @@ function borderAll(argb = "FFD1D5DB"): XlBorder {
   const b = { style: "thin" as ExcelJS.BorderStyle, color: { argb } };
   return { top: b, bottom: b, left: b, right: b };
 }
-
 function styleCell(
   cell: ExcelJS.Cell,
   opts: { fill?: string; font?: XlFont; align?: XlAlign; border?: boolean },
@@ -87,32 +86,30 @@ function styleCell(
   if (opts.border) cell.border = borderAll();
 }
 
-/** Merges a row across `cols` columns, applies a title style. Returns the cell. */
-function xlTitle(
+// ── Column-offset aware helpers ────────────────────────────────────────────────
+
+function xlTitleAt(
   ws: ExcelJS.Worksheet,
-  row: number,
-  cols: number,
-  text: string,
-  fill: string,
-  size = 14,
-  height = 28,
-): ExcelJS.Cell {
-  ws.mergeCells(row, 1, row, cols);
-  const cell = ws.getCell(row, 1);
+  row: number, startCol: number, endCol: number,
+  text: string, fill: string, size = 11, height = 22,
+): void {
+  ws.mergeCells(row, startCol, row, endCol);
+  const cell = ws.getCell(row, startCol);
   cell.value = text;
   styleCell(cell, {
     fill,
     font:  { bold: true, color: { argb: XL.HEADER }, size, name: "Calibri" },
     align: { horizontal: "center", vertical: "middle" },
   });
-  ws.getRow(row).height = height;
-  return cell;
+  const r = ws.getRow(row);
+  if (!r.height || r.height < height) r.height = height;
 }
 
-/** Column header row */
-function xlColHeaders(ws: ExcelJS.Worksheet, row: number, headers: string[]) {
+function xlColHeadersAt(
+  ws: ExcelJS.Worksheet, row: number, startCol: number, headers: string[],
+) {
   headers.forEach((h, i) => {
-    const cell = ws.getCell(row, i + 1);
+    const cell = ws.getCell(row, startCol + i);
     cell.value = h;
     styleCell(cell, {
       fill:   XL.MID,
@@ -124,17 +121,13 @@ function xlColHeaders(ws: ExcelJS.Worksheet, row: number, headers: string[]) {
   ws.getRow(row).height = 20;
 }
 
-/** Single data row with alternating bg */
-function xlDataRow(
-  ws: ExcelJS.Worksheet,
-  row: number,
-  values: (string | number)[],
-  isAlt: boolean,
-  rightAlignFrom = 1,
+function xlDataRowAt(
+  ws: ExcelJS.Worksheet, row: number, startCol: number,
+  values: (string | number)[], isAlt: boolean, rightAlignFrom = 1,
 ) {
   const fill = isAlt ? XL.ALT : XL.WHITE;
   values.forEach((v, i) => {
-    const cell = ws.getCell(row, i + 1);
+    const cell = ws.getCell(row, startCol + i);
     cell.value = v;
     cell.fill  = solidFill(fill);
     cell.font  = { size: 10, color: { argb: XL.TEXT }, name: "Calibri" };
@@ -144,10 +137,11 @@ function xlDataRow(
   ws.getRow(row).height = 18;
 }
 
-/** Totals / summary row */
-function xlTotalRow(ws: ExcelJS.Worksheet, row: number, values: (string | number)[]) {
+function xlTotalRowAt(
+  ws: ExcelJS.Worksheet, row: number, startCol: number, values: (string | number)[],
+) {
   values.forEach((v, i) => {
-    const cell = ws.getCell(row, i + 1);
+    const cell = ws.getCell(row, startCol + i);
     cell.value = v;
     styleCell(cell, {
       fill:   XL.DARK,
@@ -159,215 +153,198 @@ function xlTotalRow(ws: ExcelJS.Worksheet, row: number, values: (string | number
   ws.getRow(row).height = 20;
 }
 
-/** Add data-bar conditional formatting on the COUNT column (col 2 = B) */
+/** Colored row for gender (bold label, tinted background, colored text) */
+function xlColoredRow(
+  ws: ExcelJS.Worksheet, row: number, startCol: number,
+  label: string, count: number, pctStr: string,
+  bg: string, textArgb: string,
+) {
+  ws.getRow(row).height = 22;
+  (
+    [[label, "left", true], [count, "right", true], [pctStr, "right", false]] as
+    [string | number, "left" | "right", boolean][]
+  ).forEach(([val, align, bold], i) => {
+    const cell = ws.getCell(row, startCol + i);
+    cell.value = val;
+    styleCell(cell, {
+      fill:   bg,
+      font:   { bold, size: 10, color: { argb: textArgb }, name: "Calibri" },
+      align:  { horizontal: align, vertical: "middle" },
+      border: true,
+    });
+  });
+}
+
+/** Data-bar conditional formatting on the given column (1-based) */
 function xlDataBar(ws: ExcelJS.Worksheet, fromRow: number, toRow: number, col = 2) {
   const colLetter = String.fromCharCode(64 + col);
   ws.addConditionalFormatting({
     ref: `${colLetter}${fromRow}:${colLetter}${toRow}`,
     rules: [
+      // ExcelJS TypeScript defs are incomplete — runtime expects nested dataBar object
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       {
         type:     "dataBar",
         priority: 1,
-        gradient: true,
-        showValue: true,
-        minLength: 0,
-        maxLength: 100,
-        cfvo: [{ type: "num", value: 0 }, { type: "max" }],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        dataBar: {
+          minLength: 0,
+          maxLength: 100,
+          showValue: true,
+          gradient:  true,
+          cfvo:      [{ type: "min" }, { type: "max" }],
+          color:     { argb: "FF085782" },
+        },
       } as any,
     ],
   });
 }
 
-/** Breakdown sheet: title + col-headers + data rows + data bars on count column */
-function xlBreakdownSheet(
-  wb:         ExcelJS.Workbook,
-  sheetName:  string,
-  stateName:  string,
-  title:      string,
-  colHeaders: string[],
-  rows:       { label: string; count: number }[],
-  generated:  string,
-) {
-  const ws   = wb.addWorksheet(sheetName);
-  const cols = colHeaders.length;
+/**
+ * Render a breakdown table (title + col-headers + data rows + total + data bar).
+ * Returns the next available row after the table.
+ */
+function xlBreakdown(
+  ws:       ExcelJS.Worksheet,
+  row:      number,
+  startCol: number,
+  title:    string,
+  colHdrs:  string[],
+  rows:     { label: string; count: number }[],
+): number {
+  const endCol   = startCol + colHdrs.length - 1;
+  const countCol = startCol + 1;
+  const total    = rows.reduce((s, r) => s + r.count, 0);
 
-  ws.getColumn(1).width = 32;
-  for (let c = 2; c <= cols; c++) ws.getColumn(c).width = 14;
-
-  xlTitle(ws, 1, cols, title,     XL.DARK, 14, 30);
-  xlTitle(ws, 2, cols, stateName, XL.MID,  12, 24);
-  xlTitle(ws, 3, cols, `Dijana: ${generated}`, XL.LIGHT.replace("FF", ""), 9, 18);
-  // make generated row use dark text
-  ws.getCell(3, 1).font = { size: 9, color: { argb: XL.SUBTEXT }, name: "Calibri" };
-
-  ws.getRow(4).height = 8;
-
-  xlColHeaders(ws, 5, colHeaders);
-
-  const total   = rows.reduce((s, r) => s + r.count, 0);
-  const dataStart = 6;
-
+  xlTitleAt(ws, row++, startCol, endCol, title, XL.DARK, 11, 22);
+  xlColHeadersAt(ws, row++, startCol, colHdrs);
+  const dataStart = row;
   rows.forEach((r, i) => {
-    xlDataRow(ws, dataStart + i, [r.label, r.count, pct(r.count, total)], i % 2 !== 0, 1);
+    xlDataRowAt(ws, row++, startCol, [r.label, r.count, pct(r.count, total)], i % 2 !== 0, 1);
   });
-
-  const dataEnd = dataStart + rows.length - 1;
-  if (rows.length > 0) xlDataBar(ws, dataStart, dataEnd);
-
-  xlTotalRow(ws, dataEnd + 1, ["JUMLAH", total, "100.0%"]);
+  if (rows.length > 0) xlDataBar(ws, dataStart, row - 1, countCol);
+  xlTotalRowAt(ws, row++, startCol, ["JUMLAH", total, "100.0%"]);
+  return row;
 }
 
-// ── Gender visualization sheet ─────────────────────────────────────────────────
-
-function xlGenderSheet(
-  wb:        ExcelJS.Workbook,
-  stateName: string,
-  gender:    { label: string; count: number }[],
-  generated: string,
-) {
-  const ws = wb.addWorksheet("Jantina");
-
-  const male   = gender.find(g => g.label === "Male")   ?? gender[0];
-  const female = gender.find(g => g.label === "Female") ?? gender[1];
-  const maleCount   = male?.count   ?? 0;
-  const femaleCount = female?.count ?? 0;
-  const gTotal      = maleCount + femaleCount;
-  const malePct     = pctNum(maleCount, gTotal);
-  const femalePct   = 100 - malePct;
-
-  // Column widths proportional to M/F split (min 8)
-  ws.getColumn(1).width = Math.max(8,  Math.round(malePct   * 0.45));
-  ws.getColumn(2).width = Math.max(8,  Math.round(femalePct * 0.45));
-
-  xlTitle(ws, 1, 2, "PECAHAN JANTINA",  XL.DARK, 14, 30);
-  xlTitle(ws, 2, 2, stateName,          XL.MID,  12, 24);
-  xlTitle(ws, 3, 2, `Dijana: ${generated}`, XL.LIGHT.replace("FF",""), 9, 18);
-  ws.getCell(3, 1).font = { size: 9, color: { argb: XL.SUBTEXT }, name: "Calibri" };
-  ws.getRow(4).height = 8;
-
-  // Gender split visual header row
-  const hRow = 5;
-  ws.getRow(hRow).height = 44;
-
-  const mCell = ws.getCell(hRow, 1);
-  mCell.value = "LELAKI";
-  styleCell(mCell, {
-    fill:  XL.MALE,
-    font:  { bold: true, color: { argb: XL.HEADER }, size: 13, name: "Calibri" },
-    align: { horizontal: "center", vertical: "middle" },
-  });
-
-  const fCell = ws.getCell(hRow, 2);
-  fCell.value = "PEREMPUAN";
-  styleCell(fCell, {
-    fill:  XL.FEMALE,
-    font:  { bold: true, color: { argb: XL.HEADER }, size: 13, name: "Calibri" },
-    align: { horizontal: "center", vertical: "middle" },
-  });
-
-  // Count row
-  ws.getRow(6).height = 28;
-  [maleCount, femaleCount].forEach((v, i) => {
-    const c = ws.getCell(6, i + 1);
-    c.value = v;
-    styleCell(c, {
-      fill:  i === 0 ? "FFE0EBFF" : "FFFCE7F3",
-      font:  { bold: true, size: 18, color: { argb: i === 0 ? XL.MALE : XL.FEMALE }, name: "Calibri" },
-      align: { horizontal: "center", vertical: "middle" },
-    });
-  });
-
-  // Pct row
-  ws.getRow(7).height = 20;
-  [malePct, femalePct].forEach((v, i) => {
-    const c = ws.getCell(7, i + 1);
-    c.value = `${v}%`;
-    styleCell(c, {
-      fill:  i === 0 ? "FFE0EBFF" : "FFFCE7F3",
-      font:  { size: 11, color: { argb: XL.SUBTEXT }, name: "Calibri" },
-      align: { horizontal: "center", vertical: "middle" },
-    });
-  });
-
-  ws.getRow(8).height = 8;
-
-  // Summary data table
-  xlColHeaders(ws, 9, ["JANTINA", "BILANGAN", "PERATUSAN"]);
-  ws.getColumn(3).width = 14;
-  gender.forEach((g, i) => {
-    xlDataRow(ws, 10 + i, [g.label, g.count, pct(g.count, gTotal)], i % 2 !== 0, 1);
-  });
-  xlTotalRow(ws, 10 + gender.length, ["JUMLAH", gTotal, "100.0%"]);
-}
-
-// ── Main Excel export ──────────────────────────────────────────────────────────
+// ── Main Excel export — single sheet, two-column layout ────────────────────────
 
 export async function exportStateExcel(data: StateExportData): Promise<void> {
   const { state, stats, charts } = data;
-  const generated = new Date().toLocaleDateString("ms-MY", { day: "2-digit", month: "long", year: "numeric" });
+  const generated = new Date().toLocaleDateString("ms-MY", {
+    day: "2-digit", month: "long", year: "numeric",
+  });
+
   const wb = new ExcelJS.Workbook();
-  wb.creator   = "Techlympics";
-  wb.created   = new Date();
-  wb.modified  = new Date();
+  wb.creator  = "Techlympics";
+  wb.created  = new Date();
+  wb.modified = new Date();
 
-  // ── Sheet 1: Ringkasan ────────────────────────────────────────────────────
-  const ws1  = wb.addWorksheet("Ringkasan");
-  const COLS = 3;
-  ws1.getColumn(1).width = 34;
-  ws1.getColumn(2).width = 16;
-  ws1.getColumn(3).width = 14;
+  const ws = wb.addWorksheet("Laporan");
 
-  xlTitle(ws1, 1, COLS, "LAPORAN STATISTIK PENYERTAAN", XL.DARK, 14, 30);
-  xlTitle(ws1, 2, COLS, state.name.toUpperCase(),        XL.MID,  12, 24);
-  xlTitle(ws1, 3, COLS, `Dijana: ${generated}`,          XL.LIGHT.replace("FF",""), 9, 18);
-  ws1.getCell(3,1).font = { size: 9, color: { argb: XL.SUBTEXT }, name: "Calibri" };
-  ws1.getRow(4).height = 8;
+  // Layout: 7 columns — A:C (left table), D (spacer), E:G (right table)
+  const LC = 1; // left start col
+  const RC = 5; // right start col
+  const TC = 7; // total cols
 
-  xlTitle(ws1, 5, COLS, "STATISTIK UTAMA", XL.DARK, 11, 22);
-  xlColHeaders(ws1, 6, ["METRIK", "JUMLAH", ""]);
+  ws.getColumn(1).width = 36; // A – left label
+  ws.getColumn(2).width = 14; // B – left count
+  ws.getColumn(3).width = 12; // C – left pct
+  ws.getColumn(4).width = 3;  // D – spacer
+  ws.getColumn(5).width = 36; // E – right label
+  ws.getColumn(6).width = 14; // F – right count
+  ws.getColumn(7).width = 12; // G – right pct
 
-  const summary: [string, number][] = [
-    ["Jumlah Penyertaan",              stats.totalParticipation],
-    ["Jumlah Kontingen",               stats.totalContingents],
-    ["Pengurus Berdaftar",             stats.totalManagers],
-  ];
-  summary.forEach(([label, val], i) => xlDataRow(ws1, 7 + i, [label, val, ""], i % 2 !== 0, 1));
+  // ── Full-width header (rows 1–3) ───────────────────────────────────────────
+  xlTitleAt(ws, 1, LC, TC, "LAPORAN STATISTIK PENYERTAAN", XL.DARK, 14, 32);
+  xlTitleAt(ws, 2, LC, TC, state.name.toUpperCase(),        XL.MID,  12, 26);
+  xlTitleAt(ws, 3, LC, TC, `Dijana: ${generated}`,          XL.LIGHT, 9, 18);
+  ws.getCell(3, LC).font = { size: 9, color: { argb: XL.SUBTEXT }, name: "Calibri" };
+  ws.getRow(4).height = 10; // gap
 
-  ws1.getRow(10).height = 8;
-  xlTitle(ws1, 11, COLS, "KONTINGEN MENGIKUT JENIS", XL.DARK, 11, 22);
-  xlColHeaders(ws1, 12, ["JENIS", "BILANGAN", ""]);
+  let leftRow  = 5;
+  let rightRow = 5;
 
-  const contingentRows: [string, number][] = [
-    ["Sekolah Rendah",                 stats.primaryContingents],
-    ["Sekolah Menengah",               stats.secondaryContingents],
-    ["Institusi Pengajian Tinggi",     stats.higherContingents],
-    ["Bebas",                          stats.independentContingents],
-    ["Antarabangsa",                   stats.internationalContingents],
-  ];
-  contingentRows.forEach(([label, val], i) => xlDataRow(ws1, 13 + i, [label, val, ""], i % 2 !== 0, 1));
+  // ── Block 1 LEFT: Statistik Utama (summary counts) ────────────────────────
+  {
+    const rows: [string, number][] = [
+      ["Jumlah Penyertaan",   stats.totalParticipation],
+      ["Jumlah Kontingen",    stats.totalContingents],
+      ["Pengurus Berdaftar",  stats.totalManagers],
+    ];
+    xlTitleAt(ws, leftRow++, LC, LC + 2, "STATISTIK UTAMA", XL.DARK, 11, 22);
+    xlColHeadersAt(ws, leftRow++, LC, ["METRIK", "JUMLAH", ""]);
+    rows.forEach(([label, val], i) => {
+      xlDataRowAt(ws, leftRow++, LC, [label, val, ""], i % 2 !== 0, 1);
+    });
+    xlTotalRowAt(ws, leftRow++, LC, ["PENYERTAAN", stats.totalParticipation, ""]);
+    leftRow++; // gap
+  }
 
-  // ── Sheet 2: Jantina (gender visual) ──────────────────────────────────────
-  xlGenderSheet(wb, state.name, charts.byGender, generated);
-
-  // ── Sheet 3: Bangsa ───────────────────────────────────────────────────────
-  xlBreakdownSheet(wb, "Bangsa", state.name,
+  // ── Block 1 RIGHT: Bangsa / Etnik ─────────────────────────────────────────
+  rightRow = xlBreakdown(ws, rightRow, RC,
     "PENYERTAAN MENGIKUT BANGSA / ETNIK",
     ["BANGSA / ETNIK", "BILANGAN", "PERATUSAN"],
-    charts.byEthnicity, generated);
+    charts.byEthnicity,
+  );
+  rightRow++; // gap
 
-  // ── Sheet 4: PPD / Daerah ─────────────────────────────────────────────────
-  xlBreakdownSheet(wb, "PPD-Daerah", state.name,
-    "PENYERTAAN MENGIKUT PPD / DAERAH",
-    ["PPD / DAERAH", "BILANGAN", "PERATUSAN"],
-    charts.byPpd, generated);
+  // Sync both columns before block 2
+  leftRow = rightRow = Math.max(leftRow, rightRow);
 
-  // ── Sheet 5: Kategori Sekolah ─────────────────────────────────────────────
+  // ── Block 2 LEFT: Kontingen Mengikut Jenis ────────────────────────────────
+  {
+    const rows: [string, number][] = [
+      ["Sekolah Rendah",               stats.primaryContingents],
+      ["Sekolah Menengah",             stats.secondaryContingents],
+      ["Institusi Pengajian Tinggi",   stats.higherContingents],
+      ["Bebas",                        stats.independentContingents],
+      ["Antarabangsa",                 stats.internationalContingents],
+    ];
+    const total = rows.reduce((s, [, v]) => s + v, 0);
+    xlTitleAt(ws, leftRow++, LC, LC + 2, "KONTINGEN MENGIKUT JENIS", XL.DARK, 11, 22);
+    xlColHeadersAt(ws, leftRow++, LC, ["JENIS KONTINGEN", "BILANGAN", "PERATUSAN"]);
+    const dataStart = leftRow;
+    rows.forEach(([label, val], i) => {
+      xlDataRowAt(ws, leftRow++, LC, [label, val, pct(val, total)], i % 2 !== 0, 1);
+    });
+    if (rows.length > 0) xlDataBar(ws, dataStart, leftRow - 1, LC + 1);
+    xlTotalRowAt(ws, leftRow++, LC, ["JUMLAH", total, "100.0%"]);
+    leftRow++; // gap
+  }
+
+  // ── Block 2 RIGHT: Pecahan Jantina ────────────────────────────────────────
+  {
+    const male   = charts.byGender.find(g => g.label === "Male")   ?? { count: 0 };
+    const female = charts.byGender.find(g => g.label === "Female") ?? { count: 0 };
+    const total  = male.count + female.count;
+
+    xlTitleAt(ws, rightRow++, RC, RC + 2, "PECAHAN JANTINA", XL.DARK, 11, 22);
+    xlColHeadersAt(ws, rightRow++, RC, ["JANTINA", "BILANGAN", "PERATUSAN"]);
+    xlColoredRow(ws, rightRow++, RC, "LELAKI",     male.count,   pct(male.count,   total), "FFE0EBFF", XL.MALE);
+    xlColoredRow(ws, rightRow++, RC, "PEREMPUAN",  female.count, pct(female.count, total), "FFFCE7F3", XL.FEMALE);
+    xlTotalRowAt(ws, rightRow++, RC, ["JUMLAH", total, "100.0%"]);
+    rightRow++; // gap
+  }
+
+  // Sync both columns before block 3
+  leftRow = rightRow = Math.max(leftRow, rightRow);
+
+  // ── Block 3 LEFT: Kategori Sekolah ────────────────────────────────────────
   if (charts.bySchoolCategory.length > 0) {
-    xlBreakdownSheet(wb, "Kategori Sekolah", state.name,
+    leftRow = xlBreakdown(ws, leftRow, LC,
       "PENYERTAAN MENGIKUT KATEGORI SEKOLAH",
       ["KATEGORI SEKOLAH", "BILANGAN", "PERATUSAN"],
-      charts.bySchoolCategory, generated);
+      charts.bySchoolCategory,
+    );
+  }
+
+  // ── Block 3 RIGHT: PPD / Daerah ───────────────────────────────────────────
+  if (charts.byPpd.length > 0) {
+    rightRow = xlBreakdown(ws, rightRow, RC,
+      "PENYERTAAN MENGIKUT PPD / DAERAH",
+      ["PPD / DAERAH", "BILANGAN", "PERATUSAN"],
+      charts.byPpd,
+    );
   }
 
   const buffer = await wb.xlsx.writeBuffer();
@@ -488,73 +465,37 @@ function wdGenderBar(
   });
 }
 
-// Horizontal bar chart table (label | filled | empty | count | %)
-const BAR_MAX = 4000; // DXA max bar width
-const COL_W   = { label: 2200, count: 900, pct: 700 };
-
-function wdBarRow(
-  label: string,
-  count: number,
-  total: number,
-  maxCount: number,
-  rowIdx: number,
-): TableRow {
-  const filled  = maxCount > 0 ? Math.max(20, Math.round(BAR_MAX * count / maxCount)) : 20;
-  const empty   = BAR_MAX - filled;
-  const bg      = rowIdx % 2 === 0 ? DC.WHITE : DC.ALT;
-  const barFill = DC.DARK;
-
-  return new TableRow({
-    children: [
-      wdDCell(label, bg, AlignmentType.LEFT,  false, COL_W.label),
-      new TableCell({
-        width:   { size: filled, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: barFill, color: "auto" },
-        borders: ALL_BORDERS,
-        children: [new Paragraph({ children: [] })],
-      }),
-      new TableCell({
-        width:   { size: empty, type: WidthType.DXA },
-        shading: { type: ShadingType.CLEAR, fill: bg, color: "auto" },
-        borders: ALL_BORDERS,
-        children: [new Paragraph({ children: [] })],
-      }),
-      wdDCell(n(count),          bg, AlignmentType.RIGHT, false, COL_W.count),
-      wdDCell(pct(count, total), bg, AlignmentType.RIGHT, false, COL_W.pct),
-    ],
-  });
-}
-
-function wdBarChart(rows: { label: string; count: number }[]): Table {
-  const total    = rows.reduce((s, r) => s + r.count, 0);
-  const maxCount = rows[0]?.count ?? 1;
-  const headerW  = COL_W.label + BAR_MAX + COL_W.count + COL_W.pct;
-
+// Clean 3-column breakdown table (no proportional bar cells — consistent column count)
+function wdBarChart(
+  rows: { label: string; count: number }[],
+  labelHeader = "KETERANGAN",
+): Table {
+  const total = rows.reduce((s, r) => s + r.count, 0);
   return new Table({
-    width: { size: headerW, type: WidthType.DXA },
+    width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
-      // Column header row
       new TableRow({
         children: [
-          wdHCell("LABEL",       COL_W.label,  DC.MID),
-          wdHCell("",            BAR_MAX,      DC.MID),
-          wdHCell("BILANGAN",    COL_W.count,  DC.MID),
-          wdHCell("PERATUSAN",   COL_W.pct,    DC.MID),
+          wdHCell(labelHeader),
+          wdHCell("BILANGAN"),
+          wdHCell("PERATUSAN"),
         ],
       }),
-      ...rows.map((r, i) => wdBarRow(r.label, r.count, total, maxCount, i)),
-      // Total row
+      ...rows.map((r, i) => {
+        const bg = i % 2 === 0 ? DC.WHITE : DC.ALT;
+        return new TableRow({
+          children: [
+            wdDCell(r.label,           bg, AlignmentType.LEFT),
+            wdDCell(n(r.count),        bg, AlignmentType.RIGHT),
+            wdDCell(pct(r.count,total),bg, AlignmentType.RIGHT),
+          ],
+        });
+      }),
       new TableRow({
         children: [
-          wdDCell("JUMLAH", DC.LIGHT, AlignmentType.LEFT, true, COL_W.label),
-          new TableCell({
-            width:   { size: BAR_MAX, type: WidthType.DXA },
-            shading: { type: ShadingType.CLEAR, fill: DC.LIGHT, color: "auto" },
-            borders: ALL_BORDERS,
-            children: [new Paragraph({ children: [] })],
-          }),
-          wdDCell(n(total),  DC.LIGHT, AlignmentType.RIGHT, true, COL_W.count),
-          wdDCell("100.0%",  DC.LIGHT, AlignmentType.RIGHT, true, COL_W.pct),
+          wdDCell("JUMLAH",  DC.LIGHT, AlignmentType.LEFT,  true),
+          wdDCell(n(total),  DC.LIGHT, AlignmentType.RIGHT, true),
+          wdDCell("100.0%",  DC.LIGHT, AlignmentType.RIGHT, true),
         ],
       }),
     ],
@@ -631,19 +572,19 @@ export async function exportStateDocx(data: StateExportData): Promise<void> {
     // ── 3. Bangsa / Etnik ────────────────────────────────────────────────────
     ...(charts.byEthnicity.length > 0 ? [
       wdSection("3.  Pecahan Bangsa / Etnik"),
-      wdBarChart(charts.byEthnicity),
+      wdBarChart(charts.byEthnicity, "BANGSA / ETNIK"),
     ] : []),
 
     // ── 4. PPD / Daerah ──────────────────────────────────────────────────────
     ...(charts.byPpd.length > 0 ? [
       wdSection("4.  Pecahan PPD / Daerah"),
-      wdBarChart(charts.byPpd),
+      wdBarChart(charts.byPpd, "PPD"),
     ] : []),
 
     // ── 5. Kategori Sekolah ──────────────────────────────────────────────────
     ...(charts.bySchoolCategory.length > 0 ? [
       wdSection("5.  Pecahan Kategori Sekolah"),
-      wdBarChart(charts.bySchoolCategory),
+      wdBarChart(charts.bySchoolCategory, "KATEGORI"),
     ] : []),
 
     // ── Footer ───────────────────────────────────────────────────────────────
