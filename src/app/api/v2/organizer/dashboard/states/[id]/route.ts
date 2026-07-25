@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
+const SCHOOL_CATEGORY_LABEL: Record<string, string> = {
+  SEKOLAH_KEBANGSAAN:                       "Sekolah Kebangsaan",
+  SEKOLAH_MENENGAH_KEBANGSAAN:              "SMK",
+  SEKOLAH_JENIS_KEBANGSAAN_CINA:            "SJK (Cina)",
+  SEKOLAH_JENIS_KEBANGSAAN_TAMIL:           "SJK (Tamil)",
+  SEKOLAH_MENENGAH_KEBANGSAAN_AGAMA:        "SMKA",
+  SEKOLAH_MENENGAH_AGAMA_BANTUAN_KERAJAAN:  "SABK",
+  SEKOLAH_RENDAH_AGAMA_BANTUAN_KERAJAAN:    "SR Agama BK",
+  SEKOLAH_MENENGAH_AGAMA:                   "SM Agama",
+  SEKOLAH_RENDAH_AGAMA:                     "SR Agama",
+  SEKOLAH_KEBANGSAAN_TAHFIZ:                "SK Tahfiz",
+  SEKOLAH_BERASRAMA_PENUH:                  "SBP",
+  MAKTAB_RENDAH_SAINS_MARA:                 "MRSM",
+  KOLEJ_VOKASIONAL:                         "Kolej Vokasional",
+  SEKOLAH_MENENGAH_TEKNIK:                  "SM Teknik",
+  SEKOLAH_KEBANGSAAN_PENDIDIKAN_KHAS:       "SK Pendidikan Khas",
+  SEKOLAH_MENENGAH_PENDIDIKAN_KHAS:         "SM Pendidikan Khas",
+  SEKOLAH_BIMBINGAN_JALINAN_KASIH:          "Bimbingan Jalinan Kasih",
+  SEKOLAH_MODEL_KHAS:                       "Model Khas",
+  SEKOLAH_SENI_MALAYSIA:                    "Seni Malaysia",
+  SEKOLAH_SUKAN_MALAYSIA:                   "Sukan Malaysia",
+  PUSAT_TINGKATAN_ENAM:                     "Pusat Tingkatan 6",
+  KOLEJ_TINGKATAN_ENAM:                     "Kolej Tingkatan 6",
+  SEKOLAH_ANTARABANGSA:                     "Antarabangsa",
+  SEKOLAH_MENENGAH_PERSENDIRIAN_CINA:       "Men. Persendirian Cina",
+  SEKOLAH_MENENGAH_AKADEMIK:                "Men. Akademik",
+  SEKOLAH_RENDAH_AKADEMIK:                  "Rendah Akademik",
+};
+
 const ETHNICITY_LABEL: Record<string, string> = {
   MELAYU:                 "Melayu",
   CINA:                   "Cina",
@@ -52,6 +81,7 @@ export async function GET(
               select: {
                 ppdCode: true,
                 districtId: true,
+                category: true,
                 district: { select: { name: true } },
               },
             },
@@ -85,6 +115,7 @@ export async function GET(
   const genderMap:    Record<string, number> = {};
   const ethnicityMap: Record<string, number> = {};
   const ppdMap:       Record<string, number> = {};
+  const categoryMap:  Record<string, number> = {};
   let totalParticipation = 0;
 
   for (const comp of competitions) {
@@ -112,6 +143,10 @@ export async function GET(
           p.contingent.school?.ppdCode ??
           "Tiada PPD";
         ppdMap[ppdLabel] = (ppdMap[ppdLabel] ?? 0) + 1;
+
+        const catKey   = p.contingent.school?.category as string | null;
+        const catLabel = catKey ? (SCHOOL_CATEGORY_LABEL[catKey] ?? catKey) : "Tiada Kategori";
+        categoryMap[catLabel] = (categoryMap[catLabel] ?? 0) + 1;
       }
     }
   }
@@ -121,6 +156,10 @@ export async function GET(
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
   const byPpd = Object.entries(ppdMap)
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const bySchoolCategory = Object.entries(categoryMap)
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
 
@@ -136,6 +175,6 @@ export async function GET(
       independentContingents,
       internationalContingents,
     },
-    charts: { byGender, byEthnicity, byPpd },
+    charts: { byGender, byEthnicity, byPpd, bySchoolCategory },
   });
 }

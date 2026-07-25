@@ -44,6 +44,7 @@ type StateDetail = {
     byGender: ChartRow[];
     byEthnicity: ChartRow[];
     byPpd: ChartRow[];
+    bySchoolCategory: ChartRow[];
   };
 };
 
