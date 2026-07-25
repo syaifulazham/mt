@@ -21,6 +21,8 @@ type CourseInfo = {
   enrolled: boolean;
 };
 
+type TeamCourse = { courseId: string; label: string | null };
+
 type Team = {
   id: string;
   name: string;
@@ -33,6 +35,7 @@ type Team = {
     maxTeamSize: number; minTeamSize: number;
     eptimEduCourseId: string | null;
   };
+  courses: TeamCourse[];  // ALL courses (competition + event-specific)
 };
 
 type Credentials = { username: string; password: string; enrolled: boolean };
@@ -66,6 +69,10 @@ type LessonProgressData = {
   completionPercent: number;
   chapters: ChapterEntry[];
 };
+
+// ── Key helper ─────────────────────────────────────────────────────────────────
+
+const progKey = (teamId: string, courseId: string) => `${teamId}:${courseId}`;
 
 // ── Copy button ────────────────────────────────────────────────────────────────
 
@@ -408,7 +415,7 @@ function TeamRow({
 }: {
   team: Team;
   stats: StatsEntry | undefined;
-  progressData: ProgressEntry | undefined;
+  progressData: Record<string, ProgressEntry | undefined>;
   onJoined: (teamId: string, creds: Credentials) => void;
   onEnrolled: (teamId: string) => void;
   onReviewProgress: (teamId: string, courseId: string) => void;
@@ -416,11 +423,15 @@ function TeamRow({
   const t = useTranslations("lms");
   const { joining, enrolling, err, join, enrol } = useTeamLmsActions(team, onJoined, onEnrolled);
 
-  const hasAccount     = !!team.lmsUserId;
-  const hasCourse      = !!team.competition.eptimEduCourseId;
+  const hasAccount       = !!team.lmsUserId;
+  const hasCourse        = !!team.competition.eptimEduCourseId;
+  const compCourseId     = team.competition.eptimEduCourseId;
+  const compProgressData = compCourseId ? progressData[compCourseId] : undefined;
   // Use live progress data (specific to competition's courseId) when available;
   // fall back to DB flag only while the progress fetch is still in-flight.
-  const courseEnrolled = progressData !== undefined ? (progressData?.enrolled === true) : team.lmsCourseEnrolled;
+  const courseEnrolled   = compProgressData !== undefined
+    ? (compProgressData?.enrolled === true)
+    : team.lmsCourseEnrolled;
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors dark:hover:bg-zinc-800/40">
@@ -452,59 +463,58 @@ function TeamRow({
             </span>
           </div>
         )}
-        {hasAccount && hasCourse && (
-          <>
-            {/* Submission row — only shown when the team has submitted something */}
-            {(progressData === undefined || (progressData !== null && progressData.hasSubmission)) && (
+        {hasAccount && team.courses.map(c => {
+          const pd = progressData[c.courseId];
+          const courseLabel = c.label ?? c.courseId;
+          return (
+            <div key={c.courseId}>
+              {/* Label chip — only shown when there are multiple courses */}
+              {team.courses.length > 1 && (
+                <span className="text-[10px] text-zinc-400 font-mono truncate">{courseLabel}</span>
+              )}
+              {/* Submission row */}
+              {(pd === undefined || (pd !== null && pd.hasSubmission)) && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Upload className="h-3 w-3 text-zinc-400 shrink-0" />
+                  <span className="text-xs text-zinc-500">
+                    {pd === undefined
+                      ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+                      : pd?.hasSubmission && pd.lastSubmittedAt
+                        ? <span className="font-medium text-green-600 dark:text-green-400">
+                            {t("submittedOn", { date: new Date(pd.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" }) })}
+                          </span>
+                        : null
+                    }
+                  </span>
+                </div>
+              )}
+              {/* Progress row */}
               <div className="flex items-center gap-1 mt-1">
-                <Upload className="h-3 w-3 text-zinc-400 shrink-0" />
+                <GraduationCap className="h-3 w-3 text-zinc-400 shrink-0" />
                 <span className="text-xs text-zinc-500">
-                  {progressData === undefined
+                  {pd === undefined
                     ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
-                    : progressData?.hasSubmission && progressData.lastSubmittedAt
-                      ? <span className="font-medium text-green-600 dark:text-green-400">
-                          {t("submittedOn", {
-                            date: new Date(progressData.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" }),
-                          })}
-                        </span>
-                      : null
+                    : !pd?.enrolled
+                      ? null
+                      : pd.isComplete
+                        ? <span className="font-medium text-blue-600 dark:text-blue-400">
+                            {t("courseCompleted", { date: pd.completedAt ? new Date(pd.completedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" }) : "—" })}
+                          </span>
+                        : <span className="text-zinc-500 dark:text-zinc-400">
+                            {t("courseInProgress", { percent: pd.completionPercent })}
+                            {pd.completionPercent > 0 && (
+                              <button onClick={() => onReviewProgress(team.id, c.courseId)}
+                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2">
+                                <Eye className="h-3 w-3" /> {t("reviewProgress")}
+                              </button>
+                            )}
+                          </span>
                   }
                 </span>
               </div>
-            )}
-
-            {/* Course progress row */}
-            <div className="flex items-center gap-1 mt-1">
-              <GraduationCap className="h-3 w-3 text-zinc-400 shrink-0" />
-              <span className="text-xs text-zinc-500">
-                {progressData === undefined
-                  ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
-                  : !progressData?.enrolled
-                    ? null
-                    : progressData.isComplete
-                      ? <span className="font-medium text-blue-600 dark:text-blue-400">
-                          {t("courseCompleted", {
-                            date: progressData.completedAt
-                              ? new Date(progressData.completedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })
-                              : "—",
-                          })}
-                        </span>
-                      : <span className="text-zinc-500 dark:text-zinc-400">
-                          {t("courseInProgress", { percent: progressData.completionPercent })}
-                          {progressData.completionPercent > 0 && (
-                            <button
-                              onClick={() => onReviewProgress(team.id, team.competition.eptimEduCourseId!)}
-                              className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
-                            >
-                              <Eye className="h-3 w-3" /> {t("reviewProgress")}
-                            </button>
-                          )}
-                        </span>
-                }
-              </span>
             </div>
-          </>
-        )}
+          );
+        })}
         {err && (
           <p className="flex items-center gap-1 text-[11px] text-red-600 mt-1">
             <AlertCircle className="h-3 w-3 shrink-0" />{err}
@@ -568,7 +578,7 @@ function TeamTableRow({
 }: {
   team: Team;
   stats: StatsEntry | undefined;
-  progressData: ProgressEntry | undefined;
+  progressData: Record<string, ProgressEntry | undefined>;
   index: number;
   onJoined: (teamId: string, creds: Credentials) => void;
   onEnrolled: (teamId: string) => void;
@@ -577,11 +587,15 @@ function TeamTableRow({
   const t = useTranslations("lms");
   const { joining, enrolling, err, join, enrol } = useTeamLmsActions(team, onJoined, onEnrolled);
 
-  const hasAccount     = !!team.lmsUserId;
-  const hasCourse      = !!team.competition.eptimEduCourseId;
+  const hasAccount       = !!team.lmsUserId;
+  const hasCourse        = !!team.competition.eptimEduCourseId;
+  const compCourseId     = team.competition.eptimEduCourseId;
+  const compProgressData = compCourseId ? progressData[compCourseId] : undefined;
   // Use live progress data (specific to competition's courseId) when available;
   // fall back to DB flag only while the progress fetch is still in-flight.
-  const courseEnrolled = progressData !== undefined ? (progressData?.enrolled === true) : team.lmsCourseEnrolled;
+  const courseEnrolled   = compProgressData !== undefined
+    ? (compProgressData?.enrolled === true)
+    : team.lmsCourseEnrolled;
 
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" });
@@ -620,47 +634,65 @@ function TeamTableRow({
 
       {/* Submission */}
       <td className="px-4 py-2.5 whitespace-nowrap">
-        {hasAccount && hasCourse ? (
-          <span className="text-xs">
-            {progressData === undefined
-              ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
-              : progressData?.hasSubmission && progressData.lastSubmittedAt
-                ? <span className="font-medium text-green-600 dark:text-green-400">
-                    {t("submittedOn", { date: fmtDate(progressData.lastSubmittedAt) })}
-                  </span>
-                : <span className="text-zinc-300">—</span>
-            }
-          </span>
+        {hasAccount && team.courses.length > 0 ? (
+          <div className="space-y-1">
+            {team.courses.map(c => {
+              const pd = progressData[c.courseId];
+              return (
+                <div key={c.courseId} className="text-xs">
+                  {team.courses.length > 1 && (
+                    <span className="text-[10px] text-zinc-400 font-mono block truncate">{c.label ?? c.courseId}</span>
+                  )}
+                  {pd === undefined
+                    ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+                    : pd?.hasSubmission && pd.lastSubmittedAt
+                      ? <span className="font-medium text-green-600 dark:text-green-400">
+                          {t("submittedOn", { date: fmtDate(pd.lastSubmittedAt) })}
+                        </span>
+                      : <span className="text-zinc-300">—</span>
+                  }
+                </div>
+              );
+            })}
+          </div>
         ) : <span className="text-zinc-300 text-xs">—</span>}
       </td>
 
       {/* Progress */}
       <td className="px-4 py-2.5 whitespace-nowrap">
-        {hasAccount && hasCourse ? (
-          <span className="text-xs">
-            {progressData === undefined
-              ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
-              : !progressData?.enrolled
-                ? <span className="text-zinc-300">—</span>
-                : progressData.isComplete
-                  ? <span className="font-medium text-blue-600 dark:text-blue-400">
-                      {t("courseCompleted", {
-                        date: progressData.completedAt ? fmtDate(progressData.completedAt) : "—",
-                      })}
-                    </span>
-                  : <span className="text-zinc-500 dark:text-zinc-400">
-                      {t("courseInProgress", { percent: progressData.completionPercent })}
-                      {progressData.completionPercent > 0 && (
-                        <button
-                          onClick={() => onReviewProgress(team.id, team.competition.eptimEduCourseId!)}
-                          className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
-                        >
-                          <Eye className="h-3 w-3" /> {t("reviewProgress")}
-                        </button>
-                      )}
-                    </span>
-            }
-          </span>
+        {hasAccount && team.courses.length > 0 ? (
+          <div className="space-y-1">
+            {team.courses.map(c => {
+              const pd = progressData[c.courseId];
+              return (
+                <div key={c.courseId} className="text-xs">
+                  {team.courses.length > 1 && (
+                    <span className="text-[10px] text-zinc-400 font-mono block truncate">{c.label ?? c.courseId}</span>
+                  )}
+                  {pd === undefined
+                    ? <Loader2 className="h-3 w-3 animate-spin text-zinc-300 inline" />
+                    : !pd?.enrolled
+                      ? <span className="text-zinc-300">—</span>
+                      : pd.isComplete
+                        ? <span className="font-medium text-blue-600 dark:text-blue-400">
+                            {t("courseCompleted", { date: pd.completedAt ? fmtDate(pd.completedAt) : "—" })}
+                          </span>
+                        : <span className="text-zinc-500 dark:text-zinc-400">
+                            {t("courseInProgress", { percent: pd.completionPercent })}
+                            {pd.completionPercent > 0 && (
+                              <button
+                                onClick={() => onReviewProgress(team.id, c.courseId)}
+                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+                              >
+                                <Eye className="h-3 w-3" /> {t("reviewProgress")}
+                              </button>
+                            )}
+                          </span>
+                  }
+                </div>
+              );
+            })}
+          </div>
         ) : <span className="text-zinc-300 text-xs">—</span>}
       </td>
 
@@ -843,7 +875,11 @@ export function BengkelClient() {
 
       // Fetch login stats and submission status for enrolled teams (in parallel)
       const enrolled = fetched.filter(t => t.lmsUserId);
-      const enrolledWithCourse = enrolled.filter(t => t.competition.eptimEduCourseId);
+
+      // All (teamId, courseId) pairs to fetch progress for
+      const progressPairs = enrolled.flatMap(t =>
+        t.courses.map(c => ({ teamId: t.id, courseId: c.courseId }))
+      );
 
       const [statsResults, subResults] = await Promise.all([
         enrolled.length > 0
@@ -855,12 +891,12 @@ export function BengkelClient() {
               )
             )
           : Promise.resolve([]),
-        enrolledWithCourse.length > 0
+        progressPairs.length > 0
           ? Promise.allSettled(
-              enrolledWithCourse.map(t =>
-                fetch(`/api/v2/manager/teams/${t.id}/lms/progress?courseId=${encodeURIComponent(t.competition.eptimEduCourseId!)}`)
+              progressPairs.map(({ teamId, courseId }) =>
+                fetch(`/api/v2/manager/teams/${teamId}/lms/progress?courseId=${encodeURIComponent(courseId)}`)
                   .then(r => r.json())
-                  .then(j => ({ id: t.id, data: (j.data ?? null) as ProgressEntry }))
+                  .then(j => ({ key: progKey(teamId, courseId), data: (j.data ?? null) as ProgressEntry }))
               )
             )
           : Promise.resolve([]),
@@ -874,7 +910,7 @@ export function BengkelClient() {
 
       const progMap: Record<string, ProgressEntry> = {};
       for (const r of subResults) {
-        if (r.status === "fulfilled") progMap[r.value.id] = r.value.data;
+        if (r.status === "fulfilled") progMap[r.value.key] = r.value.data;
       }
       setProgressStats(progMap);
     } finally { setLoading(false); }
@@ -890,7 +926,17 @@ export function BengkelClient() {
       t.id === teamId ? { ...t, lmsUserId: data.username, lmsCourseEnrolled: data.enrolled } : t
     ));
     setLoginStats(prev => ({ ...prev, [teamId]: { loginCount: 0, lastLoginAt: null } }));
-    setProgressStats(prev => ({ ...prev, [teamId]: { enrolled: false, isComplete: false, completedAt: null, completionPercent: 0, hasSubmission: false, submissionCount: 0, lastSubmittedAt: null } }));
+    // Initialize progress for all courses
+    const joined = teams.find(t => t.id === teamId);
+    if (joined) {
+      setProgressStats(prev => {
+        const next = { ...prev };
+        for (const c of joined.courses) {
+          next[progKey(teamId, c.courseId)] = { enrolled: false, isComplete: false, completedAt: null, completionPercent: 0, hasSubmission: false, submissionCount: 0, lastSubmittedAt: null };
+        }
+        return next;
+      });
+    }
   }
 
   function handleEnrolled(teamId: string) {
@@ -956,7 +1002,7 @@ export function BengkelClient() {
                 {/* Mobile: card list */}
                 <div className="md:hidden divide-y dark:divide-zinc-800">
                   {compTeams.map(team => (
-                    <TeamRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} onJoined={handleJoined} onEnrolled={handleEnrolled} onReviewProgress={handleReviewProgress} />
+                    <TeamRow key={team.id} team={team} stats={loginStats[team.id]} progressData={Object.fromEntries(team.courses.map(c => [c.courseId, progressStats[progKey(team.id, c.courseId)]]))} onJoined={handleJoined} onEnrolled={handleEnrolled} onReviewProgress={handleReviewProgress} />
                   ))}
                 </div>
 
@@ -975,7 +1021,7 @@ export function BengkelClient() {
                     </thead>
                     <tbody className="divide-y dark:divide-zinc-800">
                       {compTeams.map((team, i) => (
-                        <TeamTableRow key={team.id} team={team} stats={loginStats[team.id]} progressData={progressStats[team.id]} index={i} onJoined={handleJoined} onEnrolled={handleEnrolled} onReviewProgress={handleReviewProgress} />
+                        <TeamTableRow key={team.id} team={team} stats={loginStats[team.id]} progressData={Object.fromEntries(team.courses.map(c => [c.courseId, progressStats[progKey(team.id, c.courseId)]]))} index={i} onJoined={handleJoined} onEnrolled={handleEnrolled} onReviewProgress={handleReviewProgress} />
                       ))}
                     </tbody>
                   </table>

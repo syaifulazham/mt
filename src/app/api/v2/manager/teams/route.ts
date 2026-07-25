@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       ...(competitionId && { competitionId }),
     },
     include: {
-      competition: { select: { id: true, name: true, code: true, maxTeamSize: true, minTeamSize: true, eptimEduCourseId: true } },
+      competition: { select: { id: true, name: true, code: true, maxTeamSize: true, minTeamSize: true, eptimEduCourseId: true, eptimEduCourseTitle: true } },
       members: {
         include: {
           participant: { select: { id: true, name: true, gender: true, eduLevel: true } },
@@ -48,7 +48,42 @@ export async function GET(req: NextRequest) {
     orderBy: [{ competitionId: "asc" }, { name: "asc" }],
   });
 
-  return NextResponse.json({ data: teams });
+  // Collect all unique (competitionId, eventId) pairs from teamEvents
+  const competitionIds = [...new Set(teams.map(t => t.competitionId))];
+  const eventIds = [...new Set(teams.flatMap(t => t.teamEvents.map(te => te.eventId)))];
+
+  const eventComps = eventIds.length > 0
+    ? await db.eventCompetition.findMany({
+        where: { competitionId: { in: competitionIds }, eventId: { in: eventIds } },
+        select: { eventId: true, competitionId: true, eptimEduCourseId: true, eptimEduCourseTitle: true },
+      })
+    : [];
+
+  // Map: "competitionId:eventId" → event course info
+  const ecMap = new Map(
+    eventComps
+      .filter(ec => ec.eptimEduCourseId)
+      .map(ec => [`${ec.competitionId}:${ec.eventId}`, { courseId: ec.eptimEduCourseId!, label: ec.eptimEduCourseTitle ?? null }])
+  );
+
+  const teamsWithCourses = teams.map(t => {
+    const seen = new Set<string>();
+    const courses: { courseId: string; label: string | null }[] = [];
+    if (t.competition.eptimEduCourseId) {
+      seen.add(t.competition.eptimEduCourseId);
+      courses.push({ courseId: t.competition.eptimEduCourseId, label: (t.competition as { eptimEduCourseTitle?: string | null }).eptimEduCourseTitle ?? null });
+    }
+    for (const te of t.teamEvents) {
+      const ec = ecMap.get(`${t.competitionId}:${te.eventId}`);
+      if (ec && !seen.has(ec.courseId)) {
+        seen.add(ec.courseId);
+        courses.push(ec);
+      }
+    }
+    return { ...t, courses };
+  });
+
+  return NextResponse.json({ data: teamsWithCourses });
 }
 
 // ── POST /api/v2/manager/teams  ───────────────────────────────────────────────
@@ -92,7 +127,7 @@ export async function POST(req: NextRequest) {
   const team = await db.team.create({
     data: { name: name.trim(), competitionId, contingentId },
     include: {
-      competition: { select: { id: true, name: true, code: true, maxTeamSize: true, minTeamSize: true, eptimEduCourseId: true } },
+      competition: { select: { id: true, name: true, code: true, maxTeamSize: true, minTeamSize: true, eptimEduCourseId: true, eptimEduCourseTitle: true } },
       members: {
         include: {
           participant: { select: { id: true, name: true, gender: true, eduLevel: true } },
@@ -107,5 +142,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({ data: team }, { status: 201 });
+  const courses = team.competition.eptimEduCourseId
+    ? [{ courseId: team.competition.eptimEduCourseId, label: null }]
+    : [];
+  return NextResponse.json({ data: { ...team, courses } }, { status: 201 });
 }
