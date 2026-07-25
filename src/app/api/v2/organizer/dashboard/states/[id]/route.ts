@@ -27,7 +27,7 @@ export async function GET(
   ];
 
   const [state, competitions, participants, totalContingents, totalManagers,
-    primaryContingents, secondaryContingents, distinctHigherInstitutions,
+    primaryContingents, secondaryContingents, higherContingents,
     independentContingents, internationalContingents] = await Promise.all([
     db.state.findUnique({ where: { id } }),
     db.competition.findMany({
@@ -69,12 +69,11 @@ export async function GET(
     db.contingent.count({
       where: { OR: stateOR, contingentType: "SCHOOL", school: { level: "SECONDARY" } },
     }),
-    // Count distinct higher institutions (not contingents) that have at least one
-    // HIGHER contingent registered to this state.
-    db.contingent.findMany({
-      where: { contingentType: "HIGHER", stateId: id, higherInstitutionId: { not: null } },
-      select: { higherInstitutionId: true },
-      distinct: ["higherInstitutionId"],
+    // Count distinct higher institutions in this state that have at least one contingent.
+    // State is resolved via higherInstitution.stateId (HIGHER contingents don't carry
+    // their own stateId — the institution record is the state anchor).
+    db.higherInstitution.count({
+      where: { stateId: id, contingents: { some: { contingentType: "HIGHER" } } },
     }),
     db.contingent.count({ where: { OR: stateOR, contingentType: "INDEPENDENT"   } }),
     db.contingent.count({ where: { OR: stateOR, contingentType: "INTERNATIONAL" } }),
@@ -133,7 +132,7 @@ export async function GET(
       totalManagers,
       primaryContingents,
       secondaryContingents,
-      higherContingents: distinctHigherInstitutions.length,
+      higherContingents,
       independentContingents,
       internationalContingents,
     },

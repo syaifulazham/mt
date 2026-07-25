@@ -24,13 +24,13 @@ export async function GET(
     return NextResponse.json({ error: "INVALID_TYPE" }, { status: 400 });
   }
 
-  // HIGHER: list unique higher institutions that have HIGHER contingents in this state
+  // HIGHER: list unique higher institutions in this state that have at least one contingent.
+  // State is on the institution record itself (higherInstitution.stateId), not on the contingent.
   if (type === "HIGHER") {
     const institutions = await db.higherInstitution.findMany({
       where: {
-        contingents: {
-          some: { contingentType: "HIGHER", stateId },
-        },
+        stateId,
+        contingents: { some: { contingentType: "HIGHER" } },
       },
       select: { id: true, name: true, code: true },
       orderBy: { name: "asc" },
