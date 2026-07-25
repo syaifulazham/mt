@@ -16,6 +16,7 @@ type ContingentRow = {
   createdAt: string;
   stateName: string | null;
   stateCode: string | null;
+  higherInstitutionGroupCount: number | null;
   _count: { managers: number; participants: number; teams: number };
 };
 
@@ -203,6 +204,9 @@ export function ContingentsClient() {
                           <p className="font-medium text-zinc-900 leading-snug">{row.name}</p>
                           {row.shortName && (
                             <p className="text-xs text-zinc-400 mt-0.5">{row.shortName}</p>
+                          )}
+                          {row.contingentType === "HIGHER" && row.higherInstitutionGroupCount != null && row.higherInstitutionGroupCount > 1 && (
+                            <p className="text-xs text-purple-400 mt-0.5">{row.higherInstitutionGroupCount} group management</p>
                           )}
                         </div>
                       </div>

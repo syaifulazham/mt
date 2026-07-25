@@ -44,7 +44,12 @@ export async function GET(req: NextRequest) {
         createdAt:      true,
         state:             stateSelect,
         school:            { select: { state: stateSelect } },
-        higherInstitution: { select: { state: stateSelect } },
+        higherInstitution: {
+          select: {
+            state: stateSelect,
+            _count: { select: { contingents: true } },
+          },
+        },
         _count: {
           select: {
             managers:     true,
@@ -58,8 +63,9 @@ export async function GET(req: NextRequest) {
 
   const data = contingents.map(({ school, higherInstitution, state, ...rest }) => ({
     ...rest,
-    stateName: school?.state?.name ?? higherInstitution?.state?.name ?? state?.name ?? null,
-    stateCode:  school?.state?.code ?? higherInstitution?.state?.code ?? state?.code ?? null,
+    stateName:                   school?.state?.name ?? higherInstitution?.state?.name ?? state?.name ?? null,
+    stateCode:                   school?.state?.code ?? higherInstitution?.state?.code ?? state?.code ?? null,
+    higherInstitutionGroupCount: higherInstitution?._count?.contingents ?? null,
   }));
 
   return NextResponse.json({ total, page, pageSize, data });
