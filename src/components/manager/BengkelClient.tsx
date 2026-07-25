@@ -418,7 +418,9 @@ function TeamRow({
 
   const hasAccount     = !!team.lmsUserId;
   const hasCourse      = !!team.competition.eptimEduCourseId;
-  const courseEnrolled = team.lmsCourseEnrolled;
+  // Use live progress data (specific to competition's courseId) when available;
+  // fall back to DB flag only while the progress fetch is still in-flight.
+  const courseEnrolled = progressData !== undefined ? (progressData?.enrolled === true) : team.lmsCourseEnrolled;
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors dark:hover:bg-zinc-800/40">
@@ -577,7 +579,9 @@ function TeamTableRow({
 
   const hasAccount     = !!team.lmsUserId;
   const hasCourse      = !!team.competition.eptimEduCourseId;
-  const courseEnrolled = team.lmsCourseEnrolled;
+  // Use live progress data (specific to competition's courseId) when available;
+  // fall back to DB flag only while the progress fetch is still in-flight.
+  const courseEnrolled = progressData !== undefined ? (progressData?.enrolled === true) : team.lmsCourseEnrolled;
 
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" });
