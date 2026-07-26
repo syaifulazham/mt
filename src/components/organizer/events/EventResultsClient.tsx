@@ -252,7 +252,7 @@ function ContingentCell({ name, logo }: { name: string; logo: string | null }) {
             {name.slice(0, 2).toUpperCase()}
           </div>
       }
-      <span className="text-sm text-zinc-600 truncate max-w-[200px]">{name}</span>
+      <span className="text-sm text-zinc-600">{name}</span>
     </div>
   );
 }
