@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Trophy, Plus, Trash2, Loader2, Copy, Check,
-  Eye, EyeOff, ExternalLink, Globe, Lock, Medal,
+  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, FileDown, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -273,6 +273,15 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
   const [requirePasscode, setRequirePasscode] = useState(false);
   const [createErr, setCreateErr] = useState("");
 
+  // Download modal state
+  const [showDownload, setShowDownload] = useState(false);
+  const [dlCompScope, setDlCompScope] = useState<"all" | "select">("all");
+  const [dlSelectedComps, setDlSelectedComps] = useState<Set<string>>(new Set());
+  const [dlRankedBy, setDlRankedBy] = useState<"national" | "state">(
+    ["ZONE", "ONLINE_ZONE", "STATE"].includes(event.scope) ? "state" : "national"
+  );
+  const [downloading, setDownloading] = useState(false);
+
   // Selected state map — synced with preregistration page's TeamEvent.selected
   const [selectedMap, setSelectedMap] = useState<Map<string, boolean>>(() => {
     const m = new Map<string, boolean>();
@@ -320,6 +329,19 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
     } catch (e) {
       setCreateErr(e instanceof Error ? e.message : "Gagal");
     } finally { setCreating(false); }
+  }
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const toExport = dlCompScope === "all"
+        ? competitionRankings
+        : competitionRankings.filter(c => dlSelectedComps.has(c.id));
+      if (toExport.length === 0) return;
+      const { exportResultsExcel } = await import("@/lib/export/eventResultsExport");
+      await exportResultsExcel({ eventName: event.name, competitions: toExport, rankedBy: dlRankedBy });
+      setShowDownload(false);
+    } finally { setDownloading(false); }
   }
 
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
@@ -397,7 +419,18 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
               : "Kedudukan Semasa"
             }
           </h2>
-          <CompetitionTabs competitions={competitionRankings} activeId={activeComp} onSelect={setActiveComp} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <CompetitionTabs competitions={competitionRankings} activeId={activeComp} onSelect={setActiveComp} />
+            <Button size="sm" variant="outline"
+              className="h-7 text-xs gap-1 border-rose-200 text-rose-700 hover:bg-rose-50 shrink-0"
+              onClick={() => {
+                setDlCompScope("all");
+                setDlSelectedComps(new Set());
+                setShowDownload(true);
+              }}>
+              <FileDown className="h-3 w-3" /> Muat Turun
+            </Button>
+          </div>
         </div>
 
         {!activeRanking || !hasData ? (
@@ -478,6 +511,104 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
           </div>
         )}
       </div>
+
+      {/* Download dialog */}
+      <Dialog open={showDownload} onOpenChange={o => { if (!o) setShowDownload(false); }}>
+        <DialogContent className="max-w-md w-[calc(100%-2rem)]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <FileDown className="h-4 w-4" /> Muat Turun Keputusan
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2 px-4">
+            {/* Section 1: Competition scope */}
+            <div>
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Pertandingan</p>
+              <div className="flex gap-2">
+                {(["all", "select"] as const).map((v) => (
+                  <button key={v} type="button"
+                    onClick={() => setDlCompScope(v)}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                      dlCompScope === v
+                        ? "bg-rose-600 text-white border-rose-600"
+                        : "bg-white text-zinc-500 border-zinc-200 hover:border-rose-300 hover:text-rose-600"
+                    )}>
+                    {v === "all" ? "Semua" : "Pilih"}
+                  </button>
+                ))}
+              </div>
+              {dlCompScope === "select" && (
+                <div className="mt-2">
+                  <div className="max-h-48 overflow-y-auto border rounded-lg divide-y text-sm">
+                    {competitionRankings.map(c => (
+                      <label key={c.id} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-zinc-50">
+                        <input type="checkbox"
+                          checked={dlSelectedComps.has(c.id)}
+                          onChange={e => {
+                            setDlSelectedComps(prev => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(c.id); else next.delete(c.id);
+                              return next;
+                            });
+                          }}
+                          className="rounded border-zinc-300" />
+                        <span className="text-zinc-700">
+                          <span className="font-mono text-rose-600 mr-1">{c.code}</span>
+                          — {c.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex gap-3 mt-1.5">
+                    <button type="button" className="text-[11px] text-rose-600 hover:underline"
+                      onClick={() => setDlSelectedComps(new Set(competitionRankings.map(c => c.id)))}>
+                      Pilih Semua
+                    </button>
+                    <button type="button" className="text-[11px] text-zinc-400 hover:underline"
+                      onClick={() => setDlSelectedComps(new Set())}>
+                      Nyahpilih Semua
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Ranked by — only shown if any competition has stateGroups */}
+            {!competitionRankings.every(c => c.stateGroups.length === 0) && (
+              <div>
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Susun Mengikut</p>
+                <div className="flex gap-2">
+                  {([["national", "Kebangsaan"], ["state", "Negeri"]] as const).map(([v, label]) => (
+                    <button key={v} type="button"
+                      onClick={() => setDlRankedBy(v)}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                        dlRankedBy === v
+                          ? "bg-rose-600 text-white border-rose-600"
+                          : "bg-white text-zinc-500 border-zinc-200 hover:border-rose-300 hover:text-rose-600"
+                      )}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDownload(false)} disabled={downloading}>Batal</Button>
+            <Button
+              onClick={handleDownload}
+              disabled={downloading || (dlCompScope === "select" && dlSelectedComps.size === 0)}
+              className="bg-rose-600 hover:bg-rose-700 text-white gap-1.5">
+              {downloading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Download className="h-4 w-4" />}
+              Muat Turun
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create endpoint dialog */}
       <Dialog open={showCreate} onOpenChange={o => { if (!o) setShowCreate(false); }}>
