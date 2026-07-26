@@ -24,6 +24,8 @@ type TeamRow = {
   stateName: string | null;
   competitionCode: string;
   competitionName: string;
+  targetGroupCode: string | null;
+  targetGroupName: string | null;
   members: bigint;
   memberNames: string | null;
 };
@@ -182,6 +184,12 @@ export async function GET(
         COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
         c.code    AS "competitionCode",
         c.name    AS "competitionName",
+        (SELECT tg.code FROM competition_target_groups ctg2
+         JOIN target_groups tg ON tg.id = ctg2."targetGroupId"
+         WHERE ctg2."competitionId" = c.id LIMIT 1) AS "targetGroupCode",
+        (SELECT tg.name FROM competition_target_groups ctg2
+         JOIN target_groups tg ON tg.id = ctg2."targetGroupId"
+         WHERE ctg2."competitionId" = c.id LIMIT 1) AS "targetGroupName",
         COUNT(DISTINCT tm."contestantId")                          AS members,
         STRING_AGG(p.name, ', ' ORDER BY p.name)                  AS "memberNames"
       FROM teams t
@@ -199,7 +207,7 @@ export async function GET(
       WHERE 1=1 ${extraConditions}
       GROUP BY t.id, t.name, cont.name,
         COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name
-      ORDER BY c.code, t.name
+      ORDER BY c.code, COALESCE(s.name, sch_state.name, hi_state.name), cont.name, t.name
     `;
 
     return NextResponse.json({
@@ -210,6 +218,8 @@ export async function GET(
         stateName:       r.stateName,
         competitionCode: r.competitionCode,
         competitionName: r.competitionName,
+        targetGroupCode: r.targetGroupCode,
+        targetGroupName: r.targetGroupName,
         members:         Number(r.members),
         memberNames:     r.memberNames ?? "",
       })),

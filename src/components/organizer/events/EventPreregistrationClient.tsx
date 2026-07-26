@@ -29,6 +29,8 @@ type Team = {
   stateName: string | null;
   competitionCode: string;
   competitionName: string;
+  targetGroupCode: string | null;
+  targetGroupName: string | null;
   members: number;
   selected: boolean;
   acceptance: string;
@@ -416,18 +418,8 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         utils.book_append_sheet(wb, ws, "Peserta");
         writeFile(wb, `pendaftaran-peserta-${event.slug}.xlsx`);
       } else if (listTab === "teams") {
-        const wsData = data.map((r: { teamName: string; contingentName: string | null; stateName: string | null; competitionCode: string; competitionName: string; members: number; memberNames: string }) => ({
-          "Pasukan":      r.teamName        ?? "",
-          "Kontingen":    r.contingentName  ?? "",
-          "Negeri":       r.stateName       ?? "",
-          "Pertandingan": `${r.competitionCode} — ${r.competitionName}`,
-          "Jml Ahli":     r.members         ?? 0,
-          "Nama Ahli":    r.memberNames     ?? "",
-        }));
-        const ws = utils.json_to_sheet(wsData);
-        const wb = utils.book_new();
-        utils.book_append_sheet(wb, ws, "Pasukan");
-        writeFile(wb, `pendaftaran-pasukan-${event.slug}.xlsx`);
+        const { exportTeamsExcel } = await import("@/lib/export/teamsExport");
+        await exportTeamsExcel(event.name, event.slug, data);
       }
     } catch (e) {
       console.error("[download]", e);
