@@ -70,7 +70,7 @@ export function FinalProgramExportButtons({ eventId }: Props) {
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 text-white transition-colors disabled:opacity-50"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            Unduh / Cetak
+            Muat turun / Cetak
             <ChevronDown
               className={`w-3.5 h-3.5 transition-transform ${showDropdown ? "rotate-180" : ""}`}
             />
