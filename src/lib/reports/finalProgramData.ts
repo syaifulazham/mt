@@ -79,6 +79,10 @@ export interface FinalProgramData {
   walkInRendahComps: WalkInCompStat[];
   walkInMenengahComps: WalkInCompStat[];
   walkInBeliaComps: WalkInCompStat[];
+  walkInEthnicityStats: {
+    melayu: number; cina: number; india: number;
+    orgAsli: number; sabah: number; sarawak: number; lainLain: number;
+  };
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -258,6 +262,23 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     .map(c => ({ code: c.code, name: c.name, level: c.level, participants: c.pids.size }))
     .sort((a, b) => a.code.localeCompare(b.code));
 
+  // walk-in ethnicity
+  const wiEthn = new Map<string, Set<string>>();
+  for (const w of walkIns) {
+    const k = (w.participant.ethnicity as string | null) ?? "LAIN_LAIN";
+    if (!wiEthn.has(k)) wiEthn.set(k, new Set());
+    wiEthn.get(k)!.add(w.participant.id);
+  }
+  const walkInEthnicityStats = {
+    melayu:   wiEthn.get("MELAYU")?.size ?? 0,
+    cina:     wiEthn.get("CINA")?.size ?? 0,
+    india:    wiEthn.get("INDIA")?.size ?? 0,
+    orgAsli:  wiEthn.get("ORANG_ASLI_SEMENANJUNG")?.size ?? 0,
+    sabah:    wiEthn.get("BUMIPUTRA_SABAH")?.size ?? 0,
+    sarawak:  wiEthn.get("BUMIPUTRA_SARAWAK")?.size ?? 0,
+    lainLain: wiEthn.get("LAIN_LAIN")?.size ?? 0,
+  };
+
   // competition stats
   const compMap = new Map<string, { code: string; name: string; level: Level; teams: number; pids: Set<string> }>();
   for (const t of tds) {
@@ -349,5 +370,6 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     walkInRendahComps:   allWiComps.filter(c => c.level === "RENDAH"),
     walkInMenengahComps: allWiComps.filter(c => c.level === "MENENGAH"),
     walkInBeliaComps:    allWiComps.filter(c => c.level === "BELIA"),
+    walkInEthnicityStats,
   };
 }

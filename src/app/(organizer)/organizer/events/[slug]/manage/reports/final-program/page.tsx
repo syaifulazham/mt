@@ -687,6 +687,92 @@ export default async function FinalProgramReportPage({
           </div>
         )}
 
+        {/* ══ WALK-IN MENGIKUT KAUM ════════════════════════════════════════ */}
+        {d.walkInSummary.total > 0 && (
+          <div className="overflow-hidden rounded-sm">
+            <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
+              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
+                Penyertaan Walk-In
+              </span>
+              <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
+                Jumlah Peserta Walk-In Mengikut Kaum
+              </span>
+            </div>
+
+            {(() => {
+              const cols = [
+                { label: "Melayu",    value: d.walkInEthnicityStats.melayu },
+                { label: "Cina",      value: d.walkInEthnicityStats.cina },
+                { label: "India",     value: d.walkInEthnicityStats.india },
+                { label: "Org. Asli", value: d.walkInEthnicityStats.orgAsli },
+                { label: "Sabah",     value: d.walkInEthnicityStats.sabah },
+                { label: "Sarawak",   value: d.walkInEthnicityStats.sarawak },
+                { label: "Lain-Lain", value: d.walkInEthnicityStats.lainLain },
+              ];
+              const total = cols.reduce((s, c) => s + c.value, 0);
+              return (
+                <table className="w-full table-fixed">
+                  <colgroup>
+                    {cols.map(c => (
+                      <col key={c.label} style={{ width: `${(100 / cols.length).toFixed(4)}%` }} />
+                    ))}
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-slate-700">
+                      {cols.map(c => (
+                        <th
+                          key={c.label}
+                          className="py-2 text-center text-[9px] font-black uppercase tracking-widest text-slate-200"
+                        >
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="bg-white">
+                      {cols.map(c => (
+                        <td key={c.label} className="py-3 text-center">
+                          <div className="text-xl font-black font-mono text-slate-900 leading-none">
+                            {n(c.value)}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="bg-slate-50">
+                      {cols.map(c => (
+                        <td key={c.label} className="px-1.5 py-1.5 text-center">
+                          <div className="text-[9px] font-semibold text-slate-500 tabular-nums">
+                            {total ? ((c.value / total) * 100).toFixed(1) : "0.0"}%
+                          </div>
+                          <div className="mt-1 h-1 w-full rounded-full bg-slate-200 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-slate-700"
+                              style={{ width: total ? `${(c.value / total) * 100}%` : "0%" }}
+                            />
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-900">
+                      <td colSpan={cols.length} className="px-4 py-1.5 text-right">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-2">
+                          Jumlah Keseluruhan
+                        </span>
+                        <span className="text-sm font-black font-mono text-white">
+                          {n(total)}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              );
+            })()}
+          </div>
+        )}
+
         {/* ══ 2. MENGIKUT NEGERI ════════════════════════════════════════════ */}
         <div className="overflow-hidden rounded-sm">
           <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
