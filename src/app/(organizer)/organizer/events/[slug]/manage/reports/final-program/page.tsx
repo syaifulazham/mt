@@ -278,76 +278,104 @@ export default async function FinalProgramReportPage({
               </div>
 
               {(() => {
-                const cols = [
-                  { label: "Melayu",    value: d.ethnicityStats.melayu },
-                  { label: "Cina",      value: d.ethnicityStats.cina },
-                  { label: "India",     value: d.ethnicityStats.india },
-                  { label: "Org. Asli", value: d.ethnicityStats.orgAsli },
-                  { label: "Sabah",     value: d.ethnicityStats.sabah },
-                  { label: "Sarawak",   value: d.ethnicityStats.sarawak },
-                  { label: "Lain-Lain", value: d.ethnicityStats.lainLain },
+                const labels = ["Melayu", "Cina", "India", "Org. Asli", "Sabah", "Sarawak", "Lain-Lain"];
+                const regVals = [
+                  d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
+                  d.ethnicityStats.orgAsli, d.ethnicityStats.sabah, d.ethnicityStats.sarawak, d.ethnicityStats.lainLain,
                 ];
-                const total = cols.reduce((s, c) => s + c.value, 0);
+                const wiVals = [
+                  d.walkInEthnicityStats.melayu, d.walkInEthnicityStats.cina, d.walkInEthnicityStats.india,
+                  d.walkInEthnicityStats.orgAsli, d.walkInEthnicityStats.sabah, d.walkInEthnicityStats.sarawak, d.walkInEthnicityStats.lainLain,
+                ];
+                const regTotal = regVals.reduce((s, v) => s + v, 0);
+                const wiTotal  = wiVals.reduce((s, v) => s + v, 0);
+                const grandTotal = regTotal + wiTotal;
+
+                const PctRow = ({ vals, total, bg }: { vals: number[]; total: number; bg: string }) => (
+                  <tr className={bg}>
+                    {vals.map((v, i) => (
+                      <td key={labels[i]} className="px-1.5 py-1.5 text-center">
+                        <div className="text-[9px] font-semibold text-slate-500 tabular-nums">
+                          {total ? ((v / total) * 100).toFixed(1) : "0.0"}%
+                        </div>
+                        <div className="mt-1 h-1 w-full rounded-full bg-slate-200 overflow-hidden">
+                          <div className="h-full rounded-full bg-slate-700" style={{ width: total ? `${(v / total) * 100}%` : "0%" }} />
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                );
+
                 return (
                   <table className="w-full table-fixed">
                     <colgroup>
-                      {cols.map(c => (
-                        <col key={c.label} style={{ width: `${(100 / cols.length).toFixed(4)}%` }} />
+                      {labels.map(l => (
+                        <col key={l} style={{ width: `${(100 / labels.length).toFixed(4)}%` }} />
                       ))}
                     </colgroup>
                     <thead>
                       <tr className="bg-slate-700">
-                        {cols.map(c => (
-                          <th
-                            key={c.label}
-                            className="py-2 text-center text-[9px] font-black uppercase tracking-widest text-slate-200"
-                          >
-                            {c.label}
+                        {labels.map(l => (
+                          <th key={l} className="py-2 text-center text-[9px] font-black uppercase tracking-widest text-slate-200">
+                            {l}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Berdaftar group */}
+                      <tr className="bg-slate-800">
+                        <td colSpan={labels.length} className="px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                          Peserta Berdaftar
+                        </td>
+                      </tr>
                       <tr className="bg-white">
-                        {cols.map(c => (
-                          <td
-                            key={c.label}
-                            className="py-3 text-center"
-                          >
-                            <div className="text-xl font-black font-mono text-slate-900 leading-none">
-                              {n(c.value)}
-                            </div>
+                        {regVals.map((v, i) => (
+                          <td key={labels[i]} className="py-3 text-center">
+                            <div className="text-xl font-black font-mono text-slate-900 leading-none">{n(v)}</div>
                           </td>
                         ))}
                       </tr>
-                      <tr className="bg-slate-50">
-                        {cols.map(c => (
-                          <td
-                            key={c.label}
-                            className="px-1.5 py-1.5 text-center"
-                          >
-                            <div className="text-[9px] font-semibold text-slate-500 tabular-nums">
-                              {total ? ((c.value / total) * 100).toFixed(1) : "0.0"}%
-                            </div>
-                            <div className="mt-1 h-1 w-full rounded-full bg-slate-200 overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-slate-700"
-                                style={{ width: total ? `${(c.value / total) * 100}%` : "0%" }}
-                              />
-                            </div>
-                          </td>
-                        ))}
+                      <PctRow vals={regVals} total={regTotal} bg="bg-slate-50" />
+                      <tr className="bg-slate-200">
+                        <td colSpan={labels.length} className="px-3 py-1 text-right text-[10px] text-slate-600">
+                          <span className="font-semibold uppercase tracking-widest mr-2">Jumlah Berdaftar</span>
+                          <span className="font-black font-mono text-slate-900">{n(regTotal)}</span>
+                        </td>
                       </tr>
+
+                      {/* Walk-In group */}
+                      {wiTotal > 0 && (
+                        <>
+                          <tr className="bg-slate-800">
+                            <td colSpan={labels.length} className="px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+                              Peserta Walk-In
+                            </td>
+                          </tr>
+                          <tr className="bg-white">
+                            {wiVals.map((v, i) => (
+                              <td key={labels[i]} className="py-3 text-center">
+                                <div className="text-xl font-black font-mono text-slate-900 leading-none">{n(v)}</div>
+                              </td>
+                            ))}
+                          </tr>
+                          <PctRow vals={wiVals} total={wiTotal} bg="bg-slate-50" />
+                          <tr className="bg-slate-200">
+                            <td colSpan={labels.length} className="px-3 py-1 text-right text-[10px] text-slate-600">
+                              <span className="font-semibold uppercase tracking-widest mr-2">Jumlah Walk-In</span>
+                              <span className="font-black font-mono text-slate-900">{n(wiTotal)}</span>
+                            </td>
+                          </tr>
+                        </>
+                      )}
                     </tbody>
                     <tfoot>
                       <tr className="bg-slate-900">
-                        <td colSpan={cols.length} className="px-4 py-1.5 text-right">
+                        <td colSpan={labels.length} className="px-4 py-1.5 text-right">
                           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-2">
                             Jumlah Keseluruhan
                           </span>
-                          <span className="text-sm font-black font-mono text-white">
-                            {n(total)}
-                          </span>
+                          <span className="text-sm font-black font-mono text-white">{n(grandTotal)}</span>
                         </td>
                       </tr>
                     </tfoot>
@@ -684,92 +712,6 @@ export default async function FinalProgramReportPage({
                 </tr>
               </tbody>
             </table>
-          </div>
-        )}
-
-        {/* ══ WALK-IN MENGIKUT KAUM ════════════════════════════════════════ */}
-        {d.walkInSummary.total > 0 && (
-          <div className="overflow-hidden rounded-sm">
-            <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
-              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
-                Penyertaan Walk-In
-              </span>
-              <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
-                Jumlah Peserta Walk-In Mengikut Kaum
-              </span>
-            </div>
-
-            {(() => {
-              const cols = [
-                { label: "Melayu",    value: d.walkInEthnicityStats.melayu },
-                { label: "Cina",      value: d.walkInEthnicityStats.cina },
-                { label: "India",     value: d.walkInEthnicityStats.india },
-                { label: "Org. Asli", value: d.walkInEthnicityStats.orgAsli },
-                { label: "Sabah",     value: d.walkInEthnicityStats.sabah },
-                { label: "Sarawak",   value: d.walkInEthnicityStats.sarawak },
-                { label: "Lain-Lain", value: d.walkInEthnicityStats.lainLain },
-              ];
-              const total = cols.reduce((s, c) => s + c.value, 0);
-              return (
-                <table className="w-full table-fixed">
-                  <colgroup>
-                    {cols.map(c => (
-                      <col key={c.label} style={{ width: `${(100 / cols.length).toFixed(4)}%` }} />
-                    ))}
-                  </colgroup>
-                  <thead>
-                    <tr className="bg-slate-700">
-                      {cols.map(c => (
-                        <th
-                          key={c.label}
-                          className="py-2 text-center text-[9px] font-black uppercase tracking-widest text-slate-200"
-                        >
-                          {c.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="bg-white">
-                      {cols.map(c => (
-                        <td key={c.label} className="py-3 text-center">
-                          <div className="text-xl font-black font-mono text-slate-900 leading-none">
-                            {n(c.value)}
-                          </div>
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="bg-slate-50">
-                      {cols.map(c => (
-                        <td key={c.label} className="px-1.5 py-1.5 text-center">
-                          <div className="text-[9px] font-semibold text-slate-500 tabular-nums">
-                            {total ? ((c.value / total) * 100).toFixed(1) : "0.0"}%
-                          </div>
-                          <div className="mt-1 h-1 w-full rounded-full bg-slate-200 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-slate-700"
-                              style={{ width: total ? `${(c.value / total) * 100}%` : "0%" }}
-                            />
-                          </div>
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-slate-900">
-                      <td colSpan={cols.length} className="px-4 py-1.5 text-right">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-2">
-                          Jumlah Keseluruhan
-                        </span>
-                        <span className="text-sm font-black font-mono text-white">
-                          {n(total)}
-                        </span>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              );
-            })()}
           </div>
         )}
 
