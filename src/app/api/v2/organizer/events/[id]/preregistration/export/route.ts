@@ -206,7 +206,7 @@ export async function GET(
       LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
       WHERE 1=1 ${extraConditions}
       GROUP BY t.id, t.name, cont.name,
-        COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name
+        COALESCE(s.name, sch_state.name, hi_state.name), c.id, c.code, c.name
       ORDER BY c.code, COALESCE(s.name, sch_state.name, hi_state.name), cont.name, t.name
     `;
 
