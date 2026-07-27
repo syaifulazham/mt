@@ -596,6 +596,97 @@ export default async function FinalProgramReportPage({
           </table>
         </div>
 
+        {/* ══ WALK-IN MENGIKUT TAHAP PENDIDIKAN ════════════════════════════ */}
+        {(d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0) && (
+          <div className="overflow-hidden rounded-sm">
+            <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
+              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
+                Penyertaan Walk-In
+              </span>
+              <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
+                Penyertaan Pertandingan &lsquo;Walk-In&rsquo; Mengikut Tahap Pendidikan
+              </span>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={`${TH_LEFT} w-44`}>Tahap Pendidikan</th>
+                  <th className={`${TH} w-20`}>Kod</th>
+                  <th className={TH_LEFT}>Pertandingan</th>
+                  <th className={`${TH} w-24`}>Peserta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  {
+                    label: "Sekolah Rendah",
+                    comps: d.walkInRendahComps,
+                    labelCls: "bg-indigo-800 text-white",
+                    subCls: "bg-indigo-50",
+                    totCls: "bg-indigo-100 text-indigo-900",
+                  },
+                  {
+                    label: "Sekolah Menengah",
+                    comps: d.walkInMenengahComps,
+                    labelCls: "bg-amber-800 text-white",
+                    subCls: "bg-amber-50",
+                    totCls: "bg-amber-100 text-amber-900",
+                  },
+                  {
+                    label: "Belia",
+                    comps: d.walkInBeliaComps,
+                    labelCls: "bg-teal-800 text-white",
+                    subCls: "bg-teal-50",
+                    totCls: "bg-teal-100 text-teal-900",
+                  },
+                ].map(g =>
+                  g.comps.length ? (
+                    <Fragment key={g.label}>
+                      {g.comps.map((c, i) => (
+                        <tr key={c.code} className={g.subCls}>
+                          {i === 0 && (
+                            <td
+                              className={`px-3 py-2 text-xs font-black uppercase tracking-wide align-top ${g.labelCls}`}
+                              rowSpan={g.comps.length + 1}
+                            >
+                              {g.label}
+                            </td>
+                          )}
+                          <td className="px-3 py-1.5 text-center font-mono text-xs text-slate-700">
+                            {c.code}
+                          </td>
+                          <td className="px-3 py-1.5 text-xs text-slate-700">
+                            {c.name}
+                          </td>
+                          <td className="px-3 py-1.5 text-center font-mono font-bold text-xs text-slate-900 tabular-nums">
+                            {n(c.participants)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className={`${g.totCls} font-semibold`}>
+                        <td className="px-3 py-1.5 text-right text-xs" colSpan={2}>
+                          Jumlah {g.label}:
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-mono font-black text-sm tabular-nums">
+                          {n(g.comps.reduce((s, c) => s + c.participants, 0))}
+                        </td>
+                      </tr>
+                    </Fragment>
+                  ) : null,
+                )}
+                <tr className="bg-slate-900 text-white">
+                  <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={3}>
+                    Jumlah Keseluruhan Peserta Walk-In
+                  </td>
+                  <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
+                    {n(d.walkInSummary.total)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* ══ 2. MENGIKUT NEGERI ════════════════════════════════════════════ */}
         <div className="overflow-hidden rounded-sm">
           <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">

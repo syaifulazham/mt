@@ -31,6 +31,12 @@ export interface StateCompGroup {
   comps: (CompStat & { level: Level })[];
 }
 
+export interface WalkInCompStat {
+  code: string;
+  name: string;
+  participants: number;
+}
+
 export interface FinalProgramData {
   eventName: string;
   eventId: string;
@@ -70,6 +76,9 @@ export interface FinalProgramData {
   menengahComps: CompStat[];
   beliaComps: CompStat[];
   stateCompStats: StateCompGroup[];
+  walkInRendahComps: WalkInCompStat[];
+  walkInMenengahComps: WalkInCompStat[];
+  walkInBeliaComps: WalkInCompStat[];
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -236,6 +245,19 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     total: new Set(walkIns.map(w => w.participant.id)).size,
   };
 
+  // walk-in per competition
+  const wiCompMap = new Map<string, { code: string; name: string; level: Level; pids: Set<string> }>();
+  for (const w of walkIns) {
+    const comp = w.walkInCompetition.competition;
+    const level = classifyLevel(comp.targetGroups);
+    if (!wiCompMap.has(comp.id))
+      wiCompMap.set(comp.id, { code: comp.code, name: comp.name, level, pids: new Set() });
+    wiCompMap.get(comp.id)!.pids.add(w.participant.id);
+  }
+  const allWiComps = [...wiCompMap.values()]
+    .map(c => ({ code: c.code, name: c.name, level: c.level, participants: c.pids.size }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
   // competition stats
   const compMap = new Map<string, { code: string; name: string; level: Level; teams: number; pids: Set<string> }>();
   for (const t of tds) {
@@ -324,5 +346,8 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     menengahComps: allComps.filter(c => c.level === "MENENGAH"),
     beliaComps:    allComps.filter(c => c.level === "BELIA"),
     stateCompStats,
+    walkInRendahComps:   allWiComps.filter(c => c.level === "RENDAH"),
+    walkInMenengahComps: allWiComps.filter(c => c.level === "MENENGAH"),
+    walkInBeliaComps:    allWiComps.filter(c => c.level === "BELIA"),
   };
 }
