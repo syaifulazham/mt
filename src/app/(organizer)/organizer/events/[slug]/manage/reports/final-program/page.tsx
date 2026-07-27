@@ -31,6 +31,23 @@ const TH_LEFT = "px-3 py-2 text-left text-[9px] font-black uppercase tracking-wi
 const TD = "px-3 py-1.5 text-slate-700 text-xs";
 const TD_NUM = "px-3 py-1.5 text-center font-mono font-bold text-slate-900 text-xs tabular-nums";
 const TD_LABEL = "px-3 py-1.5 text-slate-700 text-xs font-medium";
+
+function PctRow({ vals, labels, total, bg }: { vals: number[]; labels: string[]; total: number; bg: string }) {
+  return (
+    <tr className={bg}>
+      {vals.map((v, i) => (
+        <td key={labels[i]} className="px-1.5 py-1.5 text-center">
+          <div className="text-[9px] font-semibold text-slate-500 tabular-nums">
+            {total ? ((v / total) * 100).toFixed(1) : "0.0"}%
+          </div>
+          <div className="mt-1 h-1 w-full rounded-full bg-slate-200 overflow-hidden">
+            <div className="h-full rounded-full bg-slate-700" style={{ width: total ? `${(v / total) * 100}%` : "0%" }} />
+          </div>
+        </td>
+      ))}
+    </tr>
+  );
+}
 const TR_ODD = "bg-white";
 const TR_EVEN = "bg-slate-50";
 
@@ -295,21 +312,6 @@ export default async function FinalProgramReportPage({
                 const wiTotal  = wiVals.reduce((s, v) => s + v, 0);
                 const grandTotal = regTotal + wiTotal;
 
-                const PctRow = ({ vals, total, bg }: { vals: number[]; total: number; bg: string }) => (
-                  <tr className={bg}>
-                    {vals.map((v, i) => (
-                      <td key={labels[i]} className="px-1.5 py-1.5 text-center">
-                        <div className="text-[9px] font-semibold text-slate-500 tabular-nums">
-                          {total ? ((v / total) * 100).toFixed(1) : "0.0"}%
-                        </div>
-                        <div className="mt-1 h-1 w-full rounded-full bg-slate-200 overflow-hidden">
-                          <div className="h-full rounded-full bg-slate-700" style={{ width: total ? `${(v / total) * 100}%` : "0%" }} />
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
-                );
-
                 return (
                   <table className="w-full table-fixed">
                     <colgroup>
@@ -340,7 +342,7 @@ export default async function FinalProgramReportPage({
                           </td>
                         ))}
                       </tr>
-                      <PctRow vals={regVals} total={regTotal} bg="bg-slate-50" />
+                      <PctRow vals={regVals} labels={labels} total={regTotal} bg="bg-slate-50" />
                       <tr className="bg-slate-200">
                         <td colSpan={labels.length} className="px-3 py-1 text-right text-[10px] text-slate-600">
                           <span className="font-semibold uppercase tracking-widest mr-2">Jumlah Berdaftar</span>
@@ -363,7 +365,7 @@ export default async function FinalProgramReportPage({
                               </td>
                             ))}
                           </tr>
-                          <PctRow vals={wiVals} total={wiTotal} bg="bg-slate-50" />
+                          <PctRow vals={wiVals} labels={labels} total={wiTotal} bg="bg-slate-50" />
                           <tr className="bg-slate-200">
                             <td colSpan={labels.length} className="px-3 py-1 text-right text-[10px] text-slate-600">
                               <span className="font-semibold uppercase tracking-widest mr-2">Jumlah Walk-In</span>

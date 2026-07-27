@@ -64,6 +64,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ data: { newPassword } });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { renewPassword: _, ...updateData } = parsed.data;
   const updated = await db.organizerUser.update({
     where: { id },
