@@ -140,16 +140,16 @@ export default async function FinalProgramReportPage({
             <table className="w-full">
               <tbody>
                 <tr className={TR_ODD}>
-                  <td className={TD_LABEL}>1. Peserta Utama</td>
-                  <td className={`${TD_NUM} text-right pr-4`}>{n(pesertaUtama)}</td>
+                  <td className="px-3 py-2 text-slate-700 text-sm font-black">1. Peserta Utama</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-2xl tabular-nums pr-4">{n(pesertaUtama)}</td>
                 </tr>
                 <tr className={TR_EVEN}>
-                  <td className={TD_LABEL}>2. Peserta Walk-in</td>
-                  <td className={`${TD_NUM} text-right pr-4`}>{n(d.walkInSummary.total)}</td>
+                  <td className="px-3 py-2 text-slate-700 text-sm font-black">2. Peserta Walk-in</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-2xl tabular-nums pr-4">{n(d.walkInSummary.total)}</td>
                 </tr>
                 <tr className={TR_ODD}>
-                  <td className={TD_LABEL}>3. Jurulatih</td>
-                  <td className={`${TD_NUM} text-right pr-4`}>{n(d.trainerCount)}</td>
+                  <td className="px-3 py-2 text-slate-700 text-sm font-black">3. Jurulatih</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-2xl tabular-nums pr-4">{n(d.trainerCount)}</td>
                 </tr>
               </tbody>
             </table>
@@ -223,16 +223,6 @@ export default async function FinalProgramReportPage({
                 </tr>
               </tbody>
             </table>
-
-            {/* BERDAFTAR SUBTOTAL */}
-            <div className="bg-slate-800 px-4 py-2 flex items-center justify-between">
-              <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                Jumlah Keseluruhan Peserta Berdaftar
-              </div>
-              <div className="text-xl font-black font-mono text-white tabular-nums">
-                {n(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants)}
-              </div>
-            </div>
 
             {/* WALK-IN */}
             <div className="bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 mt-2">
