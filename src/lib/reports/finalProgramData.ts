@@ -83,6 +83,10 @@ export interface FinalProgramData {
     melayu: number; cina: number; india: number;
     orgAsli: number; sabah: number; sarawak: number; lainLain: number;
   };
+  walkInSchoolMale: number;
+  walkInSchoolFemale: number;
+  walkInBeliaMale: number;
+  walkInBeliaFemale: number;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -262,6 +266,12 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     .map(c => ({ code: c.code, name: c.name, level: c.level, participants: c.pids.size }))
     .sort((a, b) => a.code.localeCompare(b.code));
 
+  // walk-in gender
+  const walkInSchoolMale   = new Set(wiSchool.filter(w => (w.participant.gender as string) === "MALE").map(w => w.participant.id)).size;
+  const walkInSchoolFemale = new Set(wiSchool.filter(w => (w.participant.gender as string) === "FEMALE").map(w => w.participant.id)).size;
+  const walkInBeliaMale    = new Set(wiBelia.filter(w => (w.participant.gender as string) === "MALE").map(w => w.participant.id)).size;
+  const walkInBeliaFemale  = new Set(wiBelia.filter(w => (w.participant.gender as string) === "FEMALE").map(w => w.participant.id)).size;
+
   // walk-in ethnicity
   const wiEthn = new Map<string, Set<string>>();
   for (const w of walkIns) {
@@ -371,5 +381,7 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     walkInMenengahComps: allWiComps.filter(c => c.level === "MENENGAH"),
     walkInBeliaComps:    allWiComps.filter(c => c.level === "BELIA"),
     walkInEthnicityStats,
+    walkInSchoolMale, walkInSchoolFemale,
+    walkInBeliaMale, walkInBeliaFemale,
   };
 }

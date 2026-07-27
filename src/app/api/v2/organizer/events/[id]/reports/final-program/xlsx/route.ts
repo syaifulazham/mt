@@ -172,6 +172,12 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     r++;
   }
 
+  // Berdaftar subtotal banner
+  ws.mergeCells(r, 1, r, 3);
+  applyCell(ws.getCell(r, 1), "JUMLAH KESELURUHAN PESERTA BERDAFTAR", C.slate800, left, true, C.white);
+  applyCell(ws.getCell(r, 4), jumlahPeserta - d.walkInSummary.total, C.slate800, right, true, C.white);
+  ws.getRow(r).height = 18; r++;
+  spacer();
   spacer();
   subHeader("Walk-In", 4);
   applyHeader(ws.getCell(r, 1), "Kategori", C.slate700);
@@ -212,6 +218,30 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell(r, 3), pct(female, femaleT), C.rose50, center, false, "9F1239");
     r++;
     spacer();
+  }
+
+  // Walk-in gender
+  if (d.walkInSummary.total > 0) {
+    for (const [label, male, female] of [
+      ["Jantina Pelajar Sekolah (Walk-In)", d.walkInSchoolMale, d.walkInSchoolFemale],
+      ["Jantina Belia (Walk-In)",           d.walkInBeliaMale,  d.walkInBeliaFemale],
+    ] as [string, number, number][]) {
+      const wiGT = male + female;
+      subHeader(label, 4);
+      applyHeader(ws.getCell(r, 1), "Jantina",  C.slate700);
+      applyHeader(ws.getCell(r, 2), "Bilangan", C.slate700);
+      applyHeader(ws.getCell(r, 3), "%",        C.slate700);
+      ws.getRow(r).height = 16; r++;
+      applyCell(ws.getCell(r, 1), "Lelaki",    C.indigo50, left, true, C.indigo800);
+      applyCell(ws.getCell(r, 2), nv(male),    C.indigo50, center, true, C.indigo800);
+      applyCell(ws.getCell(r, 3), pct(male, wiGT), C.indigo50, center, false, C.indigo800);
+      r++;
+      applyCell(ws.getCell(r, 1), "Perempuan", C.rose50, left, true, "9F1239");
+      applyCell(ws.getCell(r, 2), nv(female),  C.rose50, center, true, "9F1239");
+      applyCell(ws.getCell(r, 3), pct(female, wiGT), C.rose50, center, false, "9F1239");
+      r++;
+      spacer();
+    }
   }
 
   // ═══ SECTION 2: KAUM ═══════════════════════════════════════════════════════
@@ -494,6 +524,10 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell("C13"), nv(d.walkInSummary.beliaParticipants),  C.white, center);
     applyCell(ws.getCell("D13"), nv(d.walkInSummary.total), C.white, center, true);
 
+    ws.mergeCells("A14:C14");
+    applyCell(ws.getCell("A14"), "JUMLAH KESELURUHAN PESERTA BERDAFTAR", C.slate800, left, true, C.white);
+    applyCell(ws.getCell("D14"), jumlahPeserta - d.walkInSummary.total, C.slate800, center, true, C.white);
+    ws.getRow(14).height = 18;
     // Grand total (peserta only, no trainers)
     ws.mergeCells("A15:C15");
     applyCell(ws.getCell("A15"), "JUMLAH KESELURUHAN (Berdaftar + Walk-In)", C.slate900, left, true, C.white);
@@ -524,15 +558,39 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell("B25"), nv(d.beliaFemale), C.rose50, center, true, "9F1239");
     applyCell(ws.getCell("C25"), pct(d.beliaFemale, d.beliaMale + d.beliaFemale), C.rose50, center, false, "9F1239");
 
-    // Ringkasan Keseluruhan block (rows 27–32)
+    // Gender — walk-in school
     ws.mergeCells("A27:D27");
-    applyMasthead(ws.getCell("A27"), `Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`, C.maroon);
-    ws.getRow(27).height = 22;
+    applyMasthead(ws.getCell("A27"), "Jantina Pelajar Sekolah (Walk-In)", C.slate800);
+    ws.getRow(27).height = 18;
+    applyHeader(ws.getCell("B28"), "Bilangan"); applyHeader(ws.getCell("C28"), "%");
+    applyCell(ws.getCell("A29"), "Lelaki",    C.indigo50, left, true, C.indigo800);
+    applyCell(ws.getCell("B29"), nv(d.walkInSchoolMale), C.indigo50, center, true, C.indigo800);
+    applyCell(ws.getCell("C29"), pct(d.walkInSchoolMale, d.walkInSchoolMale + d.walkInSchoolFemale), C.indigo50, center, false, C.indigo800);
+    applyCell(ws.getCell("A30"), "Perempuan", C.rose50, left, true, "9F1239");
+    applyCell(ws.getCell("B30"), nv(d.walkInSchoolFemale), C.rose50, center, true, "9F1239");
+    applyCell(ws.getCell("C30"), pct(d.walkInSchoolFemale, d.walkInSchoolMale + d.walkInSchoolFemale), C.rose50, center, false, "9F1239");
 
-    ws.mergeCells("A28:C28");
-    applyHeader(ws.getCell("A28"), "Kategori Penyertaan / Penglibatan", C.slate700);
-    applyHeader(ws.getCell("D28"), "Jumlah", C.slate700);
-    ws.getRow(28).height = 18;
+    // Gender — walk-in belia
+    ws.mergeCells("A32:D32");
+    applyMasthead(ws.getCell("A32"), "Jantina Belia (Walk-In)", C.slate800);
+    ws.getRow(32).height = 18;
+    applyHeader(ws.getCell("B33"), "Bilangan"); applyHeader(ws.getCell("C33"), "%");
+    applyCell(ws.getCell("A34"), "Lelaki",    C.indigo50, left, true, C.indigo800);
+    applyCell(ws.getCell("B34"), nv(d.walkInBeliaMale), C.indigo50, center, true, C.indigo800);
+    applyCell(ws.getCell("C34"), pct(d.walkInBeliaMale, d.walkInBeliaMale + d.walkInBeliaFemale), C.indigo50, center, false, C.indigo800);
+    applyCell(ws.getCell("A35"), "Perempuan", C.rose50, left, true, "9F1239");
+    applyCell(ws.getCell("B35"), nv(d.walkInBeliaFemale), C.rose50, center, true, "9F1239");
+    applyCell(ws.getCell("C35"), pct(d.walkInBeliaFemale, d.walkInBeliaMale + d.walkInBeliaFemale), C.rose50, center, false, "9F1239");
+
+    // Ringkasan Keseluruhan block (rows 37–42)
+    ws.mergeCells("A37:D37");
+    applyMasthead(ws.getCell("A37"), `Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`, C.maroon);
+    ws.getRow(37).height = 22;
+
+    ws.mergeCells("A38:C38");
+    applyHeader(ws.getCell("A38"), "Kategori Penyertaan / Penglibatan", C.slate700);
+    applyHeader(ws.getCell("D38"), "Jumlah", C.slate700);
+    ws.getRow(38).height = 18;
 
     const mkRows: [string, number | string, string][] = [
       ["1. Peserta Utama",   nv(pesertaUtama),          C.white],
@@ -540,17 +598,17 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       ["3. Jurulatih",       nv(d.trainerCount),        C.white],
     ];
     mkRows.forEach(([label, val, bg], i) => {
-      const row = 29 + i;
+      const row = 39 + i;
       ws.mergeCells(`A${row}:C${row}`);
       applyCell(ws.getCell(`A${row}`), label, bg, left);
       applyCell(ws.getCell(`D${row}`), val,   bg, right, true);
       ws.getRow(row).height = 16;
     });
 
-    ws.mergeCells("A32:C32");
-    applyCell(ws.getCell("A32"), "JUMLAH KESELURUHAN PENYERTAAN DAN PENGLIBATAN", C.slate900, left, true, C.white);
-    applyCell(ws.getCell("D32"), grandTotal, C.slate900, right, true, C.white);
-    ws.getRow(32).height = 20;
+    ws.mergeCells("A42:C42");
+    applyCell(ws.getCell("A42"), "JUMLAH KESELURUHAN PENYERTAAN DAN PENGLIBATAN", C.slate900, left, true, C.white);
+    applyCell(ws.getCell("D42"), grandTotal, C.slate900, right, true, C.white);
+    ws.getRow(42).height = 20;
   }
 
   // ── Sheet 2: Terperinci ───────────────────────────────────────────────────

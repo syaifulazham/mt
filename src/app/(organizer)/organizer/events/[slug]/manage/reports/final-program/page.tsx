@@ -224,6 +224,16 @@ export default async function FinalProgramReportPage({
               </tbody>
             </table>
 
+            {/* BERDAFTAR SUBTOTAL */}
+            <div className="bg-slate-800 px-4 py-2 flex items-center justify-between">
+              <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                Jumlah Keseluruhan Peserta Berdaftar
+              </div>
+              <div className="text-xl font-black font-mono text-white tabular-nums">
+                {n(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants)}
+              </div>
+            </div>
+
             {/* WALK-IN */}
             <div className="bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 mt-2">
               Walk-In
@@ -453,6 +463,71 @@ export default async function FinalProgramReportPage({
                     </tbody>
                   </table>
                 </div>
+
+                {/* Walk-In gender separator + sections */}
+                {d.walkInSummary.total > 0 && (
+                  <>
+                    <div className="col-span-2 border-t border-slate-200 pt-2 pb-0.5">
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Walk-In</span>
+                    </div>
+
+                    {/* Walk-In: Pelajar */}
+                    <div>
+                      <div className="bg-slate-700 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">
+                        Jantina — Pelajar (Walk-In)
+                      </div>
+                      <table className="w-full">
+                        <thead>
+                          <tr>
+                            <th className={TH_LEFT}>&nbsp;</th>
+                            <th className={TH}>Bil.</th>
+                            <th className={TH}>%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="bg-indigo-50">
+                            <td className="px-3 py-2 text-xs font-semibold text-indigo-900"><span className="flex items-center gap-1"><Mars className="w-3.5 h-3.5" /> Lelaki</span></td>
+                            <td className="px-3 py-2 text-center font-mono font-bold text-indigo-900 text-sm tabular-nums">{n(d.walkInSchoolMale)}</td>
+                            <td className="px-3 py-2 text-center text-xs text-indigo-700 tabular-nums">{pct(d.walkInSchoolMale, d.walkInSchoolMale + d.walkInSchoolFemale)}%</td>
+                          </tr>
+                          <tr className="bg-rose-50">
+                            <td className="px-3 py-2 text-xs font-semibold text-rose-900"><span className="flex items-center gap-1"><Venus className="w-3.5 h-3.5" /> Perempuan</span></td>
+                            <td className="px-3 py-2 text-center font-mono font-bold text-rose-900 text-sm tabular-nums">{n(d.walkInSchoolFemale)}</td>
+                            <td className="px-3 py-2 text-center text-xs text-rose-700 tabular-nums">{pct(d.walkInSchoolFemale, d.walkInSchoolMale + d.walkInSchoolFemale)}%</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Walk-In: Belia */}
+                    <div>
+                      <div className="bg-slate-700 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">
+                        Jantina — Belia (Walk-In)
+                      </div>
+                      <table className="w-full">
+                        <thead>
+                          <tr>
+                            <th className={TH_LEFT}>&nbsp;</th>
+                            <th className={TH}>Bil.</th>
+                            <th className={TH}>%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="bg-indigo-50">
+                            <td className="px-3 py-2 text-xs font-semibold text-indigo-900"><span className="flex items-center gap-1"><Mars className="w-3.5 h-3.5" /> Lelaki</span></td>
+                            <td className="px-3 py-2 text-center font-mono font-bold text-indigo-900 text-sm tabular-nums">{n(d.walkInBeliaMale)}</td>
+                            <td className="px-3 py-2 text-center text-xs text-indigo-700 tabular-nums">{pct(d.walkInBeliaMale, d.walkInBeliaMale + d.walkInBeliaFemale)}%</td>
+                          </tr>
+                          <tr className="bg-rose-50">
+                            <td className="px-3 py-2 text-xs font-semibold text-rose-900"><span className="flex items-center gap-1"><Venus className="w-3.5 h-3.5" /> Perempuan</span></td>
+                            <td className="px-3 py-2 text-center font-mono font-bold text-rose-900 text-sm tabular-nums">{n(d.walkInBeliaFemale)}</td>
+                            <td className="px-3 py-2 text-center text-xs text-rose-700 tabular-nums">{pct(d.walkInBeliaFemale, d.walkInBeliaMale + d.walkInBeliaFemale)}%</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

@@ -296,6 +296,12 @@ export async function GET(
         dCell(nv(d.walkInSummary.total), WHITE, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
+        dCell("JUMLAH KESELURUHAN PESERTA BERDAFTAR", SLATE_800, AlignmentType.LEFT, true, WHITE),
+        dCell(nv(d.regSummary.schoolParticipants), SLATE_800, AlignmentType.RIGHT, true, WHITE),
+        dCell(nv(d.regSummary.beliaParticipants),  SLATE_800, AlignmentType.RIGHT, true, WHITE),
+        dCell(nv(pesertaUtama), SLATE_800, AlignmentType.RIGHT, true, WHITE),
+      ]}),
+      new TableRow({ children: [
         dCell("JUMLAH KESELURUHAN (Berdaftar + Walk-In)", SLATE_900, AlignmentType.LEFT, true, WHITE),
         dCell("", SLATE_900),
         dCell("", SLATE_900),
@@ -306,19 +312,29 @@ export async function GET(
 
   // ── 2. Gender ──────────────────────────────────────────────────────────────
   const genderTable = new Table({
-    width: { size: 70, type: WidthType.PERCENTAGE },
+    width: { size: 100, type: WidthType.PERCENTAGE },
     borders: NO_BORDERS,
     rows: [
-      new TableRow({ children: [hCell("Jantina"), hCell("Pelajar Sekolah"), hCell("Belia")] }),
       new TableRow({ children: [
-        dCell("Lelaki",    INDIGO_50, AlignmentType.LEFT, true),
+        hCell("Jantina"),
+        hCell("Pelajar (Daftar)"),
+        hCell("Belia (Daftar)"),
+        hCell("Pelajar (Walk-In)"),
+        hCell("Belia (Walk-In)"),
+      ]}),
+      new TableRow({ children: [
+        dCell("Lelaki", INDIGO_50, AlignmentType.LEFT, true),
         dCell(`${nv(d.schoolMale)} (${pct(d.schoolMale, d.schoolMale + d.schoolFemale)})`, INDIGO_50, AlignmentType.RIGHT),
-        dCell(`${nv(d.beliaMale)} (${pct(d.beliaMale, d.beliaMale + d.beliaFemale)})`,   INDIGO_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.beliaMale)} (${pct(d.beliaMale, d.beliaMale + d.beliaFemale)})`, INDIGO_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.walkInSchoolMale)} (${pct(d.walkInSchoolMale, d.walkInSchoolMale + d.walkInSchoolFemale)})`, INDIGO_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.walkInBeliaMale)} (${pct(d.walkInBeliaMale, d.walkInBeliaMale + d.walkInBeliaFemale)})`, INDIGO_50, AlignmentType.RIGHT),
       ]}),
       new TableRow({ children: [
         dCell("Perempuan", ROSE_50, AlignmentType.LEFT, true),
         dCell(`${nv(d.schoolFemale)} (${pct(d.schoolFemale, d.schoolMale + d.schoolFemale)})`, ROSE_50, AlignmentType.RIGHT),
-        dCell(`${nv(d.beliaFemale)} (${pct(d.beliaFemale, d.beliaMale + d.beliaFemale)})`,   ROSE_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.beliaFemale)} (${pct(d.beliaFemale, d.beliaMale + d.beliaFemale)})`, ROSE_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.walkInSchoolFemale)} (${pct(d.walkInSchoolFemale, d.walkInSchoolMale + d.walkInSchoolFemale)})`, ROSE_50, AlignmentType.RIGHT),
+        dCell(`${nv(d.walkInBeliaFemale)} (${pct(d.walkInBeliaFemale, d.walkInBeliaMale + d.walkInBeliaFemale)})`, ROSE_50, AlignmentType.RIGHT),
       ]}),
     ],
   });
