@@ -32,6 +32,7 @@ const TEAL_800   = "115E59";   // Belia label
 const TEAL_50    = "F0FDFA";   // Belia data rows
 const TEAL_100   = "CCFBF1";   // Belia sub-total
 const ROSE_50    = "FFF1F2";   // Perempuan
+const MAROON     = "7B0D1E";   // Penyertaan dan Penglibatan header
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,13 +88,13 @@ function dCell(
 }
 
 // Dark masthead banner (eyebrow + title) — rendered as a single-cell full-width table
-function sectionMasthead(eyebrow: string, title: string): Table {
+function sectionMasthead(eyebrow: string, title: string, bg = SLATE_900): Table {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: NO_BORDERS,
     rows: [new TableRow({
       children: [new TableCell({
-        shading: shade(SLATE_900),
+        shading: shade(bg),
         borders: NO_BORDERS,
         margins: { top: 80, bottom: 80, left: 140, right: 140 },
         children: [
@@ -322,31 +323,42 @@ export async function GET(
     ],
   });
 
-  // ── 3. Ethnicity (KAUM) — Lain-Lain last ──────────────────────────────────
-  const ethnCols = [
-    { label: "Melayu",    value: d.ethnicityStats.melayu },
-    { label: "Cina",      value: d.ethnicityStats.cina },
-    { label: "India",     value: d.ethnicityStats.india },
-    { label: "Org. Asli", value: d.ethnicityStats.orgAsli },
-    { label: "Sabah",     value: d.ethnicityStats.sabah },
-    { label: "Sarawak",   value: d.ethnicityStats.sarawak },
-    { label: "Lain-Lain", value: d.ethnicityStats.lainLain },
+  // ── 3. Ethnicity (KAUM) — Berdaftar + Walk-In groups ──────────────────────
+  const ethnLabels3 = ["Melayu", "Cina", "India", "Org. Asli", "Sabah", "Sarawak", "Lain-Lain"];
+  const regEthnVals3 = [d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
+    d.ethnicityStats.orgAsli, d.ethnicityStats.sabah, d.ethnicityStats.sarawak, d.ethnicityStats.lainLain];
+  const wiEthnVals3  = [d.walkInEthnicityStats.melayu, d.walkInEthnicityStats.cina, d.walkInEthnicityStats.india,
+    d.walkInEthnicityStats.orgAsli, d.walkInEthnicityStats.sabah, d.walkInEthnicityStats.sarawak, d.walkInEthnicityStats.lainLain];
+  const regEthnTotal3  = regEthnVals3.reduce((s, v) => s + v, 0);
+  const wiEthnTotal3   = wiEthnVals3.reduce((s, v) => s + v, 0);
+  const ethnGrandTotal3 = regEthnTotal3 + wiEthnTotal3;
+  const ECSPAN = ethnLabels3.length;
+
+  const ethnRows: TableRow[] = [
+    new TableRow({ children: ethnLabels3.map(l => hCell(l)) }),
+    // Berdaftar group
+    new TableRow({ children: [dCell("Peserta Berdaftar", SLATE_800, AlignmentType.LEFT, true, WHITE, ECSPAN)] }),
+    new TableRow({ children: regEthnVals3.map(v => dCell(nv(v), WHITE, AlignmentType.CENTER, true)) }),
+    new TableRow({ children: regEthnVals3.map(v => dCell(
+      regEthnTotal3 ? `${(v / regEthnTotal3 * 100).toFixed(1)}%` : "", SLATE_50, AlignmentType.CENTER, false, SLATE_400,
+    ))}),
+    new TableRow({ children: [dCell(`Jumlah Berdaftar: ${regEthnTotal3}`, SLATE_200, AlignmentType.RIGHT, true, TEXT_DARK, ECSPAN)] }),
   ];
-  const ethnTotal = ethnCols.reduce((s, c) => s + c.value, 0);
+  if (wiEthnTotal3 > 0) {
+    ethnRows.push(
+      new TableRow({ children: [dCell("Peserta Walk-In", SLATE_800, AlignmentType.LEFT, true, WHITE, ECSPAN)] }),
+      new TableRow({ children: wiEthnVals3.map(v => dCell(nv(v), WHITE, AlignmentType.CENTER, true)) }),
+      new TableRow({ children: wiEthnVals3.map(v => dCell(
+        wiEthnTotal3 ? `${(v / wiEthnTotal3 * 100).toFixed(1)}%` : "", SLATE_50, AlignmentType.CENTER, false, SLATE_400,
+      ))}),
+      new TableRow({ children: [dCell(`Jumlah Walk-In: ${wiEthnTotal3}`, SLATE_200, AlignmentType.RIGHT, true, TEXT_DARK, ECSPAN)] }),
+    );
+  }
+  ethnRows.push(new TableRow({ children: [dCell(`Jumlah Keseluruhan: ${ethnGrandTotal3}`, SLATE_900, AlignmentType.RIGHT, true, WHITE, ECSPAN)] }));
   const ethnTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: NO_BORDERS,
-    rows: [
-      new TableRow({ children: ethnCols.map(c => hCell(c.label)) }),
-      new TableRow({ children: ethnCols.map(c => dCell(nv(c.value), WHITE, AlignmentType.CENTER, true)) }),
-      new TableRow({ children: ethnCols.map(c => dCell(
-        ethnTotal ? `${(c.value / ethnTotal * 100).toFixed(1)}%` : "",
-        SLATE_50, AlignmentType.CENTER, false, SLATE_400,
-      ))}),
-      new TableRow({ children: [dCell(
-        `Jumlah: ${nv(ethnTotal)}`, SLATE_900, AlignmentType.RIGHT, true, WHITE, ethnCols.length,
-      )]}),
-    ],
+    rows: ethnRows,
   });
 
   // ── 4. State detail table ──────────────────────────────────────────────────
@@ -480,7 +492,7 @@ export async function GET(
       children: [
         ...coverChildren,
 
-        sectionMasthead("Ringkasan Keseluruhan", `Penyertaan dan Penglibatan — ${d.locationLabel}`),
+        sectionMasthead("Ringkasan Keseluruhan", `Penyertaan dan Penglibatan — ${d.locationLabel}`, MAROON),
         SMALL_GAP,
         overallTable,
         GAP,
@@ -510,6 +522,44 @@ export async function GET(
         SMALL_GAP,
         levelTable,
         GAP,
+
+        ...(d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0 ? [
+          sectionMasthead("Walk-In", "Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan"),
+          SMALL_GAP,
+          (() => {
+            const wiLevelRows: TableRow[] = [
+              new TableRow({ children: [hCell("Tahap Pendidikan"), hCell("Kod"), hCell("Pertandingan"), hCell("—"), hCell("Peserta")] }),
+            ];
+            const wiLevelGrps3 = [
+              { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100 },
+              { label: "Sekolah Menengah", comps: d.walkInMenengahComps, hBg: AMBER_800,  rBg: AMBER_50,   tBg: AMBER_100 },
+              { label: "Belia",            comps: d.walkInBeliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100 },
+            ];
+            for (const g of wiLevelGrps3) {
+              if (!g.comps.length) continue;
+              wiLevelRows.push(new TableRow({ children: [dCell(g.label, g.hBg, AlignmentType.LEFT, true, WHITE, 5)] }));
+              g.comps.forEach((c, i) => {
+                const bg = i % 2 === 0 ? g.rBg : WHITE;
+                wiLevelRows.push(new TableRow({ children: [
+                  dCell("", bg),
+                  dCell(c.code, bg, AlignmentType.CENTER),
+                  dCell(c.name, bg),
+                  dCell("—", bg, AlignmentType.CENTER),
+                  dCell(nv(c.participants), bg, AlignmentType.RIGHT),
+                ]}));
+              });
+              const subWIP = g.comps.reduce((s, c) => s + c.participants, 0);
+              wiLevelRows.push(new TableRow({ children: [
+                dCell("", g.tBg), dCell("", g.tBg),
+                dCell(`Jumlah ${g.label}`, g.tBg, AlignmentType.RIGHT, true),
+                dCell("", g.tBg),
+                dCell(nv(subWIP), g.tBg, AlignmentType.RIGHT, true),
+              ]}));
+            }
+            return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, rows: wiLevelRows });
+          })(),
+          GAP,
+        ] : []),
 
         sectionMasthead("Seksyen 6", "Penyertaan Mengikut Negeri"),
         SMALL_GAP,

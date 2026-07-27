@@ -19,6 +19,7 @@ const C = {
   amber800:  "92400E", amber100:  "FEF3C7", amber50:  "FFFBEB",
   teal800:   "115E59", teal100:   "CCFBF1", teal50:   "F0FDFA",
   rose50:    "FFF1F2",
+  maroon:    "7B0D1E",
 };
 
 type Fill = ExcelJS.Fill;
@@ -80,11 +81,11 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   const COLS = 9; // total columns
 
   // Helper: merge A–I and apply masthead
-  function sectionHeader(title: string, eyebrow?: string) {
+  function sectionHeader(title: string, eyebrow?: string, bg = C.slate900) {
     ws.mergeCells(r, 1, r, COLS);
     const cell = ws.getCell(r, 1);
     cell.value = eyebrow ? `${eyebrow.toUpperCase()}  ·  ${title.toUpperCase()}` : title.toUpperCase();
-    cell.fill  = solidFill(C.slate900);
+    cell.fill  = solidFill(bg);
     cell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
     cell.alignment = { vertical: "middle", horizontal: "left", wrapText: false };
     ws.getRow(r).height = 24;
@@ -116,7 +117,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   spacer();
 
   // ═══ RINGKASAN KESELURUHAN ═════════════════════════════════════════════════
-  sectionHeader(`Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`);
+  sectionHeader(`Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`, undefined, C.maroon);
 
   ws.mergeCells(r, 1, r, COLS - 1);
   applyHeader(ws.getCell(r, 1), "Kategori Penyertaan / Penglibatan", C.slate700);
@@ -215,28 +216,48 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   // ═══ SECTION 2: KAUM ═══════════════════════════════════════════════════════
   sectionHeader("Jumlah Peserta Mengikut Kaum", "Seksyen 2 — Bagi Laporan KBS / Rakan Muda");
-  const ethnCols = [
-    { label: "Melayu",    value: d.ethnicityStats.melayu },
-    { label: "Cina",      value: d.ethnicityStats.cina },
-    { label: "India",     value: d.ethnicityStats.india },
-    { label: "Org. Asli", value: d.ethnicityStats.orgAsli },
-    { label: "Sabah",     value: d.ethnicityStats.sabah },
-    { label: "Sarawak",   value: d.ethnicityStats.sarawak },
-    { label: "Lain-Lain", value: d.ethnicityStats.lainLain },
-  ];
-  const ethnTotal = ethnCols.reduce((s, c) => s + c.value, 0);
-  ethnCols.forEach((c, i) => applyHeader(ws.getCell(r, i + 1), c.label));
+  const ethnLabels = ["Melayu", "Cina", "India", "Org. Asli", "Sabah", "Sarawak", "Lain-Lain"];
+  const regEthnVals = [d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
+    d.ethnicityStats.orgAsli, d.ethnicityStats.sabah, d.ethnicityStats.sarawak, d.ethnicityStats.lainLain];
+  const wiEthnVals  = [d.walkInEthnicityStats.melayu, d.walkInEthnicityStats.cina, d.walkInEthnicityStats.india,
+    d.walkInEthnicityStats.orgAsli, d.walkInEthnicityStats.sabah, d.walkInEthnicityStats.sarawak, d.walkInEthnicityStats.lainLain];
+  const regEthnTotal = regEthnVals.reduce((s, v) => s + v, 0);
+  const wiEthnTotal  = wiEthnVals.reduce((s, v) => s + v, 0);
+  const ethnGrandTotal = regEthnTotal + wiEthnTotal;
+  const ECOLS = ethnLabels.length;
+
+  // column headers
+  ethnLabels.forEach((l, i) => applyHeader(ws.getCell(r, i + 1), l));
   ws.getRow(r).height = 18; r++;
-  ethnCols.forEach((c, i) => {
-    applyCell(ws.getCell(r, i + 1), nv(c.value), C.white, center, true);
-  });
+
+  // Berdaftar group
+  ws.mergeCells(r, 1, r, ECOLS);
+  applyCell(ws.getCell(r, 1), "Peserta Berdaftar", C.slate800, left, true, C.white);
+  ws.getRow(r).height = 16; r++;
+  regEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), nv(v), C.white, center, true));
   r++;
-  ethnCols.forEach((c, i) => {
-    applyCell(ws.getCell(r, i + 1), pct(c.value, ethnTotal), C.slate50, center, false, C.slate400);
-  });
+  regEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), pct(v, regEthnTotal), C.slate50, center, false, C.slate400));
   r++;
-  ws.mergeCells(r, 1, r, ethnCols.length);
-  applyCell(ws.getCell(r, 1), `Jumlah: ${ethnTotal}`, C.slate900, right, true, C.white);
+  ws.mergeCells(r, 1, r, ECOLS);
+  applyCell(ws.getCell(r, 1), `Jumlah Berdaftar: ${regEthnTotal}`, C.slate200, right, true);
+  r++;
+
+  // Walk-In group (only if present)
+  if (wiEthnTotal > 0) {
+    ws.mergeCells(r, 1, r, ECOLS);
+    applyCell(ws.getCell(r, 1), "Peserta Walk-In", C.slate800, left, true, C.white);
+    ws.getRow(r).height = 16; r++;
+    wiEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), nv(v), C.white, center, true));
+    r++;
+    wiEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), pct(v, wiEthnTotal), C.slate50, center, false, C.slate400));
+    r++;
+    ws.mergeCells(r, 1, r, ECOLS);
+    applyCell(ws.getCell(r, 1), `Jumlah Walk-In: ${wiEthnTotal}`, C.slate200, right, true);
+    r++;
+  }
+
+  ws.mergeCells(r, 1, r, ECOLS);
+  applyCell(ws.getCell(r, 1), `Jumlah Keseluruhan: ${ethnGrandTotal}`, C.slate900, right, true, C.white);
   r++;
   spacer();
 
@@ -301,6 +322,48 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell(r, 4), nv(subT), g.tBg, center, true);
     applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
     r++; spacer();
+  }
+
+  // ═══ SECTION 4b: WALK-IN BY EDUCATION LEVEL ════════════════════════════════
+  const hasWalkInComps = d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
+  if (hasWalkInComps) {
+    sectionHeader("Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan", "Walk-In");
+    ["Tahap Pendidikan", "Kod", "Pertandingan", "—", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+    ws.getRow(r).height = 18; r++;
+    const wiLevelGroups = [
+      { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
+      { label: "Sekolah Menengah", comps: d.walkInMenengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
+      { label: "Belia",            comps: d.walkInBeliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
+    ];
+    for (const g of wiLevelGroups) {
+      if (!g.comps.length) continue;
+      ws.mergeCells(r, 1, r, 5);
+      applyCell(ws.getCell(r, 1), g.label, g.hBg, left, true, C.white);
+      ws.getRow(r).height = 16; r++;
+      g.comps.forEach((c, i) => {
+        const bg = i % 2 === 0 ? g.rBg : C.white;
+        applyCell(ws.getCell(r, 1), "", bg);
+        applyCell(ws.getCell(r, 2), c.code, bg, center);
+        applyCell(ws.getCell(r, 3), c.name, bg, left);
+        applyCell(ws.getCell(r, 4), "—", bg, center);
+        applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
+        r++;
+      });
+      const subP = g.comps.reduce((s, c) => s + c.participants, 0);
+      applyCell(ws.getCell(r, 1), "", g.tBg);
+      applyCell(ws.getCell(r, 2), "", g.tBg);
+      applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);
+      applyCell(ws.getCell(r, 4), "", g.tBg);
+      applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
+      r++; spacer();
+    }
+    const wiTotal2 = [d.walkInRendahComps, d.walkInMenengahComps, d.walkInBeliaComps]
+      .flat().reduce((s, c) => s + c.participants, 0);
+    ws.mergeCells(r, 1, r, 4);
+    applyCell(ws.getCell(r, 1), "JUMLAH KESELURUHAN PESERTA WALK-IN", C.slate900, left, true, C.white);
+    applyCell(ws.getCell(r, 5), nv(wiTotal2), C.slate900, center, true, C.white);
+    ws.getRow(r).height = 18; r++;
+    spacer();
   }
 
   // ═══ SECTION 5: BY STATE × COMPETITION ══════════════════════════════════════
@@ -369,23 +432,38 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     ws.mergeCells("F2:L2");
     applyMasthead(ws.getCell("F2"), "Jumlah Peserta Mengikut Kaum", C.slate700);
     const ethnCols2 = ["F","G","H","I","J","K","L"];
-    const ethnLabels = ["Melayu","Cina","India","Org. Asli","Sabah","Sarawak","Lain-Lain"];
-    ethnCols2.forEach((col, i) => applyHeader(ws.getCell(`${col}3`), ethnLabels[i]));
+    const ethnLabels2 = ["Melayu","Cina","India","Org. Asli","Sabah","Sarawak","Lain-Lain"];
+    ethnCols2.forEach((col, i) => applyHeader(ws.getCell(`${col}3`), ethnLabels2[i]));
 
-    // Kaum values (row 4)
-    const ethnTotal2 = d.ethnicityStats.melayu + d.ethnicityStats.cina + d.ethnicityStats.india +
-      d.ethnicityStats.orgAsli + d.ethnicityStats.sabah + d.ethnicityStats.sarawak + d.ethnicityStats.lainLain;
-    const ethnVals = [d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
+    // Kaum — Peserta Berdaftar group (rows 4–7)
+    ws.mergeCells("F4:L4");
+    applyCell(ws.getCell("F4"), "Peserta Berdaftar", C.slate800, left, true, C.white);
+    const regEthnVals2 = [d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
       d.ethnicityStats.orgAsli, d.ethnicityStats.sabah, d.ethnicityStats.sarawak, d.ethnicityStats.lainLain];
-    ethnCols2.forEach((col, i) => {
-      applyCell(ws.getCell(`${col}4`), nv(ethnVals[i]), C.white, center, true);
-    });
-    ethnCols2.forEach((col, i) => {
-      applyCell(ws.getCell(`${col}5`), pct(ethnVals[i], ethnTotal2), C.slate50, center, false, C.slate400);
-    });
-    ws.mergeCells("F6:L6");
-    applyCell(ws.getCell("F6"), `Jumlah: ${ethnTotal2}`, C.slate900, right, true, C.white);
-    ws.getRow(4).height = 18;
+    const regEthnTotal2 = regEthnVals2.reduce((s, v) => s + v, 0);
+    ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}5`), nv(regEthnVals2[i]), C.white, center, true));
+    ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}6`), pct(regEthnVals2[i], regEthnTotal2), C.slate50, center, false, C.slate400));
+    ws.mergeCells("F7:L7");
+    applyCell(ws.getCell("F7"), `Jumlah Berdaftar: ${regEthnTotal2}`, C.slate200, right, true);
+    ws.getRow(5).height = 18;
+
+    // Kaum — Peserta Walk-In group (rows 8–11) + grand total (row 12)
+    const wiEthnVals2 = [d.walkInEthnicityStats.melayu, d.walkInEthnicityStats.cina, d.walkInEthnicityStats.india,
+      d.walkInEthnicityStats.orgAsli, d.walkInEthnicityStats.sabah, d.walkInEthnicityStats.sarawak, d.walkInEthnicityStats.lainLain];
+    const wiEthnTotal2 = wiEthnVals2.reduce((s, v) => s + v, 0);
+    if (wiEthnTotal2 > 0) {
+      ws.mergeCells("F8:L8");
+      applyCell(ws.getCell("F8"), "Peserta Walk-In", C.slate800, left, true, C.white);
+      ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}9`), nv(wiEthnVals2[i]), C.white, center, true));
+      ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}10`), pct(wiEthnVals2[i], wiEthnTotal2), C.slate50, center, false, C.slate400));
+      ws.mergeCells("F11:L11");
+      applyCell(ws.getCell("F11"), `Jumlah Walk-In: ${wiEthnTotal2}`, C.slate200, right, true);
+      ws.mergeCells("F12:L12");
+      applyCell(ws.getCell("F12"), `Jumlah Keseluruhan: ${regEthnTotal2 + wiEthnTotal2}`, C.slate900, right, true, C.white);
+    } else {
+      ws.mergeCells("F8:L8");
+      applyCell(ws.getCell("F8"), `Jumlah Keseluruhan: ${regEthnTotal2}`, C.slate900, right, true, C.white);
+    }
 
     // Berdaftar data (A-D)
     const bRows: [string, string|number, string|number, string|number, string, boolean][] = [
@@ -448,7 +526,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     // Ringkasan Keseluruhan block (rows 27–32)
     ws.mergeCells("A27:D27");
-    applyMasthead(ws.getCell("A27"), `Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`);
+    applyMasthead(ws.getCell("A27"), `Ringkasan Keseluruhan — Penyertaan dan Penglibatan — ${d.locationLabel}`, C.maroon);
     ws.getRow(27).height = 22;
 
     ws.mergeCells("A28:C28");
@@ -556,6 +634,44 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       applyCell(ws.getCell(r, 4), nv(subT), g.tBg, center, true);
       applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
       r += 2;
+    }
+
+    // Walk-In competitions by level
+    const hasWI = d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
+    if (hasWI) {
+      r++;
+      ws.mergeCells(r, 1, r, 5);
+      applyCell(ws.getCell(r, 1), "Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan", C.slate800, left, true, C.white);
+      ws.getRow(r).height = 18; r++;
+      ["Tahap Pendidikan", "Kod", "Pertandingan", "—", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+      ws.getRow(r).height = 18; r++;
+      const wiLevelGrps = [
+        { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
+        { label: "Sekolah Menengah", comps: d.walkInMenengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
+        { label: "Belia",            comps: d.walkInBeliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
+      ];
+      for (const g of wiLevelGrps) {
+        if (!g.comps.length) continue;
+        ws.mergeCells(r, 1, r, 5);
+        applyCell(ws.getCell(r, 1), g.label, g.hBg, left, true, C.white);
+        ws.getRow(r).height = 16; r++;
+        g.comps.forEach((c, i) => {
+          const bg = i % 2 === 0 ? g.rBg : C.white;
+          applyCell(ws.getCell(r, 1), "", bg);
+          applyCell(ws.getCell(r, 2), c.code, bg, center);
+          applyCell(ws.getCell(r, 3), c.name, bg, left);
+          applyCell(ws.getCell(r, 4), "—", bg, center);
+          applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
+          r++;
+        });
+        const subWIP = g.comps.reduce((s, c) => s + c.participants, 0);
+        applyCell(ws.getCell(r, 1), "", g.tBg);
+        applyCell(ws.getCell(r, 2), "", g.tBg);
+        applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);
+        applyCell(ws.getCell(r, 4), "", g.tBg);
+        applyCell(ws.getCell(r, 5), nv(subWIP), g.tBg, center, true);
+        r += 2;
+      }
     }
   }
 
