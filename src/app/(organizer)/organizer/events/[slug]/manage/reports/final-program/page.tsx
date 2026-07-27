@@ -120,9 +120,9 @@ export default async function FinalProgramReportPage({
 
           {/* Penyertaan dan Penglibatan */}
           <div className="overflow-hidden rounded-sm">
-            <div className="bg-slate-900 px-4 py-3 flex items-center justify-between gap-4">
+            <div className="bg-[#7B0D1E] px-4 py-3 flex items-center justify-between gap-4">
               <div>
-                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 block">
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-rose-300 block">
                   Ringkasan Keseluruhan
                 </span>
                 <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
@@ -131,7 +131,7 @@ export default async function FinalProgramReportPage({
                 </span>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Jumlah Keseluruhan</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-rose-300">Jumlah Keseluruhan</p>
                 <p className="text-2xl font-black text-white tabular-nums leading-none mt-0.5">
                   {grandTotal.toLocaleString()}
                 </p>
