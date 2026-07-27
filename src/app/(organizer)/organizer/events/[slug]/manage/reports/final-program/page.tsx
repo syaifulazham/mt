@@ -140,15 +140,15 @@ export default async function FinalProgramReportPage({
             <table className="w-full">
               <tbody>
                 <tr className={TR_ODD}>
-                  <td className="px-3 py-2 text-slate-700 text-sm font-black">1. Peserta Utama</td>
+                  <td className="px-3 py-2 text-slate-700 text-sm font-black">Peserta Utama</td>
                   <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-lg tabular-nums pr-4">{n(pesertaUtama)}</td>
                 </tr>
                 <tr className={TR_EVEN}>
-                  <td className="px-3 py-2 text-slate-700 text-sm font-black">2. Peserta Walk-in</td>
+                  <td className="px-3 py-2 text-slate-700 text-sm font-black">Peserta Walk-in</td>
                   <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-lg tabular-nums pr-4">{n(d.walkInSummary.total)}</td>
                 </tr>
                 <tr className={TR_ODD}>
-                  <td className="px-3 py-2 text-slate-700 text-sm font-black">3. Jurulatih</td>
+                  <td className="px-3 py-2 text-slate-700 text-sm font-black">Jurulatih</td>
                   <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-lg tabular-nums pr-4">{n(d.trainerCount)}</td>
                 </tr>
               </tbody>
