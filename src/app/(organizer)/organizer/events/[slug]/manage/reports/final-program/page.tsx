@@ -112,47 +112,50 @@ export default async function FinalProgramReportPage({
       {/* ── report body ─────────────────────────────────────────────────────── */}
       <div className="px-6 py-6 space-y-6 print:px-0 print:py-0 bg-slate-100 min-h-screen">
 
-        {/* ══ RINGKASAN KESELURUHAN ══════════════════════════════════════════ */}
-        <div className="overflow-hidden rounded-sm">
-          <div className="bg-slate-900 px-4 py-3 flex items-center justify-between gap-4">
-            <div>
-              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 block">
-                Ringkasan Keseluruhan
-              </span>
-              <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
-                Penyertaan dan Penglibatan
-                {d.locationLabel ? ` — ${d.locationLabel.toUpperCase()}` : ""}
-              </span>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Jumlah Keseluruhan</p>
-              <p className="text-2xl font-black text-white tabular-nums leading-none mt-0.5">
-                {grandTotal.toLocaleString()}
-              </p>
-            </div>
-          </div>
-          <table className="w-full">
-            <tbody>
-              <tr className={TR_ODD}>
-                <td className={TD_LABEL}>1. Peserta Utama</td>
-                <td className={`${TD_NUM} text-right pr-4`}>{n(pesertaUtama)}</td>
-              </tr>
-              <tr className={TR_EVEN}>
-                <td className={TD_LABEL}>2. Peserta Walk-in</td>
-                <td className={`${TD_NUM} text-right pr-4`}>{n(d.walkInSummary.total)}</td>
-              </tr>
-              <tr className={TR_ODD}>
-                <td className={TD_LABEL}>3. Jurulatih</td>
-                <td className={`${TD_NUM} text-right pr-4`}>{n(d.trainerCount)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
         {/* ══ RINGKASAN ══════════════════════════════════════════════════════ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 print:grid-cols-2">
 
-          {/* Left: registration + gender summary */}
+          {/* Left: overall summary + registration detail */}
+          <div className="flex flex-col gap-4">
+
+          {/* Penyertaan dan Penglibatan */}
+          <div className="overflow-hidden rounded-sm">
+            <div className="bg-slate-900 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 block">
+                  Ringkasan Keseluruhan
+                </span>
+                <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
+                  Penyertaan dan Penglibatan
+                  {d.locationLabel ? ` — ${d.locationLabel.toUpperCase()}` : ""}
+                </span>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Jumlah Keseluruhan</p>
+                <p className="text-2xl font-black text-white tabular-nums leading-none mt-0.5">
+                  {grandTotal.toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <table className="w-full">
+              <tbody>
+                <tr className={TR_ODD}>
+                  <td className={TD_LABEL}>1. Peserta Utama</td>
+                  <td className={`${TD_NUM} text-right pr-4`}>{n(pesertaUtama)}</td>
+                </tr>
+                <tr className={TR_EVEN}>
+                  <td className={TD_LABEL}>2. Peserta Walk-in</td>
+                  <td className={`${TD_NUM} text-right pr-4`}>{n(d.walkInSummary.total)}</td>
+                </tr>
+                <tr className={TR_ODD}>
+                  <td className={TD_LABEL}>3. Jurulatih</td>
+                  <td className={`${TD_NUM} text-right pr-4`}>{n(d.trainerCount)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Penyertaan stats */}
           <div className="overflow-hidden rounded-sm bg-white">
             {/* masthead */}
             <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
@@ -262,6 +265,7 @@ export default async function FinalProgramReportPage({
             </div>
 
           </div>
+          </div>{/* end left flex col */}
 
           {/* Right: Ethnicity + Jantina stacked */}
           <div className="flex flex-col gap-3">
