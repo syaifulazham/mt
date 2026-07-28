@@ -34,6 +34,7 @@ type Team = {
   members: number;
   selected: boolean;
   acceptance: string;
+  hasDuplicateMember?: boolean;
 };
 
 type Competition = {
@@ -281,6 +282,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [teamsError, setTeamsError]     = useState<string | null>(null);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [unregistering, setUnregistering] = useState(false);
 
   // Trainers state
@@ -540,6 +542,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       if (competitionId) sp.set("competitionId", competitionId);
       if (stateId)       sp.set("stateId", stateId);
       if (targetGroupId) sp.set("targetGroupId", targetGroupId);
+      if (showDuplicates) sp.set("duplicates", "true");
 
       const res  = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams?${sp}`);
       const json = await res.json();
@@ -551,7 +554,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     } finally {
       setTeamsLoading(false);
     }
-  }, [event.id, teamsPage, debouncedQ, competitionId, stateId, targetGroupId]);
+  }, [event.id, teamsPage, debouncedQ, competitionId, stateId, targetGroupId, showDuplicates]);
 
   // Load trainers
   const loadTrainers = useCallback(async () => {
@@ -1037,6 +1040,22 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
           {listTab === "participants" ? "Peserta" : listTab === "teams" ? "Pasukan" : "Jurulatih"}
         </button>
 
+        {/* Toggle duplicate member filter (teams tab) */}
+        {listTab === "teams" && (
+          <button
+            onClick={() => { setShowDuplicates(v => !v); setTeamsPage(1); setSelectedTeamIds(new Set()); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              showDuplicates
+                ? "bg-rose-100 text-rose-800 hover:bg-rose-200 border-rose-300"
+                : "bg-zinc-50 text-zinc-600 hover:bg-zinc-100 border-zinc-200"
+            }`}
+            title={showDuplicates ? "Tunjukkan semua pasukan" : "Tunjukkan pasukan dengan ahli yang menjadi ahli pasukan lain"}
+          >
+            {showDuplicates ? <Users className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
+            {showDuplicates ? "Semua pasukan" : "Pasukan berkongsi ahli"}
+          </button>
+        )}
+
         {/* Bulk unregister (teams tab) */}
         {listTab === "teams" && selectedTeamIds.size > 0 && (
           <button
@@ -1351,9 +1370,11 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                         className={`cursor-pointer transition-colors ${
                           isChecked
                             ? "bg-red-50/60"
-                            : team.selected
-                              ? "bg-emerald-50/40"
-                              : i % 2 === 0 ? "bg-white hover:bg-zinc-50/60" : "bg-zinc-50/50 hover:bg-zinc-100/60"
+                            : team.hasDuplicateMember
+                              ? "bg-rose-100 hover:bg-rose-50/80"
+                              : team.selected
+                                ? "bg-emerald-50/40"
+                                : i % 2 === 0 ? "bg-white hover:bg-zinc-50/60" : "bg-zinc-50/50 hover:bg-zinc-100/60"
                         }`}
                       >
                         <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>

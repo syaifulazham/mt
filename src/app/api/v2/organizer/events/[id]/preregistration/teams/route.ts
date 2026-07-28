@@ -16,6 +16,7 @@ type TeamRow = {
   members: bigint;
   selected: boolean;
   acceptance: string;
+  hasDuplicateMember: boolean;
 };
 
 type CountRow = { total: bigint };
@@ -33,6 +34,7 @@ export async function GET(
   const competitionId = searchParams.get("competitionId") ?? "";
   const stateId       = searchParams.get("stateId") ?? "";
   const targetGroupId = searchParams.get("targetGroupId") ?? "";
+  const duplicates    = searchParams.get("duplicates") === "true";
   const page          = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const pageSize      = Math.min(200, Math.max(1, parseInt(searchParams.get("pageSize") ?? String(PAGE_SIZE), 10)));
 
@@ -54,6 +56,21 @@ export async function GET(
       ${q
         ? Prisma.sql`AND (t.name ILIKE ${"%" + q + "%"} OR cont.name ILIKE ${"%" + q + "%"})`
         : Prisma.empty}
+    `;
+
+    const duplicateFilter = Prisma.sql`
+      AND EXISTS (
+        SELECT 1
+        FROM team_members tm1
+        WHERE tm1."teamId" = t.id
+          AND tm1."contestantId" IN (
+            SELECT tm2."contestantId"
+            FROM team_members tm2
+            JOIN team_events te2 ON te2."teamId" = tm2."teamId" AND te2."eventId" = ${eventId}
+            GROUP BY tm2."contestantId"
+            HAVING COUNT(DISTINCT tm2."teamId") > 1
+          )
+      )
     `;
 
     const fromJoins = Prisma.sql`
@@ -81,9 +98,21 @@ export async function GET(
           c.name   AS "competitionName",
           COUNT(DISTINCT tm."contestantId") AS members,
           te.selected   AS selected,
-          te.acceptance AS acceptance
+          te.acceptance AS acceptance,
+          EXISTS (
+            SELECT 1
+            FROM team_members tm1
+            WHERE tm1."teamId" = t.id
+              AND tm1."contestantId" IN (
+                SELECT tm2."contestantId"
+                FROM team_members tm2
+                JOIN team_events te2 ON te2."teamId" = tm2."teamId" AND te2."eventId" = ${eventId}
+                GROUP BY tm2."contestantId"
+                HAVING COUNT(DISTINCT tm2."teamId") > 1
+              )
+          ) AS "hasDuplicateMember"
         ${fromJoins}
-        WHERE 1=1 ${extraConditions}
+        WHERE 1=1 ${extraConditions} ${duplicates ? duplicateFilter : Prisma.empty}
         GROUP BY t.id, t.name, cont.name,
           COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected, te.acceptance
         ORDER BY c.code, t.name
@@ -92,7 +121,7 @@ export async function GET(
       db.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT t.id) AS total
         ${fromJoins}
-        WHERE 1=1 ${extraConditions}
+        WHERE 1=1 ${extraConditions} ${duplicates ? duplicateFilter : Prisma.empty}
       `,
     ]);
 
@@ -109,6 +138,7 @@ export async function GET(
         members:         Number(r.members),
         selected:        r.selected ?? false,
         acceptance:      r.acceptance ?? "PENDING",
+        hasDuplicateMember: r.hasDuplicateMember ?? false,
       })),
       total,
       page,
