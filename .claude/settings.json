@@ -143,7 +143,15 @@
       "Bash(git -C /Users/azham/a-job/repo/mt add \"src/components/organizer/contingents/ContingentOrgDetailClient.tsx\")",
       "Bash(git -C /Users/azham/a-job/repo/mt add \"src/components/manager/BengkelClient.tsx\")",
       "Bash(mkdir -p \"/Users/azham/a-job/repo/mt/src/app/api/v2/organizer/contingents/[id]/managers/[managerId]\")",
-      "Bash(git -C /Users/azham/a-job/repo/mt add src/app/api/v2/organizer/contingents/[id]/managers/[managerId]/route.ts src/components/organizer/contingents/ContingentOrgDetailClient.tsx)"
+      "Bash(git -C /Users/azham/a-job/repo/mt add src/app/api/v2/organizer/contingents/[id]/managers/[managerId]/route.ts src/components/organizer/contingents/ContingentOrgDetailClient.tsx)",
+      "Bash(git -C /Users/azham/a-job/repo/mt status public/logos-white/mt-logo-white.svg)",
+      "Bash(git -C /Users/azham/a-job/repo/mt add public/logos-white/mt-logo-white.svg)",
+      "Bash(git -C /Users/azham/a-job/repo/mt status public/logo/Jata-01.png)",
+      "Bash(git -C /Users/azham/a-job/repo/mt add public/logo/Jata-01.png)",
+      "Bash(git -C /Users/azham/a-job/repo/mt add src/components/results/ResultsBoardClient.tsx public/logos-white/Jata-01-white.png)",
+      "Bash(git -C /Users/azham/a-job/repo/mt add src/app/api/judging/\\\\[slug\\\\]/route.ts src/components/judging/JudgingBoardClient.tsx)",
+      "Bash(git -C /Users/azham/a-job/repo/mt add src/app/api/judging/\\\\[slug\\\\]/route.ts)",
+      "Bash(git -C /Users/azham/a-job/repo/mt add src/app/api/v2/attendance/\\\\[code\\\\]/scan/route.ts src/components/attendance/AttendanceCounterClient.tsx)"
     ],
     "additionalDirectories": [
       "/Users/azham/a-job/repo/mt/src/app/(organizer)/invite",

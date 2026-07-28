@@ -37,6 +37,11 @@ export interface WalkInCompStat {
   participants: number;
 }
 
+export interface WalkInStateCompGroup {
+  stateName: string;
+  comps: (WalkInCompStat & { level: Level })[];
+}
+
 export interface FinalProgramData {
   eventName: string;
   eventId: string;
@@ -91,6 +96,7 @@ export interface FinalProgramData {
   walkInBeliaFemale: number;
   walkInMultiCompCount: number;
   multiTeamParticipantCount: number;
+  walkInStateCompStats: WalkInStateCompGroup[];
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -176,6 +182,13 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
         },
       },
       participant: { select: { id: true, gender: true, ethnicity: true } },
+      contingent: {
+        select: {
+          state: { select: { name: true } },
+          school: { select: { state: { select: { name: true } } } },
+          higherInstitution: { select: { state: { select: { name: true } } } },
+        },
+      },
     },
   });
 
@@ -299,6 +312,27 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     wiCompPerPax.set(w.participant.id, (wiCompPerPax.get(w.participant.id) ?? 0) + 1);
   const walkInMultiCompCount = [...wiCompPerPax.values()].filter(c => c > 1).length;
 
+  // walk-in state × competition
+  const wiScMap = new Map<string, Map<string, { code: string; name: string; level: Level; pids: Set<string> }>>();
+  for (const w of walkIns) {
+    const comp = w.walkInCompetition.competition;
+    const level = classifyLevel(comp.targetGroups);
+    const stateName = getStateName(w.contingent);
+    if (!wiScMap.has(stateName)) wiScMap.set(stateName, new Map());
+    const byComp = wiScMap.get(stateName)!;
+    if (!byComp.has(comp.id))
+      byComp.set(comp.id, { code: comp.code, name: comp.name, level, pids: new Set() });
+    byComp.get(comp.id)!.pids.add(w.participant.id);
+  }
+  const walkInStateCompStats: WalkInStateCompGroup[] = [...wiScMap.entries()]
+    .map(([stateName, byComp]) => ({
+      stateName,
+      comps: [...byComp.values()]
+        .map(c => ({ code: c.code, name: c.name, level: c.level, participants: c.pids.size }))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    }))
+    .sort((a, b) => a.stateName.localeCompare(b.stateName));
+
   // registered participants in more than one team
   const teamsPerPax = new Map<string, number>();
   for (const t of tds)
@@ -404,5 +438,6 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     walkInBeliaMale, walkInBeliaFemale,
     walkInMultiCompCount,
     multiTeamParticipantCount,
+    walkInStateCompStats,
   };
 }

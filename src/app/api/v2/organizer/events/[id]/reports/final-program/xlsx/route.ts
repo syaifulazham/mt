@@ -426,6 +426,45 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell(r, 5), nv(subP), C.slate200, center, true);
     r++;
   });
+  if (d.multiTeamParticipantCount > 0) {
+    ws.mergeCells(r, 1, r, 4);
+    applyCell(ws.getCell(r, 1), "Peserta menjadi ahli 2 atau lebih pasukan", C.amber50, left, false, C.amber800);
+    applyCell(ws.getCell(r, 5), nv(d.multiTeamParticipantCount), C.amber50, center, true, C.amber800);
+    ws.getRow(r).height = 16; r++;
+  }
+
+  // ═══ SECTION 6: WALK-IN BY STATE × COMPETITION ═════════════════════════════
+  if (d.walkInStateCompStats.length > 0) {
+    sectionHeader("Penyertaan 'Walk-in' Mengikut Negeri", "Seksyen 6");
+    ["Negeri", "Kod", "Pertandingan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+    ws.getRow(r).height = 18; r++;
+    d.walkInStateCompStats.forEach((sg, si) => {
+      const rowBg = si % 2 === 0 ? C.white : C.slate50;
+      ws.mergeCells(r, 1, r, 4);
+      applyCell(ws.getCell(r, 1), sg.stateName, C.slate700, left, true, C.white);
+      ws.getRow(r).height = 16; r++;
+      sg.comps.forEach((c, i) => {
+        const bg = i % 2 === 0 ? rowBg : C.white;
+        applyCell(ws.getCell(r, 1), "", bg);
+        applyCell(ws.getCell(r, 2), c.code, bg, center);
+        applyCell(ws.getCell(r, 3), c.name, bg, left);
+        applyCell(ws.getCell(r, 4), nv(c.participants), bg, center);
+        r++;
+      });
+      const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
+      applyCell(ws.getCell(r, 1), "", C.slate200);
+      applyCell(ws.getCell(r, 2), "", C.slate200);
+      applyCell(ws.getCell(r, 3), `Jumlah ${sg.stateName}`, C.slate200, right, true);
+      applyCell(ws.getCell(r, 4), nv(subP), C.slate200, center, true);
+      r++;
+    });
+    if (d.walkInMultiCompCount > 0) {
+      ws.mergeCells(r, 1, r, 3);
+      applyCell(ws.getCell(r, 1), "Peserta memasuki 2 atau lebih pertandingan", C.amber50, left, false, C.amber800);
+      applyCell(ws.getCell(r, 4), nv(d.walkInMultiCompCount), C.amber50, center, true, C.amber800);
+      ws.getRow(r).height = 16; r++;
+    }
+  }
 }
 
 // ─── Multi-sheet builder (existing logic, updated palette) ────────────────────
@@ -785,6 +824,52 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       applyCell(ws.getCell(r, 5), nv(subP), C.slate200, center, true);
       r += 2;
     });
+    if (d.multiTeamParticipantCount > 0) {
+      ws.mergeCells(r, 1, r, 4);
+      applyCell(ws.getCell(r, 1), "Peserta menjadi ahli 2 atau lebih pasukan", C.amber50, left, false, C.amber800);
+      applyCell(ws.getCell(r, 5), nv(d.multiTeamParticipantCount), C.amber50, center, true, C.amber800);
+      ws.getRow(r).height = 16; r++;
+    }
+  }
+
+  // ── Sheet 5: Walk-In Mengikut Negeri ────────────────────────────────────────
+  if (d.walkInStateCompStats.length > 0) {
+    const ws = wb.addWorksheet("Walk-In Mengikut Negeri");
+    ws.columns = [{ width: 26 }, { width: 12 }, { width: 44 }, { width: 14 }];
+    ws.mergeCells("A1:D1");
+    applyMasthead(ws.getCell("A1"), "Penyertaan 'Walk-in' Mengikut Negeri");
+    ws.getRow(1).height = 22;
+    ["Negeri", "Kod", "Pertandingan", "Peserta"]
+      .forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
+    ws.getRow(2).height = 18;
+
+    let r = 3;
+    d.walkInStateCompStats.forEach((sg, si) => {
+      const rowBg = si % 2 === 0 ? C.white : C.slate50;
+      ws.mergeCells(r, 1, r, 4);
+      applyCell(ws.getCell(r, 1), sg.stateName, C.slate700, left, true, C.white);
+      ws.getRow(r).height = 16; r++;
+      sg.comps.forEach((c, i) => {
+        const bg = i % 2 === 0 ? rowBg : C.white;
+        applyCell(ws.getCell(r, 1), "", bg);
+        applyCell(ws.getCell(r, 2), c.code, bg, center);
+        applyCell(ws.getCell(r, 3), c.name, bg, left);
+        applyCell(ws.getCell(r, 4), nv(c.participants), bg, center);
+        r++;
+      });
+      const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
+      applyCell(ws.getCell(r, 1), "", C.slate200);
+      applyCell(ws.getCell(r, 2), "", C.slate200);
+      applyCell(ws.getCell(r, 3), `Jumlah ${sg.stateName}`, C.slate200, right, true);
+      applyCell(ws.getCell(r, 4), nv(subP), C.slate200, center, true);
+      r += 2;
+    });
+    if (d.walkInMultiCompCount > 0) {
+      ws.mergeCells(r, 1, r, 3);
+      applyCell(ws.getCell(r, 1), "Peserta memasuki 2 atau lebih pertandingan", C.amber50, left, false, C.amber800);
+      applyCell(ws.getCell(r, 4), nv(d.walkInMultiCompCount), C.amber50, center, true, C.amber800);
+      ws.getRow(r).height = 16; r++;
+    }
   }
 }
 
@@ -1165,6 +1250,45 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell(r, 5), nv(subP), C.slate200, center, true);
     r++;
   });
+  if (d.multiTeamParticipantCount > 0) {
+    ws.mergeCells(r, 1, r, 4);
+    applyCell(ws.getCell(r, 1), "Peserta menjadi ahli 2 atau lebih pasukan", C.amber50, left, false, C.amber800);
+    applyCell(ws.getCell(r, 5), nv(d.multiTeamParticipantCount), C.amber50, center, true, C.amber800);
+    ws.getRow(r).height = 16; r++;
+  }
+
+  // Penyertaan Walk-In Mengikut Negeri
+  if (d.walkInStateCompStats.length > 0) {
+    sectionHeader("Penyertaan 'Walk-in' Mengikut Negeri", "Seksyen 3");
+    ["Negeri", "Kod", "Pertandingan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+    ws.getRow(r).height = 18; r++;
+    d.walkInStateCompStats.forEach((sg, si) => {
+      const rowBg = si % 2 === 0 ? C.white : C.slate50;
+      ws.mergeCells(r, 1, r, 4);
+      applyCell(ws.getCell(r, 1), sg.stateName, C.slate700, left, true, C.white);
+      ws.getRow(r).height = 16; r++;
+      sg.comps.forEach((c, i) => {
+        const bg = i % 2 === 0 ? rowBg : C.white;
+        applyCell(ws.getCell(r, 1), "", bg);
+        applyCell(ws.getCell(r, 2), c.code, bg, center);
+        applyCell(ws.getCell(r, 3), c.name, bg, left);
+        applyCell(ws.getCell(r, 4), nv(c.participants), bg, center);
+        r++;
+      });
+      const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
+      applyCell(ws.getCell(r, 1), "", C.slate200);
+      applyCell(ws.getCell(r, 2), "", C.slate200);
+      applyCell(ws.getCell(r, 3), `Jumlah ${sg.stateName}`, C.slate200, right, true);
+      applyCell(ws.getCell(r, 4), nv(subP), C.slate200, center, true);
+      r++;
+    });
+    if (d.walkInMultiCompCount > 0) {
+      ws.mergeCells(r, 1, r, 3);
+      applyCell(ws.getCell(r, 1), "Peserta memasuki 2 atau lebih pertandingan", C.amber50, left, false, C.amber800);
+      applyCell(ws.getCell(r, 4), nv(d.walkInMultiCompCount), C.amber50, center, true, C.amber800);
+      ws.getRow(r).height = 16; r++;
+    }
+  }
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
