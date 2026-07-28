@@ -35,6 +35,7 @@ type Team = {
   selected: boolean;
   acceptance: string;
   hasDuplicateMember?: boolean;
+  duplicateMembers?: { memberName: string; otherTeams: string[] }[];
 };
 
 type Competition = {
@@ -1389,7 +1390,19 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                           {(teamsPage - 1) * PAGE_SIZE + i + 1}
                         </td>
                         <td className="px-4 py-2.5 text-zinc-600 text-xs">{team.contingentName ?? "–"}</td>
-                        <td className="px-4 py-2.5 font-medium text-zinc-900">{team.teamName}</td>
+                        <td className="px-4 py-2.5">
+                          <p className="font-medium text-zinc-900">{team.teamName}</p>
+                          {team.duplicateMembers && team.duplicateMembers.length > 0 && (
+                            <div className="mt-0.5 space-y-0.5">
+                              {team.duplicateMembers.map((dm, di) => (
+                                <p key={di} className="text-[10px] leading-tight text-rose-600">
+                                  ⚠ <span className="font-semibold">{dm.memberName}</span>{" "}
+                                  → {dm.otherTeams.join(", ")}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-2.5 text-zinc-500 text-xs">{team.stateName ?? "–"}</td>
                         <td className="px-4 py-2.5">
                           <span className="inline-flex items-center gap-1">

@@ -115,7 +115,7 @@ export async function GET(
         WHERE 1=1 ${extraConditions} ${duplicates ? duplicateFilter : Prisma.empty}
         GROUP BY t.id, t.name, cont.name,
           COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected, te.acceptance
-        ORDER BY c.code, t.name
+        ORDER BY COALESCE(s.name, sch_state.name, hi_state.name), cont.name, t.name
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `,
       db.$queryRaw<CountRow[]>`
@@ -126,6 +126,39 @@ export async function GET(
     ]);
 
     const total = Number(countRows[0]?.total ?? 0);
+
+    // For teams with duplicate members, fetch which members are shared and their other teams
+    const dupTeamIds = rows.filter(r => r.hasDuplicateMember).map(r => r.id);
+    type DupRow = { teamId: string; memberName: string; otherTeamName: string };
+    let dupDetails: DupRow[] = [];
+    if (dupTeamIds.length > 0) {
+      dupDetails = await db.$queryRaw<DupRow[]>`
+        SELECT
+          tm1."teamId"  AS "teamId",
+          p.name        AS "memberName",
+          t2.name       AS "otherTeamName"
+        FROM team_members tm1
+        JOIN contestants p ON p.id = tm1."contestantId"
+        JOIN team_members tm2 ON tm2."contestantId" = tm1."contestantId" AND tm2."teamId" != tm1."teamId"
+        JOIN team_events te2 ON te2."teamId" = tm2."teamId" AND te2."eventId" = ${eventId}
+        JOIN teams t2 ON t2.id = tm2."teamId"
+        WHERE tm1."teamId" IN (${Prisma.join(dupTeamIds)})
+        ORDER BY p.name, t2.name
+      `;
+    }
+
+    // Group duplicate details by teamId
+    const dupMap = new Map<string, { memberName: string; otherTeams: string[] }[]>();
+    for (const d of dupDetails) {
+      if (!dupMap.has(d.teamId)) dupMap.set(d.teamId, []);
+      const arr = dupMap.get(d.teamId)!;
+      const existing = arr.find(x => x.memberName === d.memberName);
+      if (existing) {
+        if (!existing.otherTeams.includes(d.otherTeamName)) existing.otherTeams.push(d.otherTeamName);
+      } else {
+        arr.push({ memberName: d.memberName, otherTeams: [d.otherTeamName] });
+      }
+    }
 
     return NextResponse.json({
       data: rows.map(r => ({
@@ -139,6 +172,7 @@ export async function GET(
         selected:        r.selected ?? false,
         acceptance:      r.acceptance ?? "PENDING",
         hasDuplicateMember: r.hasDuplicateMember ?? false,
+        duplicateMembers: dupMap.get(r.id) ?? [],
       })),
       total,
       page,
