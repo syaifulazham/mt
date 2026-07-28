@@ -284,6 +284,18 @@ export default async function LandingPage({
           {/* Hero content */}
           <div className="relative z-10 hero-content flex flex-col items-center" style={{ padding: "0 24px", maxWidth: 720 }}>
 
+            {/* Jata Negara */}
+            <div className="mb-6">
+              <Image
+                src="/logos-white/Jata-01-white.png"
+                alt="Jata Negara"
+                width={180}
+                height={180}
+                priority
+                style={{ width: "clamp(120px, 18vw, 180px)", height: "auto" }}
+              />
+            </div>
+
             {/* Badge */}
             <div
               className="inline-flex items-center gap-2 mb-8 rounded-full px-5 py-2"
