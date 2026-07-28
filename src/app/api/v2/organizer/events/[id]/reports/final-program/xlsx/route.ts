@@ -254,41 +254,38 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   const regEthnTotal = regEthnVals.reduce((s, v) => s + v, 0);
   const wiEthnTotal  = wiEthnVals.reduce((s, v) => s + v, 0);
   const ethnGrandTotal = regEthnTotal + wiEthnTotal;
-  const ECOLS = ethnLabels.length;
 
-  // column headers
-  ethnLabels.forEach((l, i) => applyHeader(ws.getCell(r, i + 1), l));
+  // Headers: Jenis Penyertaan | ethnicity columns ... | Jumlah
+  applyHeader(ws.getCell(r, 1), "Jenis Penyertaan", C.slate700);
+  ethnLabels.forEach((l, i) => applyHeader(ws.getCell(r, i + 2), l));
+  applyHeader(ws.getCell(r, 9), "Jumlah", C.slate700);
   ws.getRow(r).height = 18; r++;
 
-  // Berdaftar group
-  ws.mergeCells(r, 1, r, ECOLS);
-  applyCell(ws.getCell(r, 1), "Peserta Berdaftar", C.slate800, left, true, C.white);
-  ws.getRow(r).height = 16; r++;
-  regEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), nv(v), C.white, center, true));
-  r++;
-  regEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), pct(v, regEthnTotal), C.slate50, center, false, C.slate400));
-  r++;
-  ws.mergeCells(r, 1, r, ECOLS);
-  applyCell(ws.getCell(r, 1), `Jumlah Berdaftar: ${regEthnTotal}`, C.slate200, right, true);
+  function fmtCountPct(v: number, total: number): string {
+    if (v === 0) return "";
+    const p = pct(v, total);
+    return p ? `${v} (${p}%)` : String(v);
+  }
+
+  // Peserta Utama row
+  applyCell(ws.getCell(r, 1), "Peserta Utama", C.slate50, left, true);
+  regEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 2), fmtCountPct(v, regEthnTotal), C.slate50, center, true));
+  applyCell(ws.getCell(r, 9), nv(regEthnTotal), C.slate50, center, true);
   r++;
 
-  // Walk-In group (only if present)
+  // Peserta Walk-in row
   if (wiEthnTotal > 0) {
-    ws.mergeCells(r, 1, r, ECOLS);
-    applyCell(ws.getCell(r, 1), "Peserta Walk-In", C.slate800, left, true, C.white);
-    ws.getRow(r).height = 16; r++;
-    wiEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), nv(v), C.white, center, true));
-    r++;
-    wiEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 1), pct(v, wiEthnTotal), C.slate50, center, false, C.slate400));
-    r++;
-    ws.mergeCells(r, 1, r, ECOLS);
-    applyCell(ws.getCell(r, 1), `Jumlah Walk-In: ${wiEthnTotal}`, C.slate200, right, true);
+    applyCell(ws.getCell(r, 1), "Peserta Walk-in", C.white, left, true);
+    wiEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 2), fmtCountPct(v, wiEthnTotal), C.white, center, true));
+    applyCell(ws.getCell(r, 9), nv(wiEthnTotal), C.white, center, true);
     r++;
   }
 
-  ws.mergeCells(r, 1, r, ECOLS);
-  applyCell(ws.getCell(r, 1), `Jumlah Keseluruhan: ${ethnGrandTotal}`, C.slate900, right, true, C.white);
-  r++;
+  // Grand total row
+  applyCell(ws.getCell(r, 1), "Jumlah Keseluruhan", C.slate900, left, true, C.white);
+  ethnLabels.forEach((_, i) => applyCell(ws.getCell(r, i + 2), nv(regEthnVals[i] + (wiEthnTotal > 0 ? wiEthnVals[i] : 0)), C.slate900, center, true, C.white));
+  applyCell(ws.getCell(r, 9), nv(ethnGrandTotal), C.slate900, center, true, C.white);
+  ws.getRow(r).height = 18; r++;
   spacer();
 
   // ═══ SECTION 3: STATE DETAIL ════════════════════════════════════════════════
@@ -445,7 +442,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     ws.columns = [
       { width: 36 }, { width: 14 }, { width: 14 }, { width: 14 },
       { width: 2  },
-      { width: 16 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
+      { width: 18 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 12 },
     ];
 
     ws.mergeCells("A1:D1");
@@ -453,7 +450,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     ws.getRow(1).height = 22;
 
     // Ethnicity title (right side)
-    ws.mergeCells("F1:L1");
+    ws.mergeCells("F1:N1");
     applyMasthead(ws.getCell("F1"), "Bagi Laporan KBS — Rakan Muda", C.slate800);
 
     ws.mergeCells("A2:D2");
@@ -465,40 +462,48 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyHeader(ws.getCell("D3"), "Jumlah");
 
     // Kaum header (right side, row 2–3)
-    ws.mergeCells("F2:L2");
+    ws.mergeCells("F2:N2");
     applyMasthead(ws.getCell("F2"), "Jumlah Peserta Mengikut Kaum", C.slate700);
-    const ethnCols2 = ["F","G","H","I","J","K","L"];
     const ethnLabels2 = ["Melayu","Cina","India","Org. Asli","Sabah","Sarawak","Lain-Lain"];
+    applyHeader(ws.getCell("F3"), "Jenis Penyertaan", C.slate700);
+    const ethnCols2 = ["G","H","I","J","K","L","M"];
     ethnCols2.forEach((col, i) => applyHeader(ws.getCell(`${col}3`), ethnLabels2[i]));
+    applyHeader(ws.getCell("N3"), "Jumlah", C.slate700);
 
-    // Kaum — Peserta Berdaftar group (rows 4–7)
-    ws.mergeCells("F4:L4");
-    applyCell(ws.getCell("F4"), "Peserta Berdaftar", C.slate800, left, true, C.white);
     const regEthnVals2 = [d.ethnicityStats.melayu, d.ethnicityStats.cina, d.ethnicityStats.india,
       d.ethnicityStats.orgAsli, d.ethnicityStats.sabah, d.ethnicityStats.sarawak, d.ethnicityStats.lainLain];
     const regEthnTotal2 = regEthnVals2.reduce((s, v) => s + v, 0);
-    ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}5`), nv(regEthnVals2[i]), C.white, center, true));
-    ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}6`), pct(regEthnVals2[i], regEthnTotal2), C.slate50, center, false, C.slate400));
-    ws.mergeCells("F7:L7");
-    applyCell(ws.getCell("F7"), `Jumlah Berdaftar: ${regEthnTotal2}`, C.slate200, right, true);
-    ws.getRow(5).height = 18;
-
-    // Kaum — Peserta Walk-In group (rows 8–11) + grand total (row 12)
     const wiEthnVals2 = [d.walkInEthnicityStats.melayu, d.walkInEthnicityStats.cina, d.walkInEthnicityStats.india,
       d.walkInEthnicityStats.orgAsli, d.walkInEthnicityStats.sabah, d.walkInEthnicityStats.sarawak, d.walkInEthnicityStats.lainLain];
     const wiEthnTotal2 = wiEthnVals2.reduce((s, v) => s + v, 0);
+
+    function fmtCountPct2(v: number, total: number): string {
+      if (v === 0) return "";
+      const p = pct(v, total);
+      return p ? `${v} (${p}%)` : String(v);
+    }
+
+    // Peserta Utama row
+    applyCell(ws.getCell("F4"), "Peserta Utama", C.slate50, left, true);
+    ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}4`), fmtCountPct2(regEthnVals2[i], regEthnTotal2), C.slate50, center, true));
+    applyCell(ws.getCell("N4"), nv(regEthnTotal2), C.slate50, center, true);
+    ws.getRow(4).height = 18;
+
+    // Peserta Walk-in row
     if (wiEthnTotal2 > 0) {
-      ws.mergeCells("F8:L8");
-      applyCell(ws.getCell("F8"), "Peserta Walk-In", C.slate800, left, true, C.white);
-      ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}9`), nv(wiEthnVals2[i]), C.white, center, true));
-      ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}10`), pct(wiEthnVals2[i], wiEthnTotal2), C.slate50, center, false, C.slate400));
-      ws.mergeCells("F11:L11");
-      applyCell(ws.getCell("F11"), `Jumlah Walk-In: ${wiEthnTotal2}`, C.slate200, right, true);
-      ws.mergeCells("F12:L12");
-      applyCell(ws.getCell("F12"), `Jumlah Keseluruhan: ${regEthnTotal2 + wiEthnTotal2}`, C.slate900, right, true, C.white);
+      applyCell(ws.getCell("F5"), "Peserta Walk-in", C.white, left, true);
+      ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}5`), fmtCountPct2(wiEthnVals2[i], wiEthnTotal2), C.white, center, true));
+      applyCell(ws.getCell("N5"), nv(wiEthnTotal2), C.white, center, true);
+
+      // Grand total row
+      applyCell(ws.getCell("F6"), "Jumlah Keseluruhan", C.slate900, left, true, C.white);
+      ethnLabels2.forEach((_, i) => applyCell(ws.getCell(`${ethnCols2[i]}6`), nv(regEthnVals2[i] + wiEthnVals2[i]), C.slate900, center, true, C.white));
+      applyCell(ws.getCell("N6"), nv(regEthnTotal2 + wiEthnTotal2), C.slate900, center, true, C.white);
     } else {
-      ws.mergeCells("F8:L8");
-      applyCell(ws.getCell("F8"), `Jumlah Keseluruhan: ${regEthnTotal2}`, C.slate900, right, true, C.white);
+      // Grand total row (no walk-in)
+      applyCell(ws.getCell("F5"), "Jumlah Keseluruhan", C.slate900, left, true, C.white);
+      ethnLabels2.forEach((_, i) => applyCell(ws.getCell(`${ethnCols2[i]}5`), nv(regEthnVals2[i]), C.slate900, center, true, C.white));
+      applyCell(ws.getCell("N5"), nv(regEthnTotal2), C.slate900, center, true, C.white);
     }
 
     // Berdaftar data (A-D)
