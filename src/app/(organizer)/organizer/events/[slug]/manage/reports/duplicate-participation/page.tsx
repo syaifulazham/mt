@@ -9,7 +9,7 @@ import { ArrowLeft, Users } from "lucide-react";
 
 export const metadata: Metadata = { title: "Penyertaan Berganda" };
 
-type TeamPair = { team: string; contingent: string };
+type TeamPair = { team: string; contingent: string; competitionCode: string; competitionName: string };
 
 type DuplicateParticipant = {
   id: string;
@@ -18,7 +18,6 @@ type DuplicateParticipant = {
   teamCount: number;
   competitionCount: number;
   teamPairs: TeamPair[];
-  competitions: string;
 };
 
 export default async function DuplicateParticipationPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -40,11 +39,16 @@ export default async function DuplicateParticipationPage({ params }: { params: P
     ic: string | null;
     teamCount: bigint;
     competitionCount: bigint;
-    teamPairs: { team: string; contingent: string }[];
-    competitions: string;
+    teamPairs: TeamPair[];
   }[]>`
     WITH event_teams AS (
-      SELECT t.id AS "teamId", t.name AS "teamName", t."competitionId", c.name AS "competitionName", cont.name AS "contingentName"
+      SELECT
+        t.id AS "teamId",
+        t.name AS "teamName",
+        t."competitionId",
+        c.code AS "competitionCode",
+        c.name AS "competitionName",
+        cont.name AS "contingentName"
       FROM team_events te
       JOIN teams t ON t.id = te."teamId"
       JOIN competitions c ON c.id = t."competitionId"
@@ -60,6 +64,7 @@ export default async function DuplicateParticipationPage({ params }: { params: P
         et."teamId",
         et."teamName",
         et."competitionId",
+        et."competitionCode",
         et."competitionName",
         et."contingentName"
       FROM team_members tm
@@ -73,10 +78,14 @@ export default async function DuplicateParticipationPage({ params }: { params: P
       COUNT(DISTINCT "teamId") AS "teamCount",
       COUNT(DISTINCT "competitionId") AS "competitionCount",
       JSON_AGG(
-        JSON_BUILD_OBJECT('team', "teamName", 'contingent', COALESCE("contingentName", '—'))
-        ORDER BY "teamName"
-      ) AS "teamPairs",
-      STRING_AGG(DISTINCT "competitionName", ', ' ORDER BY "competitionName") AS competitions
+        JSON_BUILD_OBJECT(
+          'team', "teamName",
+          'contingent', COALESCE("contingentName", '—'),
+          'competitionCode', "competitionCode",
+          'competitionName', "competitionName"
+        )
+        ORDER BY "contingentName", "teamName"
+      ) AS "teamPairs"
     FROM participant_teams
     GROUP BY "participantId"
     HAVING COUNT(DISTINCT "teamId") > 1 OR COUNT(DISTINCT "competitionId") > 1
@@ -90,7 +99,6 @@ export default async function DuplicateParticipationPage({ params }: { params: P
     teamCount: Number(r.teamCount),
     competitionCount: Number(r.competitionCount),
     teamPairs: r.teamPairs,
-    competitions: r.competitions,
   }));
 
   return (
@@ -128,27 +136,44 @@ export default async function DuplicateParticipationPage({ params }: { params: P
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {participants.map(p => (
-                  <tr key={p.id} className="hover:bg-zinc-50 align-top">
-                    <td className="px-4 py-3 text-zinc-900">{p.name}</td>
-                    <td className="px-4 py-3 text-zinc-600 font-mono text-xs">{p.ic ?? '-'}</td>
-                    <td className="px-4 py-3">
-                      <div className="space-y-2">
-                        {p.teamPairs.map((pair, i) => (
-                          <div key={i}>
-                            <div className="text-xs font-semibold text-zinc-800">{pair.contingent}</div>
-                            <div className="text-xs text-zinc-500 mt-0.5">{pair.team}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold" title={p.competitions}>
-                        {p.competitionCount}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {participants.map(p => {
+                  // Group teams by contingent, preserving SQL sort order
+                  const grouped = new Map<string, TeamPair[]>();
+                  for (const pair of p.teamPairs) {
+                    if (!grouped.has(pair.contingent)) grouped.set(pair.contingent, []);
+                    grouped.get(pair.contingent)!.push(pair);
+                  }
+                  return (
+                    <tr key={p.id} className="hover:bg-zinc-50 align-top">
+                      <td className="px-4 py-3 text-zinc-900 font-medium">{p.name}</td>
+                      <td className="px-4 py-3 text-zinc-600 font-mono text-xs">{p.ic ?? '-'}</td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-3">
+                          {[...grouped.entries()].map(([contingent, teams]) => (
+                            <div key={contingent}>
+                              <div className="text-xs font-semibold text-zinc-800 mb-1">{contingent}</div>
+                              <div className="space-y-1 pl-2">
+                                {teams.map((t, i) => (
+                                  <div key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2.5 py-1.5">
+                                    <div className="text-[10px] font-mono text-zinc-400 leading-tight">
+                                      {t.competitionCode} · {t.competitionName}
+                                    </div>
+                                    <div className="text-xs font-medium text-zinc-700 mt-0.5">{t.team}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                          {p.competitionCount}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
