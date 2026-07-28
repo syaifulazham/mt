@@ -15,6 +15,8 @@ type DuplicateParticipant = {
   ic: string | null;
   teamCount: number;
   competitionCount: number;
+  teams: string;
+  contingents: string;
   competitions: string;
 };
 
@@ -37,13 +39,16 @@ export default async function DuplicateParticipationPage({ params }: { params: P
     ic: string | null;
     teamCount: bigint;
     competitionCount: bigint;
+    teams: string;
+    contingents: string;
     competitions: string;
   }[]>`
     WITH event_teams AS (
-      SELECT t.id AS "teamId", t."competitionId", c.name AS "competitionName"
+      SELECT t.id AS "teamId", t.name AS "teamName", t."competitionId", c.name AS "competitionName", cont.name AS "contingentName"
       FROM team_events te
       JOIN teams t ON t.id = te."teamId"
       JOIN competitions c ON c.id = t."competitionId"
+      LEFT JOIN contingents cont ON cont.id = t."contingentId"
       WHERE te."eventId" = ${event.id}
         AND te.acceptance IN ('PENDING', 'ACCEPT')
     ),
@@ -53,8 +58,10 @@ export default async function DuplicateParticipationPage({ params }: { params: P
         p.name,
         p.ic,
         et."teamId",
+        et."teamName",
         et."competitionId",
-        et."competitionName"
+        et."competitionName",
+        et."contingentName"
       FROM team_members tm
       JOIN contestants p ON p.id = tm."contestantId"
       JOIN event_teams et ON et."teamId" = tm."teamId"
@@ -65,6 +72,8 @@ export default async function DuplicateParticipationPage({ params }: { params: P
       MAX(ic) AS ic,
       COUNT(DISTINCT "teamId") AS "teamCount",
       COUNT(DISTINCT "competitionId") AS "competitionCount",
+      STRING_AGG(DISTINCT "teamName", ', ' ORDER BY "teamName") AS teams,
+      STRING_AGG(DISTINCT "contingentName", ', ' ORDER BY "contingentName") AS contingents,
       STRING_AGG(DISTINCT "competitionName", ', ' ORDER BY "competitionName") AS competitions
     FROM participant_teams
     GROUP BY "participantId"
@@ -78,6 +87,8 @@ export default async function DuplicateParticipationPage({ params }: { params: P
     ic: r.ic,
     teamCount: Number(r.teamCount),
     competitionCount: Number(r.competitionCount),
+    teams: r.teams,
+    contingents: r.contingents,
     competitions: r.competitions,
   }));
 
@@ -111,9 +122,9 @@ export default async function DuplicateParticipationPage({ params }: { params: P
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-zinc-600">Nama</th>
                   <th className="px-4 py-3 text-left font-medium text-zinc-600">No. Kad Pengenalan</th>
-                  <th className="px-4 py-3 text-center font-medium text-zinc-600">Pasukan</th>
+                  <th className="px-4 py-3 text-left font-medium text-zinc-600">Kontinjen</th>
+                  <th className="px-4 py-3 text-left font-medium text-zinc-600">Pasukan</th>
                   <th className="px-4 py-3 text-center font-medium text-zinc-600">Pertandingan</th>
-                  <th className="px-4 py-3 text-left font-medium text-zinc-600">Senarai Pertandingan</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -121,18 +132,16 @@ export default async function DuplicateParticipationPage({ params }: { params: P
                   <tr key={p.id} className="hover:bg-zinc-50">
                     <td className="px-4 py-3 text-zinc-900">{p.name}</td>
                     <td className="px-4 py-3 text-zinc-600 font-mono text-xs">{p.ic ?? '-'}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
-                        {p.teamCount}
-                      </span>
+                    <td className="px-4 py-3 text-zinc-600 text-xs max-w-[180px] truncate" title={p.contingents}>
+                      {p.contingents}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 text-xs max-w-[180px] truncate" title={p.teams}>
+                      {p.teams}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-semibold" title={p.competitions}>
                         {p.competitionCount}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600 text-xs max-w-xs truncate" title={p.competitions}>
-                      {p.competitions}
                     </td>
                   </tr>
                 ))}
