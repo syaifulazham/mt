@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import Link from "next/link";
-import { ArrowLeft, BarChart3, CheckSquare, UserCheck, FileText } from "lucide-react";
+import { db } from "@/lib/db";
+import { ArrowLeft, BarChart3, CheckSquare, UserCheck, FileText, Users } from "lucide-react";
 
 export const metadata: Metadata = { title: "Laporan" };
 
@@ -52,6 +53,31 @@ export default async function EventReportsPage({ params }: { params: Promise<{ s
 
   const { slug } = await params;
 
+  const event = await db.event.findUnique({
+    where: { slug },
+    select: { id: true, slug: true },
+  });
+  if (!event) redirect("/organizer/events");
+
+  const [duplicateRow] = await db.$queryRaw<{ count: number }[]>`
+    WITH event_teams AS (
+      SELECT t.id AS "teamId", t."competitionId"
+      FROM team_events te
+      JOIN teams t ON t.id = te."teamId"
+      WHERE te."eventId" = ${event.id}
+        AND te.acceptance IN ('PENDING', 'ACCEPT')
+    )
+    SELECT COUNT(DISTINCT "contestantId")::int AS count
+    FROM (
+      SELECT tm."contestantId"
+      FROM team_members tm
+      JOIN event_teams et ON et."teamId" = tm."teamId"
+      GROUP BY tm."contestantId"
+      HAVING COUNT(DISTINCT tm."teamId") > 1 OR COUNT(DISTINCT et."competitionId") > 1
+    ) d
+  `;
+  const duplicateCount = Number(duplicateRow?.count ?? 0);
+
   return (
     <OrganizerShell userName={session.name} role={session.role}>
       <div className="p-6 max-w-4xl mx-auto">
@@ -69,6 +95,25 @@ export default async function EventReportsPage({ params }: { params: Promise<{ s
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {duplicateCount > 0 && (
+            <Link
+              href={`/organizer/events/${slug}/manage/reports/duplicate-participation`}
+              className="block"
+            >
+              <div className="flex flex-col gap-3 rounded-xl border p-5 h-full transition-all border-rose-200 bg-rose-50 cursor-pointer hover:shadow-md hover:scale-[1.01]">
+                <div className="flex items-center gap-3">
+                  <Users className="w-6 h-6 text-rose-600" />
+                  <span className="text-sm font-semibold text-rose-600">Penyertaan Berganda</span>
+                  <span className="ml-auto text-xs font-bold text-white bg-rose-600 rounded-full px-2 py-0.5">
+                    {duplicateCount}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Peserta yang menjadi ahli lebih daripada satu pasukan atau menyertai lebih daripada satu pertandingan.
+                </p>
+              </div>
+            </Link>
+          )}
           {REPORTS.map((r) => {
             const Icon = r.icon;
             const card = (
