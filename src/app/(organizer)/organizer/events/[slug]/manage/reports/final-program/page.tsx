@@ -632,6 +632,7 @@ export default async function FinalProgramReportPage({
                 {
                   label: "Sekolah Rendah",
                   comps: d.rendahComps,
+                  levelParticipants: d.rendahParticipants,
                   labelCls: "bg-indigo-800 text-white",
                   subCls: "bg-indigo-50",
                   totCls: "bg-indigo-100 text-indigo-900",
@@ -639,6 +640,7 @@ export default async function FinalProgramReportPage({
                 {
                   label: "Sekolah Menengah",
                   comps: d.menengahComps,
+                  levelParticipants: d.menengahParticipants,
                   labelCls: "bg-amber-800 text-white",
                   subCls: "bg-amber-50",
                   totCls: "bg-amber-100 text-amber-900",
@@ -646,6 +648,7 @@ export default async function FinalProgramReportPage({
                 {
                   label: "Belia",
                   comps: d.beliaComps,
+                  levelParticipants: d.regSummary.beliaParticipants,
                   labelCls: "bg-teal-800 text-white",
                   subCls: "bg-teal-50",
                   totCls: "bg-teal-100 text-teal-900",
@@ -685,7 +688,7 @@ export default async function FinalProgramReportPage({
                         {n(g.comps.reduce((s, c) => s + c.teams, 0))}
                       </td>
                       <td className="px-3 py-1.5 text-center font-mono font-black text-sm tabular-nums">
-                        {n(g.comps.reduce((s, c) => s + c.participants, 0))}
+                        {n(g.levelParticipants)}
                       </td>
                     </tr>
                   </Fragment>
@@ -773,14 +776,42 @@ export default async function FinalProgramReportPage({
                     </Fragment>
                   ) : null,
                 )}
-                <tr className="bg-slate-900 text-white">
-                  <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={3}>
-                    Jumlah Keseluruhan Peserta Walk-In
-                  </td>
-                  <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
-                    {n(d.walkInSummary.total)}
-                  </td>
-                </tr>
+                {(() => {
+                  const totalPenyertaan = [
+                    ...d.walkInRendahComps, ...d.walkInMenengahComps, ...d.walkInBeliaComps
+                  ].reduce((s, c) => s + c.participants, 0);
+                  const uniquePeserta = d.walkInSummary.total;
+                  return (
+                    <>
+                      <tr className="bg-slate-700 text-white">
+                        <td className="px-3 py-1.5 text-xs font-semibold text-slate-300" colSpan={3}>
+                          Jumlah Penyertaan <span className="font-normal italic text-slate-400">(termasuk penyertaan berganda)</span>
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-mono font-black text-sm tabular-nums">
+                          {n(totalPenyertaan)}
+                        </td>
+                      </tr>
+                      <tr className="bg-slate-900 text-white">
+                        <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={3}>
+                          Jumlah Peserta Walk-In (Unik)
+                        </td>
+                        <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
+                          {n(uniquePeserta)}
+                        </td>
+                      </tr>
+                      {d.walkInMultiCompCount > 0 && (
+                        <tr className="bg-amber-50 border-t border-amber-200">
+                          <td className="px-3 py-1.5 text-xs text-amber-800" colSpan={3}>
+                            Peserta memasuki 2 atau lebih pertandingan
+                          </td>
+                          <td className="px-3 py-1.5 text-center font-mono font-bold text-sm tabular-nums text-amber-900">
+                            {n(d.walkInMultiCompCount)}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })()}
               </tbody>
             </table>
           </div>

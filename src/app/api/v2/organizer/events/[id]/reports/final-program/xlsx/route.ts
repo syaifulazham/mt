@@ -326,9 +326,9 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
   ws.getRow(r).height = 18; r++;
   const levelGroups = [
-    { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
-    { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
-    { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
+    { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100, levelPax: d.rendahParticipants },
+    { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100,  levelPax: d.menengahParticipants },
+    { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100,   levelPax: d.regSummary.beliaParticipants },
   ];
   for (const g of levelGroups) {
     if (!g.comps.length) continue;
@@ -345,7 +345,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       r++;
     });
     const subT = g.comps.reduce((s, c) => s + c.teams, 0);
-    const subP = g.comps.reduce((s, c) => s + c.participants, 0);
+    const subP = g.levelPax;
     applyCell(ws.getCell(r, 1), "", g.tBg);
     applyCell(ws.getCell(r, 2), "", g.tBg);
     applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);
@@ -666,9 +666,9 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     let r = 3;
     const levelGroups = [
-      { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
-      { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
-      { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
+      { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100, levelPax: d.rendahParticipants },
+      { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100,  levelPax: d.menengahParticipants },
+      { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100,   levelPax: d.regSummary.beliaParticipants },
     ];
     for (const g of levelGroups) {
       if (!g.comps.length) continue;
@@ -685,7 +685,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
         r++;
       });
       const subT = g.comps.reduce((s, c) => s + c.teams, 0);
-      const subP = g.comps.reduce((s, c) => s + c.participants, 0);
+      const subP = g.levelPax;
       applyCell(ws.getCell(r, 1), "", g.tBg);
       applyCell(ws.getCell(r, 2), "", g.tBg);
       applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);

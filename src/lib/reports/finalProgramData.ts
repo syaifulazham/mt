@@ -75,6 +75,8 @@ export interface FinalProgramData {
   rendahComps: CompStat[];
   menengahComps: CompStat[];
   beliaComps: CompStat[];
+  rendahParticipants: number;
+  menengahParticipants: number;
   stateCompStats: StateCompGroup[];
   walkInRendahComps: WalkInCompStat[];
   walkInMenengahComps: WalkInCompStat[];
@@ -87,6 +89,7 @@ export interface FinalProgramData {
   walkInSchoolFemale: number;
   walkInBeliaMale: number;
   walkInBeliaFemale: number;
+  walkInMultiCompCount: number;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -289,6 +292,12 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     lainLain: wiEthn.get("LAIN_LAIN")?.size ?? 0,
   };
 
+  // walk-in multi-competition participants
+  const wiCompPerPax = new Map<string, number>();
+  for (const w of walkIns)
+    wiCompPerPax.set(w.participant.id, (wiCompPerPax.get(w.participant.id) ?? 0) + 1);
+  const walkInMultiCompCount = [...wiCompPerPax.values()].filter(c => c > 1).length;
+
   // competition stats
   const compMap = new Map<string, { code: string; name: string; level: Level; teams: number; pids: Set<string> }>();
   for (const t of tds) {
@@ -376,6 +385,8 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     rendahComps:   allComps.filter(c => c.level === "RENDAH"),
     menengahComps: allComps.filter(c => c.level === "MENENGAH"),
     beliaComps:    allComps.filter(c => c.level === "BELIA"),
+    rendahParticipants:   uniquePids(rendahTDs).size,
+    menengahParticipants: uniquePids(menengahTDs).size,
     stateCompStats,
     walkInRendahComps:   allWiComps.filter(c => c.level === "RENDAH"),
     walkInMenengahComps: allWiComps.filter(c => c.level === "MENENGAH"),
@@ -383,5 +394,6 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     walkInEthnicityStats,
     walkInSchoolMale, walkInSchoolFemale,
     walkInBeliaMale, walkInBeliaFemale,
+    walkInMultiCompCount,
   };
 }

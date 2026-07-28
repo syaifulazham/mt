@@ -426,9 +426,9 @@ export async function GET(
     new TableRow({ children: [hCell("Tahap Pendidikan"), hCell("Kod"), hCell("Pertandingan"), hCell("Pasukan"), hCell("Peserta")] }),
   ];
   const levelGroups = [
-    { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100 },
-    { label: "Sekolah Menengah", comps: d.menengahComps, hBg: AMBER_800,  rBg: AMBER_50,   tBg: AMBER_100 },
-    { label: "Belia",            comps: d.beliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100 },
+    { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100, levelPax: d.rendahParticipants },
+    { label: "Sekolah Menengah", comps: d.menengahComps, hBg: AMBER_800,  rBg: AMBER_50,   tBg: AMBER_100,  levelPax: d.menengahParticipants },
+    { label: "Belia",            comps: d.beliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100,   levelPax: d.regSummary.beliaParticipants },
   ];
   for (const g of levelGroups) {
     if (!g.comps.length) continue;
@@ -444,7 +444,7 @@ export async function GET(
       ]}));
     });
     const subT = g.comps.reduce((s, c) => s + c.teams, 0);
-    const subP = g.comps.reduce((s, c) => s + c.participants, 0);
+    const subP = g.levelPax;
     levelRows.push(new TableRow({ children: [
       dCell("", g.tBg), dCell("", g.tBg),
       dCell(`Jumlah ${g.label}`, g.tBg, AlignmentType.RIGHT, true),
