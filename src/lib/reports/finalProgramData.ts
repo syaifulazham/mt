@@ -90,6 +90,7 @@ export interface FinalProgramData {
   walkInBeliaMale: number;
   walkInBeliaFemale: number;
   walkInMultiCompCount: number;
+  multiTeamParticipantCount: number;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -298,6 +299,13 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     wiCompPerPax.set(w.participant.id, (wiCompPerPax.get(w.participant.id) ?? 0) + 1);
   const walkInMultiCompCount = [...wiCompPerPax.values()].filter(c => c > 1).length;
 
+  // registered participants in more than one team
+  const teamsPerPax = new Map<string, number>();
+  for (const t of tds)
+    for (const m of t.members)
+      teamsPerPax.set(m.id, (teamsPerPax.get(m.id) ?? 0) + 1);
+  const multiTeamParticipantCount = [...teamsPerPax.values()].filter(c => c > 1).length;
+
   // competition stats
   const compMap = new Map<string, { code: string; name: string; level: Level; teams: number; pids: Set<string> }>();
   for (const t of tds) {
@@ -395,5 +403,6 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     walkInSchoolMale, walkInSchoolFemale,
     walkInBeliaMale, walkInBeliaFemale,
     walkInMultiCompCount,
+    multiTeamParticipantCount,
   };
 }

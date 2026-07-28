@@ -353,6 +353,12 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
     r++; spacer();
   }
+  if (d.multiTeamParticipantCount > 0) {
+    ws.mergeCells(r, 1, r, 4);
+    applyCell(ws.getCell(r, 1), "Peserta menjadi ahli 2 atau lebih pasukan", C.amber50, left, false, C.amber800);
+    applyCell(ws.getCell(r, 5), nv(d.multiTeamParticipantCount), C.amber50, center, true, C.amber800);
+    ws.getRow(r).height = 16; r++;
+  }
 
   // ═══ SECTION 4b: WALK-IN BY EDUCATION LEVEL ════════════════════════════════
   const hasWalkInComps = d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
@@ -692,6 +698,12 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       applyCell(ws.getCell(r, 4), nv(subT), g.tBg, center, true);
       applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
       r += 2;
+    }
+    if (d.multiTeamParticipantCount > 0) {
+      ws.mergeCells(r, 1, r, 4);
+      applyCell(ws.getCell(r, 1), "Peserta menjadi ahli 2 atau lebih pasukan", C.amber50, left, false, C.amber800);
+      applyCell(ws.getCell(r, 5), nv(d.multiTeamParticipantCount), C.amber50, center, true, C.amber800);
+      ws.getRow(r).height = 16; r++;
     }
 
     // Walk-In competitions by level

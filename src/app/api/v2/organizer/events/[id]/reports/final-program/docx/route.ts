@@ -452,6 +452,12 @@ export async function GET(
       dCell(nv(subP), g.tBg, AlignmentType.RIGHT, true),
     ]}));
   }
+  if (d.multiTeamParticipantCount > 0) {
+    levelRows.push(new TableRow({ children: [
+      dCell("Peserta menjadi ahli 2 atau lebih pasukan", AMBER_50, AlignmentType.LEFT, false, AMBER_800, 4),
+      dCell(nv(d.multiTeamParticipantCount), AMBER_50, AlignmentType.RIGHT, true, AMBER_800),
+    ]}));
+  }
   const levelTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, rows: levelRows });
 
   // ── 6. By state × competition ──────────────────────────────────────────────

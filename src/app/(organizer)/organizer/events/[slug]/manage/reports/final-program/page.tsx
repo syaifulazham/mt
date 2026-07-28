@@ -694,6 +694,16 @@ export default async function FinalProgramReportPage({
                   </Fragment>
                 ) : null,
               )}
+              {d.multiTeamParticipantCount > 0 && (
+                <tr className="bg-amber-50 border-t border-amber-200">
+                  <td className="px-3 py-1.5 text-xs text-amber-800" colSpan={4}>
+                    Peserta menjadi ahli 2 atau lebih pasukan
+                  </td>
+                  <td className="px-3 py-1.5 text-center font-mono font-bold text-sm tabular-nums text-amber-900">
+                    {n(d.multiTeamParticipantCount)}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
