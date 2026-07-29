@@ -827,77 +827,6 @@ export default async function FinalProgramReportPage({
           </div>
         )}
 
-        {/* ══ WALK-IN MENGIKUT NEGERI ══════════════════════════════════════ */}
-        {d.walkInStateCompStats.length > 0 && (
-          <div className="overflow-hidden rounded-sm">
-            <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
-              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
-                Penyertaan Walk-In
-              </span>
-              <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
-                Penyertaan &lsquo;Walk-In&rsquo; Mengikut Negeri
-              </span>
-            </div>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th className={`${TH_LEFT} w-44`}>Negeri</th>
-                  <th className={`${TH} w-20`}>Kod</th>
-                  <th className={TH_LEFT}>Pertandingan</th>
-                  <th className={`${TH} w-24`}>Peserta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.walkInStateCompStats.map((sg, si) => {
-                  const subP  = sg.comps.reduce((s, c) => s + c.participants, 0);
-                  const rowBg = si % 2 === 0 ? "bg-white" : "bg-slate-50";
-                  return (
-                    <Fragment key={sg.stateName}>
-                      {sg.comps.map((c, ci) => (
-                        <tr key={`${sg.stateName}-${c.code}`} className={rowBg}>
-                          {ci === 0 && (
-                            <td
-                              className="px-3 py-1.5 text-xs font-black uppercase tracking-wide align-top bg-slate-700 text-white"
-                              rowSpan={sg.comps.length + 1}
-                            >
-                              {sg.stateName}
-                            </td>
-                          )}
-                          <td className="px-3 py-1.5 text-center font-mono text-xs text-slate-700">
-                            {c.code}
-                          </td>
-                          <td className="px-3 py-1.5 text-xs text-slate-700">
-                            {c.name}
-                          </td>
-                          <td className="px-3 py-1.5 text-center font-mono font-bold text-xs text-slate-900 tabular-nums">
-                            {n(c.participants)}
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="bg-slate-200 font-semibold">
-                        <td className="px-3 py-1.5 text-right text-xs text-slate-700" colSpan={2}>
-                          Jumlah {sg.stateName}:
-                        </td>
-                        <td className="px-3 py-1.5 text-center font-mono font-black text-sm text-slate-900 tabular-nums">
-                          {n(subP)}
-                        </td>
-                      </tr>
-                    </Fragment>
-                  );
-                })}
-                <tr className="bg-slate-900 text-white">
-                  <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={3}>
-                    Jumlah Keseluruhan Peserta Walk-In
-                  </td>
-                  <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
-                    {n(d.walkInSummary.total)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-
         {/* ══ 2. MENGIKUT NEGERI ════════════════════════════════════════════ */}
         <div className="overflow-hidden rounded-sm">
           <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
@@ -967,6 +896,104 @@ export default async function FinalProgramReportPage({
             </tbody>
           </table>
         </div>
+
+        {/* ══ WALK-IN MENGIKUT NEGERI ══════════════════════════════════════ */}
+        {d.walkInStateCompStats.length > 0 && (
+          <div className="overflow-hidden rounded-sm">
+            <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
+              <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
+                Penyertaan Walk-In
+              </span>
+              <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
+                Penyertaan &lsquo;Walk-In&rsquo; Mengikut Negeri
+              </span>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={`${TH_LEFT} w-44`}>Negeri</th>
+                  <th className={`${TH} w-20`}>Kod</th>
+                  <th className={TH_LEFT}>Pertandingan</th>
+                  <th className={`${TH} w-24`}>Peserta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.walkInStateCompStats.map((sg, si) => {
+                  const subP  = sg.comps.reduce((s, c) => s + c.participants, 0);
+                  const rowBg = si % 2 === 0 ? "bg-white" : "bg-slate-50";
+                  return (
+                    <Fragment key={sg.stateName}>
+                      {sg.comps.map((c, ci) => (
+                        <tr key={`${sg.stateName}-${c.code}`} className={rowBg}>
+                          {ci === 0 && (
+                            <td
+                              className="px-3 py-1.5 text-xs font-black uppercase tracking-wide align-top bg-slate-700 text-white"
+                              rowSpan={sg.comps.length + 1}
+                            >
+                              {sg.stateName}
+                            </td>
+                          )}
+                          <td className="px-3 py-1.5 text-center font-mono text-xs text-slate-700">
+                            {c.code}
+                          </td>
+                          <td className="px-3 py-1.5 text-xs text-slate-700">
+                            {c.name}
+                          </td>
+                          <td className="px-3 py-1.5 text-center font-mono font-bold text-xs text-slate-900 tabular-nums">
+                            {n(c.participants)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-200 font-semibold">
+                        <td className="px-3 py-1.5 text-right text-xs text-slate-700" colSpan={2}>
+                          Jumlah {sg.stateName}:
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-mono font-black text-sm text-slate-900 tabular-nums">
+                          {n(subP)}
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
+                {(() => {
+                  const totalPenyertaan = d.walkInStateCompStats
+                    .flatMap(sg => sg.comps)
+                    .reduce((s, c) => s + c.participants, 0);
+                  return (
+                    <>
+                      <tr className="bg-slate-700 text-white">
+                        <td className="px-3 py-1.5 text-xs font-semibold text-slate-300" colSpan={3}>
+                          Jumlah Penyertaan <span className="font-normal italic text-slate-400">(termasuk penyertaan berganda)</span>
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-mono font-black text-sm tabular-nums">
+                          {n(totalPenyertaan)}
+                        </td>
+                      </tr>
+                      <tr className="bg-slate-900 text-white">
+                        <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={3}>
+                          Jumlah Peserta Walk-In (Unik)
+                        </td>
+                        <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
+                          {n(d.walkInSummary.total)}
+                        </td>
+                      </tr>
+                      {d.walkInMultiCompCount > 0 && (
+                        <tr className="bg-amber-50 border-t border-amber-200">
+                          <td className="px-3 py-1.5 text-xs text-amber-800" colSpan={3}>
+                            Peserta memasuki 2 atau lebih pertandingan
+                          </td>
+                          <td className="px-3 py-1.5 text-center font-mono font-bold text-sm tabular-nums text-amber-900">
+                            {n(d.walkInMultiCompCount)}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        )}
 
       </div>
     </OrganizerShell>

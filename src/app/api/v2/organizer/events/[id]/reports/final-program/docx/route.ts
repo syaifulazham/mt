@@ -583,10 +583,18 @@ export async function GET(
           GAP,
         ] : []),
 
+        sectionMasthead("Seksyen 6", "Penyertaan Mengikut Negeri"),
+        SMALL_GAP,
+        scTable,
+
         ...(d.walkInStateCompStats.length > 0 ? [
+          GAP,
           sectionMasthead("Walk-In", "Penyertaan 'Walk-In' Mengikut Negeri"),
           SMALL_GAP,
           (() => {
+            const totalPenyertaan = d.walkInStateCompStats
+              .flatMap(sg => sg.comps)
+              .reduce((s, c) => s + c.participants, 0);
             const wiStateRows: TableRow[] = [
               new TableRow({ children: [hCell("Negeri"), hCell("Kod"), hCell("Pertandingan"), hCell("Peserta")] }),
             ];
@@ -610,17 +618,22 @@ export async function GET(
               ]}));
             });
             wiStateRows.push(new TableRow({ children: [
-              dCell("JUMLAH KESELURUHAN PESERTA WALK-IN", SLATE_900, AlignmentType.LEFT, true, WHITE, 3),
+              dCell("Jumlah Penyertaan (termasuk penyertaan berganda)", SLATE_700, AlignmentType.LEFT, false, WHITE, 3),
+              dCell(nv(totalPenyertaan), SLATE_700, AlignmentType.RIGHT, true, WHITE),
+            ]}));
+            wiStateRows.push(new TableRow({ children: [
+              dCell("JUMLAH PESERTA WALK-IN (UNIK)", SLATE_900, AlignmentType.LEFT, true, WHITE, 3),
               dCell(nv(d.walkInSummary.total), SLATE_900, AlignmentType.RIGHT, true, WHITE),
             ]}));
+            if (d.walkInMultiCompCount > 0) {
+              wiStateRows.push(new TableRow({ children: [
+                dCell("Peserta memasuki 2 atau lebih pertandingan", AMBER_50, AlignmentType.LEFT, false, AMBER_800, 3),
+                dCell(nv(d.walkInMultiCompCount), AMBER_50, AlignmentType.RIGHT, true, AMBER_800),
+              ]}));
+            }
             return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, rows: wiStateRows });
           })(),
-          GAP,
         ] : []),
-
-        sectionMasthead("Seksyen 6", "Penyertaan Mengikut Negeri"),
-        SMALL_GAP,
-        scTable,
 
         new Paragraph({
           alignment: AlignmentType.CENTER,
