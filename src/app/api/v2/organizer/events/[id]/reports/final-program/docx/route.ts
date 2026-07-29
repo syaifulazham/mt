@@ -583,6 +583,41 @@ export async function GET(
           GAP,
         ] : []),
 
+        ...(d.walkInStateCompStats.length > 0 ? [
+          sectionMasthead("Walk-In", "Penyertaan 'Walk-In' Mengikut Negeri"),
+          SMALL_GAP,
+          (() => {
+            const wiStateRows: TableRow[] = [
+              new TableRow({ children: [hCell("Negeri"), hCell("Kod"), hCell("Pertandingan"), hCell("Peserta")] }),
+            ];
+            d.walkInStateCompStats.forEach((sg, si) => {
+              const rowBg = si % 2 === 0 ? WHITE : SLATE_50;
+              wiStateRows.push(new TableRow({ children: [dCell(sg.stateName, SLATE_700, AlignmentType.LEFT, true, WHITE, 4)] }));
+              sg.comps.forEach((c, i) => {
+                const bg = i % 2 === 0 ? rowBg : WHITE;
+                wiStateRows.push(new TableRow({ children: [
+                  dCell("", bg),
+                  dCell(c.code, bg, AlignmentType.CENTER),
+                  dCell(c.name, bg),
+                  dCell(nv(c.participants), bg, AlignmentType.RIGHT),
+                ]}));
+              });
+              const subP = sg.comps.reduce((s, c) => s + c.participants, 0);
+              wiStateRows.push(new TableRow({ children: [
+                dCell("", SLATE_200), dCell("", SLATE_200),
+                dCell(`Jumlah ${sg.stateName}`, SLATE_200, AlignmentType.RIGHT, true),
+                dCell(nv(subP), SLATE_200, AlignmentType.RIGHT, true),
+              ]}));
+            });
+            wiStateRows.push(new TableRow({ children: [
+              dCell("JUMLAH KESELURUHAN PESERTA WALK-IN", SLATE_900, AlignmentType.LEFT, true, WHITE, 3),
+              dCell(nv(d.walkInSummary.total), SLATE_900, AlignmentType.RIGHT, true, WHITE),
+            ]}));
+            return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, rows: wiStateRows });
+          })(),
+          GAP,
+        ] : []),
+
         sectionMasthead("Seksyen 6", "Penyertaan Mengikut Negeri"),
         SMALL_GAP,
         scTable,
