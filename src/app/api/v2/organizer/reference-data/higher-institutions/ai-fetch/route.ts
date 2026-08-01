@@ -37,6 +37,35 @@ export async function POST(req: NextRequest) {
     generationConfig: { responseMimeType: "application/json" },
   });
 
+  // If extraPrompt is a URL, fetch its content to use as reference context
+  let extraContext = "";
+  if (extraPrompt) {
+    const urlMatch = /^https?:\/\/\S+/.exec(extraPrompt.trim());
+    if (urlMatch) {
+      try {
+        const pageRes = await fetch(urlMatch[0], {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; TechlympicsBot/1.0)" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        const html = await pageRes.text();
+        const text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&[a-z]+;/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 8000);
+        extraContext = `The user has provided a reference page. Use its content as primary source for institutions to include:\nURL: ${urlMatch[0]}\nContent:\n${text}\n\nPrioritize institutions found in the above reference.`;
+      } catch {
+        // URL fetch failed — treat as plain text instruction
+        extraContext = `Additional instructions from user:\n${extraPrompt}`;
+      }
+    } else {
+      extraContext = `Additional instructions from user:\n${extraPrompt}`;
+    }
+  }
+
   // Build category include list from toggles
   const categoryLines: string[] = [];
   if (categories.publicUnis)   categoryLines.push("1. All 20 Malaysian public universities (UM, UKM, UPM, UTM, USM, UiTM, UIAM, UUM, UNIMAS, UMS, UPSI, UTHM, UMP, UTeM, UniMAP, UMT, UMK, USIM, UPNM, UniKL) and their branch campuses");
@@ -72,7 +101,7 @@ For each institution return a JSON object with:
 
 INCLUDE the following categories:
 ${categoryLines.length > 0 ? categoryLines.join("\n") : "All categories of Malaysian higher education institutions."}
-${extraPrompt ? `\nAdditional instructions from user:\n${extraPrompt}` : ""}
+${extraContext ? `\n${extraContext}` : ""}
 Return ONLY a valid JSON array. No markdown fences, no explanation.`;
 
   try {
