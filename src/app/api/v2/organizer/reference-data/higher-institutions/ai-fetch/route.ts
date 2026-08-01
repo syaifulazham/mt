@@ -32,11 +32,6 @@ export async function POST(req: NextRequest) {
     foreign:      body?.categories?.foreign      !== false,
   };
 
-  // Fetch existing HEI codes and names for filtering + client-side duplicate marking
-  const existingHEIs = await db.higherInstitution.findMany({ select: { code: true, name: true } });
-  const existingCodes = new Set(existingHEIs.map((h) => (h.code ?? "").toUpperCase()).filter(Boolean));
-  const existingNames = existingHEIs.map((h) => h.name);
-
   const aiModel = genAI.getGenerativeModel({
     model: modelId,
     generationConfig: { responseMimeType: "application/json" },
@@ -81,6 +76,11 @@ ${extraPrompt ? `\nAdditional instructions from user:\n${extraPrompt}` : ""}
 Return ONLY a valid JSON array. No markdown fences, no explanation.`;
 
   try {
+    // Fetch existing HEI codes and names for filtering + client-side duplicate marking
+    const existingHEIs = await db.higherInstitution.findMany({ select: { code: true, name: true } });
+    const existingCodes = new Set(existingHEIs.map((h) => (h.code ?? "").toUpperCase()).filter(Boolean));
+    const existingNames = existingHEIs.map((h) => h.name);
+
     const result = await aiModel.generateContent(prompt);
     let raw = result.response.text().trim()
       .replace(/^```(?:json)?\s*/i, "")

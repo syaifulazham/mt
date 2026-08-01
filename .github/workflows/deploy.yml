@@ -84,7 +84,7 @@ jobs:
                   proxy_set_header X-Forwarded-Proto $scheme;
                   proxy_set_header X-Forwarded-Host $host;
                   proxy_set_header X-Forwarded-Port 443;
-                  proxy_read_timeout 60s;
+                  proxy_read_timeout 300s;
               }
           }
           EOF

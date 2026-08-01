@@ -1,7 +1,44 @@
-import { getAllClusters } from "@/lib/mapping-db";
+import { getAllClusters, syncFromMaster } from "@/lib/mapping-db";
+import { db } from "@/lib/db";
 
 export async function GET() {
-  const clusters = getAllClusters();
+  let clusters = getAllClusters();
+
+  // Auto-populate from master DB on first load (no organizer action needed)
+  if (clusters.length === 0) {
+    try {
+      const themes = await db.theme.findMany({
+        orderBy: { name: "asc" },
+        include: {
+          competitions: {
+            orderBy: { code: "asc" },
+            include: {
+              targetGroups: { include: { targetGroup: true } },
+              docs: { orderBy: { uploadedAt: "desc" } },
+            },
+          },
+        },
+      });
+      syncFromMaster(
+        themes.map((t) => ({
+          id: t.id,
+          name: t.name,
+          competitions: t.competitions.map((c) => ({
+            id: c.id,
+            code: c.code,
+            name: c.name,
+            pdfDocs: (c.docs ?? []).map((d) => ({ name: d.name, url: d.url })),
+            targetGroups: c.targetGroups.map((tg) => ({
+              targetGroup: { name: tg.targetGroup.name, schoolLevel: tg.targetGroup.schoolLevel },
+            })),
+          })),
+        }))
+      );
+      clusters = getAllClusters();
+    } catch {
+      // Return empty page — master DB unavailable
+    }
+  }
 
   const clusterMeta = clusters.map((cl) => ({
     id: cl.id,
