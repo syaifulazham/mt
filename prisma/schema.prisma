@@ -29,8 +29,9 @@ model OrganizerUser {
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
 
-  sessions OrganizerSession[]
-  accounts OrganizerAccount[]
+  sessions    OrganizerSession[]
+  accounts    OrganizerAccount[]
+  emailBlasts EmailBlast[]
 
   @@map("organizer_users")
 }
@@ -1146,6 +1147,47 @@ model TeamDroneAccess {
   team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@map("team_drone_access")
+}
+
+model EmailBlast {
+  id          String           @id @default(cuid())
+  title       String
+  subject     String?
+  htmlBody    String?
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  sentCount   Int              @default(0)
+  status      EmailBlastStatus @default(DRAFT)
+  createdById String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  createdBy  OrganizerUser        @relation(fields: [createdById], references: [id])
+  recipients EmailBlastRecipient[]
+
+  @@map("email_blasts")
+}
+
+model EmailBlastRecipient {
+  id      String  @id @default(cuid())
+  blastId String
+  email   String
+  name    String
+  meta    String?
+  status  String  @default("PENDING")
+  sentAt  DateTime?
+
+  blast EmailBlast @relation(fields: [blastId], references: [id], onDelete: Cascade)
+
+  @@unique([blastId, email])
+  @@map("email_blast_recipients")
+}
+
+enum EmailBlastStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
 }
 
 model ContingentDistance {
