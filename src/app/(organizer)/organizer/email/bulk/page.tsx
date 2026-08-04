@@ -377,7 +377,19 @@ function buildEnvelopeHtml(body: string, includeHeader: boolean, includeFooter: 
     </div>`;
 }
 
-function PreviewModal({ blast, onClose }: { blast: Blast; onClose: () => void }) {
+type FullBlast = Blast & { htmlBody: string | null; includeHeader: boolean; includeFooter: boolean };
+
+function PreviewModal({ blastId, subject, onClose }: { blastId: string; subject: string | null; onClose: () => void }) {
+  const [detail, setDetail] = useState<FullBlast | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/v2/organizer/email/blasts/${blastId}`)
+      .then(r => r.json())
+      .then(d => setDetail(d))
+      .finally(() => setLoading(false));
+  }, [blastId]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
@@ -385,8 +397,8 @@ function PreviewModal({ blast, onClose }: { blast: Blast; onClose: () => void })
         <div className="flex items-center justify-between px-5 py-3 border-b shrink-0 bg-zinc-50 rounded-t-xl">
           <div className="flex items-center gap-3">
             <span className="text-xs font-medium text-zinc-600">Preview</span>
-            {blast.subject && (
-              <span className="text-xs text-zinc-400 italic truncate max-w-xs">{blast.subject}</span>
+            {subject && (
+              <span className="text-xs text-zinc-400 italic truncate max-w-xs">{subject}</span>
             )}
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700">
@@ -396,10 +408,14 @@ function PreviewModal({ blast, onClose }: { blast: Blast; onClose: () => void })
 
         {/* Email envelope */}
         <div className="flex-1 overflow-y-auto bg-[#ede9fe]">
-          {blast.htmlBody ? (
+          {loading ? (
+            <div className="flex items-center justify-center h-48 gap-2 text-zinc-400">
+              <Loader2 className="h-5 w-5 animate-spin" /> Loading…
+            </div>
+          ) : detail?.htmlBody ? (
             <div
               dangerouslySetInnerHTML={{
-                __html: buildEnvelopeHtml(blast.htmlBody, blast.includeHeader, blast.includeFooter),
+                __html: buildEnvelopeHtml(detail.htmlBody, detail.includeHeader ?? true, detail.includeFooter ?? true),
               }}
             />
           ) : (
@@ -608,7 +624,7 @@ export default function BulkPage() {
       {/* Modals */}
       {showCreate    && <CreateBlastDialog onCreated={handleCreated} onClose={() => setShowCreate(false)} />}
       {recipientsFor && <RecipientsModal blast={recipientsFor} onClose={() => setRecipientsFor(null)} onSaved={handleRecipientsSaved} />}
-      {previewFor    && <PreviewModal blast={previewFor} onClose={() => setPreviewFor(null)} />}
+      {previewFor    && <PreviewModal blastId={previewFor.id} subject={previewFor.subject} onClose={() => setPreviewFor(null)} />}
       {deleteFor     && <DeleteDialog blast={deleteFor} onDeleted={handleDeleted} onClose={() => setDeleteFor(null)} />}
     </div>
   );
