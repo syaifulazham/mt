@@ -6,19 +6,48 @@ import {
   ArrowLeft, Bold, Italic, Underline, List, ListOrdered, Minus,
   RemoveFormatting, Heading2, Heading3, Eye, EyeOff,
   Save, Loader2, CalendarClock, CheckCircle, ImageIcon, Paperclip, X,
+  LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EMAIL_HEADER_HTML, EMAIL_FOOTER_HTML } from "@/lib/email/templates";
 
 type Blast = {
   id: string;
   title: string;
   subject: string | null;
   htmlBody: string | null;
+  includeHeader: boolean;
+  includeFooter: boolean;
   scheduledAt: string | null;
   status: string;
 };
 
 type InsertMode = "none" | "image" | "doc";
+
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500",
+          checked ? "bg-violet-600" : "bg-zinc-300"
+        )}
+      >
+        <span
+          className={cn(
+            "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out mt-0.5",
+            checked ? "translate-x-4.5" : "translate-x-0.5"
+          )}
+        />
+      </button>
+      <span className="text-xs text-zinc-600">{label}</span>
+    </label>
+  );
+}
 
 export default function ComposePage({ params }: { params: Promise<{ id: string }> }) {
   const { id }  = use(params);
@@ -28,16 +57,18 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   const [subject, setSubject]                 = useState("");
   const [scheduledAt, setScheduledAt]         = useState("");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [includeHeader, setIncludeHeader]     = useState(true);
+  const [includeFooter, setIncludeFooter]     = useState(true);
   const [preview, setPreview]                 = useState(false);
   const [htmlBody, setHtmlBody]               = useState("");
   const [saving, setSaving]                   = useState(false);
   const [saved, setSaved]                     = useState(false);
   const [loading, setLoading]                 = useState(true);
 
-  const [insertMode, setInsertMode] = useState<InsertMode>("none");
-  const [insertUrl, setInsertUrl]   = useState("");
-  const [insertLabel, setInsertLabel] = useState("");
-  const [uploading, setUploading]   = useState(false);
+  const [insertMode, setInsertMode]     = useState<InsertMode>("none");
+  const [insertUrl, setInsertUrl]       = useState("");
+  const [insertLabel, setInsertLabel]   = useState("");
+  const [uploading, setUploading]       = useState(false);
 
   const editorRef  = useRef<HTMLDivElement>(null);
   const imgFileRef = useRef<HTMLInputElement>(null);
@@ -51,9 +82,10 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
         setSubject(d.subject ?? "");
         const body = d.htmlBody ?? "";
         setHtmlBody(body);
+        setIncludeHeader(d.includeHeader ?? true);
+        setIncludeFooter(d.includeFooter ?? true);
         setScheduledAt(d.scheduledAt ? new Date(d.scheduledAt).toISOString().slice(0, 16) : "");
         setScheduleEnabled(!!d.scheduledAt);
-        // Set editor content after mount
         if (editorRef.current) editorRef.current.innerHTML = body;
       })
       .finally(() => setLoading(false));
@@ -67,7 +99,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   }
 
   function togglePreview() {
-    if (!preview) syncBody(); // capture latest editor content before hiding it
+    if (!preview) syncBody();
     setPreview(p => !p);
   }
 
@@ -119,12 +151,54 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
       body: JSON.stringify({
         subject,
         htmlBody: body,
+        includeHeader,
+        includeFooter,
         scheduledAt: scheduleEnabled && scheduledAt ? new Date(scheduledAt).toISOString() : null,
       }),
     });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  }
+
+  // Build the preview HTML (full email envelope)
+  function buildPreviewHtml() {
+    const body = htmlBody;
+    const headerSection = includeHeader
+      ? `<div style="background:linear-gradient(135deg,#3b0764 0%,#5b21b6 55%,#7c3aed 100%);padding:36px 40px 28px;text-align:center;">
+           <img src="/logos-white/mt-logo-white.svg" alt="Malaysia Techlympics" style="height:48px;width:auto;max-width:200px;display:block;margin:0 auto;" />
+           <div style="margin-top:18px;width:56px;height:3px;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:2px;margin-left:auto;margin-right:auto;"></div>
+         </div>
+         <div style="height:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa,#7c3aed);"></div>`
+      : "";
+    const footerSection = includeFooter
+      ? `<div style="border-top:1px solid #e5e7eb;background:#f9fafb;padding:32px 40px;text-align:center;">
+           <img src="/logo-mt.svg" alt="Malaysia Techlympics" style="height:32px;width:auto;max-width:120px;display:block;margin:0 auto 12px;opacity:0.65;" />
+           <p style="margin:0 0 4px;font-family:sans-serif;font-size:13px;font-weight:600;color:#374151;letter-spacing:0.05em;">MALAYSIA TECHLYMPICS</p>
+           <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;line-height:1.6;">
+             Aras 15, Menara MDEC, MSC Malaysia Headquarters,<br/>
+             2310, Jalan Usahawan, 63000 Cyberjaya, Selangor, Malaysia
+           </p>
+           <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;">
+             <a href="https://techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">techlympics.my</a>
+             &nbsp;·&nbsp;
+             <a href="mailto:info@techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">info@techlympics.my</a>
+           </p>
+           <p style="margin:16px 0 0;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:10px;color:#d1d5db;">
+             © 2025 Malaysia Techlympics. All rights reserved.<br/>
+             You are receiving this email because you registered as a contingent manager.
+           </p>
+         </div>`
+      : "";
+
+    return `
+      <div style="background:#ede9fe;padding:24px;min-height:100%;font-family:Arial,sans-serif;">
+        <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(91,33,182,0.12);">
+          ${headerSection}
+          <div style="padding:32px 40px;font-size:15px;line-height:1.7;color:#1f2937;">${body}</div>
+          ${footerSection}
+        </div>
+      </div>`;
   }
 
   if (loading) {
@@ -137,7 +211,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      {/* Header */}
+      {/* Page header */}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.push("/organizer/email/bulk")}
           className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700 transition-colors shrink-0">
@@ -172,6 +246,16 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
           />
         </div>
 
+        {/* Header / Footer toggles */}
+        <div className="flex items-center gap-5 px-3 py-2.5 bg-zinc-50 rounded-lg border border-zinc-200">
+          <LayoutTemplate className="h-4 w-4 text-zinc-400 shrink-0" />
+          <span className="text-xs font-medium text-zinc-500 shrink-0">Email layout</span>
+          <div className="flex items-center gap-6 ml-auto">
+            <Toggle checked={includeHeader} onChange={setIncludeHeader} label="Include header" />
+            <Toggle checked={includeFooter} onChange={setIncludeFooter} label="Include footer" />
+          </div>
+        </div>
+
         {/* Body */}
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -179,7 +263,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
             <button type="button" onClick={togglePreview}
               className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800">
               {preview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              {preview ? "Edit" : "Preview"}
+              {preview ? "Edit" : "Preview full email"}
             </button>
           </div>
 
@@ -329,12 +413,21 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
             />
           </div>
 
-          {/* ── Preview (always mounted, hidden in edit mode) ── */}
-          <div
-            style={{ display: preview ? "block" : "none" }}
-            className="min-h-[400px] border border-zinc-200 rounded-md px-4 py-3 prose prose-sm max-w-none bg-white"
-            dangerouslySetInnerHTML={{ __html: htmlBody }}
-          />
+          {/* ── Preview — full email envelope ── */}
+          <div style={{ display: preview ? "block" : "none" }}>
+            <div className="rounded-md border border-zinc-200 overflow-hidden">
+              {/* mini email client chrome */}
+              <div className="bg-zinc-100 border-b border-zinc-200 px-4 py-2 flex items-center gap-2">
+                <span className="text-xs text-zinc-400 font-medium">Preview</span>
+                <span className="flex-1" />
+                <span className="text-xs text-zinc-400 italic">{subject || "(no subject)"}</span>
+              </div>
+              <div
+                className="overflow-auto bg-[#ede9fe]"
+                dangerouslySetInnerHTML={{ __html: buildPreviewHtml() }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Schedule */}

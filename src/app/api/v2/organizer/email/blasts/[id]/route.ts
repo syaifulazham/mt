@@ -26,11 +26,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const blast = await db.emailBlast.update({
     where: { id },
     data: {
-      ...(body.title       !== undefined && { title: body.title }),
-      ...(body.subject     !== undefined && { subject: body.subject }),
-      ...(body.htmlBody    !== undefined && { htmlBody: body.htmlBody }),
-      ...(body.scheduledAt !== undefined && { scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null }),
-      ...(body.status      !== undefined && { status: body.status }),
+      ...(body.title         !== undefined && { title: body.title }),
+      ...(body.subject       !== undefined && { subject: body.subject }),
+      ...(body.htmlBody      !== undefined && { htmlBody: body.htmlBody }),
+      ...(body.includeHeader !== undefined && { includeHeader: body.includeHeader }),
+      ...(body.includeFooter !== undefined && { includeFooter: body.includeFooter }),
+      ...(body.scheduledAt   !== undefined && { scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null }),
+      ...(body.status        !== undefined && { status: body.status }),
     },
   });
 
