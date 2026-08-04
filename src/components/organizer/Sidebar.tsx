@@ -27,6 +27,8 @@ import {
   Building2,
   ShieldAlert,
   Mail,
+  Send,
+  Users2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
@@ -61,7 +63,13 @@ const NAV: NavItem[] = [
       { label: "Competition Mapping", href: "/organizer/landing/mapping",       icon: Map },
     ],
   },
-  { label: "Email",          href: "/organizer/email",          icon: Mail,            roles: ["SUPER_ADMIN", "ADMIN"] },
+  {
+    label: "Email", href: "/organizer/email", icon: Mail, roles: ["SUPER_ADMIN", "ADMIN"],
+    children: [
+      { label: "Test",      href: "/organizer/email/test", icon: Send },
+      { label: "Bulk Send", href: "/organizer/email/bulk", icon: Users2 },
+    ],
+  },
   { label: "Smart Chat",     href: "/organizer/smart-chat",     icon: BotMessageSquare },
   { label: "Knowledge Base", href: "/organizer/knowledge-base", icon: BookMarked },
   { label: "DB Backups",     href: "/organizer/backups",        icon: DatabaseBackup, roles: ["SUPER_ADMIN"] },
