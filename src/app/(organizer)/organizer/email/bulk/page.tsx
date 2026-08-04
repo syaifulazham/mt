@@ -596,6 +596,8 @@ export default function BulkPage() {
   const [sendFor, setSendFor]             = useState<Blast | null>(null);
   const [deleteFor, setDeleteFor]         = useState<Blast | null>(null);
   const [duplicating, setDuplicating]     = useState<string | null>(null);
+  const [editingId, setEditingId]         = useState<string | null>(null);
+  const [editingTitle, setEditingTitle]   = useState("");
   const [flash, setFlash]                 = useState<{ ok: boolean; msg: string } | null>(null);
 
   async function load() {
@@ -624,6 +626,18 @@ export default function BulkPage() {
       b.id === recipientsFor?.id ? { ...b, _count: { recipients: count } } : b
     ));
     showFlash(true, `Recipients updated (${count} total).`);
+  }
+
+  async function handleTitleSave(id: string, title: string) {
+    const trimmed = title.trim();
+    setEditingId(null);
+    if (!trimmed) return; // don't save empty
+    setBlasts(prev => prev.map(b => b.id === id ? { ...b, title: trimmed } : b));
+    await fetch(`/api/v2/organizer/email/blasts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: trimmed }),
+    });
   }
 
   function handleDeleted() {
@@ -731,8 +745,30 @@ export default function BulkPage() {
                 <tr key={b.id} className="hover:bg-zinc-50 align-middle">
                   <td className="px-4 py-3 text-zinc-500 text-xs whitespace-nowrap">{fmt(b.createdAt)}</td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-zinc-900">{b.title}</p>
-                    {b.subject && <p className="text-xs text-zinc-400 truncate max-w-xs">{b.subject}</p>}
+                    {editingId === b.id ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editingTitle}
+                        onChange={e => setEditingTitle(e.target.value)}
+                        onBlur={() => handleTitleSave(b.id, editingTitle)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter")  e.currentTarget.blur();
+                          if (e.key === "Escape") setEditingId(null);
+                        }}
+                        className="w-full font-medium text-sm text-zinc-900 border border-violet-300 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
+                      />
+                    ) : (
+                      <p
+                        onClick={() => { setEditingId(b.id); setEditingTitle(b.title); }}
+                        title="Click to rename"
+                        className="font-medium text-zinc-900 cursor-text hover:text-violet-700 inline-flex items-center gap-1.5 group"
+                      >
+                        {b.title}
+                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-35 text-zinc-400 shrink-0" />
+                      </p>
+                    )}
+                    {b.subject && <p className="text-xs text-zinc-400 truncate max-w-xs mt-0.5">{b.subject}</p>}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
