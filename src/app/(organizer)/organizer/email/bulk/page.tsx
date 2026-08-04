@@ -14,6 +14,9 @@ type Blast = {
   id: string;
   title: string;
   subject: string | null;
+  htmlBody: string | null;
+  includeHeader: boolean;
+  includeFooter: boolean;
   scheduledAt: string | null;
   sentAt: string | null;
   sentCount: number;
@@ -335,35 +338,82 @@ function RecipientsModal({ blast, onClose, onSaved }: {
 }
 
 // ── Message Preview Modal ────────────────────────────────────────────────────
+function buildEnvelopeHtml(body: string, includeHeader: boolean, includeFooter: boolean) {
+  const header = includeHeader ? `
+    <div style="background:linear-gradient(135deg,#3b0764 0%,#5b21b6 55%,#7c3aed 100%);padding:36px 40px 28px;text-align:center;">
+      <img src="/logos-white/mt-logo-white.svg" alt="Malaysia Techlympics"
+           style="height:48px;width:auto;max-width:200px;display:block;margin:0 auto;" />
+      <div style="margin-top:18px;width:56px;height:3px;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:2px;margin-left:auto;margin-right:auto;"></div>
+    </div>
+    <div style="height:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa,#7c3aed);"></div>` : "";
+
+  const footer = includeFooter ? `
+    <div style="border-top:1px solid #e5e7eb;background:#f9fafb;padding:32px 40px;text-align:center;">
+      <img src="/logo-mt.svg" alt="Malaysia Techlympics"
+           style="height:32px;width:auto;max-width:120px;display:block;margin:0 auto 12px;opacity:0.65;" />
+      <p style="margin:0 0 4px;font-family:sans-serif;font-size:13px;font-weight:600;color:#374151;letter-spacing:0.05em;">MALAYSIA TECHLYMPICS</p>
+      <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;line-height:1.6;">
+        Aras 15, Menara MDEC, MSC Malaysia Headquarters,<br/>
+        2310, Jalan Usahawan, 63000 Cyberjaya, Selangor, Malaysia
+      </p>
+      <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;">
+        <a href="https://techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">techlympics.my</a>
+        &nbsp;·&nbsp;
+        <a href="mailto:info@techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">info@techlympics.my</a>
+      </p>
+      <p style="margin:16px 0 0;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:10px;color:#d1d5db;">
+        © 2025 Malaysia Techlympics. All rights reserved.<br/>
+        You are receiving this email because you registered as a contingent manager.
+      </p>
+    </div>` : "";
+
+  return `
+    <div style="background:#ede9fe;padding:24px;min-height:100%;font-family:Arial,sans-serif;">
+      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(91,33,182,0.12);">
+        ${header}
+        <div style="padding:32px 40px;font-size:15px;line-height:1.7;color:#1f2937;">${body}</div>
+        ${footer}
+      </div>
+    </div>`;
+}
+
 function PreviewModal({ blast, onClose }: { blast: Blast; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
-          <div>
-            <h2 className="text-base font-semibold text-zinc-900">Message Preview</h2>
-            {blast.subject && <p className="text-xs text-zinc-500 mt-0.5">Subject: {blast.subject}</p>}
+        {/* Chrome bar */}
+        <div className="flex items-center justify-between px-5 py-3 border-b shrink-0 bg-zinc-50 rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-zinc-600">Preview</span>
+            {blast.subject && (
+              <span className="text-xs text-zinc-400 italic truncate max-w-xs">{blast.subject}</span>
+            )}
           </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700">
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          {blast.subject ? (
+
+        {/* Email envelope */}
+        <div className="flex-1 overflow-y-auto bg-[#ede9fe]">
+          {blast.htmlBody ? (
             <div
-              className="prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: blast.subject }}
-            />
-          ) : null}
-          {(blast as unknown as { htmlBody?: string }).htmlBody ? (
-            <div
-              className="prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: (blast as unknown as { htmlBody: string }).htmlBody }}
+              dangerouslySetInnerHTML={{
+                __html: buildEnvelopeHtml(blast.htmlBody, blast.includeHeader, blast.includeFooter),
+              }}
             />
           ) : (
-            <p className="text-zinc-400 text-sm italic">No message composed yet.</p>
+            <div className="flex items-center justify-center h-48">
+              <p className="text-zinc-400 text-sm italic">No message composed yet.</p>
+            </div>
           )}
         </div>
+
         <div className="px-5 py-3 border-t text-right shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-md border border-zinc-200 text-zinc-600 hover:bg-zinc-50">Close</button>
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm rounded-md border border-zinc-200 text-zinc-600 hover:bg-zinc-50">
+            Close
+          </button>
         </div>
       </div>
     </div>
