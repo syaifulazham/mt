@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Eye, Pencil, Trash2, Users, Loader2, X, CheckCircle, AlertCircle,
-  Mail, CalendarClock, Send,
+  Mail, CalendarClock, Send, PlayCircle, Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -436,6 +436,126 @@ function PreviewModal({ blastId, subject, onClose }: { blastId: string; subject:
   );
 }
 
+// ── Send / Schedule Dialog ───────────────────────────────────────────────────
+function SendDialog({ blast, onDone, onClose }: {
+  blast: Blast;
+  onDone: (id: string, sent: number) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode]       = useState<"now" | "later">(blast.scheduledAt ? "later" : "now");
+  const [dt, setDt]           = useState(blast.scheduledAt ? new Date(blast.scheduledAt).toISOString().slice(0, 16) : "");
+  const [sending, setSending] = useState(false);
+  const [error, setError]     = useState("");
+
+  const missingSubject    = !blast.subject?.trim();
+  const missingBody       = !blast.htmlBody?.trim();
+  const missingRecipients = blast._count.recipients === 0;
+  const canSend           = !missingSubject && !missingBody && !missingRecipients;
+
+  async function run() {
+    setSending(true);
+    setError("");
+    try {
+      await fetch(`/api/v2/organizer/email/blasts/${blast.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduledAt: mode === "later" && dt ? new Date(dt).toISOString() : null,
+        }),
+      });
+      const res = await fetch(`/api/v2/organizer/email/blasts/${blast.id}/send`, { method: "POST" });
+      const j   = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Failed to send");
+      onDone(blast.id, j.sent);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-5">
+        {/* Title */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+              <PlayCircle className="h-4 w-4 text-violet-500 shrink-0" /> Run Task
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5 truncate max-w-xs">{blast.title}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 shrink-0">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Summary */}
+        <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-4 py-3 space-y-1.5 text-sm">
+          <div className="flex items-center gap-2 text-zinc-600">
+            <Users className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+            <span><span className="font-medium">{blast._count.recipients}</span> recipient{blast._count.recipients !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="flex items-start gap-2 text-zinc-600">
+            <Mail className="h-3.5 w-3.5 text-zinc-400 shrink-0 mt-0.5" />
+            {blast.subject ? (
+              <span className="truncate">{blast.subject}</span>
+            ) : (
+              <span className="text-amber-600 italic">No subject set</span>
+            )}
+          </div>
+        </div>
+
+        {/* Warnings */}
+        {(missingRecipients || missingSubject || missingBody) && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 space-y-1">
+            {missingRecipients && <p className="text-xs text-amber-700">⚠ No recipients added yet.</p>}
+            {missingSubject    && <p className="text-xs text-amber-700">⚠ Subject is required before sending.</p>}
+            {missingBody       && <p className="text-xs text-amber-700">⚠ Email body is empty.</p>}
+          </div>
+        )}
+
+        {/* Mode */}
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input type="radio" name="mode" value="now" checked={mode === "now"} onChange={() => setMode("now")}
+              className="accent-violet-600" />
+            <div>
+              <p className="text-sm font-medium text-zinc-800">Send immediately</p>
+              <p className="text-xs text-zinc-400">Recipients receive the email right away</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input type="radio" name="mode" value="later" checked={mode === "later"} onChange={() => setMode("later")}
+              className="accent-violet-600 mt-1" />
+            <div className="flex-1 space-y-1.5">
+              <p className="text-sm font-medium text-zinc-800">Schedule for later</p>
+              <input type="datetime-local" value={dt} onChange={e => setDt(e.target.value)}
+                disabled={mode === "now"}
+                className="w-full text-sm border border-zinc-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:opacity-40 disabled:cursor-not-allowed" />
+              <p className="text-xs text-zinc-400">Resend supports scheduling up to 72 hours ahead.</p>
+            </div>
+          </label>
+        </div>
+
+        {error && <p className="text-xs text-rose-600">{error}</p>}
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm rounded-md border border-zinc-200 text-zinc-600 hover:bg-zinc-50">
+            Cancel
+          </button>
+          <button type="button" onClick={run} disabled={!canSend || sending || (mode === "later" && !dt)}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40">
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+            {sending ? "Sending…" : mode === "later" ? "Schedule & Send" : "Send Now"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Delete Confirm Dialog ────────────────────────────────────────────────────
 function DeleteDialog({ blast, onDeleted, onClose }: { blast: Blast; onDeleted: () => void; onClose: () => void }) {
   const [deleting, setDeleting] = useState(false);
@@ -468,13 +588,15 @@ function DeleteDialog({ blast, onDeleted, onClose }: { blast: Blast; onDeleted: 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function BulkPage() {
   const router = useRouter();
-  const [blasts, setBlasts]           = useState<Blast[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [showCreate, setShowCreate]   = useState(false);
+  const [blasts, setBlasts]               = useState<Blast[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [showCreate, setShowCreate]       = useState(false);
   const [recipientsFor, setRecipientsFor] = useState<Blast | null>(null);
-  const [previewFor, setPreviewFor]   = useState<Blast | null>(null);
-  const [deleteFor, setDeleteFor]     = useState<Blast | null>(null);
-  const [flash, setFlash]             = useState<{ ok: boolean; msg: string } | null>(null);
+  const [previewFor, setPreviewFor]       = useState<Blast | null>(null);
+  const [sendFor, setSendFor]             = useState<Blast | null>(null);
+  const [deleteFor, setDeleteFor]         = useState<Blast | null>(null);
+  const [duplicating, setDuplicating]     = useState<string | null>(null);
+  const [flash, setFlash]                 = useState<{ ok: boolean; msg: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -508,6 +630,46 @@ export default function BulkPage() {
     setBlasts(prev => prev.filter(b => b.id !== deleteFor?.id));
     setDeleteFor(null);
     showFlash(true, "Task deleted.");
+  }
+
+  function handleSent(id: string, sent: number) {
+    setBlasts(prev => prev.map(b =>
+      b.id === id
+        ? { ...b, sentCount: sent, status: "COMPLETED" as BlastStatus, sentAt: new Date().toISOString() }
+        : b
+    ));
+    setSendFor(null);
+    showFlash(true, `Sent to ${sent} recipient(s).`);
+  }
+
+  async function handleDuplicate(b: Blast) {
+    setDuplicating(b.id);
+    try {
+      const createRes = await fetch("/api/v2/organizer/email/blasts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: `Copy of ${b.title}` }),
+      });
+      const created = await createRes.json();
+      if (b.subject || b.htmlBody) {
+        await fetch(`/api/v2/organizer/email/blasts/${created.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject:       b.subject,
+            htmlBody:      b.htmlBody,
+            includeHeader: b.includeHeader,
+            includeFooter: b.includeFooter,
+          }),
+        });
+      }
+      await load();
+      showFlash(true, `"${b.title}" duplicated.`);
+    } catch {
+      showFlash(false, "Failed to duplicate.");
+    } finally {
+      setDuplicating(null);
+    }
   }
 
   return (
@@ -608,11 +770,23 @@ export default function BulkPage() {
                       {STATUS_LABEL[b.status]}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => setDeleteFor(b)} title="Delete"
-                      className="p-1.5 rounded hover:bg-rose-50 text-zinc-300 hover:text-rose-500 transition-colors">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <button onClick={() => handleDuplicate(b)} disabled={duplicating === b.id} title="Duplicate task"
+                        className="p-1.5 rounded hover:bg-zinc-100 text-zinc-300 hover:text-zinc-600 transition-colors disabled:opacity-40">
+                        {duplicating === b.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                      <button onClick={() => setSendFor(b)} disabled={b.status === "COMPLETED"} title="Run / schedule"
+                        className="p-1.5 rounded hover:bg-violet-50 text-zinc-300 hover:text-violet-600 transition-colors disabled:opacity-30">
+                        <PlayCircle className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => setDeleteFor(b)} title="Delete"
+                        className="p-1.5 rounded hover:bg-rose-50 text-zinc-300 hover:text-rose-500 transition-colors">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -625,6 +799,7 @@ export default function BulkPage() {
       {showCreate    && <CreateBlastDialog onCreated={handleCreated} onClose={() => setShowCreate(false)} />}
       {recipientsFor && <RecipientsModal blast={recipientsFor} onClose={() => setRecipientsFor(null)} onSaved={handleRecipientsSaved} />}
       {previewFor    && <PreviewModal blastId={previewFor.id} subject={previewFor.subject} onClose={() => setPreviewFor(null)} />}
+      {sendFor       && <SendDialog blast={sendFor} onDone={handleSent} onClose={() => setSendFor(null)} />}
       {deleteFor     && <DeleteDialog blast={deleteFor} onDeleted={handleDeleted} onClose={() => setDeleteFor(null)} />}
     </div>
   );
