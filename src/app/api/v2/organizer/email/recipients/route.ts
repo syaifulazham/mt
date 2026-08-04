@@ -51,40 +51,41 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ recipients });
   }
 
-  if (type === "participants") {
+  // Contingent managers filtered by event — contingent must have ≥1 team in that event
+  if (type === "event") {
     if (!eventId) {
-      return NextResponse.json({ error: "eventId is required for participants" }, { status: 400 });
+      return NextResponse.json({ error: "eventId is required" }, { status: 400 });
     }
 
-    const participants = await db.participant.findMany({
+    const managers = await db.contingentManager.findMany({
       where: {
-        email: { not: null },
-        teamMembers: {
-          some: {
-            team: {
-              teamEvents: { some: { eventId } },
-            },
-          },
+        status: "ACTIVE",
+        contingent: {
+          teams: { some: { teamEvents: { some: { eventId } } } },
         },
         ...(q
           ? {
-              OR: [
-                { name: { contains: q, mode: "insensitive" } },
-                { email: { contains: q, mode: "insensitive" } },
-                { ic: { contains: q } },
-              ],
+              manager: {
+                OR: [
+                  { name: { contains: q, mode: "insensitive" } },
+                  { email: { contains: q, mode: "insensitive" } },
+                ],
+              },
             }
           : {}),
       },
-      select: { email: true, name: true, ic: true },
+      include: {
+        manager: { select: { email: true, name: true } },
+        contingent: { select: { name: true } },
+      },
+      distinct: ["managerId"],
       take: 200,
-      distinct: ["email"],
     });
 
-    const recipients = participants.map((p) => ({
-      email: p.email!,
-      name: p.name,
-      meta: p.ic ?? "",
+    const recipients = managers.map((m) => ({
+      email: m.manager.email,
+      name: m.manager.name,
+      meta: m.contingent.name,
     }));
 
     return NextResponse.json({ recipients });

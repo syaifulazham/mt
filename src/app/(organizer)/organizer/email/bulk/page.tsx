@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 type Recipient = { email: string; name: string; meta: string };
 type Event     = { id: string; name: string; slug: string };
 type State     = { id: string; name: string };
-type SourceType = "managers" | "participants" | "manual";
+type SourceType = "managers" | "event" | "manual";
 
 function parseManualEntry(text: string): Recipient[] {
   const lines = text.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
@@ -62,14 +62,14 @@ export default function BulkSendPage() {
 
   const fetchResults = useCallback(async () => {
     if (sourceType === "manual") return;
-    if (sourceType === "participants" && !eventId) return;
+    if (sourceType === "event" && !eventId) return;
 
     setLoadingResults(true);
     try {
       const params = new URLSearchParams({ type: sourceType });
       if (q) params.set("q", q);
       if (sourceType === "managers" && stateId) params.set("stateId", stateId);
-      if (sourceType === "participants" && eventId) params.set("eventId", eventId);
+      if (sourceType === "event" && eventId) params.set("eventId", eventId);
 
       const res = await fetch(`/api/v2/organizer/email/recipients?${params}`);
       const data = await res.json();
@@ -180,21 +180,25 @@ export default function BulkSendPage() {
             )}
           </div>
 
-          {/* Source type selector */}
-          <div className="flex gap-2 flex-wrap">
-            {(["managers", "participants", "manual"] as SourceType[]).map((t) => (
+          {/* Source type tabs */}
+          <div className="flex border-b border-zinc-200 -mx-4 px-4">
+            {([
+              { key: "managers", label: "Contingent Managers" },
+              { key: "event",    label: "Event" },
+              { key: "manual",   label: "Manual Entry" },
+            ] as { key: SourceType; label: string }[]).map(({ key, label }) => (
               <button
-                key={t}
+                key={key}
                 type="button"
-                onClick={() => setSourceType(t)}
+                onClick={() => setSourceType(key)}
                 className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
-                  sourceType === t
-                    ? "bg-violet-600 text-white border-violet-600"
-                    : "bg-white text-zinc-600 border-zinc-200 hover:border-violet-400"
+                  "px-4 py-2 text-sm transition-colors border-b-2 -mb-px",
+                  sourceType === key
+                    ? "border-violet-600 text-violet-700 font-medium"
+                    : "border-transparent text-zinc-500 hover:text-zinc-800"
                 )}
               >
-                {t === "managers" ? "Contingent Managers" : t === "participants" ? "Event Participants" : "Manual Entry"}
+                {label}
               </button>
             ))}
           </div>
@@ -223,7 +227,7 @@ export default function BulkSendPage() {
             </select>
           )}
 
-          {sourceType === "participants" && (
+          {sourceType === "event" && (
             <select
               value={eventId}
               onChange={(e) => setEventId(e.target.value)}
@@ -276,7 +280,7 @@ export default function BulkSendPage() {
                   </div>
                 ) : results.length === 0 ? (
                   <div className="py-6 text-center text-zinc-400 text-sm">
-                    {sourceType === "participants" && !eventId ? "Select an event to load participants." : "No results."}
+                    {sourceType === "event" && !eventId ? "Select an event to load contingent managers." : "No results."}
                   </div>
                 ) : (
                   results.map((r) => (
