@@ -19,11 +19,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const team = await db.team.findUnique({
     where: { id: teamId },
-    include: { competition: { select: { maxTeamSize: true } }, members: true },
+    include: {
+      competition: { select: { maxTeamSize: true } },
+      members: true,
+      teamEvents: { select: { selected: true } },
+    },
   });
   if (!team) return NextResponse.json({ error: "TEAM_NOT_FOUND" }, { status: 404 });
   if (!contingentIds.includes(team.contingentId))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+
+  if (team.teamEvents.some(te => te.selected))
+    return NextResponse.json({ error: "TEAM_LOCKED" }, { status: 400 });
 
   if (team.members.length >= team.competition.maxTeamSize)
     return NextResponse.json({ error: "TEAM_FULL" }, { status: 400 });

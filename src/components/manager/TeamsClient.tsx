@@ -60,6 +60,7 @@ type TeamEventEntry = {
   id: string;
   eventId: string;
   acceptance: string;
+  selected: boolean;
   event: EventRef & { needManagerAcceptance: boolean };
 };
 
@@ -844,6 +845,7 @@ function TeamCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const isFull = team.members.length >= team.competition.maxTeamSize;
+  const isTeamSelected = team.teamEvents.some(te => te.selected);
 
   return (
     <div className="rounded-xl border bg-white shadow-sm overflow-hidden dark:bg-zinc-900 dark:border-zinc-800 dark:shadow-black/20">
@@ -905,18 +907,25 @@ function TeamCard({
                     </p>
                   </div>
                 </div>
-                <Button
-                  size="sm" variant="ghost"
-                  className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
-                  onClick={() => onRemoveMember(team, m.id)}
-                  title="Remove member"
-                >
-                  <UserMinus className="h-3.5 w-3.5" />
-                </Button>
+                {!isTeamSelected && (
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => onRemoveMember(team, m.id)}
+                    title="Remove member"
+                  >
+                    <UserMinus className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             ))
           )}
-          {!isFull && (
+          {isTeamSelected && (
+            <p className="text-[11px] text-amber-600 bg-amber-50 rounded-md px-2.5 py-1.5 mt-1 border border-amber-100">
+              Members locked — team is selected (PILIH) for an event.
+            </p>
+          )}
+          {!isFull && !isTeamSelected && (
             <Button
               size="sm" variant="outline" className="w-full mt-1 text-xs h-7"
               onClick={() => onAddMember(team)}

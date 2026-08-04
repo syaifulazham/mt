@@ -52,7 +52,6 @@ export async function GET(
   const team = await db.team.findUnique({
     where: { id: teamId },
     include: {
-      members: { select: { participantId: true } },
       competition: {
         include: {
           targetGroups: { include: { targetGroup: true } },
@@ -64,8 +63,14 @@ export async function GET(
   if (!contingentIds.includes(team.contingentId))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
-  const alreadyInTeam = new Set(team.members.map((m) => m.participantId));
   const targetGroups  = team.competition.targetGroups.map((ctg) => ctg.targetGroup);
+
+  // Exclude participants already in ANY team
+  const allTeamMembers = await db.teamMember.findMany({
+    where: { team: { contingentId: { in: contingentIds } } },
+    select: { participantId: true },
+  });
+  const alreadyInTeam = new Set(allTeamMembers.map((m) => m.participantId));
 
   const participants = await db.participant.findMany({
     where: {

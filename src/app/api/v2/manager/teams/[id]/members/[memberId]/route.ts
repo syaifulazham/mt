@@ -20,10 +20,16 @@ export async function DELETE(
 
   const contingentIds = manager.contingentManagers.map((cm) => cm.contingentId);
 
-  const team = await db.team.findUnique({ where: { id: teamId } });
+  const team = await db.team.findUnique({
+    where: { id: teamId },
+    include: { teamEvents: { select: { selected: true } } },
+  });
   if (!team) return NextResponse.json({ error: "TEAM_NOT_FOUND" }, { status: 404 });
   if (!contingentIds.includes(team.contingentId))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+
+  if (team.teamEvents.some(te => te.selected))
+    return NextResponse.json({ error: "TEAM_LOCKED" }, { status: 400 });
 
   const member = await db.teamMember.findUnique({ where: { id: memberId } });
   if (!member || member.teamId !== teamId)
