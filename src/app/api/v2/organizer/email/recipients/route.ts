@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
               ],
             }
           : undefined,
-        contingent: stateId ? { stateId } : undefined,
+        contingent: stateId
+          ? { OR: [{ stateId }, { school: { stateId } }, { higherInstitution: { stateId } }] }
+          : undefined,
       },
       include: {
         manager: { select: { email: true, name: true } },
