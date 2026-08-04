@@ -23,7 +23,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   if (!blast.htmlBody)   return NextResponse.json({ error: "Email body is required" }, { status: 400 });
   if (blast.recipients.length === 0) return NextResponse.json({ error: "No recipients" }, { status: 400 });
 
-  const fullHtml = buildEmailHtml(blast.htmlBody, blast.includeHeader, blast.includeFooter);
+  const fullHtml = buildEmailHtml(blast.htmlBody, blast.includeHeader ?? true, blast.includeFooter ?? true);
 
   let sent   = 0;
   let failed = 0;
