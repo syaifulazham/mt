@@ -1,8 +1,12 @@
--- CreateEnum
-CREATE TYPE "EmailBlastStatus" AS ENUM ('DRAFT', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED');
+-- CreateEnum (idempotent)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'EmailBlastStatus') THEN
+    CREATE TYPE "EmailBlastStatus" AS ENUM ('DRAFT', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED');
+  END IF;
+END $$;
 
--- CreateTable
-CREATE TABLE "email_blasts" (
+-- CreateTable (idempotent)
+CREATE TABLE IF NOT EXISTS "email_blasts" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "subject" TEXT,
@@ -18,8 +22,7 @@ CREATE TABLE "email_blasts" (
     CONSTRAINT "email_blasts_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "email_blast_recipients" (
+CREATE TABLE IF NOT EXISTS "email_blast_recipients" (
     "id" TEXT NOT NULL,
     "blastId" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -31,13 +34,26 @@ CREATE TABLE "email_blast_recipients" (
     CONSTRAINT "email_blast_recipients_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "email_blast_recipients_blastId_email_key" ON "email_blast_recipients"("blastId", "email");
+-- CreateIndex (idempotent)
+CREATE UNIQUE INDEX IF NOT EXISTS "email_blast_recipients_blastId_email_key" ON "email_blast_recipients"("blastId", "email");
 
--- AddForeignKey
-ALTER TABLE "email_blasts" ADD CONSTRAINT "email_blasts_createdById_fkey"
-    FOREIGN KEY ("createdById") REFERENCES "organizer_users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey (idempotent)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'email_blasts_createdById_fkey'
+  ) THEN
+    ALTER TABLE "email_blasts" ADD CONSTRAINT "email_blasts_createdById_fkey"
+      FOREIGN KEY ("createdById") REFERENCES "organizer_users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "email_blast_recipients" ADD CONSTRAINT "email_blast_recipients_blastId_fkey"
-    FOREIGN KEY ("blastId") REFERENCES "email_blasts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'email_blast_recipients_blastId_fkey'
+  ) THEN
+    ALTER TABLE "email_blast_recipients" ADD CONSTRAINT "email_blast_recipients_blastId_fkey"
+      FOREIGN KEY ("blastId") REFERENCES "email_blasts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
