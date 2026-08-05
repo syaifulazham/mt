@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganizerRole } from "@/lib/auth/session";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY!);
 const FROM = "Techlympics <noreply@techlympics.my>";
 const CHUNK = 100;
 
 type Recipient = { email: string; name: string };
 
 export async function POST(req: NextRequest) {
+  const resend = new Resend(process.env.RESEND_API_KEY!);
   const user = await requireOrganizerRole("SUPER_ADMIN", "ADMIN");
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

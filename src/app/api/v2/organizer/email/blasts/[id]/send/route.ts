@@ -4,11 +4,11 @@ import { db } from "@/lib/db";
 import { Resend } from "resend";
 import { buildEmailHtml } from "@/lib/email/templates";
 
-const resend = new Resend(process.env.RESEND_API_KEY!);
 const FROM   = "Techlympics <noreply@techlympics.my>";
 const CHUNK  = 100;
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const resend = new Resend(process.env.RESEND_API_KEY!);
   const user = await requireOrganizerRole("SUPER_ADMIN", "ADMIN");
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

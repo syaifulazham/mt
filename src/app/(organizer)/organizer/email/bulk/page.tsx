@@ -167,7 +167,6 @@ function RecipientsModal({ blast, onClose, onSaved }: {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => { setResults([]); setQ(""); setStateId(""); setEventId(""); }, [source]);
 
   function toggle(r: Recipient) {
     setPending(prev => {
@@ -239,7 +238,7 @@ function RecipientsModal({ blast, onClose, onSaved }: {
           {/* Source tabs */}
           <div className="flex border-b px-5">
             {TABS.map(({ key, label }) => (
-              <button key={key} type="button" onClick={() => setSource(key)}
+              <button key={key} type="button" onClick={() => { setSource(key); setResults([]); setQ(""); setStateId(""); setEventId(""); }}
                 className={cn("px-3 py-2.5 text-sm border-b-2 -mb-px transition-colors",
                   source === key ? "border-violet-600 text-violet-700 font-medium" : "border-transparent text-zinc-500 hover:text-zinc-800"
                 )}>
@@ -583,7 +582,13 @@ export default function BulkPage() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    fetch("/api/v2/organizer/email/blasts")
+      .then(r => r.json())
+      .then(d => setBlasts(d.blasts ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   // Stop all polling on unmount
   useEffect(() => () => { pollingRef.current.forEach(t => clearInterval(t)); }, []);
