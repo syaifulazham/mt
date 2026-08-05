@@ -28,11 +28,13 @@ export async function PATCH(
 
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { needManagerAcceptance: true },
+    select: { needManagerAcceptance: true, status: true },
   });
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
   if (!event.needManagerAcceptance)
     return NextResponse.json({ error: "ACCEPTANCE_NOT_REQUIRED" }, { status: 400 });
+  if (event.status === "DRAFT")
+    return NextResponse.json({ error: "EVENT_NOT_PUBLISHED" }, { status: 400 });
 
   const { acceptance } = await req.json() as { acceptance: Acceptance };
   if (!VALID_ACCEPTANCE.includes(acceptance))

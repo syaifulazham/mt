@@ -16,10 +16,11 @@ export async function GET() {
   const contingentIds = manager.contingentManagers.map((cm) => cm.contingentId);
   if (contingentIds.length === 0) return NextResponse.json({ data: [] });
 
-  // Find team_events for this manager's teams in needManagerAcceptance events
+  // Find team_events for this manager's teams in needManagerAcceptance events.
+  // Exclude DRAFT events — managers must not see/accept events that are not yet published.
   const teamEvents = await db.teamEvent.findMany({
     where: {
-      event: { needManagerAcceptance: true },
+      event: { needManagerAcceptance: true, status: { not: "DRAFT" } },
       team:  { contingentId: { in: contingentIds } },
     },
     include: {

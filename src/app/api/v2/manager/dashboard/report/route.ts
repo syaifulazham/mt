@@ -34,10 +34,10 @@ export async function GET(req: Request) {
     },
   });
 
-  // Only teams in events that require manager acceptance
+  // Only teams in events that require manager acceptance; exclude DRAFT (not yet published) events.
   const teamEvents = await db.teamEvent.findMany({
     where: {
-      event: { needManagerAcceptance: true, ...(eventId ? { id: eventId } : {}) },
+      event: { needManagerAcceptance: true, status: { not: "DRAFT" }, ...(eventId ? { id: eventId } : {}) },
       team:  { contingentId: { in: contingentIds } },
     },
     include: {
