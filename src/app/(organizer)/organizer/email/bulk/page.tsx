@@ -791,7 +791,7 @@ export default function BulkPage() {
                       title="Manage recipients"
                     >
                       <Users className="h-3.5 w-3.5" />
-                      {b._count.recipients}
+                      {b._count?.recipients ?? 0}
                     </button>
                   </td>
                   <td className="px-4 py-3 text-center">
