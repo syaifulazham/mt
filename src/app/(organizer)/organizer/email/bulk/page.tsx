@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Eye, Pencil, Trash2, Users, Loader2, X, CheckCircle, AlertCircle,
@@ -348,20 +348,14 @@ function buildEnvelopeHtml(body: string, includeHeader: boolean, includeFooter: 
     <div style="height:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa,#7c3aed);"></div>` : "";
 
   const footer = includeFooter ? `
-    <div style="border-top:1px solid #e5e7eb;background:#f9fafb;padding:32px 40px;text-align:center;">
+    <div style="border-top:1px solid #e5e7eb;background:#f9fafb;padding:28px 40px;text-align:center;">
       <img src="/logo-mt.svg" alt="Malaysia Techlympics"
-           style="height:32px;width:auto;max-width:120px;display:block;margin:0 auto 12px;opacity:0.65;" />
-      <p style="margin:0 0 4px;font-family:sans-serif;font-size:13px;font-weight:600;color:#374151;letter-spacing:0.05em;">MALAYSIA TECHLYMPICS</p>
-      <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;line-height:1.6;">
-        Aras 15, Menara MDEC, MSC Malaysia Headquarters,<br/>
-        2310, Jalan Usahawan, 63000 Cyberjaya, Selangor, Malaysia
-      </p>
+           style="height:32px;width:auto;max-width:120px;display:block;margin:0 auto 10px;opacity:0.65;" />
+      <p style="margin:0 0 8px;font-family:sans-serif;font-size:13px;font-weight:600;color:#374151;letter-spacing:0.05em;">MALAYSIA TECHLYMPICS</p>
       <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;">
         <a href="https://techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">techlympics.my</a>
-        &nbsp;·&nbsp;
-        <a href="mailto:info@techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">info@techlympics.my</a>
       </p>
-      <p style="margin:16px 0 0;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:10px;color:#d1d5db;">
+      <p style="margin:14px 0 0;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:10px;color:#d1d5db;">
         © 2025 Malaysia Techlympics. All rights reserved.<br/>
         You are receiving this email because you registered as a contingent manager.
       </p>
@@ -437,40 +431,22 @@ function PreviewModal({ blastId, subject, onClose }: { blastId: string; subject:
 }
 
 // ── Send / Schedule Dialog ───────────────────────────────────────────────────
-function SendDialog({ blast, onDone, onClose }: {
+function SendDialog({ blast, onConfirm, onClose }: {
   blast: Blast;
-  onDone: (id: string, sent: number) => void;
+  onConfirm: (blastId: string, scheduledAt: string | null) => void;
   onClose: () => void;
 }) {
-  const [mode, setMode]       = useState<"now" | "later">(blast.scheduledAt ? "later" : "now");
-  const [dt, setDt]           = useState(blast.scheduledAt ? new Date(blast.scheduledAt).toISOString().slice(0, 16) : "");
-  const [sending, setSending] = useState(false);
-  const [error, setError]     = useState("");
+  const [mode, setMode] = useState<"now" | "later">(blast.scheduledAt ? "later" : "now");
+  const [dt, setDt]     = useState(blast.scheduledAt ? new Date(blast.scheduledAt).toISOString().slice(0, 16) : "");
 
   const missingSubject    = !blast.subject?.trim();
   const missingBody       = !blast.htmlBody?.trim();
   const missingRecipients = blast._count.recipients === 0;
   const canSend           = !missingSubject && !missingBody && !missingRecipients;
 
-  async function run() {
-    setSending(true);
-    setError("");
-    try {
-      await fetch(`/api/v2/organizer/email/blasts/${blast.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scheduledAt: mode === "later" && dt ? new Date(dt).toISOString() : null,
-        }),
-      });
-      const res = await fetch(`/api/v2/organizer/email/blasts/${blast.id}/send`, { method: "POST" });
-      const j   = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "Failed to send");
-      onDone(blast.id, j.sent);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed");
-      setSending(false);
-    }
+  function run() {
+    const schedAt = mode === "later" && dt ? new Date(dt).toISOString() : null;
+    onConfirm(blast.id, schedAt); // parent closes dialog, patches, fires send, polls
   }
 
   return (
@@ -537,18 +513,16 @@ function SendDialog({ blast, onDone, onClose }: {
           </label>
         </div>
 
-        {error && <p className="text-xs text-rose-600">{error}</p>}
-
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 pt-1">
           <button type="button" onClick={onClose}
             className="px-4 py-2 text-sm rounded-md border border-zinc-200 text-zinc-600 hover:bg-zinc-50">
             Cancel
           </button>
-          <button type="button" onClick={run} disabled={!canSend || sending || (mode === "later" && !dt)}
+          <button type="button" onClick={run} disabled={!canSend || (mode === "later" && !dt)}
             className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40">
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-            {sending ? "Sending…" : mode === "later" ? "Schedule & Send" : "Send Now"}
+            <PlayCircle className="h-4 w-4" />
+            {mode === "later" ? "Schedule & Send" : "Send Now"}
           </button>
         </div>
       </div>
@@ -587,7 +561,8 @@ function DeleteDialog({ blast, onDeleted, onClose }: { blast: Blast; onDeleted: 
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function BulkPage() {
-  const router = useRouter();
+  const router      = useRouter();
+  const pollingRef  = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const [blasts, setBlasts]               = useState<Blast[]>([]);
   const [loading, setLoading]             = useState(true);
   const [showCreate, setShowCreate]       = useState(false);
@@ -609,6 +584,9 @@ export default function BulkPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Stop all polling on unmount
+  useEffect(() => () => { pollingRef.current.forEach(t => clearInterval(t)); }, []);
 
   function showFlash(ok: boolean, msg: string) {
     setFlash({ ok, msg });
@@ -646,14 +624,45 @@ export default function BulkPage() {
     showFlash(true, "Task deleted.");
   }
 
-  function handleSent(id: string, sent: number) {
-    setBlasts(prev => prev.map(b =>
-      b.id === id
-        ? { ...b, sentCount: sent, status: "COMPLETED" as BlastStatus, sentAt: new Date().toISOString() }
-        : b
-    ));
+  function startPolling(blastId: string) {
+    if (pollingRef.current.has(blastId)) return;
+    const timer = setInterval(async () => {
+      try {
+        const data = await fetch(`/api/v2/organizer/email/blasts/${blastId}`).then(r => r.json());
+        setBlasts(prev => prev.map(b =>
+          b.id === blastId
+            ? { ...b, sentCount: data.sentCount ?? b.sentCount, status: data.status, sentAt: data.sentAt }
+            : b
+        ));
+        if (data.status === "COMPLETED" || data.status === "DRAFT") {
+          clearInterval(timer);
+          pollingRef.current.delete(blastId);
+          if (data.status === "COMPLETED") showFlash(true, `Sent to ${data.sentCount} recipient(s).`);
+        }
+      } catch { /* ignore transient errors */ }
+    }, 1500);
+    pollingRef.current.set(blastId, timer);
+  }
+
+  async function handleConfirmSend(blastId: string, scheduledAt: string | null) {
     setSendFor(null);
-    showFlash(true, `Sent to ${sent} recipient(s).`);
+    // Patch scheduledAt first (fast)
+    await fetch(`/api/v2/organizer/email/blasts/${blastId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scheduledAt }),
+    });
+    // Optimistic: show IN_PROGRESS immediately
+    setBlasts(prev => prev.map(b =>
+      b.id === blastId ? { ...b, status: "IN_PROGRESS" as BlastStatus, sentCount: 0 } : b
+    ));
+    // Fire send in background — don't await
+    fetch(`/api/v2/organizer/email/blasts/${blastId}/send`, { method: "POST" })
+      .then(r => r.json())
+      .then(j => { if (j.error) showFlash(false, j.error); })
+      .catch(() => showFlash(false, "Send failed."));
+    // Poll for progress until COMPLETED
+    startPolling(blastId);
   }
 
   async function handleDuplicate(b: Blast) {
@@ -802,9 +811,27 @@ export default function BulkPage() {
                   </td>
                   <td className="px-4 py-3 text-center text-xs font-mono text-zinc-600">{b.sentCount}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium", STATUS_BADGE[b.status])}>
-                      {STATUS_LABEL[b.status]}
-                    </span>
+                    {b.status === "IN_PROGRESS" ? (
+                      <div className="px-1 space-y-1.5">
+                        <div className="relative h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
+                          <div
+                            className="absolute inset-y-0 left-0 bg-violet-500 rounded-full transition-all duration-700 ease-out"
+                            style={{
+                              width: b._count.recipients > 0
+                                ? `${Math.max(4, Math.min(100, Math.round((b.sentCount / b._count.recipients) * 100)))}%`
+                                : "4%",
+                            }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-violet-600 font-medium tabular-nums">
+                          {b.sentCount} / {b._count.recipients}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium", STATUS_BADGE[b.status])}>
+                        {STATUS_LABEL[b.status]}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-0.5">
@@ -835,7 +862,7 @@ export default function BulkPage() {
       {showCreate    && <CreateBlastDialog onCreated={handleCreated} onClose={() => setShowCreate(false)} />}
       {recipientsFor && <RecipientsModal blast={recipientsFor} onClose={() => setRecipientsFor(null)} onSaved={handleRecipientsSaved} />}
       {previewFor    && <PreviewModal blastId={previewFor.id} subject={previewFor.subject} onClose={() => setPreviewFor(null)} />}
-      {sendFor       && <SendDialog blast={sendFor} onDone={handleSent} onClose={() => setSendFor(null)} />}
+      {sendFor       && <SendDialog blast={sendFor} onConfirm={handleConfirmSend} onClose={() => setSendFor(null)} />}
       {deleteFor     && <DeleteDialog blast={deleteFor} onDeleted={handleDeleted} onClose={() => setDeleteFor(null)} />}
     </div>
   );

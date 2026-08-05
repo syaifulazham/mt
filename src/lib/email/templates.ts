@@ -51,19 +51,9 @@ export const EMAIL_FOOTER_HTML = `
           </td>
         </tr>
         <tr>
-          <td align="center" style="padding:0 40px 10px;">
-            <p style="margin:0;font-family:Arial,sans-serif;font-size:11px;color:#9ca3af;line-height:1.6;">
-              Aras 15, Menara MDEC, MSC Malaysia Headquarters,<br/>
-              2310, Jalan Usahawan, 63000 Cyberjaya, Selangor, Malaysia
-            </p>
-          </td>
-        </tr>
-        <tr>
           <td align="center" style="padding:0 40px 12px;">
             <p style="margin:0;font-family:Arial,sans-serif;font-size:11px;color:#9ca3af;">
               <a href="${BASE_URL}" style="color:#7c3aed;text-decoration:none;font-weight:bold;">techlympics.my</a>
-              &nbsp;&nbsp;·&nbsp;&nbsp;
-              <a href="mailto:info@techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:bold;">info@techlympics.my</a>
             </p>
           </td>
         </tr>

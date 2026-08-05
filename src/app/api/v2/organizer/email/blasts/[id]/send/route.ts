@@ -25,6 +25,12 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   const fullHtml = buildEmailHtml(blast.htmlBody, blast.includeHeader ?? true, blast.includeFooter ?? true);
 
+  // Mark as in-progress before starting
+  await db.emailBlast.update({
+    where: { id },
+    data: { status: "IN_PROGRESS", sentCount: 0 },
+  });
+
   let sent   = 0;
   let failed = 0;
 
@@ -44,14 +50,18 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     } else {
       sent += data?.data?.length ?? chunk.length;
     }
+    // Update progress after each chunk so the poller can read it
+    await db.emailBlast.update({
+      where: { id },
+      data: { sentCount: sent },
+    });
   }
 
   await db.emailBlast.update({
     where: { id },
     data: {
-      sentAt:    new Date(),
-      sentCount: sent,
-      status:    "COMPLETED",
+      sentAt: new Date(),
+      status: "COMPLETED",
     },
   });
 

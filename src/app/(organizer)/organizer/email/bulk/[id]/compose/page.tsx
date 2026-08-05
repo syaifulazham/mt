@@ -172,19 +172,13 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
          <div style="height:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa,#7c3aed);"></div>`
       : "";
     const footerSection = includeFooter
-      ? `<div style="border-top:1px solid #e5e7eb;background:#f9fafb;padding:32px 40px;text-align:center;">
-           <img src="/logo-mt.svg" alt="Malaysia Techlympics" style="height:32px;width:auto;max-width:120px;display:block;margin:0 auto 12px;opacity:0.65;" />
-           <p style="margin:0 0 4px;font-family:sans-serif;font-size:13px;font-weight:600;color:#374151;letter-spacing:0.05em;">MALAYSIA TECHLYMPICS</p>
-           <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;line-height:1.6;">
-             Aras 15, Menara MDEC, MSC Malaysia Headquarters,<br/>
-             2310, Jalan Usahawan, 63000 Cyberjaya, Selangor, Malaysia
-           </p>
+      ? `<div style="border-top:1px solid #e5e7eb;background:#f9fafb;padding:28px 40px;text-align:center;">
+           <img src="/logo-mt.svg" alt="Malaysia Techlympics" style="height:32px;width:auto;max-width:120px;display:block;margin:0 auto 10px;opacity:0.65;" />
+           <p style="margin:0 0 8px;font-family:sans-serif;font-size:13px;font-weight:600;color:#374151;letter-spacing:0.05em;">MALAYSIA TECHLYMPICS</p>
            <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;color:#9ca3af;">
              <a href="https://techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">techlympics.my</a>
-             &nbsp;·&nbsp;
-             <a href="mailto:info@techlympics.my" style="color:#7c3aed;text-decoration:none;font-weight:500;">info@techlympics.my</a>
            </p>
-           <p style="margin:16px 0 0;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:10px;color:#d1d5db;">
+           <p style="margin:14px 0 0;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:10px;color:#d1d5db;">
              © 2025 Malaysia Techlympics. All rights reserved.<br/>
              You are receiving this email because you registered as a contingent manager.
            </p>
