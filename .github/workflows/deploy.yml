@@ -213,20 +213,32 @@ jobs:
 
             # ── Migrating database ──────────────────────────────────────────────
             echo "── Migrating database ──"
-            for migration in \
-              20260520000000_add_missing_tables_and_columns \
-              20260620000001_add_drone_access_team_events_prerequisites \
-              20260721000001_add_walkin_viblock_judging_columns; do
-              docker run --rm \
-                --network host \
-                --env-file /opt/mt/.env.production \
-                ${GHCR_IMAGE}:migrator \
-                node_modules/.bin/prisma migrate resolve --rolled-back "$migration" 2>/dev/null || true
-            done
-            docker run --rm \
+            set +e
+            MIGRATE_LOG=$(docker run --rm \
               --network host \
               --env-file /opt/mt/.env.production \
-              ${GHCR_IMAGE}:migrator
+              ${GHCR_IMAGE}:migrator 2>&1)
+            MIGRATE_EXIT=$?
+            echo "$MIGRATE_LOG"
+            set -e
+            if [ $MIGRATE_EXIT -ne 0 ]; then
+              if echo "$MIGRATE_LOG" | grep -q 'P3009'; then
+                echo "── Resolving failed migrations and retrying ──"
+                echo "$MIGRATE_LOG" | grep ' migration ' | grep ' failed$' | awk '{print $2}' | tr -d '`' | while IFS= read -r m; do
+                  [ -n "$m" ] && docker run --rm \
+                    --network host \
+                    --env-file /opt/mt/.env.production \
+                    ${GHCR_IMAGE}:migrator \
+                    node_modules/.bin/prisma migrate resolve --rolled-back "$m" 2>/dev/null || true
+                done
+                docker run --rm \
+                  --network host \
+                  --env-file /opt/mt/.env.production \
+                  ${GHCR_IMAGE}:migrator
+              else
+                exit 1
+              fi
+            fi
 
             # ── Restarting container ────────────────────────────────────────────
             echo "── Restarting container ──"
