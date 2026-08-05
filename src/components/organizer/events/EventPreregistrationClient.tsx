@@ -5,8 +5,9 @@ import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
   ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download, ListChecks,
-  CheckSquare, Square, X, UserPlus, Settings,
+  CheckSquare, Square, X, UserPlus, Settings, Network,
 } from "lucide-react";
+import { SharedMembersGraph } from "@/components/organizer/events/SharedMembersGraph";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { exportXlsx, exportDocx } from "@/lib/export/preregistrationStatsExport";
 
@@ -327,6 +328,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [stateFilterSaving, setStateFilterSaving]           = useState(false);
   const [stateFilterError, setStateFilterError]             = useState("");
   const [showStateFilterConfig, setShowStateFilterConfig]   = useState(false);
+  const [showSharedGraph, setShowSharedGraph]               = useState(false);
 
   // Add-teams search modal
   type AddTeamsModalState =
@@ -1054,6 +1056,18 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
           >
             {showDuplicates ? <Users className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
             {showDuplicates ? "Semua pasukan" : "Pasukan berkongsi ahli"}
+          </button>
+        )}
+
+        {/* Shared-members network graph (teams tab) */}
+        {listTab === "teams" && (
+          <button
+            onClick={() => setShowSharedGraph(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+            title="Paparkan graf rangkaian pasukan yang berkongsi ahli"
+          >
+            <Network className="h-3.5 w-3.5" />
+            Graf Perkongsian
           </button>
         )}
 
@@ -2182,6 +2196,11 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
 
           </div>
         </div>
+      )}
+
+      {/* Shared-members network graph modal */}
+      {showSharedGraph && (
+        <SharedMembersGraph eventId={event.id} onClose={() => setShowSharedGraph(false)} />
       )}
     </div>
   );
