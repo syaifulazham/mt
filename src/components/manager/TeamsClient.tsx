@@ -920,11 +920,7 @@ function TeamCard({
               </div>
             ))
           )}
-          {isTeamSelected && (
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded-md px-2.5 py-1.5 mt-1 border border-amber-100">
-              Members locked — team is selected (PILIH) for an event.
-            </p>
-          )}
+
           {!isFull && !isTeamSelected && (
             <Button
               size="sm" variant="outline" className="w-full mt-1 text-xs h-7"
