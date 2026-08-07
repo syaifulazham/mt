@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import {
   Loader2, Trophy, Mail, CheckCircle2, BookOpen, Copy, AlertCircle, KeyRound, GraduationCap, BadgeCheck, LogIn, UserCircle2, ExternalLink, Upload, Eye,
+  ChevronLeft, ChevronRight, LayoutGrid, List,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -163,6 +164,8 @@ function ManagerAccountSection() {
   const [newCreds,    setNewCreds]    = useState<{ username: string; password: string; loginUrl: string } | null>(null);
   const [err,         setErr]         = useState("");
   const [managersData, setManagersData] = useState<ContingentManagersData | null>(null);
+  const [coursesExpanded, setCoursesExpanded] = useState(false);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   async function reloadStatus() {
     try {
@@ -280,91 +283,158 @@ function ManagerAccountSection() {
             </p>
           )}
 
-          {/* Courses grid */}
+          {/* Courses — carousel (default) or expanded grid */}
           {!loading && courses.length > 0 && (
             <div>
-              <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-2">
-                Your Courses ({courses.filter(c => c.enrolled).length}/{courses.length} enrolled)
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {courses.map(course => (
-                  <CourseCard key={course.courseId} course={course} />
-                ))}
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">
+                  Your Courses ({courses.filter(c => c.enrolled).length}/{courses.length} enrolled)
+                </p>
+                <div className="flex items-center gap-1">
+                  {!coursesExpanded && (
+                    <>
+                      <button
+                        onClick={() => carouselRef.current?.scrollBy({ left: -260, behavior: "smooth" })}
+                        className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => carouselRef.current?.scrollBy({ left: 260, behavior: "smooth" })}
+                        className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setCoursesExpanded(v => !v)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    {coursesExpanded
+                      ? <><List className="h-3.5 w-3.5" /> Carousel</>
+                      : <><LayoutGrid className="h-3.5 w-3.5" /> Lihat semua</>
+                    }
+                  </button>
+                </div>
               </div>
+
+              {coursesExpanded ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {courses.map(course => (
+                    <CourseCard key={course.courseId} course={course} />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  ref={carouselRef}
+                  className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth"
+                  style={{ scrollbarWidth: "none" }}
+                >
+                  {courses.map(course => (
+                    <div key={course.courseId} className="snap-start shrink-0 w-52">
+                      <CourseCard course={course} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Contingent managers progress — same row style as teams */}
+          {/* Managers Progress — table with Manager, Email, Submission, Progress */}
           {!loading && managersData && managersData.courses.length > 0 && managersData.managers.length > 0 && (
             <div>
               <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-2">
                 Managers Progress ({managersData.managers.filter(m => m.lmsUserId).length}/{managersData.managers.length} registered)
               </p>
-              <div className="rounded-lg border dark:border-zinc-800 divide-y dark:divide-zinc-800 overflow-hidden">
-                {managersData.managers.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`flex items-start gap-3 px-4 py-3 ${m.isMe ? "bg-blue-50/50 dark:bg-blue-900/10" : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"} transition-colors`}
-                  >
-                    {/* Avatar */}
-                    <div className="h-7 w-7 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-600 dark:text-zinc-300 shrink-0 mt-0.5">
-                      {m.name[0]?.toUpperCase() ?? "?"}
-                    </div>
-
-                    {/* Name + per-course progress */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate">{m.name}</span>
-                        {m.isMe && <span className="text-[9px] text-blue-500 font-semibold">you</span>}
-                        {!m.lmsUserId && <span className="text-[10px] text-zinc-400 italic">no account</span>}
-                      </div>
-
-                      {m.lmsUserId ? (
-                        <div className="space-y-2">
-                          {managersData.courses.map((c) => {
-                            const p = m.progress[c.courseId];
-                            return (
-                              <div key={c.courseId}>
-                                {/* Course label */}
-                                <p className="text-[10px] text-zinc-400 font-mono truncate mb-0.5">{c.title}</p>
-                                {!p ? (
-                                  <p className="text-xs text-zinc-400 italic">not enrolled</p>
-                                ) : (
-                                  <div className="space-y-1">
-                                    {/* Submission */}
-                                    <div className="flex items-center gap-1 text-xs text-zinc-500">
-                                      <Upload className="h-3 w-3 shrink-0 text-zinc-400" />
-                                      {p.hasSubmission && p.lastSubmittedAt
-                                        ? <span className="font-medium text-green-600 dark:text-green-400">
-                                            Submitted · {new Date(p.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })}
-                                          </span>
-                                        : <span className="text-zinc-400">{p.submissionCount} submission{p.submissionCount !== 1 ? "s" : ""}</span>
+              <div className="rounded-lg border dark:border-zinc-800 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-zinc-50 dark:bg-zinc-800/60 border-b dark:border-zinc-800">
+                        <th className="text-left px-4 py-2.5 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Manager</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Email</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Submission</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Progress</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y dark:divide-zinc-800">
+                      {managersData.managers.map((m, idx) => (
+                        <tr key={m.id} className={`${idx % 2 === 0 ? "bg-white dark:bg-zinc-900" : "bg-zinc-50/40 dark:bg-zinc-800/20"} ${m.isMe ? "ring-1 ring-inset ring-blue-200 dark:ring-blue-800" : ""}`}>
+                          {/* Manager */}
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-6 w-6 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-600 dark:text-zinc-300 shrink-0">
+                                {m.name[0]?.toUpperCase() ?? "?"}
+                              </div>
+                              <span className="font-semibold text-zinc-800 dark:text-zinc-200">{m.name}</span>
+                              {m.isMe && <span className="text-[9px] text-blue-500 font-semibold">you</span>}
+                              {!m.lmsUserId && <span className="text-[10px] text-zinc-400 italic ml-1">no account</span>}
+                            </div>
+                          </td>
+                          {/* Email */}
+                          <td className="px-4 py-2.5 text-zinc-500 whitespace-nowrap">{m.email}</td>
+                          {/* Submission */}
+                          <td className="px-4 py-2.5">
+                            {m.lmsUserId ? (
+                              <div className="space-y-1.5">
+                                {managersData.courses.map((c) => {
+                                  const p = m.progress[c.courseId];
+                                  return (
+                                    <div key={c.courseId}>
+                                      <p className="text-[10px] text-zinc-400 truncate max-w-[200px]">{c.title}</p>
+                                      {!p
+                                        ? <span className="text-zinc-300 dark:text-zinc-600">—</span>
+                                        : p.hasSubmission && p.lastSubmittedAt
+                                          ? <span className="font-medium text-green-600 dark:text-green-400">
+                                              Submitted · {new Date(p.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })}
+                                            </span>
+                                          : <span className="text-zinc-400">{p.submissionCount} submission{p.submissionCount !== 1 ? "s" : ""}</span>
                                       }
                                     </div>
-                                    {/* Progress bar */}
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex-1 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
-                                        <div
-                                          className={`h-full rounded-full ${p.isComplete ? "bg-green-500" : p.completionPercent > 0 ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
-                                          style={{ width: `${p.completionPercent}%` }}
-                                        />
-                                      </div>
-                                      <span className={`text-xs shrink-0 font-mono tabular-nums ${p.isComplete ? "text-green-600 dark:text-green-400" : "text-zinc-500"}`}>
-                                        {p.isComplete ? "✓ Selesai" : `${p.completionPercent}%`}
-                                      </span>
-                                    </div>
-                                  </div>
-                                )}
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-zinc-400">—</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                            ) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+                          </td>
+                          {/* Progress */}
+                          <td className="px-4 py-2.5">
+                            {m.lmsUserId ? (
+                              <div className="space-y-1.5">
+                                {managersData.courses.map((c) => {
+                                  const p = m.progress[c.courseId];
+                                  return (
+                                    <div key={c.courseId}>
+                                      <p className="text-[10px] text-zinc-400 truncate max-w-[200px]">{c.title}</p>
+                                      {!p
+                                        ? <span className="text-zinc-300 dark:text-zinc-600">—</span>
+                                        : (
+                                          <div className="flex items-center gap-2 min-w-[140px]">
+                                            <div className="flex-1 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                                              <div
+                                                className={`h-full rounded-full ${p.isComplete ? "bg-green-500" : p.completionPercent > 0 ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+                                                style={{ width: `${p.completionPercent}%` }}
+                                              />
+                                            </div>
+                                            <span className={`shrink-0 font-mono tabular-nums ${p.isComplete ? "text-green-600 dark:text-green-400 font-semibold" : "text-zinc-500"}`}>
+                                              {p.isComplete
+                                                ? <>Completed{p.completedAt && <> · {new Date(p.completedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })}</>}</>
+                                                : `${p.completionPercent}%`}
+                                            </span>
+                                          </div>
+                                        )
+                                      }
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
