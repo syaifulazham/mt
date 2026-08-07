@@ -294,91 +294,77 @@ function ManagerAccountSection() {
             </div>
           )}
 
-          {/* Contingent managers progress table */}
+          {/* Contingent managers progress — same row style as teams */}
           {!loading && managersData && managersData.courses.length > 0 && managersData.managers.length > 0 && (
             <div>
               <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-2">
                 Managers Progress ({managersData.managers.filter(m => m.lmsUserId).length}/{managersData.managers.length} registered)
               </p>
-              <div className="rounded-lg border dark:border-zinc-800 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-zinc-50 dark:bg-zinc-800/60 border-b dark:border-zinc-800">
-                        <th className="text-left px-3 py-2 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Manager</th>
-                        {managersData.courses.map((c) => (
-                          <th key={c.courseId} className="text-left px-3 py-2 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap max-w-[180px]">
-                            <p className="truncate">{c.title}</p>
-                            <p className="text-[10px] font-normal text-zinc-400 dark:text-zinc-500 truncate">{c.competitionName}</p>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y dark:divide-zinc-800">
-                      {managersData.managers.map((m) => (
-                        <tr key={m.id} className={m.isMe ? "bg-blue-50/50 dark:bg-blue-900/10" : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"}>
-                          <td className="px-3 py-2.5 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-5 w-5 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[9px] font-bold text-zinc-600 dark:text-zinc-300 shrink-0">
-                                {m.name[0]?.toUpperCase() ?? "?"}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
-                                  {m.name}
-                                  {m.isMe && <span className="ml-1 text-[9px] text-blue-500 font-semibold">YOU</span>}
-                                </span>
-                                {!m.lmsUserId && (
-                                  <span className="ml-1.5 text-[9px] text-zinc-400 italic">no account</span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
+              <div className="rounded-lg border dark:border-zinc-800 divide-y dark:divide-zinc-800 overflow-hidden">
+                {managersData.managers.map((m) => (
+                  <div
+                    key={m.id}
+                    className={`flex items-start gap-3 px-4 py-3 ${m.isMe ? "bg-blue-50/50 dark:bg-blue-900/10" : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"} transition-colors`}
+                  >
+                    {/* Avatar */}
+                    <div className="h-7 w-7 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-600 dark:text-zinc-300 shrink-0 mt-0.5">
+                      {m.name[0]?.toUpperCase() ?? "?"}
+                    </div>
+
+                    {/* Name + per-course progress */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate">{m.name}</span>
+                        {m.isMe && <span className="text-[9px] text-blue-500 font-semibold">you</span>}
+                        {!m.lmsUserId && <span className="text-[10px] text-zinc-400 italic">no account</span>}
+                      </div>
+
+                      {m.lmsUserId ? (
+                        <div className="space-y-2">
                           {managersData.courses.map((c) => {
                             const p = m.progress[c.courseId];
-                            if (!m.lmsUserId) {
-                              return (
-                                <td key={c.courseId} className="px-3 py-2.5 text-zinc-300 dark:text-zinc-600">—</td>
-                              );
-                            }
-                            if (!p) {
-                              return (
-                                <td key={c.courseId} className="px-3 py-2.5 text-zinc-400 dark:text-zinc-500 italic">not enrolled</td>
-                              );
-                            }
                             return (
-                              <td key={c.courseId} className="px-3 py-2.5">
-                                <div className="flex flex-col gap-1 min-w-[120px]">
-                                  {/* Progress bar */}
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="flex-1 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full ${p.isComplete ? "bg-green-500" : p.completionPercent > 0 ? "bg-blue-500" : "bg-zinc-300"}`}
-                                        style={{ width: `${p.completionPercent}%` }}
-                                      />
+                              <div key={c.courseId}>
+                                {/* Course label */}
+                                <p className="text-[10px] text-zinc-400 font-mono truncate mb-0.5">{c.title}</p>
+                                {!p ? (
+                                  <p className="text-xs text-zinc-400 italic">not enrolled</p>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {/* Submission */}
+                                    <div className="flex items-center gap-1 text-xs text-zinc-500">
+                                      <Upload className="h-3 w-3 shrink-0 text-zinc-400" />
+                                      {p.hasSubmission && p.lastSubmittedAt
+                                        ? <span className="font-medium text-green-600 dark:text-green-400">
+                                            Submitted · {new Date(p.lastSubmittedAt).toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" })}
+                                          </span>
+                                        : <span className="text-zinc-400">{p.submissionCount} submission{p.submissionCount !== 1 ? "s" : ""}</span>
+                                      }
                                     </div>
-                                    <span className={`shrink-0 font-mono ${p.isComplete ? "text-green-600 dark:text-green-400" : "text-zinc-500"}`}>
-                                      {p.isComplete ? "✓" : `${p.completionPercent}%`}
-                                    </span>
-                                  </div>
-                                  {/* Submission count */}
-                                  <div className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500">
-                                    <Upload className="h-2.5 w-2.5 shrink-0" />
-                                    <span>{p.submissionCount} submission{p.submissionCount !== 1 ? "s" : ""}</span>
-                                    {p.lastSubmittedAt && (
-                                      <span className="text-zinc-300 dark:text-zinc-600">
-                                        · {new Date(p.lastSubmittedAt).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
+                                    {/* Progress bar */}
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex-1 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                                        <div
+                                          className={`h-full rounded-full ${p.isComplete ? "bg-green-500" : p.completionPercent > 0 ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+                                          style={{ width: `${p.completionPercent}%` }}
+                                        />
+                                      </div>
+                                      <span className={`text-xs shrink-0 font-mono tabular-nums ${p.isComplete ? "text-green-600 dark:text-green-400" : "text-zinc-500"}`}>
+                                        {p.isComplete ? "✓ Selesai" : `${p.completionPercent}%`}
                                       </span>
-                                    )}
+                                    </div>
                                   </div>
-                                </div>
-                              </td>
+                                )}
+                              </div>
                             );
                           })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-zinc-400">—</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

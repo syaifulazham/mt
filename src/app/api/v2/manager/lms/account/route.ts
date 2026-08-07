@@ -33,13 +33,11 @@ export type CourseInfo = {
   enrolled: boolean;
 };
 
-export async function getManagerCourseList(
-  contingentIds: string[],
-  username: string | null,
-): Promise<CourseInfo[]> {
-  if (contingentIds.length === 0) return [];
+// Build a map of courseId → competitionName from DB (competition-level + event-level overrides)
+async function buildDbCourseNames(contingentIds: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (contingentIds.length === 0) return names;
 
-  // Fetch all teams with their competition and event registrations
   const teams = await db.team.findMany({
     where: { contingentId: { in: contingentIds } },
     select: {
@@ -48,73 +46,87 @@ export async function getManagerCourseList(
       teamEvents: { select: { eventId: true } },
     },
   });
-  if (teams.length === 0) return [];
-
-  const competitionIds = [...new Set(teams.map((t) => t.competitionId))];
-  const eventIds       = [...new Set(teams.flatMap((t) => t.teamEvents.map((te) => te.eventId)))];
-
-  // Event-level course overrides (EventCompetition.eptimEduCourseId)
-  const eventComps = eventIds.length > 0
-    ? await db.eventCompetition.findMany({
-        where: {
-          competitionId: { in: competitionIds },
-          eventId:       { in: eventIds },
-          eptimEduCourseId: { not: null },
-        },
-        select: { competitionId: true, eptimEduCourseId: true, eptimEduCourseTitle: true },
-      })
-    : [];
-
-  // Build a deduplicated map: courseId → display name
-  // Competition-level first, then event-level overrides add any new courseIds
-  const courseEntries = new Map<string, string>(); // courseId → competitionName
+  if (teams.length === 0) return names;
 
   for (const t of teams) {
     const id = t.competition.eptimEduCourseId;
-    if (id && !courseEntries.has(id)) courseEntries.set(id, t.competition.name);
+    if (id && !names.has(id)) names.set(id, t.competition.name);
   }
-  for (const ec of eventComps) {
-    const id = ec.eptimEduCourseId!;
-    if (!courseEntries.has(id)) {
-      const fallback = teams.find((t) => t.competitionId === ec.competitionId)?.competition.name ?? id;
-      courseEntries.set(id, ec.eptimEduCourseTitle ?? fallback);
+
+  const compIds  = [...new Set(teams.map((t) => t.competitionId))];
+  const eventIds = [...new Set(teams.flatMap((t) => t.teamEvents.map((te) => te.eventId)))];
+  if (eventIds.length > 0) {
+    const ecs = await db.eventCompetition.findMany({
+      where: { competitionId: { in: compIds }, eventId: { in: eventIds }, eptimEduCourseId: { not: null } },
+      select: { competitionId: true, eptimEduCourseId: true, eptimEduCourseTitle: true },
+    });
+    for (const ec of ecs) {
+      const id = ec.eptimEduCourseId!;
+      if (!names.has(id)) {
+        const fallback = teams.find((t) => t.competitionId === ec.competitionId)?.competition.name ?? id;
+        names.set(id, ec.eptimEduCourseTitle ?? fallback);
+      }
     }
   }
+  return names;
+}
 
-  if (courseEntries.size === 0) return [];
+export async function getManagerCourseList(
+  contingentIds: string[],
+  username: string | null,
+): Promise<CourseInfo[]> {
+  if (contingentIds.length === 0) return [];
 
-  const [coursesResult, enrolResult] = await Promise.allSettled([
-    eptimEdu.courses(),
+  const [dbNames, coursesResult, enrolResult] = await Promise.all([
+    buildDbCourseNames(contingentIds),
+    eptimEdu.courses().catch(() => ({ courses: [] })),
     username
-      ? eptimEdu.getUserEnrolments(username)
+      ? eptimEdu.getUserEnrolments(username).catch(() => ({ enrolments: [] }))
       : Promise.resolve({ enrolments: [] }),
   ]);
 
   const courseMap = new Map<string, { title: string; thumbnail: string | null; slug: string }>();
-  if (coursesResult.status === "fulfilled") {
-    for (const c of coursesResult.value?.courses ?? []) {
-      courseMap.set(c.id, { title: c.title, thumbnail: c.thumbnail ?? null, slug: c.slug ?? "" });
-    }
+  for (const c of (coursesResult as { courses: { id: string; title: string; thumbnail?: string | null; slug?: string }[] })?.courses ?? []) {
+    courseMap.set(c.id, { title: c.title, thumbnail: c.thumbnail ?? null, slug: c.slug ?? "" });
   }
 
   const enrolledIds = new Set<string>();
-  if (enrolResult.status === "fulfilled") {
-    for (const e of enrolResult.value?.enrolments ?? []) {
-      enrolledIds.add(e.courseId);
-    }
+  for (const e of (enrolResult as { enrolments: { courseId: string }[] })?.enrolments ?? []) {
+    enrolledIds.add(e.courseId);
   }
 
-  return [...courseEntries.entries()].map(([courseId, competitionName]) => {
+  // Merge: enrolled courses from EptimEdu (source of truth) + unenrolled DB-mapped courses
+  const result = new Map<string, CourseInfo>();
+
+  // 1. All enrolled courses — EptimEdu is authoritative here
+  for (const courseId of enrolledIds) {
     const course = courseMap.get(courseId);
-    return {
+    result.set(courseId, {
       courseId,
       title:           course?.title     ?? `Course ${courseId}`,
       thumbnail:       course?.thumbnail ?? null,
       slug:            course?.slug      ?? "",
-      competitionName,
-      enrolled:        enrolledIds.has(courseId),
-    };
-  });
+      competitionName: dbNames.get(courseId) ?? course?.title ?? courseId,
+      enrolled:        true,
+    });
+  }
+
+  // 2. DB-mapped courses not yet enrolled
+  for (const [courseId, competitionName] of dbNames) {
+    if (!result.has(courseId)) {
+      const course = courseMap.get(courseId);
+      result.set(courseId, {
+        courseId,
+        title:           course?.title     ?? `Course ${courseId}`,
+        thumbnail:       course?.thumbnail ?? null,
+        slug:            course?.slug      ?? "",
+        competitionName,
+        enrolled:        false,
+      });
+    }
+  }
+
+  return [...result.values()];
 }
 
 // ── GET — check account status + courses ─────────────────────────────────────

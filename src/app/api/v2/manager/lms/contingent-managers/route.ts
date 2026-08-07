@@ -56,8 +56,9 @@ export async function GET() {
     .map((r) => r.manager)
     .filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
 
-  // Courses linked to competitions for these contingents
-  const courses = await getManagerCourseList(contingentIds, null).catch(() => []);
+  // Course list uses the calling manager's enrolled courses as source of truth
+  const callerUsername = manager.lmsUserId ? emailToUsername(manager.email) : null;
+  const courses = await getManagerCourseList(contingentIds, callerUsername).catch(() => []);
   const courseIds = courses.map((c) => c.courseId);
 
   const sharedCourses = courses.map((c) => ({
