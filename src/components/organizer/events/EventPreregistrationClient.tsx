@@ -313,6 +313,12 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [loadingMissing, setLoadingMissing]     = useState(false);
   const [loadMissingResult, setLoadMissingResult] = useState<{ added: number } | null>(null);
 
+  // Unselected-from-prerequisite teams (registered here but never selected in prereq)
+  type UnselectedPrereqTeam = { id: string; teamName: string; contingentName: string | null };
+  const [unselectedPrereqTeams, setUnselectedPrereqTeams] = useState<UnselectedPrereqTeam[]>([]);
+  const [unselectedPrereqDismissed, setUnselectedPrereqDismissed] = useState(false);
+  const [removingUnselectedPrereq, setRemovingUnselectedPrereq] = useState(false);
+
   // Load-from-prerequisite modal
   type PrereqModalState =
     | { phase: "loading" }
@@ -499,6 +505,15 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       .catch(() => {});
   }, [event.id, event.prerequisites?.length]);
 
+  // Fetch unselected-from-prerequisite teams
+  useEffect(() => {
+    if (!event.prerequisites?.length) return;
+    fetch(`/api/v2/organizer/events/${event.id}/preregistration/unselected-prereq`)
+      .then((r) => r.json())
+      .then((d) => setUnselectedPrereqTeams(d.teams ?? []))
+      .catch(() => {});
+  }, [event.id, event.prerequisites?.length]);
+
   // Load state filter config
   useEffect(() => {
     if (!event.prerequisites?.length) return;
@@ -666,6 +681,29 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
       alert("Gagal membuang pasukan PENDING. Sila cuba lagi.");
     } finally {
       setRemovingPending(false);
+    }
+  }
+
+  async function handleRemoveUnselectedPrereq() {
+    if (unselectedPrereqTeams.length === 0) return;
+    setRemovingUnselectedPrereq(true);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/preregistration/teams`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamIds: unselectedPrereqTeams.map((t) => t.id) }),
+        },
+      );
+      if (!res.ok) throw new Error("Gagal membuang pasukan");
+      setUnselectedPrereqTeams([]);
+      loadTeams();
+      loadStats();
+    } catch {
+      alert("Gagal membuang pasukan. Sila cuba lagi.");
+    } finally {
+      setRemovingUnselectedPrereq(false);
     }
   }
 
@@ -1284,6 +1322,48 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
           <span className="text-green-500">✓</span>
           <span>Semua <strong>{prereqCheck.totalSelected} pasukan terpilih</strong> dari acara prasyarat telah didaftarkan.</span>
           <button onClick={() => setPrereqCheckDismissed(true)} className="ml-auto text-green-400 hover:text-green-600">✕</button>
+        </div>
+      )}
+
+      {/* Unselected-from-prerequisite teams banner */}
+      {unselectedPrereqTeams.length > 0 && !unselectedPrereqDismissed && !isCompleted && (
+        <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm">
+          <span className="text-rose-500 mt-0.5 shrink-0">✕</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-rose-800">
+              {unselectedPrereqTeams.length} pasukan dalam acara ini tidak dipilih (tidak lulus) dalam acara prasyarat
+            </p>
+            <p className="text-rose-700 mt-0.5 text-xs">
+              Pasukan-pasukan berikut wujud di acara ini tetapi tidak pernah dipilih dalam mana-mana acara prasyarat.
+              Buang mereka daripada acara ini jika mereka tidak sepatutnya menyertai.
+            </p>
+            <ul className="mt-2 space-y-0.5 max-h-28 overflow-y-auto pr-1">
+              {unselectedPrereqTeams.map((t) => (
+                <li key={t.id} className="text-xs text-rose-700 flex items-center gap-1.5">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                  <span className="font-medium">{t.teamName}</span>
+                  {t.contingentName && <span className="text-rose-500">— {t.contingentName}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleRemoveUnselectedPrereq}
+              disabled={removingUnselectedPrereq}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 font-medium transition-colors"
+            >
+              {removingUnselectedPrereq && <Loader2 className="h-3 w-3 animate-spin" />}
+              Buang
+            </button>
+            <button
+              onClick={() => setUnselectedPrereqDismissed(true)}
+              className="text-rose-400 hover:text-rose-600 transition-colors"
+              title="Tutup"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
