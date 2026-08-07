@@ -342,7 +342,16 @@ function ManagerAccountSection() {
           )}
 
           {/* Managers Progress — table with Manager, Email, Submission, Progress */}
-          {!loading && managersData && managersData.courses.length > 0 && managersData.managers.length > 0 && (
+          {!loading && managersData && managersData.courses.length > 0 && managersData.managers.length > 0 && (() => {
+            // Only show courses where at least one manager has started (submission or progress)
+            const activeCourses = managersData.courses.filter((c) =>
+              managersData.managers.some((m) => {
+                const p = m.progress[c.courseId];
+                return p && (p.submissionCount > 0 || p.completionPercent > 0 || p.isComplete);
+              })
+            );
+            if (activeCourses.length === 0) return null;
+            return (
             <div>
               <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-2">
                 Managers Progress ({managersData.managers.filter(m => m.lmsUserId).length}/{managersData.managers.length} registered)
@@ -378,7 +387,7 @@ function ManagerAccountSection() {
                           <td className="px-4 py-2.5">
                             {m.lmsUserId ? (
                               <div className="space-y-1.5">
-                                {managersData.courses.map((c) => {
+                                {activeCourses.map((c) => {
                                   const p = m.progress[c.courseId];
                                   return (
                                     <div key={c.courseId}>
@@ -401,7 +410,7 @@ function ManagerAccountSection() {
                           <td className="px-4 py-2.5">
                             {m.lmsUserId ? (
                               <div className="space-y-1.5">
-                                {managersData.courses.map((c) => {
+                                {activeCourses.map((c) => {
                                   const p = m.progress[c.courseId];
                                   return (
                                     <div key={c.courseId}>
@@ -437,7 +446,8 @@ function ManagerAccountSection() {
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
       </div>
 
