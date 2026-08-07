@@ -99,6 +99,31 @@ type ManagerAccountStatus =
   | { registered: true;  username: string; loginUrl: string; loginCount: number; lastLoginAt: string | null; courses: CourseInfo[] }
   | { registered: false; username: string; loginUrl: string; courses: CourseInfo[] };
 
+type ManagerProgressData = {
+  enrolled: boolean;
+  isComplete: boolean;
+  completedAt: string | null;
+  completionPercent: number;
+  hasSubmission: boolean;
+  submissionCount: number;
+  lastSubmittedAt: string | null;
+} | null;
+
+type ContingentManagerEntry = {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+  isMe: boolean;
+  lmsUserId: string | null;
+  progress: Record<string, ManagerProgressData>;
+};
+
+type ContingentManagersData = {
+  courses: { courseId: string; title: string; competitionName: string }[];
+  managers: ContingentManagerEntry[];
+};
+
 function CourseCard({ course }: { course: CourseInfo }) {
   return (
     <div className="relative rounded-lg border bg-zinc-50 dark:bg-zinc-800/50 dark:border-zinc-700 overflow-hidden flex flex-col">
@@ -137,6 +162,7 @@ function ManagerAccountSection() {
   const [signingIn,   setSigningIn]   = useState(false);
   const [newCreds,    setNewCreds]    = useState<{ username: string; password: string; loginUrl: string } | null>(null);
   const [err,         setErr]         = useState("");
+  const [managersData, setManagersData] = useState<ContingentManagersData | null>(null);
 
   async function reloadStatus() {
     try {
@@ -147,7 +173,15 @@ function ManagerAccountSection() {
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { reloadStatus().finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    Promise.all([
+      reloadStatus(),
+      fetch("/api/v2/manager/lms/contingent-managers")
+        .then((r) => r.json())
+        .then((j) => { if (j.courses) setManagersData(j); })
+        .catch(() => {}),
+    ]).finally(() => setLoading(false));
+  }, []);
 
   async function createAccount() {
     setCreating(true); setErr("");
@@ -254,6 +288,95 @@ function ManagerAccountSection() {
                 {courses.map(course => (
                   <CourseCard key={course.courseId} course={course} />
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Contingent managers progress table */}
+          {!loading && managersData && managersData.courses.length > 0 && managersData.managers.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-2">
+                Managers Progress ({managersData.managers.filter(m => m.lmsUserId).length}/{managersData.managers.length} registered)
+              </p>
+              <div className="rounded-lg border dark:border-zinc-800 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-zinc-50 dark:bg-zinc-800/60 border-b dark:border-zinc-800">
+                        <th className="text-left px-3 py-2 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Manager</th>
+                        {managersData.courses.map((c) => (
+                          <th key={c.courseId} className="text-left px-3 py-2 font-semibold text-zinc-500 dark:text-zinc-400 whitespace-nowrap max-w-[180px]">
+                            <p className="truncate">{c.title}</p>
+                            <p className="text-[10px] font-normal text-zinc-400 dark:text-zinc-500 truncate">{c.competitionName}</p>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y dark:divide-zinc-800">
+                      {managersData.managers.map((m) => (
+                        <tr key={m.id} className={m.isMe ? "bg-blue-50/50 dark:bg-blue-900/10" : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"}>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-5 w-5 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[9px] font-bold text-zinc-600 dark:text-zinc-300 shrink-0">
+                                {m.name[0]?.toUpperCase() ?? "?"}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                                  {m.name}
+                                  {m.isMe && <span className="ml-1 text-[9px] text-blue-500 font-semibold">YOU</span>}
+                                </span>
+                                {!m.lmsUserId && (
+                                  <span className="ml-1.5 text-[9px] text-zinc-400 italic">no account</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          {managersData.courses.map((c) => {
+                            const p = m.progress[c.courseId];
+                            if (!m.lmsUserId) {
+                              return (
+                                <td key={c.courseId} className="px-3 py-2.5 text-zinc-300 dark:text-zinc-600">—</td>
+                              );
+                            }
+                            if (!p) {
+                              return (
+                                <td key={c.courseId} className="px-3 py-2.5 text-zinc-400 dark:text-zinc-500 italic">not enrolled</td>
+                              );
+                            }
+                            return (
+                              <td key={c.courseId} className="px-3 py-2.5">
+                                <div className="flex flex-col gap-1 min-w-[120px]">
+                                  {/* Progress bar */}
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="flex-1 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${p.isComplete ? "bg-green-500" : p.completionPercent > 0 ? "bg-blue-500" : "bg-zinc-300"}`}
+                                        style={{ width: `${p.completionPercent}%` }}
+                                      />
+                                    </div>
+                                    <span className={`shrink-0 font-mono ${p.isComplete ? "text-green-600 dark:text-green-400" : "text-zinc-500"}`}>
+                                      {p.isComplete ? "✓" : `${p.completionPercent}%`}
+                                    </span>
+                                  </div>
+                                  {/* Submission count */}
+                                  <div className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500">
+                                    <Upload className="h-2.5 w-2.5 shrink-0" />
+                                    <span>{p.submissionCount} submission{p.submissionCount !== 1 ? "s" : ""}</span>
+                                    {p.lastSubmittedAt && (
+                                      <span className="text-zinc-300 dark:text-zinc-600">
+                                        · {new Date(p.lastSubmittedAt).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
