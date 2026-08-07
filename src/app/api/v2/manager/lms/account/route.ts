@@ -39,14 +39,49 @@ export async function getManagerCourseList(
 ): Promise<CourseInfo[]> {
   if (contingentIds.length === 0) return [];
 
-  const competitions = await db.competition.findMany({
-    where: {
-      eptimEduCourseId: { not: null },
-      teams: { some: { contingentId: { in: contingentIds } } },
+  // Fetch all teams with their competition and event registrations
+  const teams = await db.team.findMany({
+    where: { contingentId: { in: contingentIds } },
+    select: {
+      competitionId: true,
+      competition: { select: { name: true, eptimEduCourseId: true } },
+      teamEvents: { select: { eventId: true } },
     },
-    select: { id: true, name: true, eptimEduCourseId: true },
   });
-  if (competitions.length === 0) return [];
+  if (teams.length === 0) return [];
+
+  const competitionIds = [...new Set(teams.map((t) => t.competitionId))];
+  const eventIds       = [...new Set(teams.flatMap((t) => t.teamEvents.map((te) => te.eventId)))];
+
+  // Event-level course overrides (EventCompetition.eptimEduCourseId)
+  const eventComps = eventIds.length > 0
+    ? await db.eventCompetition.findMany({
+        where: {
+          competitionId: { in: competitionIds },
+          eventId:       { in: eventIds },
+          eptimEduCourseId: { not: null },
+        },
+        select: { competitionId: true, eptimEduCourseId: true, eptimEduCourseTitle: true },
+      })
+    : [];
+
+  // Build a deduplicated map: courseId → display name
+  // Competition-level first, then event-level overrides add any new courseIds
+  const courseEntries = new Map<string, string>(); // courseId → competitionName
+
+  for (const t of teams) {
+    const id = t.competition.eptimEduCourseId;
+    if (id && !courseEntries.has(id)) courseEntries.set(id, t.competition.name);
+  }
+  for (const ec of eventComps) {
+    const id = ec.eptimEduCourseId!;
+    if (!courseEntries.has(id)) {
+      const fallback = teams.find((t) => t.competitionId === ec.competitionId)?.competition.name ?? id;
+      courseEntries.set(id, ec.eptimEduCourseTitle ?? fallback);
+    }
+  }
+
+  if (courseEntries.size === 0) return [];
 
   const [coursesResult, enrolResult] = await Promise.allSettled([
     eptimEdu.courses(),
@@ -69,23 +104,17 @@ export async function getManagerCourseList(
     }
   }
 
-  const seen = new Set<string>();
-  const result: CourseInfo[] = [];
-  for (const comp of competitions) {
-    const courseId = comp.eptimEduCourseId!;
-    if (seen.has(courseId)) continue;
-    seen.add(courseId);
+  return [...courseEntries.entries()].map(([courseId, competitionName]) => {
     const course = courseMap.get(courseId);
-    result.push({
+    return {
       courseId,
-      title:           course?.title    ?? `Course ${courseId}`,
+      title:           course?.title     ?? `Course ${courseId}`,
       thumbnail:       course?.thumbnail ?? null,
       slug:            course?.slug      ?? "",
-      competitionName: comp.name,
+      competitionName,
       enrolled:        enrolledIds.has(courseId),
-    });
-  }
-  return result;
+    };
+  });
 }
 
 // ── GET — check account status + courses ─────────────────────────────────────
