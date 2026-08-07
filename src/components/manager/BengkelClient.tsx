@@ -172,10 +172,12 @@ function ManagerAccountSection() {
     } catch { /* ignore */ }
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     Promise.all([
-      reloadStatus(),
+      fetch("/api/v2/manager/lms/account")
+        .then((r) => r.json())
+        .then((j) => { if (j.registered !== undefined) setStatus(j); })
+        .catch(() => {}),
       fetch("/api/v2/manager/lms/contingent-managers")
         .then((r) => r.json())
         .then((j) => { if (j.courses) setManagersData(j); })

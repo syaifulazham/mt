@@ -800,7 +800,7 @@ export function ContestantsClient({ contingents }: { contingents: Contingent[] }
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [total, setTotal]           = useState(0);
   const [tabCounts, setTabCounts]   = useState({ ALL: 0, PRIMARY: 0, SECONDARY: 0, YOUTH: 0 });
-  const [loading, setLoading]       = useState(false);
+  const [loading, setLoading]       = useState(true);
   const [addOpen, setAddOpen]       = useState(false);
   const [bulkOpen, setBulkOpen]     = useState(false);
   const [viewing, setViewing]       = useState<Contestant | null>(null);
@@ -825,8 +825,9 @@ export function ContestantsClient({ contingents }: { contingents: Contingent[] }
     }
   }, [q, tab, ppkiOnly, page]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchContestants(); }, [fetchContestants]);
+  useEffect(() => {
+    Promise.resolve().then(() => fetchContestants());
+  }, [fetchContestants]);
 
   function handleTabChange(key: EduLevel | "ALL") { setTab(key); setPage(1); }
   function handleSearch() { setQ(searchInput); setPage(1); }
