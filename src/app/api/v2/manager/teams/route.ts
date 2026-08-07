@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "asc" },
       },
       teamEvents: {
+        where: { event: { status: { not: "DRAFT" } } },
         include: {
           event: { select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, needManagerAcceptance: true } },
         },
