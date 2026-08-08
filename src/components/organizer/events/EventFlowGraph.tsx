@@ -248,7 +248,10 @@ export function EventFlowGraph({ onClose }: { onClose: () => void }) {
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  // dragState holds coordinates — only read in event handlers, never during render
+  const dragState = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  // draggingId is state so NodeCard can re-render with the right cursor
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   // Fetch
   useEffect(() => {
@@ -269,13 +272,14 @@ export function EventFlowGraph({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     const pos = positions.get(id);
     if (!pos) return;
-    dragging.current = { id, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+    dragState.current = { id, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+    setDraggingId(id);
   }, [positions]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
-      if (!dragging.current) return;
-      const { id, startX, startY, origX, origY } = dragging.current;
+      if (!dragState.current) return;
+      const { id, startX, startY, origX, origY } = dragState.current;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       const newPos = { ...positions.get(id)!, x: origX + dx, y: origY + dy };
@@ -286,7 +290,7 @@ export function EventFlowGraph({ onClose }: { onClose: () => void }) {
       });
       setCanvas(canvasSize(new Map([...positions, [id, newPos]])));
     }
-    function onMouseUp() { dragging.current = null; }
+    function onMouseUp() { dragState.current = null; setDraggingId(null); }
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     return () => {
@@ -434,7 +438,7 @@ export function EventFlowGraph({ onClose }: { onClose: () => void }) {
                   key={node.id}
                   node={node}
                   pos={pos}
-                  dragging={dragging.current?.id === node.id}
+                  dragging={draggingId === node.id}
                   onMouseDown={(e) => onMouseDown(node.id, e)}
                 />
               );
