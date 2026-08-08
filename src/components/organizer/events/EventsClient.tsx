@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy,
+  Gavel, Copy, Network,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DeleteDialog } from "@/components/organizer/reference-data/DeleteDialog";
+import { EventFlowGraph } from "@/components/organizer/events/EventFlowGraph";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
 
@@ -1658,6 +1659,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false 
   const [pushFail,     setPushFail]     = useState(false);
   const [pushAllState, setPushAllState] = useState<"idle" | "running" | "done">("idle");
   const [pushProgress, setPushProgress] = useState<{ done: number; total: number } | null>(null);
+  const [showFlowGraph, setShowFlowGraph] = useState(false);
 
   const PAGE_SIZE = 20;
 
@@ -1777,6 +1779,13 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false 
       <aside className="w-64 shrink-0 flex flex-col border-r bg-white">
         <div className="px-4 py-3 border-b flex items-center gap-2">
           <span className="text-sm font-semibold flex-1">Events</span>
+          <button
+            onClick={() => setShowFlowGraph(true)}
+            className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500"
+            title="Graf Aliran Acara"
+          >
+            <Network className="h-3.5 w-3.5" />
+          </button>
           <Button variant="outline" size="sm" onClick={pushAll} disabled={pushAllState === "running"}
             className="h-6 text-[10px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 px-2">
             {pushAllState === "running"
@@ -1988,6 +1997,8 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {showFlowGraph && <EventFlowGraph onClose={() => setShowFlowGraph(false)} />}
     </div>
   );
 }
