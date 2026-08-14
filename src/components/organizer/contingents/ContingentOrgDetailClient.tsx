@@ -6,7 +6,7 @@ import {
   ArrowLeft, Users, UserCheck, Trophy,
   Search, Pencil, ChevronLeft, ChevronRight,
   School as SchoolIcon, Building2, MapPin, Loader2, X, Check, Trash2, AlertTriangle,
-  ChevronDown, Plus, Upload, Sparkles, Download,
+  ChevronDown, Plus, Upload, Sparkles, Download, UserPlus,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -844,10 +844,38 @@ function TeamsTab({ contingentId, teams }: {
   const [enrolling,    setEnrolling]    = useState<{ teamId: string; courseId: string } | null>(null);
   const [enrolError,   setEnrolError]   = useState<{ teamId: string; courseId: string; message: string } | null>(null);
 
+  const [registeringLms, setRegisteringLms] = useState<string | null>(null);
+  const [lmsRegError,    setLmsRegError]    = useState<Record<string, string>>({});
+
   // Seed enrolledMap from EptimEdu-verified course IDs returned by the API
   function seedEnrolled(teamId: string, detail: TeamDetail) {
     const ids = detail.enrolledCourseIds ?? [];
     setEnrolledMap((prev) => ({ ...prev, [teamId]: new Set(ids) }));
+  }
+
+  async function handleRegisterLms(teamId: string) {
+    setRegisteringLms(teamId);
+    setLmsRegError((prev) => { const n = { ...prev }; delete n[teamId]; return n; });
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/contingents/${contingentId}/teams/${teamId}/register-lms`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        setLmsRegError((prev) => ({ ...prev, [teamId]: json.error ?? "Registration failed." }));
+      } else {
+        setDetails((prev) => {
+          const d = prev[teamId];
+          if (!d) return prev;
+          return { ...prev, [teamId]: { ...d, lmsUserId: json.lmsUserId ?? d.lmsUserId } };
+        });
+      }
+    } catch {
+      setLmsRegError((prev) => ({ ...prev, [teamId]: "Network error. Please try again." }));
+    } finally {
+      setRegisteringLms(null);
+    }
   }
 
   async function handleEnrol(teamId: string, courseId: string, force = false) {
@@ -967,6 +995,22 @@ function TeamsTab({ contingentId, teams }: {
                       )}
                       {detail.email && (
                         <span className="text-zinc-400 font-mono">{detail.email}</span>
+                      )}
+                      {/* Register button — shown when team has email but no EptimEdu account */}
+                      {!detail.lmsUserId && detail.email && (
+                        <button
+                          type="button"
+                          disabled={registeringLms === t.id}
+                          onClick={() => handleRegisterLms(t.id)}
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-300 bg-blue-50 px-2.5 py-0.5 text-xs text-blue-700 font-semibold hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {registeringLms === t.id
+                            ? <><Loader2 className="h-3 w-3 animate-spin" /> Registering…</>
+                            : <><UserPlus className="h-3 w-3" /> Register in EptimEdu</>}
+                        </button>
+                      )}
+                      {lmsRegError[t.id] && (
+                        <span className="text-xs text-red-600">{lmsRegError[t.id]}</span>
                       )}
                     </div>
 

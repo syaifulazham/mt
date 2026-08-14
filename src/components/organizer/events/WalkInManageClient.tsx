@@ -19,7 +19,9 @@ type WalkInEndpointItem = {
 
 type WalkInCompSummary = {
   id: string; competitionId: string; picName: string | null; maxSlots: number;
-  publishToPortal: boolean; useViblockarena: boolean; viblockChallengeId: string | null; viblockChallengeLocked: boolean; judgingTemplatesLocked: boolean;
+  publishToPortal: boolean;
+  useViblockarena: boolean; useDronearena: boolean; useVibeblocks: boolean;
+  viblockChallengeId: string | null; viblockChallengeLocked: boolean; judgingTemplatesLocked: boolean;
   competition: { id: string; code: string; name: string };
   _count: { registrations: number };
   endpoints: WalkInEndpointItem[];
@@ -27,6 +29,12 @@ type WalkInCompSummary = {
 
 type ViblockChallenge = {
   id: string; name: string; description: string | null; challenge_mode: string; status: string; order_index: number;
+};
+
+type VibeBlocksEvent = {
+  event_id: string; challenge_id: string; name: string;
+  status: "draft" | "open" | "closed";
+  starts_at: string; ends_at: string; run_duration_sec: number;
 };
 
 type EventSummary = {
@@ -124,6 +132,9 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [unlockConfirm,            setUnlockConfirm]            = useState<{ code: string; target: "viblock" | "judging" } | null>(null);
   const [unlockInput,              setUnlockInput]              = useState("");
   const [togglingLock,             setTogglingLock]             = useState(false);
+  const [vibeBlocksEvents,         setVibeBlocksEvents]         = useState<VibeBlocksEvent[]>([]);
+  const [vibeBlocksEventsLoading,  setVibeBlocksEventsLoading]  = useState(false);
+  const [vibeBlocksActionId,       setVibeBlocksActionId]       = useState<string | null>(null);
 
   const loadRegistrations = useCallback(async (wicId: string, filter: string) => {
     setLoading(true);
@@ -200,6 +211,42 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     }
   }
 
+  async function vibeBlocksRegisterParticipant(regId: string) {
+    if (!selectedWic) return;
+    setVibeBlocksActionId(regId);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/vibeblocks`,
+        { method: "POST" },
+      );
+      const j = await res.json();
+      if (res.ok)
+        setRegistrations(prev => prev.map(r =>
+          r.id === regId ? { ...r, viblockToken: `${j.entryToken}:${j.entryId}` } : r,
+        ));
+    } finally {
+      setVibeBlocksActionId(null);
+    }
+  }
+
+  async function vibeBlocksRenewParticipantToken(regId: string) {
+    if (!selectedWic) return;
+    setVibeBlocksActionId(regId);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/vibeblocks`,
+        { method: "PATCH" },
+      );
+      const j = await res.json();
+      if (res.ok)
+        setRegistrations(prev => prev.map(r =>
+          r.id === regId ? { ...r, viblockToken: `${j.entryToken}:${j.entryId}` } : r,
+        ));
+    } finally {
+      setVibeBlocksActionId(null);
+    }
+  }
+
   // Load viblock challenges when selected competition has viblock enabled
   useEffect(() => {
     const id = setTimeout(() => {
@@ -214,6 +261,20 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     return () => clearTimeout(id);
   }, [selectedWic?.useViblockarena, event.id]);
 
+  // Load VibeBlocks events when selected competition has VibeBlocks enabled
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (!selectedWic?.useVibeblocks) { setVibeBlocksEvents([]); return; }
+      setVibeBlocksEventsLoading(true);
+      fetch(`/api/v2/organizer/events/${event.id}/walkin/vibeblocks-events`)
+        .then(r => r.json())
+        .then(j => setVibeBlocksEvents(j.events ?? []))
+        .catch(() => setVibeBlocksEvents([]))
+        .finally(() => setVibeBlocksEventsLoading(false));
+    }, 0);
+    return () => clearTimeout(id);
+  }, [selectedWic?.useVibeblocks, event.id]);
+
   async function setViblockChallenge(challengeId: string | null) {
     if (!selectedWic) return;
     setSavingChallenge(true);
@@ -222,6 +283,17 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
       body: JSON.stringify({ viblockChallengeId: challengeId }),
     });
     if (res.ok) updateWic(selectedWic.id, { viblockChallengeId: challengeId });
+    setSavingChallenge(false);
+  }
+
+  async function setVibeBlocksEvent(eventId: string | null) {
+    if (!selectedWic) return;
+    setSavingChallenge(true);
+    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viblockChallengeId: eventId }),
+    });
+    if (res.ok) updateWic(selectedWic.id, { viblockChallengeId: eventId });
     setSavingChallenge(false);
   }
 
@@ -718,6 +790,43 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                       </div>
                     )}
 
+                    {/* VibeBlocks Event */}
+                    {selectedWic.useVibeblocks && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                          <Gamepad2 className="h-3.5 w-3.5" /> VibeBlocks Competition Event
+                        </p>
+                        {vibeBlocksEventsLoading ? (
+                          <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading events…
+                          </div>
+                        ) : vibeBlocksEvents.length === 0 ? (
+                          <p className="text-xs text-zinc-400 italic">No events available from VibeBlocks.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <select
+                              value={selectedWic.viblockChallengeId ?? ""}
+                              onChange={(e) => setVibeBlocksEvent(e.target.value || null)}
+                              disabled={savingChallenge || selectedWic.viblockChallengeLocked}
+                              className="w-full rounded-md border border-input bg-background text-xs h-7 px-2 focus:outline-none focus:ring-1 focus:ring-emerald-300"
+                            >
+                              <option value="">— Tiada event dipilih —</option>
+                              {vibeBlocksEvents.map(ev => (
+                                <option key={ev.event_id} value={ev.event_id}>
+                                  {ev.name} ({ev.status})
+                                </option>
+                              ))}
+                            </select>
+                            {selectedWic.viblockChallengeId && (
+                              <p className="text-[10px] text-emerald-600">
+                                Event ID: <code className="font-mono">{selectedWic.viblockChallengeId}</code>
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Judging Templates */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -879,16 +988,17 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Status</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Masa Daftar</th>
                         {selectedWic?.useViblockarena && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Viblock</th>}
+                        {selectedWic?.useVibeblocks  && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">VibeBlocks</th>}
                         {canWrite && <th className="px-4 py-3 w-32" />}
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {loading ? (
-                        <tr><td colSpan={selectedWic?.useViblockarena ? 8 : 7} className="px-4 py-10 text-center text-zinc-400">
+                        <tr><td colSpan={(selectedWic?.useViblockarena || selectedWic?.useVibeblocks) ? 8 : 7} className="px-4 py-10 text-center text-zinc-400">
                           <Loader2 className="h-5 w-5 animate-spin mx-auto" />
                         </td></tr>
                       ) : registrations.length === 0 ? (
-                        <tr><td colSpan={selectedWic?.useViblockarena ? 8 : 7} className="px-4 py-10 text-center text-xs text-zinc-400">
+                        <tr><td colSpan={(selectedWic?.useViblockarena || selectedWic?.useVibeblocks) ? 8 : 7} className="px-4 py-10 text-center text-xs text-zinc-400">
                           Tiada pendaftaran{statusFilter !== "ALL" ? ` dengan status ${statusFilter}` : ""}.
                         </td></tr>
                       ) : registrations.map((reg, i) => (
@@ -947,6 +1057,38 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                               )}
                             </td>
                           )}
+                          {selectedWic?.useVibeblocks && (() => {
+                            const raw = reg.viblockToken ?? "";
+                            const idx = raw.indexOf(":");
+                            const entryToken = idx > 0 ? raw.slice(0, idx) : raw;
+                            return (
+                              <td className="px-4 py-3">
+                                {raw ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      {entryToken}
+                                    </span>
+                                    {canWrite && (
+                                      <button type="button" onClick={() => vibeBlocksRenewParticipantToken(reg.id)}
+                                        disabled={vibeBlocksActionId === reg.id}
+                                        className="p-1 rounded text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-40" title="Ganti token">
+                                        {vibeBlocksActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : canWrite ? (
+                                  <button type="button" onClick={() => vibeBlocksRegisterParticipant(reg.id)}
+                                    disabled={vibeBlocksActionId === reg.id}
+                                    className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors disabled:opacity-40">
+                                    {vibeBlocksActionId === reg.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gamepad2 className="h-3 w-3" />}
+                                    Daftar
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-zinc-400 italic">Belum didaftar</span>
+                                )}
+                              </td>
+                            );
+                          })()}
                           {canWrite && (
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1.5">

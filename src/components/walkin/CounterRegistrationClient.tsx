@@ -43,7 +43,7 @@ type ParticipantResult = {
   alreadyRegistered: boolean; registrationStatus: string | null;
   registrationId: string | null;
 };
-type RegisteredResult = { id: string; status: string; viblockToken?: string | null };
+type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null };
 type ScanResult = {
   id: string; alreadyConfirmed: boolean;
   participantName: string; ic: string | null; gender: string;
@@ -51,6 +51,7 @@ type ScanResult = {
   contingentName: string; contingentLogo: string | null;
   competitionCode: string; competitionName: string; eventName: string;
   viblockToken?: string | null;
+  vibeBlocksToken?: string | null;
 };
 
 const EDU_LABEL: Record<string, string> = {
@@ -335,6 +336,19 @@ function ConfirmCard({ result, onReset }: { result: ScanResult; onReset: () => v
           </div>
         )}
 
+        {/* VibeBlocks token */}
+        {result.vibeBlocksToken && (
+          <div className="rounded-xl px-4 py-3.5 border space-y-1.5"
+            style={{ background: "rgba(5,150,105,.15)", borderColor: "rgba(16,185,129,.4)" }}>
+            <p className="text-[9px] font-bold tracking-[0.25em] uppercase" style={{ color: "#6ee7b7" }}>
+              VibeBlocks Token
+            </p>
+            <p className="text-center text-2xl font-extrabold font-mono tracking-[0.35em] text-white">
+              {result.vibeBlocksToken}
+            </p>
+          </div>
+        )}
+
         {/* Accept + countdown */}
         <div className="space-y-2">
           <button type="button" onClick={handleAccept}
@@ -470,7 +484,11 @@ function CameraQrScanner({ onScan, onError }: {
 }
 
 /* ─── QR modal (after successful register) ──────────────────────────────── */
-function QrModal({ regId, name, viblockToken, onClose }: { regId: string; name: string; viblockToken?: string | null; onClose: () => void }) {
+function QrModal({ regId, name, viblockToken, vibeBlocksToken, onClose }: {
+  regId: string; name: string;
+  viblockToken?: string | null; vibeBlocksToken?: string | null;
+  onClose: () => void;
+}) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -498,6 +516,17 @@ function QrModal({ regId, name, viblockToken, onClose }: { regId: string; name: 
             </p>
             <p className="text-center text-xl font-extrabold font-mono tracking-[0.3em] text-white">
               {viblockToken}
+            </p>
+          </div>
+        )}
+        {vibeBlocksToken && (
+          <div className="w-full rounded-xl px-4 py-3 border space-y-1"
+            style={{ background: "rgba(5,150,105,.15)", borderColor: "rgba(16,185,129,.4)" }}>
+            <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: "#6ee7b7" }}>
+              VibeBlocks Token
+            </p>
+            <p className="text-center text-2xl font-extrabold font-mono tracking-[0.35em] text-white">
+              {vibeBlocksToken}
             </p>
           </div>
         )}
@@ -948,7 +977,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       </div>
 
       {regResult && (
-        <QrModal regId={regResult.id} name={selected?.name ?? "Peserta"} viblockToken={regResult.viblockToken} onClose={() => setRegResult(null)} />
+        <QrModal regId={regResult.id} name={selected?.name ?? "Peserta"} viblockToken={regResult.viblockToken} vibeBlocksToken={regResult.vibeBlocksToken} onClose={() => setRegResult(null)} />
       )}
     </div>
   );

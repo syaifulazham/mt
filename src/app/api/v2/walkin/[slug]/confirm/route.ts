@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { viblockCompetitionRegister, viblockConfigured } from "@/lib/viblock";
+import {
+  vibeBlocksConfigured, vibeBlocksRegisterEntry,
+  generateEntryToken, encodeVibeBlocksToken, parseVibeBlocksToken,
+} from "@/lib/vibeblocks";
 
 // POST — confirm a PENDING portal registration by scanning QR at the counter
 export async function POST(
@@ -42,6 +46,8 @@ export async function POST(
         select: {
           eventId: true,
           useViblockarena: true,
+          useVibeblocks: true,
+          viblockChallengeId: true,
           competition: { select: { code: true, name: true } },
           event: { select: { name: true } },
         },
@@ -62,6 +68,7 @@ export async function POST(
 
   const alreadyConfirmed = reg.status === "CONFIRMED";
   let viblockToken: string | null = reg.viblockToken;
+  let vibeBlocksToken: string | null = null; // entry_token shown to participant on confirm
 
   if (!alreadyConfirmed) {
     if (reg.status !== "PENDING")
@@ -79,19 +86,36 @@ export async function POST(
       } catch (e) {
         console.error("[viblock] competition register on confirm failed:", e);
       }
+    } else if (!viblockToken && reg.walkInCompetition?.useVibeblocks && vibeBlocksConfigured() && reg.walkInCompetition.viblockChallengeId) {
+      try {
+        const entryToken = generateEntryToken();
+        const vRes = await vibeBlocksRegisterEntry(reg.walkInCompetition.viblockChallengeId, {
+          entryToken,
+          partnerReference: registrationId,
+        });
+        viblockToken = encodeVibeBlocksToken(entryToken, vRes.entry_id);
+        vibeBlocksToken = entryToken;
+      } catch (e) {
+        console.error("[vibeblocks] register entry on confirm failed:", e);
+      }
     }
 
     await db.walkInRegistration.update({
       where: { id: registrationId },
       data: { status: "CONFIRMED", confirmedAt: new Date(), viblockToken },
     });
+  } else if (viblockToken && reg.walkInCompetition?.useVibeblocks) {
+    // Already confirmed — parse stored composite to surface the entry_token for display
+    const parsed = parseVibeBlocksToken(viblockToken);
+    if (parsed) vibeBlocksToken = parsed.entryToken;
   }
 
   return NextResponse.json({
     data: {
       id:             reg.id,
       alreadyConfirmed,
-      viblockToken,
+      viblockToken:     reg.walkInCompetition?.useViblockarena ? viblockToken : undefined,
+      vibeBlocksToken:  reg.walkInCompetition?.useVibeblocks  ? vibeBlocksToken : undefined,
       participantName: reg.participant.name,
       ic:              reg.participant.ic ? `••••••-••-${reg.participant.ic.slice(-4)}` : null,
       gender:          reg.participant.gender,

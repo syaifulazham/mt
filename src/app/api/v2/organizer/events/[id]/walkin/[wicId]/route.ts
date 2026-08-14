@@ -14,13 +14,15 @@ export async function PATCH(
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { wicId } = await params;
 
-  const { picName, picContact, maxSlots, publishToPortal, useViblockarena, useDronearena, viblockChallengeId, viblockChallengeLocked, judgingTemplatesLocked } = await req.json();
+  const { picName, picContact, maxSlots, publishToPortal, useViblockarena, useDronearena, useVibeblocks, viblockChallengeId, viblockChallengeLocked, judgingTemplatesLocked } = await req.json();
 
-  // Mutual exclusivity: turning one on turns the other off
-  let viblock = useViblockarena !== undefined ? Boolean(useViblockarena) : undefined;
-  let drone   = useDronearena   !== undefined ? Boolean(useDronearena)   : undefined;
-  if (viblock === true)  drone   = false;
-  if (drone   === true)  viblock = false;
+  // Mutual exclusivity: turning one bot on turns the others off
+  let viblock    = useViblockarena !== undefined ? Boolean(useViblockarena) : undefined;
+  let drone      = useDronearena   !== undefined ? Boolean(useDronearena)   : undefined;
+  let vibeblocks = useVibeblocks   !== undefined ? Boolean(useVibeblocks)   : undefined;
+  if (viblock    === true) { drone = false; vibeblocks = false; }
+  if (drone      === true) { viblock = false; vibeblocks = false; }
+  if (vibeblocks === true) { viblock = false; drone = false; }
 
   const wic = await db.eventWalkInCompetition.update({
     where: { id: wicId },
@@ -31,6 +33,7 @@ export async function PATCH(
       ...(publishToPortal     !== undefined && { publishToPortal:    Boolean(publishToPortal) }),
       ...(viblock             !== undefined && { useViblockarena:    viblock }),
       ...(drone               !== undefined && { useDronearena:      drone }),
+      ...(vibeblocks          !== undefined && { useVibeblocks:      vibeblocks }),
       ...(viblockChallengeId     !== undefined && { viblockChallengeId:     viblockChallengeId || null }),
       ...(viblockChallengeLocked !== undefined && { viblockChallengeLocked: Boolean(viblockChallengeLocked) }),
       ...(judgingTemplatesLocked !== undefined && { judgingTemplatesLocked: Boolean(judgingTemplatesLocked) }),

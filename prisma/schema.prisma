@@ -604,6 +604,7 @@ model EventWalkInCompetition {
   publishToPortal  Boolean  @default(false)
   useViblockarena    Boolean  @default(false)
   useDronearena      Boolean  @default(false)
+  useVibeblocks      Boolean  @default(false)
   viblockChallengeId     String?
   viblockChallengeLocked Boolean  @default(false)
   judgingTemplatesLocked Boolean  @default(false)

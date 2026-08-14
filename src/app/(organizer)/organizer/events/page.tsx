@@ -10,12 +10,13 @@ export default async function EventsPage() {
   const session = await getOrganizerSession();
   if (!session) redirect("/organizer/login");
 
-  const hasViblockKey = !!process.env.WALKIN_EPTIM_VIBLOCK_API_KEY;
-  const hasDroneKey   = !!process.env.WALKIN_EPTIM_DRONE_API_KEY;
+  const hasViblockKey     = !!process.env.WALKIN_EPTIM_VIBLOCK_API_KEY;
+  const hasDroneKey       = !!process.env.WALKIN_EPTIM_DRONE_API_KEY;
+  const hasVibeBlocksKey  = !!process.env.WALKIN_VIBEBLOCKS_API_KEY;
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <EventsClient role={session.role} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} />
+      <EventsClient role={session.role} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} />
     </OrganizerShell>
   );
 }
