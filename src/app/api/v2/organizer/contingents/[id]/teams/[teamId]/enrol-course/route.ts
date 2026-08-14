@@ -61,13 +61,27 @@ export async function POST(
         "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[
           Math.floor(Math.random() * 55)
         ]).join("");
-      const created = await eptimEdu.createUser({
-        username,
-        password,
-        name: team.name,
-        email: team.email,
-      });
-      lmsUserId = created.id;
+      try {
+        const created = await eptimEdu.createUser({
+          username,
+          password,
+          name: team.name,
+          email: team.email,
+        });
+        lmsUserId = created.id;
+      } catch (createErr: unknown) {
+        // Email already registered under a different username — look it up and reuse that account
+        if ((createErr as { status?: number })?.status === 409 && team.email) {
+          const found = await eptimEdu.findUserByEmail(team.email);
+          if (found?.exists && found.user) {
+            lmsUserId = found.user.id;
+          } else {
+            throw createErr;
+          }
+        } else {
+          throw createErr;
+        }
+      }
     }
 
     // 2. Check if already enrolled in this specific course

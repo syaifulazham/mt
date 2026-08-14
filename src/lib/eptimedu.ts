@@ -43,6 +43,15 @@ export const eptimEdu = {
     }
   },
 
+  findUserByEmail: async (email: string) => {
+    try {
+      return await req(`/api/v1/users?email=${encodeURIComponent(email)}`);
+    } catch (e: unknown) {
+      if ((e as { status?: number })?.status === 404) return null;
+      throw e;
+    }
+  },
+
   createUser: (data: { username: string; password: string; name?: string; email?: string }) =>
     req("/api/v1/users", { method: "POST", body: JSON.stringify(data) }),
 
