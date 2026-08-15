@@ -144,6 +144,7 @@ function RecipientsModal({ blast, onClose, onSaved }: {
   const [states, setStates]         = useState<State[]>([]);
   const [loading, setLoading]       = useState(false);
   const [saving, setSaving]         = useState(false);
+  const [showAdd, setShowAdd]       = useState(false);
 
   // Load meta lists + existing recipients
   useEffect(() => {
@@ -289,7 +290,19 @@ function RecipientsModal({ blast, onClose, onSaved }: {
             </div>
           )}
 
+          {/* Add Recipients toggle */}
+          {!showAdd && existing.length > 0 && (
+            <div className="px-5 py-4">
+              <button type="button" onClick={() => setShowAdd(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm rounded-md border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 font-medium">
+                <Plus className="h-4 w-4" /> Add Recipients
+              </button>
+            </div>
+          )}
+
           {/* Source tabs */}
+          {(showAdd || existing.length === 0) && (
+          <>
           <div className="flex border-b px-5">
             {TABS.map(({ key, label }) => (
               <button key={key} type="button" onClick={() => { setSource(key); setResults([]); setQ(""); setStateId(""); setEventId(""); }}
@@ -390,6 +403,8 @@ function RecipientsModal({ blast, onClose, onSaved }: {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
 
         <div className="flex items-center justify-between px-5 py-3 border-t shrink-0 bg-white">
