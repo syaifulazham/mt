@@ -134,7 +134,11 @@ function RecipientsModal({ blast, onClose, onSaved }: {
   const [eventId, setEventId]       = useState("");
   const [results, setResults]       = useState<Recipient[]>([]);
   const [pending, setPending]       = useState<Map<string, Recipient>>(new Map());
-  const [existing, setExisting]     = useState<{ id: string; email: string; name: string; meta: string | null }[]>([]);
+  const [existing, setExisting]     = useState<{
+    id: string; email: string; name: string; meta: string | null;
+    userType: "manager" | "organizer" | "custom";
+    contingent: string | null; state: string | null; event: string | null;
+  }[]>([]);
   const [manualText, setManualText] = useState("");
   const [events, setEvents]         = useState<Event[]>([]);
   const [states, setStates]         = useState<State[]>([]);
@@ -176,6 +180,20 @@ function RecipientsModal({ blast, onClose, onSaved }: {
     });
   }
 
+  function toggleAll() {
+    setPending(prev => {
+      const next = new Map(prev);
+      const selectable = results.filter(r => !existingEmails.has(r.email));
+      const allSelected = selectable.length > 0 && selectable.every(r => next.has(r.email));
+      if (allSelected) {
+        selectable.forEach(r => next.delete(r.email));
+      } else {
+        selectable.forEach(r => next.set(r.email, r));
+      }
+      return next;
+    });
+  }
+
   async function removeExisting(id: string) {
     await fetch(`/api/v2/organizer/email/blasts/${blast.id}/recipients/${id}`, { method: "DELETE" });
     setExisting(prev => prev.filter(r => r.id !== id));
@@ -210,7 +228,7 @@ function RecipientsModal({ blast, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
           <div>
             <h2 className="text-base font-semibold text-zinc-900">Recipients — {blast.title}</h2>
@@ -224,13 +242,49 @@ function RecipientsModal({ blast, onClose, onSaved }: {
           {existing.length > 0 && (
             <div className="px-5 py-3 border-b bg-zinc-50">
               <p className="text-xs font-medium text-zinc-500 mb-2">Current recipients ({existing.length})</p>
-              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                {existing.map(r => (
-                  <span key={r.id} className="inline-flex items-center gap-1 bg-white border border-zinc-200 text-zinc-700 text-xs px-2 py-0.5 rounded-full">
-                    {r.name}
-                    <button type="button" onClick={() => removeExisting(r.id)} className="hover:text-rose-600"><X className="h-3 w-3" /></button>
-                  </span>
-                ))}
+              <div className="max-h-56 overflow-y-auto border border-zinc-200 rounded-md bg-white">
+                <table className="w-full text-xs">
+                  <thead className="bg-zinc-100 sticky top-0">
+                    <tr className="text-left text-zinc-500">
+                      <th className="px-3 py-1.5 font-medium w-8">#</th>
+                      <th className="px-3 py-1.5 font-medium">Name</th>
+                      <th className="px-3 py-1.5 font-medium">Email</th>
+                      <th className="px-3 py-1.5 font-medium w-24">Type</th>
+                      <th className="px-3 py-1.5 font-medium w-28">State</th>
+                      <th className="px-3 py-1.5 font-medium">Contingent</th>
+                      <th className="px-3 py-1.5 font-medium">Event</th>
+                      <th className="px-3 py-1.5 w-8" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {existing.map((r, i) => (
+                      <tr key={r.id} className="hover:bg-zinc-50">
+                        <td className="px-3 py-1.5 text-zinc-400 tabular-nums">{i + 1}</td>
+                        <td className="px-3 py-1.5 font-medium text-zinc-800">{r.name}</td>
+                        <td className="px-3 py-1.5 text-zinc-500">{r.email}</td>
+                        <td className="px-3 py-1.5">
+                          <span className={cn(
+                            "inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold",
+                            r.userType === "manager"   && "bg-blue-50 text-blue-700",
+                            r.userType === "organizer" && "bg-violet-50 text-violet-700",
+                            r.userType === "custom"    && "bg-zinc-100 text-zinc-500",
+                          )}>
+                            {r.userType}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-zinc-500">{r.state ?? "—"}</td>
+                        <td className="px-3 py-1.5 text-zinc-500">{r.contingent ?? "—"}</td>
+                        <td className="px-3 py-1.5 text-zinc-500">{r.event ?? "—"}</td>
+                        <td className="px-3 py-1.5 text-center">
+                          <button type="button" onClick={() => removeExisting(r.id)} title="Remove recipient"
+                            className="text-zinc-300 hover:text-rose-600">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -288,20 +342,35 @@ function RecipientsModal({ blast, onClose, onSaved }: {
                     {source === "event" && !eventId ? "Select an event." : "No results."}
                   </div>
                 ) : (
-                  results.map(r => {
-                    const alreadyIn = existingEmails.has(r.email);
-                    return (
-                      <label key={r.email} className={cn("flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-zinc-50", alreadyIn && "opacity-40")}>
-                        <input type="checkbox" checked={pending.has(r.email)} disabled={alreadyIn}
-                          onChange={() => toggle(r)} className="accent-violet-600" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-zinc-800 truncate">{r.name}</p>
-                          <p className="text-xs text-zinc-400 truncate">{r.email}{r.meta ? ` · ${r.meta}` : ""}</p>
-                        </div>
-                        {alreadyIn && <span className="text-[10px] text-zinc-400">already added</span>}
-                      </label>
-                    );
-                  })
+                  <>
+                    {(() => {
+                      const selectable = results.filter(r => !existingEmails.has(r.email));
+                      const allSelected = selectable.length > 0 && selectable.every(r => pending.has(r.email));
+                      return (
+                        <label className="flex items-center gap-3 px-3 py-2 cursor-pointer bg-zinc-50 hover:bg-zinc-100 font-medium">
+                          <input type="checkbox" checked={allSelected} disabled={selectable.length === 0}
+                            onChange={toggleAll} className="accent-violet-600" />
+                          <span className="text-xs text-zinc-600">
+                            Select all ({selectable.length})
+                          </span>
+                        </label>
+                      );
+                    })()}
+                    {results.map(r => {
+                      const alreadyIn = existingEmails.has(r.email);
+                      return (
+                        <label key={r.email} className={cn("flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-zinc-50", alreadyIn && "opacity-40")}>
+                          <input type="checkbox" checked={pending.has(r.email)} disabled={alreadyIn}
+                            onChange={() => toggle(r)} className="accent-violet-600" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-zinc-800 truncate">{r.name}</p>
+                            <p className="text-xs text-zinc-400 truncate">{r.email}{r.meta ? ` · ${r.meta}` : ""}</p>
+                          </div>
+                          {alreadyIn && <span className="text-[10px] text-zinc-400">already added</span>}
+                        </label>
+                      );
+                    })}
+                  </>
                 )}
               </div>
             )}

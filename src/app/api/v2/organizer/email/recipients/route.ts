@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         manager: { select: { email: true, name: true } },
         contingent: { select: { name: true } },
       },
-      take: 100,
+      take: 500,
     });
 
     const recipients = managers.map((m) => ({
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
         contingent: { select: { name: true } },
       },
       distinct: ["managerId"],
-      take: 200,
+      take: 500,
     });
 
     const recipients = managers.map((m) => ({

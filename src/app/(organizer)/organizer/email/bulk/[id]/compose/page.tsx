@@ -6,7 +6,7 @@ import {
   ArrowLeft, Bold, Italic, Underline, List, ListOrdered, Minus,
   RemoveFormatting, Heading2, Heading3, Eye, EyeOff,
   Save, Loader2, CalendarClock, CheckCircle, ImageIcon, Paperclip, X,
-  LayoutTemplate,
+  LayoutTemplate, Link2, QrCode, Table2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EMAIL_HEADER_HTML, EMAIL_FOOTER_HTML } from "@/lib/email/templates";
@@ -22,7 +22,7 @@ type Blast = {
   status: string;
 };
 
-type InsertMode = "none" | "image" | "doc";
+type InsertMode = "none" | "image" | "doc" | "link" | "qrcode" | "table";
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -70,9 +70,20 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   const [insertLabel, setInsertLabel]   = useState("");
   const [uploading, setUploading]       = useState(false);
 
-  const editorRef  = useRef<HTMLDivElement>(null);
-  const imgFileRef = useRef<HTMLInputElement>(null);
-  const docFileRef = useRef<HTMLInputElement>(null);
+  // Hyperlink
+  const [linkUrl, setLinkUrl]           = useState("");
+  const [linkText, setLinkText]         = useState("");
+  // QR code
+  const [qrText, setQrText]             = useState("");
+  const [qrSize, setQrSize]             = useState(200);
+  // Table
+  const [tableRows, setTableRows]       = useState(3);
+  const [tableCols, setTableCols]       = useState(3);
+
+  const editorRef      = useRef<HTMLDivElement>(null);
+  const imgFileRef     = useRef<HTMLInputElement>(null);
+  const docFileRef     = useRef<HTMLInputElement>(null);
+  const savedRangeRef  = useRef<Range | null>(null);
 
   useEffect(() => {
     fetch(`/api/v2/organizer/email/blasts/${id}`)
@@ -139,6 +150,59 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
     setInsertMode("none");
     setInsertUrl("");
     setInsertLabel("");
+  }
+
+  function saveRange() {
+    const sel = window.getSelection();
+    savedRangeRef.current = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+  }
+
+  function restoreRange() {
+    const range = savedRangeRef.current;
+    if (!range) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function doInsertLink(url: string, text: string) {
+    if (!url) return;
+    const label = text.trim() || url;
+    const html = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#7c3aed;text-decoration:underline;">${label}</a>`;
+    editorRef.current?.focus();
+    restoreRange();
+    document.execCommand("insertHTML", false, html);
+    syncBody();
+    setInsertMode("none");
+    setLinkUrl(""); setLinkText("");
+  }
+
+  function doInsertQr(text: string, size: number) {
+    if (!text.trim()) return;
+    const encoded = encodeURIComponent(text.trim());
+    const src = `https://api.qrserver.com/v1/create-qr-code/?data=${encoded}&size=${size}x${size}&format=png`;
+    const html = `<div style="text-align:center;margin:12px 0;"><img src="${src}" alt="QR Code" width="${size}" height="${size}" style="display:block;margin:0 auto;border:1px solid #e5e7eb;padding:8px;background:#fff;border-radius:6px;" /></div><br/>`;
+    editorRef.current?.focus();
+    restoreRange();
+    document.execCommand("insertHTML", false, html);
+    syncBody();
+    setInsertMode("none");
+    setQrText("");
+  }
+
+  function doInsertTable(rows: number, cols: number) {
+    const cellStyle = "border:1px solid #d1d5db;padding:8px 12px;text-align:left;font-family:Arial,sans-serif;font-size:14px;";
+    const headerStyle = cellStyle + "background:#f3f4f6;font-weight:600;";
+    const headerRow = `<tr>${Array.from({ length: cols }, (_, c) => `<th style="${headerStyle}">Header ${c + 1}</th>`).join("")}</tr>`;
+    const bodyRows = Array.from({ length: rows - 1 }, (_, r) =>
+      `<tr>${Array.from({ length: cols }, () => `<td style="${cellStyle}">Cell</td>`).join("")}</tr>`
+    ).join("");
+    const html = `<table style="border-collapse:collapse;width:100%;margin:12px 0;">${headerRow}${bodyRows}</table><br/>`;
+    editorRef.current?.focus();
+    document.execCommand("insertHTML", false, html);
+    syncBody();
+    setInsertMode("none");
   }
 
   async function save() {
@@ -320,6 +384,22 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
                 className={cn("p-1 rounded text-zinc-600", insertMode === "doc" ? "bg-violet-100 text-violet-700" : "hover:bg-zinc-200")}>
                 <Paperclip className="h-4 w-4" />
               </button>
+              <span className="w-px bg-zinc-200 mx-1" />
+              <button type="button" title="Insert hyperlink"
+                onMouseDown={e => { e.preventDefault(); saveRange(); setInsertMode(m => m === "link" ? "none" : "link"); }}
+                className={cn("p-1 rounded text-zinc-600", insertMode === "link" ? "bg-blue-100 text-blue-700" : "hover:bg-zinc-200")}>
+                <Link2 className="h-4 w-4" />
+              </button>
+              <button type="button" title="Insert QR code"
+                onMouseDown={e => { e.preventDefault(); saveRange(); setInsertMode(m => m === "qrcode" ? "none" : "qrcode"); }}
+                className={cn("p-1 rounded text-zinc-600", insertMode === "qrcode" ? "bg-emerald-100 text-emerald-700" : "hover:bg-zinc-200")}>
+                <QrCode className="h-4 w-4" />
+              </button>
+              <button type="button" title="Insert table"
+                onClick={() => setInsertMode(m => m === "table" ? "none" : "table")}
+                className={cn("p-1 rounded text-zinc-600", insertMode === "table" ? "bg-amber-100 text-amber-700" : "hover:bg-zinc-200")}>
+                <Table2 className="h-4 w-4" />
+              </button>
             </div>
 
             {/* Image insert panel */}
@@ -391,6 +471,109 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
                   Insert
                 </button>
                 <button type="button" onClick={() => { setInsertMode("none"); setInsertUrl(""); setInsertLabel(""); }}
+                  className="text-zinc-400 hover:text-zinc-700 shrink-0">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Hyperlink panel */}
+            {insertMode === "link" && (
+              <div className="border border-t-0 border-zinc-200 bg-blue-50 px-3 py-2 flex flex-wrap items-center gap-2">
+                <Link2 className="h-4 w-4 text-blue-400 shrink-0" />
+                <input
+                  placeholder="https://…"
+                  value={linkUrl}
+                  onChange={e => setLinkUrl(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && doInsertLink(linkUrl, linkText)}
+                  className="flex-1 min-w-[160px] text-sm border border-zinc-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                <input
+                  placeholder="Link text (optional)"
+                  value={linkText}
+                  onChange={e => setLinkText(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && doInsertLink(linkUrl, linkText)}
+                  className="w-40 text-sm border border-zinc-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 shrink-0"
+                />
+                <button type="button" disabled={!linkUrl} onClick={() => doInsertLink(linkUrl, linkText)}
+                  className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 shrink-0">
+                  Insert
+                </button>
+                <button type="button" onClick={() => { setInsertMode("none"); setLinkUrl(""); setLinkText(""); }}
+                  className="text-zinc-400 hover:text-zinc-700 shrink-0">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* QR code panel */}
+            {insertMode === "qrcode" && (
+              <div className="border border-t-0 border-zinc-200 bg-emerald-50 px-3 py-2 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <QrCode className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <input
+                    placeholder="Text or URL to encode…"
+                    value={qrText}
+                    onChange={e => setQrText(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && doInsertQr(qrText, qrSize)}
+                    className="flex-1 min-w-[200px] text-sm border border-zinc-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                  />
+                  <select
+                    value={qrSize}
+                    onChange={e => setQrSize(Number(e.target.value))}
+                    className="text-sm border border-zinc-200 rounded px-2 py-1 bg-white focus:outline-none shrink-0"
+                  >
+                    <option value={100}>100 px</option>
+                    <option value={150}>150 px</option>
+                    <option value={200}>200 px</option>
+                    <option value={250}>250 px</option>
+                    <option value={300}>300 px</option>
+                  </select>
+                  <button type="button" disabled={!qrText.trim()} onClick={() => doInsertQr(qrText, qrSize)}
+                    className="text-xs px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 shrink-0">
+                    Insert QR
+                  </button>
+                  <button type="button" onClick={() => { setInsertMode("none"); setQrText(""); }}
+                    className="text-zinc-400 hover:text-zinc-700 shrink-0">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {qrText.trim() && (
+                  <div className="flex items-center gap-3 pl-6">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrText.trim())}&size=${qrSize}x${qrSize}&format=png`}
+                      alt="QR preview"
+                      width={64} height={64}
+                      className="border border-zinc-200 rounded bg-white p-1"
+                    />
+                    <p className="text-xs text-emerald-700">Live preview · will be inserted as hosted image (email-safe)</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Table panel */}
+            {insertMode === "table" && (
+              <div className="border border-t-0 border-zinc-200 bg-amber-50 px-3 py-2 flex flex-wrap items-center gap-3">
+                <Table2 className="h-4 w-4 text-amber-500 shrink-0" />
+                <span className="text-xs text-zinc-600 shrink-0">Rows</span>
+                <input
+                  type="number" min={2} max={20} value={tableRows}
+                  onChange={e => setTableRows(Math.max(2, Math.min(20, Number(e.target.value))))}
+                  className="w-16 text-sm border border-zinc-200 rounded px-2 py-1 bg-white focus:outline-none text-center"
+                />
+                <span className="text-xs text-zinc-600 shrink-0">Cols</span>
+                <input
+                  type="number" min={1} max={10} value={tableCols}
+                  onChange={e => setTableCols(Math.max(1, Math.min(10, Number(e.target.value))))}
+                  className="w-16 text-sm border border-zinc-200 rounded px-2 py-1 bg-white focus:outline-none text-center"
+                />
+                <span className="text-xs text-zinc-400 shrink-0">(first row = header)</span>
+                <button type="button" onClick={() => doInsertTable(tableRows, tableCols)}
+                  className="text-xs px-3 py-1 rounded bg-amber-600 text-white hover:bg-amber-700 shrink-0">
+                  Insert Table
+                </button>
+                <button type="button" onClick={() => setInsertMode("none")}
                   className="text-zinc-400 hover:text-zinc-700 shrink-0">
                   <X className="h-4 w-4" />
                 </button>
