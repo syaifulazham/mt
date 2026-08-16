@@ -91,17 +91,23 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
       .then((d: Blast) => {
         setBlast(d);
         setSubject(d.subject ?? "");
-        const body = d.htmlBody ?? "";
-        setHtmlBody(body);
+        setHtmlBody(d.htmlBody ?? "");
         setIncludeHeader(d.includeHeader ?? true);
         setIncludeFooter(d.includeFooter ?? true);
         setScheduledAt(d.scheduledAt ? new Date(d.scheduledAt).toISOString().slice(0, 16) : "");
         setScheduleEnabled(!!d.scheduledAt);
-        if (editorRef.current) editorRef.current.innerHTML = body;
       })
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Populate the editor once loading finishes and the div is mounted
+  useEffect(() => {
+    if (!loading && editorRef.current) {
+      editorRef.current.innerHTML = htmlBody;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   function syncBody() {
     const html = editorRef.current?.innerHTML ?? "";
