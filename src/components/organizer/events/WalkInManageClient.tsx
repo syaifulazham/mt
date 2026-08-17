@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -129,6 +129,10 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [viblockChallenges,       setViblockChallenges]       = useState<ViblockChallenge[]>([]);
   const [viblockChallengesLoading, setViblockChallengesLoading] = useState(false);
   const [savingChallenge,          setSavingChallenge]          = useState(false);
+
+  // ── Drone challenges ──
+  const [droneChallenges,        setDroneChallenges]        = useState<{ id: string; name: string; status: string }[]>([]);
+  const [droneChallengesLoading, setDroneChallengesLoading] = useState(false);
   const [unlockConfirm,            setUnlockConfirm]            = useState<{ code: string; target: "viblock" | "judging" } | null>(null);
   const [unlockInput,              setUnlockInput]              = useState("");
   const [togglingLock,             setTogglingLock]             = useState(false);
@@ -162,6 +166,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   }, [selectedWic, statusFilter, loadRegistrations]);
 
   const [viblockActionId, setViblockActionId] = useState<string | null>(null);
+  const [droneActionId,   setDroneActionId]   = useState<string | null>(null);
 
   async function viblockRegisterParticipant(regId: string) {
     if (!selectedWic) return;
@@ -247,6 +252,72 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     }
   }
 
+  async function droneRegisterParticipant(regId: string) {
+    if (!selectedWic) return;
+    setDroneActionId(regId);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/drone`,
+        { method: "POST" },
+      );
+      const j = await res.json();
+      if (res.ok) {
+        const stored = (j.competitionToken && j.endpointId)
+          ? `${j.userid}|${j.password}|${j.accessToken}|${j.competitionToken}|${j.endpointId}`
+          : `${j.userid}|${j.password}|${j.accessToken}`;
+        setRegistrations(prev => prev.map(r =>
+          r.id === regId ? { ...r, viblockToken: stored } : r,
+        ));
+      }
+    } finally {
+      setDroneActionId(null);
+    }
+  }
+
+  async function droneRefreshToken(regId: string) {
+    if (!selectedWic) return;
+    setDroneActionId(regId);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/drone`,
+        { method: "PATCH" },
+      );
+      const j = await res.json();
+      if (res.ok)
+        setRegistrations(prev => prev.map(r => {
+          if (r.id !== regId || !r.viblockToken) return r;
+          const stored = (j.competitionToken && j.endpointId)
+            ? `${j.userid}|${j.password}|${j.accessToken}|${j.competitionToken}|${j.endpointId}`
+            : `${j.userid}|${j.password}|${j.accessToken}`;
+          return { ...r, viblockToken: stored };
+        }));
+    } finally {
+      setDroneActionId(null);
+    }
+  }
+
+  async function droneNewToken(regId: string) {
+    if (!selectedWic) return;
+    setDroneActionId(regId);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/drone?force=true`,
+        { method: "POST" },
+      );
+      const j = await res.json();
+      if (res.ok) {
+        const stored = (j.competitionToken && j.endpointId)
+          ? `${j.userid}|${j.password}|${j.accessToken}|${j.competitionToken}|${j.endpointId}`
+          : `${j.userid}|${j.password}|${j.accessToken}`;
+        setRegistrations(prev => prev.map(r =>
+          r.id === regId ? { ...r, viblockToken: stored } : r,
+        ));
+      }
+    } finally {
+      setDroneActionId(null);
+    }
+  }
+
   // Load viblock challenges when selected competition has viblock enabled
   useEffect(() => {
     const id = setTimeout(() => {
@@ -275,6 +346,20 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     return () => clearTimeout(id);
   }, [selectedWic?.useVibeblocks, event.id]);
 
+  // Load Drone challenges when selected competition has Drone enabled
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (!selectedWic?.useDronearena) { setDroneChallenges([]); return; }
+      setDroneChallengesLoading(true);
+      fetch(`/api/v2/organizer/events/${event.id}/walkin/drone-challenges`)
+        .then(r => r.json())
+        .then(j => setDroneChallenges(j.challenges ?? []))
+        .catch(() => setDroneChallenges([]))
+        .finally(() => setDroneChallengesLoading(false));
+    }, 0);
+    return () => clearTimeout(id);
+  }, [selectedWic?.useDronearena, event.id]);
+
   async function setViblockChallenge(challengeId: string | null) {
     if (!selectedWic) return;
     setSavingChallenge(true);
@@ -294,6 +379,17 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
       body: JSON.stringify({ viblockChallengeId: eventId }),
     });
     if (res.ok) updateWic(selectedWic.id, { viblockChallengeId: eventId });
+    setSavingChallenge(false);
+  }
+
+  async function setDroneChallenge(challengeId: string | null) {
+    if (!selectedWic) return;
+    setSavingChallenge(true);
+    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viblockChallengeId: challengeId }),
+    });
+    if (res.ok) updateWic(selectedWic.id, { viblockChallengeId: challengeId });
     setSavingChallenge(false);
   }
 
@@ -827,6 +923,43 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                       </div>
                     )}
 
+                    {/* Drone Challenge */}
+                    {selectedWic.useDronearena && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                          <Gamepad2 className="h-3.5 w-3.5" /> Eptim Drone Challenge
+                        </p>
+                        {droneChallengesLoading ? (
+                          <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading challenges…
+                          </div>
+                        ) : droneChallenges.length === 0 ? (
+                          <p className="text-xs text-zinc-400 italic">No challenges available from Eptim Drone.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <select
+                              value={selectedWic.viblockChallengeId ?? ""}
+                              onChange={(e) => setDroneChallenge(e.target.value || null)}
+                              disabled={savingChallenge}
+                              className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400 disabled:opacity-60"
+                            >
+                              <option value="">— Tiada challenge dipilih —</option>
+                              {droneChallenges.map(ch => (
+                                <option key={ch.id} value={ch.id}>
+                                  {ch.name} ({ch.status})
+                                </option>
+                              ))}
+                            </select>
+                            {selectedWic.viblockChallengeId && (
+                              <p className="text-[10px] text-sky-600">
+                                Challenge ID: <code className="font-mono">{selectedWic.viblockChallengeId}</code>
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Judging Templates */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -989,16 +1122,17 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Masa Daftar</th>
                         {selectedWic?.useViblockarena && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Viblock</th>}
                         {selectedWic?.useVibeblocks  && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">VibeBlocks</th>}
+                        {selectedWic?.useDronearena  && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Drone</th>}
                         {canWrite && <th className="px-4 py-3 w-32" />}
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {loading ? (
-                        <tr><td colSpan={(selectedWic?.useViblockarena || selectedWic?.useVibeblocks) ? 8 : 7} className="px-4 py-10 text-center text-zinc-400">
+                        <tr><td colSpan={(canWrite ? 7 : 6) + (selectedWic?.useViblockarena ? 1 : 0) + (selectedWic?.useVibeblocks ? 1 : 0) + (selectedWic?.useDronearena ? 1 : 0)} className="px-4 py-10 text-center text-zinc-400">
                           <Loader2 className="h-5 w-5 animate-spin mx-auto" />
                         </td></tr>
                       ) : registrations.length === 0 ? (
-                        <tr><td colSpan={(selectedWic?.useViblockarena || selectedWic?.useVibeblocks) ? 8 : 7} className="px-4 py-10 text-center text-xs text-zinc-400">
+                        <tr><td colSpan={(canWrite ? 7 : 6) + (selectedWic?.useViblockarena ? 1 : 0) + (selectedWic?.useVibeblocks ? 1 : 0) + (selectedWic?.useDronearena ? 1 : 0)} className="px-4 py-10 text-center text-xs text-zinc-400">
                           Tiada pendaftaran{statusFilter !== "ALL" ? ` dengan status ${statusFilter}` : ""}.
                         </td></tr>
                       ) : registrations.map((reg, i) => (
@@ -1081,6 +1215,54 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                                     disabled={vibeBlocksActionId === reg.id}
                                     className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors disabled:opacity-40">
                                     {vibeBlocksActionId === reg.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gamepad2 className="h-3 w-3" />}
+                                    Daftar
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-zinc-400 italic">Belum didaftar</span>
+                                )}
+                              </td>
+                            );
+                          })()}
+                          {selectedWic?.useDronearena && (() => {
+                            const raw = reg.viblockToken ?? "";
+                            const parts = raw.split("|");
+                            const isDrone = (parts.length === 3 || parts.length === 5) && !!parts[0] && !!parts[1] && !!parts[2];
+                            const droneUserId = isDrone ? parts[0] : null;
+                            const competitionToken = isDrone && parts.length === 5 ? parts[3] : null;
+                            return (
+                              <td className="px-4 py-3">
+                                {isDrone ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                                        {droneUserId}
+                                      </span>
+                                      {canWrite && (
+                                        <>
+                                          <button type="button" onClick={() => droneRefreshToken(reg.id)}
+                                            disabled={droneActionId === reg.id}
+                                            className="p-1 rounded text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-40" title="Refresh token (jana semula access token)">
+                                            {droneActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                          </button>
+                                          <button type="button" onClick={() => droneNewToken(reg.id)}
+                                            disabled={droneActionId === reg.id}
+                                            className="p-1 rounded text-violet-500 hover:text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-40" title="Token baharu (daftar semula sepenuhnya)">
+                                            {droneActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                    {competitionToken && (
+                                      <span className="inline-flex items-center text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700 border border-cyan-200 tracking-widest">
+                                        {competitionToken}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : canWrite ? (
+                                  <button type="button" onClick={() => droneRegisterParticipant(reg.id)}
+                                    disabled={droneActionId === reg.id}
+                                    className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors disabled:opacity-40">
+                                    {droneActionId === reg.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gamepad2 className="h-3 w-3" />}
                                     Daftar
                                   </button>
                                 ) : (

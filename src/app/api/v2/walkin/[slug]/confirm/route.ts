@@ -5,6 +5,10 @@ import {
   vibeBlocksConfigured, vibeBlocksRegisterEntry,
   generateEntryToken, encodeVibeBlocksToken, parseVibeBlocksToken,
 } from "@/lib/vibeblocks";
+import {
+  droneConfigured, droneRegisterParticipant, encodeDroneToken, parseDroneToken,
+  droneListEndpoints, droneGetOrCreateCompetitionToken, deriveDroneUserId,
+} from "@/lib/drone";
 
 // POST — confirm a PENDING portal registration by scanning QR at the counter
 export async function POST(
@@ -29,7 +33,7 @@ export async function POST(
   const reg = await db.walkInRegistration.findUnique({
     where: { id: registrationId },
     select: {
-      id: true, walkInCompetitionId: true, participantId: true, status: true, confirmedAt: true, viblockToken: true,
+      id: true, walkInCompetitionId: true, participantId: true, contingentId: true, status: true, confirmedAt: true, viblockToken: true,
       participant: {
         select: {
           name: true, ic: true, gender: true, eduLevel: true, classGrade: true,
@@ -47,6 +51,7 @@ export async function POST(
           eventId: true,
           useViblockarena: true,
           useVibeblocks: true,
+          useDronearena: true,
           viblockChallengeId: true,
           competition: { select: { code: true, name: true } },
           event: { select: { name: true } },
@@ -69,6 +74,7 @@ export async function POST(
   const alreadyConfirmed = reg.status === "CONFIRMED";
   let viblockToken: string | null = reg.viblockToken;
   let vibeBlocksToken: string | null = null; // entry_token shown to participant on confirm
+  let droneToken: { userid: string; password: string; accessToken: string; competitionToken?: string | null } | null = null;
 
   if (!alreadyConfirmed) {
     if (reg.status !== "PENDING")
@@ -98,6 +104,35 @@ export async function POST(
       } catch (e) {
         console.error("[vibeblocks] register entry on confirm failed:", e);
       }
+    } else if (!viblockToken && reg.walkInCompetition?.useDronearena && droneConfigured()) {
+      try {
+        const sectorCustomId = (reg.contingentId ?? "").slice(-16);
+        const droneUserId = deriveDroneUserId(reg.participantId);
+        const result = await droneRegisterParticipant({
+          sectorName:     reg.participant.contingent?.name ?? reg.contingent.name,
+          sectorRegion:   reg.participant.contingent?.state?.name ?? "",
+          sectorCustomId,
+          userid:         droneUserId,
+          fullName:       reg.participant.name,
+        });
+        let competitionToken: string | null = null;
+        let endpointId: string | null = null;
+        try {
+          const { endpoints } = await droneListEndpoints();
+          const activeEndpoint = endpoints.find(ep => ep.is_active);
+          if (activeEndpoint) {
+            const tokenData = await droneGetOrCreateCompetitionToken(activeEndpoint.id, droneUserId);
+            competitionToken = tokenData.token;
+            endpointId = activeEndpoint.id;
+          }
+        } catch (e) {
+          console.error("[drone] competition token on confirm failed:", e);
+        }
+        viblockToken = encodeDroneToken(result.userid, result.password, result.accessToken, competitionToken ?? undefined, endpointId ?? undefined);
+        droneToken = { ...result, competitionToken };
+      } catch (e) {
+        console.error("[drone] register on confirm failed:", e);
+      }
     }
 
     await db.walkInRegistration.update({
@@ -108,6 +143,10 @@ export async function POST(
     // Already confirmed — parse stored composite to surface the entry_token for display
     const parsed = parseVibeBlocksToken(viblockToken);
     if (parsed) vibeBlocksToken = parsed.entryToken;
+  } else if (viblockToken && reg.walkInCompetition?.useDronearena) {
+    // Already confirmed — parse stored composite drone token for display
+    const parsed = parseDroneToken(viblockToken);
+    if (parsed) droneToken = { userid: parsed.userid, password: parsed.password, accessToken: parsed.accessToken, competitionToken: parsed.competitionToken };
   }
 
   return NextResponse.json({
@@ -116,6 +155,7 @@ export async function POST(
       alreadyConfirmed,
       viblockToken:     reg.walkInCompetition?.useViblockarena ? viblockToken : undefined,
       vibeBlocksToken:  reg.walkInCompetition?.useVibeblocks  ? vibeBlocksToken : undefined,
+      droneToken:       reg.walkInCompetition?.useDronearena   ? droneToken : undefined,
       participantName: reg.participant.name,
       ic:              reg.participant.ic ? `••••••-••-${reg.participant.ic.slice(-4)}` : null,
       gender:          reg.participant.gender,

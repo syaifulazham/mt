@@ -43,7 +43,8 @@ type ParticipantResult = {
   alreadyRegistered: boolean; registrationStatus: string | null;
   registrationId: string | null;
 };
-type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null };
+type DroneTokenData = { userid: string; password: string; accessToken: string; competitionToken?: string | null };
+type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null; droneToken?: DroneTokenData | null };
 type ScanResult = {
   id: string; alreadyConfirmed: boolean;
   participantName: string; ic: string | null; gender: string;
@@ -52,6 +53,7 @@ type ScanResult = {
   competitionCode: string; competitionName: string; eventName: string;
   viblockToken?: string | null;
   vibeBlocksToken?: string | null;
+  droneToken?: DroneTokenData | null;
 };
 
 const EDU_LABEL: Record<string, string> = {
@@ -349,6 +351,31 @@ function ConfirmCard({ result, onReset }: { result: ScanResult; onReset: () => v
           </div>
         )}
 
+        {/* Drone Simulator token */}
+        {result.droneToken && (
+          <div className="w-full rounded-xl px-4 py-3 border space-y-2"
+            style={{ background: "rgba(14,165,233,.12)", borderColor: "rgba(56,189,248,.4)" }}>
+            <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: "#7dd3fc" }}>
+              Drone Simulator
+            </p>
+            {result.droneToken.competitionToken && (
+              <div className="rounded-lg px-3 py-2 text-center" style={{ background: "rgba(56,189,248,.15)" }}>
+                <p className="text-[8px] uppercase tracking-widest mb-0.5" style={{ color: "rgba(125,211,252,.7)" }}>Terminal Token</p>
+                <p className="text-2xl font-extrabold font-mono tracking-[0.35em] text-white">{result.droneToken.competitionToken}</p>
+              </div>
+            )}
+            <div className="space-y-1">
+              {([["User ID", result.droneToken.userid], ["Password", result.droneToken.password]] as [string, string][]).map(([label, val]) => (
+                <div key={label} className="flex justify-between items-center gap-2">
+                  <span className="text-[9px] text-white/50 uppercase">{label}</span>
+                  <span className="text-xs font-mono font-bold text-white">{val}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[8px] text-center" style={{ color: "rgba(125,211,252,.6)" }}>Token disediakan — log masuk ke simulator drone</p>
+          </div>
+        )}
+
         {/* Accept + countdown */}
         <div className="space-y-2">
           <button type="button" onClick={handleAccept}
@@ -484,9 +511,10 @@ function CameraQrScanner({ onScan, onError }: {
 }
 
 /* ─── QR modal (after successful register) ──────────────────────────────── */
-function QrModal({ regId, name, viblockToken, vibeBlocksToken, onClose }: {
+function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, onClose }: {
   regId: string; name: string;
   viblockToken?: string | null; vibeBlocksToken?: string | null;
+  droneToken?: DroneTokenData | null;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -528,6 +556,29 @@ function QrModal({ regId, name, viblockToken, vibeBlocksToken, onClose }: {
             <p className="text-center text-2xl font-extrabold font-mono tracking-[0.35em] text-white">
               {vibeBlocksToken}
             </p>
+          </div>
+        )}
+        {droneToken && (
+          <div className="w-full rounded-xl px-4 py-3 border space-y-2"
+            style={{ background: "rgba(14,165,233,.12)", borderColor: "rgba(56,189,248,.4)" }}>
+            <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: "#7dd3fc" }}>
+              Drone Simulator
+            </p>
+            {droneToken.competitionToken && (
+              <div className="rounded-lg px-3 py-2 text-center" style={{ background: "rgba(56,189,248,.15)" }}>
+                <p className="text-[8px] uppercase tracking-widest mb-0.5" style={{ color: "rgba(125,211,252,.7)" }}>Terminal Token</p>
+                <p className="text-2xl font-extrabold font-mono tracking-[0.35em] text-white">{droneToken.competitionToken}</p>
+              </div>
+            )}
+            <div className="space-y-1">
+              {([["User ID", droneToken.userid], ["Password", droneToken.password]] as [string, string][]).map(([label, val]) => (
+                <div key={label} className="flex justify-between items-center gap-2">
+                  <span className="text-[9px] text-white/50 uppercase">{label}</span>
+                  <span className="text-xs font-mono font-bold text-white">{val}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[8px] text-center" style={{ color: "rgba(125,211,252,.6)" }}>Token disediakan — log masuk ke simulator drone</p>
           </div>
         )}
         <button type="button" onClick={onClose}
@@ -977,7 +1028,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       </div>
 
       {regResult && (
-        <QrModal regId={regResult.id} name={selected?.name ?? "Peserta"} viblockToken={regResult.viblockToken} vibeBlocksToken={regResult.vibeBlocksToken} onClose={() => setRegResult(null)} />
+        <QrModal regId={regResult.id} name={selected?.name ?? "Peserta"} viblockToken={regResult.viblockToken} vibeBlocksToken={regResult.vibeBlocksToken} droneToken={regResult.droneToken} onClose={() => setRegResult(null)} />
       )}
     </div>
   );

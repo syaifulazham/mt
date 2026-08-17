@@ -6,6 +6,10 @@ import {
   vibeBlocksConfigured, vibeBlocksRegisterEntry,
   generateEntryToken, encodeVibeBlocksToken,
 } from "@/lib/vibeblocks";
+import {
+  droneConfigured, droneRegisterParticipant, encodeDroneToken,
+  droneListEndpoints, droneGetOrCreateCompetitionToken, deriveDroneUserId,
+} from "@/lib/drone";
 
 export async function POST(
   req: NextRequest,
@@ -32,7 +36,7 @@ export async function POST(
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId, eventId: endpoint.eventId },
-    select: { id: true, maxSlots: true, useViblockarena: true, useVibeblocks: true, viblockChallengeId: true, _count: { select: { registrations: true } } },
+    select: { id: true, maxSlots: true, useViblockarena: true, useVibeblocks: true, useDronearena: true, viblockChallengeId: true, _count: { select: { registrations: true } } },
   });
   if (!wic) return NextResponse.json({ error: "COMPETITION_NOT_FOUND" }, { status: 404 });
   if (wic.maxSlots > 0 && wic._count.registrations >= wic.maxSlots)
@@ -55,6 +59,7 @@ export async function POST(
   // Register to Viblock Arena if configured and enabled
   let viblockToken: string | null = null;
   let vibeBlocksToken: string | null = null; // entry_token shown to participant
+  let droneToken: { userid: string; password: string; accessToken: string; competitionToken?: string | null } | null = null;
   if (wic.useViblockarena && viblockConfigured()) {
     try {
       const vRes = await viblockCompetitionRegister({
@@ -78,6 +83,36 @@ export async function POST(
     } catch (e) {
       console.error("[vibeblocks] register entry failed:", e);
     }
+  } else if (wic.useDronearena && droneConfigured()) {
+    try {
+      const sectorCustomId = (participant.contingentId ?? "").slice(-16);
+      const droneUserId = deriveDroneUserId(participantId);
+      const result = await droneRegisterParticipant({
+        sectorName:     participant.contingent?.name ?? "Unknown",
+        sectorRegion:   participant.contingent?.state?.name ?? "",
+        sectorCustomId,
+        userid:         droneUserId,
+        fullName:       participant.name,
+      });
+      // Try to generate a competition terminal token
+      let competitionToken: string | null = null;
+      let endpointId: string | null = null;
+      try {
+        const { endpoints } = await droneListEndpoints();
+        const activeEndpoint = endpoints.find(ep => ep.is_active);
+        if (activeEndpoint) {
+          const tokenData = await droneGetOrCreateCompetitionToken(activeEndpoint.id, droneUserId);
+          competitionToken = tokenData.token;
+          endpointId = activeEndpoint.id;
+        }
+      } catch (e) {
+        console.error("[drone] competition token failed:", e);
+      }
+      viblockToken = encodeDroneToken(result.userid, result.password, result.accessToken, competitionToken ?? undefined, endpointId ?? undefined);
+      droneToken = { ...result, competitionToken };
+    } catch (e) {
+      console.error("[drone] register failed:", e);
+    }
   }
 
   try {
@@ -94,7 +129,7 @@ export async function POST(
       },
       select: { id: true, status: true },
     });
-    return NextResponse.json({ data: { ...reg, viblockToken, vibeBlocksToken } }, { status: 201 });
+    return NextResponse.json({ data: { ...reg, viblockToken, vibeBlocksToken, droneToken } }, { status: 201 });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
       return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });

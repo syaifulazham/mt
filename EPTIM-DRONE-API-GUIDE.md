@@ -1,6 +1,6 @@
 # EPTIM Drone API Guide
 
-Third-party REST API for managing users, sectors, authentication, and retrieving results for drone competition events.
+Third-party REST API for managing users, sectors, authentication, competition endpoints, participant tokens, and retrieving results for drone competition events.
 
 ---
 
@@ -379,21 +379,6 @@ GET /challenges/{challenge_id}/attempts
       "phase": "completed",
       "session_kind": "automation",
       "submitted_at": "2026-06-18T14:30:00.000Z"
-    },
-    {
-      "attempt_id": "uuid-attempt-2",
-      "user_id": "uuid-1",
-      "full_name": "Ahmad Razif",
-      "email": "pilot@school.edu",
-      "pilot_handle": "razif_ace",
-      "sector_custom_id": "SMK-TM-2026",
-      "sector_name": "SMK Taman Melawati",
-      "score": 72,
-      "max_score": 100,
-      "elapsed_seconds": 45.1,
-      "phase": "completed",
-      "session_kind": "automation",
-      "submitted_at": "2026-06-18T13:15:00.000Z"
     }
   ]
 }
@@ -538,6 +523,220 @@ Returns `"available": false` if a user with that userid already exists.
 
 ---
 
+## Competition End-points & Participant Tokens
+
+When **Competition Mode** is enabled for an event, organizers can create **End-points** -- passcode-protected access points for physical competition terminals. Each participant receives a **single-use 6-character alphanumeric token** (A-Z, 0-9) that they enter at a terminal to identify themselves.
+
+### How it works
+
+1. **Organizer creates an End-point** with a passcode (via the dashboard or API).
+2. **Organizer enters the passcode on physical terminals** (one passcode can be shared across multiple terminals).
+3. **Tokens are generated** for participants (one per participant per endpoint).
+4. **Participant enters their 6-character token** at the terminal.
+5. **Terminal validates the token** via the API -- the token is consumed (single-use).
+
+---
+
+### 13. List Competition End-points
+
+Returns all competition endpoints for the event.
+
+```
+GET /endpoints
+```
+
+**Response (200):**
+
+```json
+{
+  "event_id": "uuid-of-event",
+  "endpoints": [
+    {
+      "id": "uuid-endpoint-1",
+      "name": "Hall A Terminals",
+      "passcode_prefix": "AB12...",
+      "is_active": true,
+      "created_at": "2026-08-17T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### 14. Generate Participant Token
+
+Generates a single-use 6-character token for a participant on a specific endpoint.
+
+```
+POST /endpoints/{endpoint_id}/tokens
+```
+
+**Request Body (by user_id):**
+
+```json
+{
+  "user_id": "uuid-of-user"
+}
+```
+
+**Request Body (by email):**
+
+```json
+{
+  "email": "pilot@school.edu"
+}
+```
+
+**Request Body (by userid):**
+
+```json
+{
+  "userid": "STU-2026-001"
+}
+```
+
+**Response (201):**
+
+```json
+{
+  "id": "uuid-of-token-row",
+  "endpoint_id": "uuid-endpoint-1",
+  "event_id": "uuid-of-event",
+  "user_id": "uuid-of-user",
+  "token": "K7M2XP",
+  "is_used": false,
+  "created_at": "2026-08-17T08:05:00.000Z"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `token` | The 6-character alphanumeric code (A-Z, 0-9). Give this to the participant. |
+
+**Errors:**
+- `404` - Endpoint or user not found
+- `400` - Endpoint is disabled
+- `409` - Token already exists for this user on this endpoint (use PUT to regenerate)
+
+---
+
+### 15. Regenerate Participant Token
+
+Replaces an existing token with a new one. The old token becomes invalid. The new token is marked as unused.
+
+```
+PUT /endpoints/{endpoint_id}/tokens/{user_identifier}
+```
+
+`{user_identifier}` can be a **user UUID**, an **email**, or a **userid** (e.g. `STU-2026-001`).
+
+**Response (200):**
+
+```json
+{
+  "id": "uuid-of-token-row",
+  "endpoint_id": "uuid-endpoint-1",
+  "event_id": "uuid-of-event",
+  "user_id": "uuid-of-user",
+  "token": "R3N9WQ",
+  "is_used": false,
+  "created_at": "2026-08-17T08:05:00.000Z"
+}
+```
+
+**Errors:**
+- `404` - Endpoint, user, or existing token not found
+
+---
+
+### 16. List Tokens for an Endpoint
+
+Returns all participant tokens for a specific endpoint, with user profile information.
+
+```
+GET /endpoints/{endpoint_id}/tokens
+```
+
+**Response (200):**
+
+```json
+{
+  "endpoint_id": "uuid-endpoint-1",
+  "endpoint_name": "Hall A Terminals",
+  "tokens": [
+    {
+      "id": "uuid-token-1",
+      "user_id": "uuid-1",
+      "full_name": "Ahmad Razif",
+      "email": "pilot@school.edu",
+      "pilot_handle": "razif_ace",
+      "token": "K7M2XP",
+      "is_used": false,
+      "used_at": null,
+      "created_at": "2026-08-17T08:05:00.000Z"
+    },
+    {
+      "id": "uuid-token-2",
+      "user_id": "uuid-2",
+      "full_name": "Siti Aminah",
+      "email": "siti@school.edu",
+      "pilot_handle": null,
+      "token": "W4J8BN",
+      "is_used": true,
+      "used_at": "2026-08-17T09:30:00.000Z",
+      "created_at": "2026-08-17T08:05:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### 17. Validate & Consume Token (Terminal Use)
+
+Called by the competition terminal to validate a participant's token. If valid, the token is **consumed** (marked as used) and the participant's identity is returned.
+
+```
+POST /endpoints/{endpoint_id}/validate
+```
+
+**Request Body:**
+
+```json
+{
+  "passcode": "AB12CD34",
+  "token": "K7M2XP"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `passcode` | Yes | The endpoint passcode entered on the terminal |
+| `token` | Yes | The 6-character participant token |
+
+**Response (200) -- Token valid and consumed:**
+
+```json
+{
+  "valid": true,
+  "user_id": "uuid-of-user",
+  "full_name": "Ahmad Razif",
+  "email": "pilot@school.edu",
+  "pilot_handle": "razif_ace",
+  "token": "K7M2XP",
+  "consumed_at": "2026-08-17T09:15:00.000Z"
+}
+```
+
+**Errors:**
+- `401` - Invalid passcode
+- `404` - Endpoint not found or invalid token
+- `400` - Endpoint is disabled
+- `410` - Token has already been used
+
+---
+
 ## Error Responses
 
 All errors follow this format:
@@ -555,10 +754,11 @@ All errors follow this format:
 | 200 | Success |
 | 201 | Created successfully |
 | 400 | Bad request (missing or invalid parameters) |
-| 401 | Invalid or missing API key / Invalid credentials |
+| 401 | Invalid or missing API key / Invalid credentials / Invalid passcode |
 | 403 | Forbidden (user not in event sector) |
 | 404 | Resource not found |
 | 409 | Conflict (duplicate) |
+| 410 | Gone (token already used) |
 | 500 | Internal server error |
 
 ---
@@ -631,6 +831,43 @@ curl -X GET "$BASE/sectors/SMK-TM-2026/results" \
 
 ---
 
+## Example Workflow: Competition Terminal Tokens
+
+```bash
+API_KEY="eptdk_your_key_here"
+BASE="https://htttbsoeihchbeyrqdfp.supabase.co/functions/v1/eptim-api"
+
+# 1. List available endpoints
+curl -X GET "$BASE/endpoints" \
+  -H "X-API-Key: $API_KEY"
+
+# 2. Generate a token for a specific participant
+curl -X POST "$BASE/endpoints/ENDPOINT_UUID/tokens" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "userid": "STU-001" }'
+
+# 3. List all tokens for an endpoint
+curl -X GET "$BASE/endpoints/ENDPOINT_UUID/tokens" \
+  -H "X-API-Key: $API_KEY"
+
+# 4. Regenerate a token (e.g. participant lost their token)
+curl -X PUT "$BASE/endpoints/ENDPOINT_UUID/tokens/STU-001" \
+  -H "X-API-Key: $API_KEY"
+
+# 5. Terminal validates a participant's token
+#    (called by the terminal software when participant enters their code)
+curl -X POST "$BASE/endpoints/ENDPOINT_UUID/validate" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "passcode": "AB12CD34",
+    "token": "K7M2XP"
+  }'
+```
+
+---
+
 ## Security Best Practices
 
 1. **HTTPS Only** - All requests must use HTTPS (enforced by Supabase).
@@ -638,6 +875,8 @@ curl -X GET "$BASE/sectors/SMK-TM-2026/results" \
 3. **Key Rotation** - If a key is compromised, revoke it immediately from the event dashboard and create a new one.
 4. **Minimal Scope** - Each API key is scoped to a single event. Create separate keys for separate integrations.
 5. **Monitor Usage** - Check the "Last Used" timestamp in the dashboard to detect unauthorized access.
+6. **Token Security** - Participant tokens are single-use. Once validated, they cannot be reused. Regenerate tokens if a participant's token is compromised.
+7. **Passcode Protection** - Endpoint passcodes are stored hashed (SHA-256). Keep passcodes secret to authorized terminal operators.
 
 ---
 
@@ -655,3 +894,6 @@ The API follows Supabase Edge Function limits:
 - The `custom_id` field on sectors is your integration key. Use a stable identifier from your system (school code, organization ID, etc.) so you can reference sectors without storing UUIDs.
 - Users created via `userid` get a synthetic email. They can log in using either their userid or the full synthetic email.
 - The `access_token` from `/auth/token` is a standard Supabase JWT that can be used with the Supabase client SDK for real-time features.
+- Participant tokens are 6 characters, uppercase alphanumeric (A-Z, 0-9) for easy reading and typing on competition terminals.
+- One endpoint can be used across multiple physical terminals - they all share the same passcode.
+- Each participant can have one token per endpoint. To reset a used token, use the regenerate endpoint (PUT).
