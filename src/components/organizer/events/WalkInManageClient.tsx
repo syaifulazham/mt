@@ -1227,35 +1227,31 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                             const raw = reg.viblockToken ?? "";
                             const parts = raw.split("|");
                             const isDrone = (parts.length === 3 || parts.length === 5) && !!parts[0] && !!parts[1] && !!parts[2];
-                            const droneUserId = isDrone ? parts[0] : null;
                             const competitionToken = isDrone && parts.length === 5 ? parts[3] : null;
                             return (
                               <td className="px-4 py-3">
                                 {isDrone ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <div className="flex items-center gap-1">
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
-                                        {droneUserId}
-                                      </span>
-                                      {canWrite && (
-                                        <>
-                                          <button type="button" onClick={() => droneRefreshToken(reg.id)}
-                                            disabled={droneActionId === reg.id}
-                                            className="p-1 rounded text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-40" title="Refresh token (jana semula access token)">
-                                            {droneActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                                          </button>
-                                          <button type="button" onClick={() => droneNewToken(reg.id)}
-                                            disabled={droneActionId === reg.id}
-                                            className="p-1 rounded text-violet-500 hover:text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-40" title="Token baharu (daftar semula sepenuhnya)">
-                                            {droneActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
-                                          </button>
-                                        </>
-                                      )}
-                                    </div>
-                                    {competitionToken && (
-                                      <span className="inline-flex items-center text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700 border border-cyan-200 tracking-widest">
+                                  <div className="flex items-center gap-1">
+                                    {competitionToken ? (
+                                      <span className="inline-flex items-center text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 border border-cyan-200 tracking-widest">
                                         {competitionToken}
                                       </span>
+                                    ) : (
+                                      <span className="text-[10px] text-zinc-400 italic">—</span>
+                                    )}
+                                    {canWrite && (
+                                      <>
+                                        <button type="button" onClick={() => droneRefreshToken(reg.id)}
+                                          disabled={droneActionId === reg.id}
+                                          className="p-1 rounded text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-40" title="Refresh token (jana semula access token)">
+                                          {droneActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                        </button>
+                                        <button type="button" onClick={() => droneNewToken(reg.id)}
+                                          disabled={droneActionId === reg.id}
+                                          className="p-1 rounded text-violet-500 hover:text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-40" title="Token baharu (daftar semula sepenuhnya)">
+                                          {droneActionId === reg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+                                        </button>
+                                      </>
                                     )}
                                   </div>
                                 ) : canWrite ? (
