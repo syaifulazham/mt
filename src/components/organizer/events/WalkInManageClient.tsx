@@ -22,6 +22,11 @@ type WalkInCompSummary = {
   publishToPortal: boolean;
   useViblockarena: boolean; useDronearena: boolean; useVibeblocks: boolean;
   viblockChallengeId: string | null; viblockChallengeLocked: boolean; judgingTemplatesLocked: boolean;
+  vibeBlocksChallengeId: string | null;
+  vibeBlocksEventName: string | null;
+  vibeBlocksStartsAt: string | null;
+  vibeBlocksEndsAt: string | null;
+  vibeBlocksRunDurationSec: number | null;
   competition: { id: string; code: string; name: string };
   _count: { registrations: number };
   endpoints: WalkInEndpointItem[];
@@ -31,10 +36,8 @@ type ViblockChallenge = {
   id: string; name: string; description: string | null; challenge_mode: string; status: string; order_index: number;
 };
 
-type VibeBlocksEvent = {
-  event_id: string; challenge_id: string; name: string;
-  status: "draft" | "open" | "closed";
-  starts_at: string; ends_at: string; run_duration_sec: number;
+type VibeBlocksChallenge = {
+  id: string; name: string; challenge_mode: string; status: string;
 };
 
 type EventSummary = {
@@ -92,6 +95,18 @@ function QrModal({ regId, participantName, competitionName, onClose }: {
   );
 }
 
+function isoToDateTimeLocal(isoStr: string | null | undefined): string {
+  if (!isoStr) return "";
+  // Strip milliseconds and timezone suffix to produce YYYY-MM-DDTHH:MM for datetime-local
+  return isoStr.replace(/\.\d+Z?$/, "").replace("Z", "").slice(0, 16);
+}
+
+function dateTimeLocalToISO(dtLocal: string): string {
+  if (!dtLocal) return "";
+  // Treat datetime-local value as UTC by appending 'Z'
+  return dtLocal.length >= 16 ? dtLocal.slice(0, 16) + ":00.000Z" : dtLocal;
+}
+
 export function WalkInManageClient({ event, canWrite }: { event: EventSummary; canWrite: boolean }) {
   const [wicList,       setWicList]       = useState<WalkInCompSummary[]>(event.walkInCompetitions);
   const [selectedWic,   setSelectedWic]   = useState<WalkInCompSummary | null>(
@@ -136,9 +151,14 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [unlockConfirm,            setUnlockConfirm]            = useState<{ code: string; target: "viblock" | "judging" } | null>(null);
   const [unlockInput,              setUnlockInput]              = useState("");
   const [togglingLock,             setTogglingLock]             = useState(false);
-  const [vibeBlocksEvents,         setVibeBlocksEvents]         = useState<VibeBlocksEvent[]>([]);
-  const [vibeBlocksEventsLoading,  setVibeBlocksEventsLoading]  = useState(false);
-  const [vibeBlocksActionId,       setVibeBlocksActionId]       = useState<string | null>(null);
+  const [vibeBlocksChallenges,         setVibeBlocksChallenges]         = useState<VibeBlocksChallenge[]>([]);
+  const [vibeBlocksChallengesLoading,  setVibeBlocksChallengesLoading]  = useState(false);
+  const [vibeBlocksActionId,           setVibeBlocksActionId]           = useState<string | null>(null);
+  const [vibeBlocksCreateForm, setVibeBlocksCreateForm] = useState({
+    challengeId: "", name: "", startsAt: "", endsAt: "", runDurationSec: 3600,
+  });
+  const [vibeBlocksCreating, setVibeBlocksCreating] = useState(false);
+  const [vibeBlocksUpdating, setVibeBlocksUpdating] = useState(false);
 
   const loadRegistrations = useCallback(async (wicId: string, filter: string) => {
     setLoading(true);
@@ -332,19 +352,19 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     return () => clearTimeout(id);
   }, [selectedWic?.useViblockarena, event.id]);
 
-  // Load VibeBlocks events when selected competition has VibeBlocks enabled
+  // Load VibeBlocks challenges when selected competition has VibeBlocks enabled
   useEffect(() => {
     const id = setTimeout(() => {
-      if (!selectedWic?.useVibeblocks) { setVibeBlocksEvents([]); return; }
-      setVibeBlocksEventsLoading(true);
-      fetch(`/api/v2/organizer/events/${event.id}/walkin/vibeblocks-events`)
+      if (!selectedWic?.useVibeblocks) { setVibeBlocksChallenges([]); return; }
+      setVibeBlocksChallengesLoading(true);
+      fetch("/api/v2/organizer/vibeblocks/challenges")
         .then(r => r.json())
-        .then(j => setVibeBlocksEvents(j.events ?? []))
-        .catch(() => setVibeBlocksEvents([]))
-        .finally(() => setVibeBlocksEventsLoading(false));
+        .then(j => setVibeBlocksChallenges(j.challenges ?? []))
+        .catch(() => setVibeBlocksChallenges([]))
+        .finally(() => setVibeBlocksChallengesLoading(false));
     }, 0);
     return () => clearTimeout(id);
-  }, [selectedWic?.useVibeblocks, event.id]);
+  }, [selectedWic?.useVibeblocks]);
 
   // Load Drone challenges when selected competition has Drone enabled
   useEffect(() => {
@@ -360,6 +380,84 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     return () => clearTimeout(id);
   }, [selectedWic?.useDronearena, event.id]);
 
+  // Initialise VibeBlocks form when switching to a different WIC
+  useEffect(() => {
+    if (!selectedWic) return;
+    setVibeBlocksCreateForm({
+      challengeId:    selectedWic.vibeBlocksChallengeId ?? "",
+      name:           selectedWic.vibeBlocksEventName ?? "",
+      startsAt:       isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt),
+      endsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt),
+      runDurationSec: selectedWic.vibeBlocksRunDurationSec ?? 3600,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWic?.id]);
+
+  async function createVibeBlocksEvent() {
+    if (!selectedWic) return;
+    setVibeBlocksCreating(true);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/vibeblocks-event`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            challengeId:    vibeBlocksCreateForm.challengeId,
+            name:           vibeBlocksCreateForm.name,
+            startsAt:       dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+            endsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+            runDurationSec: vibeBlocksCreateForm.runDurationSec,
+          }),
+        },
+      );
+      const j = await res.json();
+      if (res.ok) {
+        updateWic(selectedWic.id, {
+          viblockChallengeId:      j.eventId,
+          vibeBlocksChallengeId:   vibeBlocksCreateForm.challengeId,
+          vibeBlocksEventName:     vibeBlocksCreateForm.name,
+          vibeBlocksStartsAt:      dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+          vibeBlocksEndsAt:        dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+          vibeBlocksRunDurationSec: vibeBlocksCreateForm.runDurationSec,
+        });
+      }
+    } finally {
+      setVibeBlocksCreating(false);
+    }
+  }
+
+  async function updateVibeBlocksEvent() {
+    if (!selectedWic) return;
+    setVibeBlocksUpdating(true);
+    try {
+      const res = await fetch(
+        `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/vibeblocks-event`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name:           vibeBlocksCreateForm.name,
+            startsAt:       dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+            endsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+            runDurationSec: vibeBlocksCreateForm.runDurationSec,
+          }),
+        },
+      );
+      const j = await res.json();
+      if (res.ok && j.updated) {
+        updateWic(selectedWic.id, {
+          vibeBlocksEventName:     vibeBlocksCreateForm.name,
+          vibeBlocksStartsAt:      dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+          vibeBlocksEndsAt:        dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+          vibeBlocksRunDurationSec: vibeBlocksCreateForm.runDurationSec,
+        });
+      }
+    } finally {
+      setVibeBlocksUpdating(false);
+    }
+  }
+
   async function setViblockChallenge(challengeId: string | null) {
     if (!selectedWic) return;
     setSavingChallenge(true);
@@ -368,17 +466,6 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
       body: JSON.stringify({ viblockChallengeId: challengeId }),
     });
     if (res.ok) updateWic(selectedWic.id, { viblockChallengeId: challengeId });
-    setSavingChallenge(false);
-  }
-
-  async function setVibeBlocksEvent(eventId: string | null) {
-    if (!selectedWic) return;
-    setSavingChallenge(true);
-    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ viblockChallengeId: eventId }),
-    });
-    if (res.ok) updateWic(selectedWic.id, { viblockChallengeId: eventId });
     setSavingChallenge(false);
   }
 
@@ -886,40 +973,102 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                       </div>
                     )}
 
-                    {/* VibeBlocks Event */}
+                    {/* VibeBlocks Competition Event */}
                     {selectedWic.useVibeblocks && (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <p className="text-xs text-zinc-500 flex items-center gap-1.5">
                           <Gamepad2 className="h-3.5 w-3.5" /> VibeBlocks Competition Event
                         </p>
-                        {vibeBlocksEventsLoading ? (
-                          <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                            <Loader2 className="h-3 w-3 animate-spin" /> Loading events…
-                          </div>
-                        ) : vibeBlocksEvents.length === 0 ? (
-                          <p className="text-xs text-zinc-400 italic">No events available from VibeBlocks.</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            <select
-                              value={selectedWic.viblockChallengeId ?? ""}
-                              onChange={(e) => setVibeBlocksEvent(e.target.value || null)}
-                              disabled={savingChallenge || selectedWic.viblockChallengeLocked}
-                              className="w-full rounded-md border border-input bg-background text-xs h-7 px-2 focus:outline-none focus:ring-1 focus:ring-emerald-300"
-                            >
-                              <option value="">— Tiada event dipilih —</option>
-                              {vibeBlocksEvents.map(ev => (
-                                <option key={ev.event_id} value={ev.event_id}>
-                                  {ev.name} ({ev.status})
-                                </option>
-                              ))}
-                            </select>
-                            {selectedWic.viblockChallengeId && (
-                              <p className="text-[10px] text-emerald-600">
-                                Event ID: <code className="font-mono">{selectedWic.viblockChallengeId}</code>
-                              </p>
-                            )}
+                        {selectedWic.viblockChallengeId && (
+                          <div className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-[11px] text-emerald-700">
+                            Event ID: <code className="font-mono">{selectedWic.viblockChallengeId}</code>
                           </div>
                         )}
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[11px] text-zinc-400 block mb-0.5">Challenge</label>
+                            {vibeBlocksChallengesLoading ? (
+                              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Loading challenges…
+                              </div>
+                            ) : (
+                              <select
+                                value={vibeBlocksCreateForm.challengeId}
+                                onChange={e => setVibeBlocksCreateForm(f => ({ ...f, challengeId: e.target.value }))}
+                                disabled={!!selectedWic.viblockChallengeId}
+                                className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
+                              >
+                                <option value="">— Select challenge —</option>
+                                {vibeBlocksChallenges.map(ch => (
+                                  <option key={ch.id} value={ch.id}>
+                                    {ch.name} ({ch.challenge_mode})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-zinc-400 block mb-0.5">Event Name</label>
+                            <input
+                              type="text"
+                              value={vibeBlocksCreateForm.name}
+                              onChange={e => setVibeBlocksCreateForm(f => ({ ...f, name: e.target.value }))}
+                              placeholder="Competition name"
+                              className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[11px] text-zinc-400 block mb-0.5">Start (UTC)</label>
+                              <input
+                                type="datetime-local"
+                                value={vibeBlocksCreateForm.startsAt}
+                                onChange={e => setVibeBlocksCreateForm(f => ({ ...f, startsAt: e.target.value }))}
+                                className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] text-zinc-400 block mb-0.5">End (UTC)</label>
+                              <input
+                                type="datetime-local"
+                                value={vibeBlocksCreateForm.endsAt}
+                                onChange={e => setVibeBlocksCreateForm(f => ({ ...f, endsAt: e.target.value }))}
+                                className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-zinc-400 block mb-0.5">Run duration (seconds)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={vibeBlocksCreateForm.runDurationSec}
+                              onChange={e => setVibeBlocksCreateForm(f => ({ ...f, runDurationSec: Number(e.target.value) }))}
+                              className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                            />
+                          </div>
+                          {!selectedWic.viblockChallengeId ? (
+                            <Button
+                              size="sm"
+                              onClick={createVibeBlocksEvent}
+                              disabled={vibeBlocksCreating || !vibeBlocksCreateForm.challengeId || !vibeBlocksCreateForm.name}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
+                            >
+                              {vibeBlocksCreating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                              Create Event
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={updateVibeBlocksEvent}
+                              disabled={vibeBlocksUpdating || !vibeBlocksCreateForm.name}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
+                            >
+                              {vibeBlocksUpdating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                              Update Event
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     )}
 

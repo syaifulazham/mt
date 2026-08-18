@@ -25,7 +25,9 @@ export default async function WalkInManagePage({
         orderBy: { createdAt: "asc" },
         select: {
           id: true, competitionId: true, picName: true, maxSlots: true,
-          publishToPortal: true, useViblockarena: true, useDronearena: true, useVibeblocks: true, viblockChallengeId: true, viblockChallengeLocked: true, judgingTemplatesLocked: true,
+          publishToPortal: true, useViblockarena: true, useDronearena: true, useVibeblocks: true,
+          viblockChallengeId: true, viblockChallengeLocked: true, judgingTemplatesLocked: true,
+          vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksStartsAt: true, vibeBlocksEndsAt: true, vibeBlocksRunDurationSec: true,
           competition: { select: { id: true, code: true, name: true } },
           _count: { select: { registrations: true } },
           endpoints: {
@@ -45,9 +47,19 @@ export default async function WalkInManagePage({
 
   if (!event) redirect("/organizer/events");
 
+  // Serialize Date fields to strings for the client component
+  const serializedEvent = {
+    ...event,
+    walkInCompetitions: event.walkInCompetitions.map(wic => ({
+      ...wic,
+      vibeBlocksStartsAt: wic.vibeBlocksStartsAt?.toISOString() ?? null,
+      vibeBlocksEndsAt:   wic.vibeBlocksEndsAt?.toISOString() ?? null,
+    })),
+  };
+
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <WalkInManageClient event={event} canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)} />
+      <WalkInManageClient event={serializedEvent} canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)} />
     </OrganizerShell>
   );
 }

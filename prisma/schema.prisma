@@ -605,7 +605,12 @@ model EventWalkInCompetition {
   useViblockarena    Boolean  @default(false)
   useDronearena      Boolean  @default(false)
   useVibeblocks      Boolean  @default(false)
-  viblockChallengeId     String?
+  viblockChallengeId       String?
+  vibeBlocksChallengeId    String?
+  vibeBlocksEventName      String?
+  vibeBlocksStartsAt       DateTime?
+  vibeBlocksEndsAt         DateTime?
+  vibeBlocksRunDurationSec Int?
   viblockChallengeLocked Boolean  @default(false)
   judgingTemplatesLocked Boolean  @default(false)
   createdAt              DateTime @default(now())

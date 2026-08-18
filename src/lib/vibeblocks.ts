@@ -176,6 +176,48 @@ export async function vibeBlocksQueryResults(eventId: string, entryIds: string[]
   );
 }
 
+export type VibeBlocksCreateEventRequest = {
+  event_id: string;
+  challenge_id: string;
+  name: string;
+  starts_at: string;
+  ends_at: string;
+  run_duration_sec: number;
+};
+
+export type VibeBlocksCreateEventResponse = {
+  event_id: string;
+  challenge_id: string;
+  name: string;
+  status: string;
+  starts_at: string;
+  ends_at: string;
+  run_duration_sec: number;
+  already_exists: boolean;
+};
+
+export type VibeBlocksUpdateEventResponse = {
+  event_id: string;
+  updated: boolean;
+};
+
+export async function vibeBlocksCreateEvent(opts: VibeBlocksCreateEventRequest) {
+  return req<VibeBlocksCreateEventResponse>("/v1/partner/events", {
+    method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
+
+export async function vibeBlocksUpdateEvent(
+  eventId: string,
+  patch: Partial<Pick<VibeBlocksCreateEventRequest, "name" | "starts_at" | "ends_at" | "run_duration_sec">> & { status?: "open" | "closed" },
+) {
+  return req<VibeBlocksUpdateEventResponse>(`/v1/partner/events/${encodeURIComponent(eventId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 export const vibeBlocks = {
   configured: vibeBlocksConfigured,
   health: vibeBlocksHealth,
@@ -184,4 +226,6 @@ export const vibeBlocks = {
   registerEntry: vibeBlocksRegisterEntry,
   replaceToken: vibeBlocksReplaceToken,
   queryResults: vibeBlocksQueryResults,
+  createEvent: vibeBlocksCreateEvent,
+  updateEvent: vibeBlocksUpdateEvent,
 };

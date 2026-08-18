@@ -14,7 +14,12 @@ export async function PATCH(
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { wicId } = await params;
 
-  const { picName, picContact, maxSlots, publishToPortal, useViblockarena, useDronearena, useVibeblocks, viblockChallengeId, viblockChallengeLocked, judgingTemplatesLocked } = await req.json();
+  const {
+    picName, picContact, maxSlots, publishToPortal,
+    useViblockarena, useDronearena, useVibeblocks,
+    viblockChallengeId, viblockChallengeLocked, judgingTemplatesLocked,
+    vibeBlocksChallengeId, vibeBlocksEventName, vibeBlocksStartsAt, vibeBlocksEndsAt, vibeBlocksRunDurationSec,
+  } = await req.json();
 
   // Mutual exclusivity: turning one bot on turns the others off
   let viblock    = useViblockarena !== undefined ? Boolean(useViblockarena) : undefined;
@@ -34,9 +39,14 @@ export async function PATCH(
       ...(viblock             !== undefined && { useViblockarena:    viblock }),
       ...(drone               !== undefined && { useDronearena:      drone }),
       ...(vibeblocks          !== undefined && { useVibeblocks:      vibeblocks }),
-      ...(viblockChallengeId     !== undefined && { viblockChallengeId:     viblockChallengeId || null }),
-      ...(viblockChallengeLocked !== undefined && { viblockChallengeLocked: Boolean(viblockChallengeLocked) }),
-      ...(judgingTemplatesLocked !== undefined && { judgingTemplatesLocked: Boolean(judgingTemplatesLocked) }),
+      ...(viblockChallengeId       !== undefined && { viblockChallengeId:       viblockChallengeId || null }),
+      ...(viblockChallengeLocked   !== undefined && { viblockChallengeLocked:   Boolean(viblockChallengeLocked) }),
+      ...(judgingTemplatesLocked   !== undefined && { judgingTemplatesLocked:   Boolean(judgingTemplatesLocked) }),
+      ...(vibeBlocksChallengeId    !== undefined && { vibeBlocksChallengeId:    vibeBlocksChallengeId || null }),
+      ...(vibeBlocksEventName      !== undefined && { vibeBlocksEventName:      vibeBlocksEventName || null }),
+      ...(vibeBlocksStartsAt       !== undefined && { vibeBlocksStartsAt:       vibeBlocksStartsAt ? new Date(vibeBlocksStartsAt) : null }),
+      ...(vibeBlocksEndsAt         !== undefined && { vibeBlocksEndsAt:         vibeBlocksEndsAt ? new Date(vibeBlocksEndsAt) : null }),
+      ...(vibeBlocksRunDurationSec !== undefined && { vibeBlocksRunDurationSec: vibeBlocksRunDurationSec !== null ? Number(vibeBlocksRunDurationSec) : null }),
     },
   });
   return NextResponse.json({ data: wic });
