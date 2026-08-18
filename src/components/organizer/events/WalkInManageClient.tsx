@@ -165,9 +165,9 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     const sp = new URLSearchParams();
     if (filter !== "ALL") sp.set("status", filter);
     const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${wicId}/registrations?${sp}`);
-    const j   = await res.json();
-    setRegistrations(j.data ?? []);
-    setStats(j.stats ?? {});
+    const j   = res.ok ? await res.json() : null;
+    setRegistrations(j?.data ?? []);
+    setStats(j?.stats ?? {});
     setLoading(false);
   }, [event.id]);
 
@@ -550,9 +550,12 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
         fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates`),
         fetch("/api/v2/organizer/judging/templates"),
       ]).then(async ([aRes, allRes]) => {
-        const [aJson, allJson] = await Promise.all([aRes.json(), allRes.json()]);
-        setAssignedTemplates(aJson.data ?? []);
-        setAllTemplates(allJson.templates ?? []);
+        const [aJson, allJson] = await Promise.all([
+          aRes.ok ? aRes.json() : Promise.resolve(null),
+          allRes.ok ? allRes.json() : Promise.resolve(null),
+        ]);
+        setAssignedTemplates(aJson?.data ?? []);
+        setAllTemplates(allJson?.templates ?? []);
       }).finally(() => setTemplatesLoading(false));
     }, 0);
     return () => clearTimeout(id);
