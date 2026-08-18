@@ -383,13 +383,16 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   // Initialise VibeBlocks form when switching to a different WIC
   useEffect(() => {
     if (!selectedWic) return;
-    setVibeBlocksCreateForm({
-      challengeId:    selectedWic.vibeBlocksChallengeId ?? "",
-      name:           selectedWic.vibeBlocksEventName ?? "",
-      startsAt:       isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt),
-      endsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt),
-      runDurationSec: selectedWic.vibeBlocksRunDurationSec ?? 3600,
-    });
+    const id = setTimeout(() => {
+      setVibeBlocksCreateForm({
+        challengeId:    selectedWic.vibeBlocksChallengeId ?? "",
+        name:           selectedWic.vibeBlocksEventName ?? "",
+        startsAt:       isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt),
+        endsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt),
+        runDurationSec: selectedWic.vibeBlocksRunDurationSec ?? 3600,
+      });
+    }, 0);
+    return () => clearTimeout(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWic?.id]);
 
@@ -879,7 +882,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                                         <button type="button"
                                           onClick={() => setRevealedEpIds(prev => {
                                             const next = new Set(prev);
-                                            next.has(ep.id) ? next.delete(ep.id) : next.add(ep.id);
+                                            if (next.has(ep.id)) { next.delete(ep.id); } else { next.add(ep.id); }
                                             return next;
                                           })}
                                           className="text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
