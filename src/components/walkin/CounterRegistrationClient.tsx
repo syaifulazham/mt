@@ -325,8 +325,8 @@ function ConfirmCard({ result, onReset }: { result: ScanResult; onReset: () => v
           <p className="text-xs" style={{ color: "rgba(255,255,255,.45)" }}>{result.eventName}</p>
         </div>
 
-        {/* Viblock Arena token */}
-        {result.viblockToken && (
+        {/* Viblock Arena token — only shown for viblock competitions, not drone */}
+        {result.viblockToken && !result.droneToken && (
           <div className="rounded-xl px-4 py-3.5 border space-y-1.5"
             style={{ background: "rgba(124,58,237,.15)", borderColor: "rgba(139,92,246,.4)" }}>
             <p className="text-[9px] font-bold tracking-[0.25em] uppercase" style={{ color: "#a78bfa" }}>
@@ -536,7 +536,7 @@ function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, onClo
           <QRCodeSVG value={regId} size={180} level="M" />
         </div>
         <p className="text-[10px] text-white/30 font-mono break-all text-center">{regId}</p>
-        {viblockToken && (
+        {viblockToken && !droneToken && (
           <div className="w-full rounded-xl px-4 py-3 border space-y-1"
             style={{ background: "rgba(124,58,237,.15)", borderColor: "rgba(139,92,246,.4)" }}>
             <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: "#a78bfa" }}>
