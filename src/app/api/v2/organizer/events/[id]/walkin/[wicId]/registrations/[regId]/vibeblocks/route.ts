@@ -101,12 +101,25 @@ export async function PATCH(
 
   try {
     const newEntryToken = generateEntryToken();
-    const result = await vibeBlocksReplaceToken(eventId, parsed.entryId, newEntryToken);
+    let entryId: string;
+    try {
+      const result = await vibeBlocksReplaceToken(eventId, parsed.entryId, newEntryToken);
+      entryId = result.entry_id;
+    } catch (replaceErr) {
+      // 404 = entry no longer exists in VibeBlocks (e.g. event config changed after
+      // registration). Re-register as a fresh entry under the current event.
+      if ((replaceErr as { status?: number }).status !== 404) throw replaceErr;
+      const result = await vibeBlocksRegisterEntry(eventId, {
+        entryToken: newEntryToken,
+        partnerReference: regId,
+      });
+      entryId = result.entry_id;
+    }
     await db.walkInRegistration.update({
       where: { id: regId },
-      data: { viblockToken: encodeVibeBlocksToken(newEntryToken, result.entry_id) },
+      data: { viblockToken: encodeVibeBlocksToken(newEntryToken, entryId) },
     });
-    return NextResponse.json({ entryToken: newEntryToken, entryId: result.entry_id });
+    return NextResponse.json({ entryToken: newEntryToken, entryId });
   } catch (e: unknown) {
     const err = e as { message?: string; status?: number };
     return NextResponse.json(
