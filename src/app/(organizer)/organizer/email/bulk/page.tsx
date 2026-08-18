@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type BlastStatus = "DRAFT" | "SCHEDULED" | "IN_PROGRESS" | "COMPLETED";
+type SendScope = "all" | "pending" | "resend";
 
 type Blast = {
   id: string;
@@ -138,6 +139,7 @@ function RecipientsModal({ blast, onClose, onSaved }: {
     id: string; email: string; name: string; meta: string | null;
     userType: "manager" | "organizer" | "custom";
     contingent: string | null; state: string | null; event: string | null;
+    status: string; sentAt: string | null;
   }[]>([]);
   const [manualText, setManualText] = useState("");
   const [events, setEvents]         = useState<Event[]>([]);
@@ -254,6 +256,7 @@ function RecipientsModal({ blast, onClose, onSaved }: {
                       <th className="px-3 py-1.5 font-medium w-28">State</th>
                       <th className="px-3 py-1.5 font-medium">Contingent</th>
                       <th className="px-3 py-1.5 font-medium">Event</th>
+                      <th className="px-3 py-1.5 font-medium w-20">Status</th>
                       <th className="px-3 py-1.5 w-8" />
                     </tr>
                   </thead>
@@ -276,6 +279,17 @@ function RecipientsModal({ blast, onClose, onSaved }: {
                         <td className="px-3 py-1.5 text-zinc-500">{r.state ?? "—"}</td>
                         <td className="px-3 py-1.5 text-zinc-500">{r.contingent ?? "—"}</td>
                         <td className="px-3 py-1.5 text-zinc-500">{r.event ?? "—"}</td>
+                        <td className="px-3 py-1.5">
+                          <span className={cn(
+                            "inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold",
+                            r.status === "SENT"    && "bg-emerald-50 text-emerald-700",
+                            r.status === "FAILED"  && "bg-rose-50 text-rose-700",
+                            r.status === "PENDING" && "bg-zinc-100 text-zinc-500",
+                          )}
+                            title={r.sentAt ? `Sent ${new Date(r.sentAt).toLocaleString("en-MY")}` : undefined}>
+                            {r.status}
+                          </span>
+                        </td>
                         <td className="px-3 py-1.5 text-center">
                           <button type="button" onClick={() => removeExisting(r.id)} title="Remove recipient"
                             className="text-zinc-300 hover:text-rose-600">
@@ -516,20 +530,37 @@ function PreviewModal({ blastId, subject, onClose }: { blastId: string; subject:
 // ── Send / Schedule Dialog ───────────────────────────────────────────────────
 function SendDialog({ blast, onConfirm, onClose }: {
   blast: Blast;
-  onConfirm: (blastId: string, scheduledAt: string | null) => void;
+  onConfirm: (blastId: string, scheduledAt: string | null, scope: SendScope) => void;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<"now" | "later">(blast.scheduledAt ? "later" : "now");
   const [dt, setDt]     = useState(blast.scheduledAt ? new Date(blast.scheduledAt).toISOString().slice(0, 16) : "");
+  const [counts, setCounts] = useState<{ total: number; pending: number; sent: number } | null>(null);
+  const [scope, setScope] = useState<SendScope>(blast.sentAt ? "pending" : "all");
+
+  useEffect(() => {
+    fetch(`/api/v2/organizer/email/blasts/${blast.id}/recipients`)
+      .then(r => r.json())
+      .then(d => {
+        const list: { status: string }[] = d.recipients ?? [];
+        setCounts({
+          total:   list.length,
+          pending: list.filter(r => r.status === "PENDING" || r.status === "FAILED").length,
+          sent:    list.filter(r => r.status === "SENT").length,
+        });
+      })
+      .catch(() => {});
+  }, [blast.id]);
 
   const missingSubject    = !blast.subject?.trim();
   const missingBody       = !blast.htmlBody?.trim();
   const missingRecipients = blast._count.recipients === 0;
-  const canSend           = !missingSubject && !missingBody && !missingRecipients;
+  const nothingToSend     = scope === "pending" && counts !== null && counts.pending === 0;
+  const canSend           = !missingSubject && !missingBody && !missingRecipients && !nothingToSend;
 
   function run() {
     const schedAt = mode === "later" && dt ? new Date(dt).toISOString() : null;
-    onConfirm(blast.id, schedAt); // parent closes dialog, patches, fires send, polls
+    onConfirm(blast.id, schedAt, scope); // parent closes dialog, patches, fires send, polls
   }
 
   return (
@@ -572,6 +603,46 @@ function SendDialog({ blast, onConfirm, onClose }: {
             {missingBody       && <p className="text-xs text-amber-700">⚠ Email body is empty.</p>}
           </div>
         )}
+
+        {/* Recipients scope */}
+        <div className="space-y-2.5">
+          <p className="text-xs font-medium text-zinc-500">Recipients</p>
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input type="radio" name="scope" value="all" checked={scope === "all"} onChange={() => setScope("all")}
+              className="accent-violet-600 mt-1" />
+            <div>
+              <p className="text-sm font-medium text-zinc-800">
+                Send{counts ? ` (${counts.total})` : ""}
+              </p>
+              <p className="text-xs text-zinc-400">All recipients on the list</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input type="radio" name="scope" value="pending" checked={scope === "pending"} onChange={() => setScope("pending")}
+              className="accent-violet-600 mt-1" />
+            <div>
+              <p className="text-sm font-medium text-zinc-800">
+                Send pendings{counts ? ` (${counts.pending})` : ""}
+              </p>
+              <p className="text-xs text-zinc-400">Only recipients not yet sent (or previously failed)</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input type="radio" name="scope" value="resend" checked={scope === "resend"} onChange={() => setScope("resend")}
+              className="accent-violet-600 mt-1" />
+            <div>
+              <p className="text-sm font-medium text-zinc-800">
+                Resend all{counts ? ` (${counts.total})` : ""}
+              </p>
+              <p className="text-xs text-zinc-400">Send again to everyone, including those already sent</p>
+            </div>
+          </label>
+          {nothingToSend && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              ⚠ No pending recipients — everyone has already been sent.
+            </p>
+          )}
+        </div>
 
         {/* Mode */}
         <div className="space-y-3">
@@ -733,7 +804,7 @@ export default function BulkPage() {
     pollingRef.current.set(blastId, timer);
   }
 
-  async function handleConfirmSend(blastId: string, scheduledAt: string | null) {
+  async function handleConfirmSend(blastId: string, scheduledAt: string | null, scope: SendScope) {
     setSendFor(null);
     // Patch scheduledAt first (fast)
     await fetch(`/api/v2/organizer/email/blasts/${blastId}`, {
@@ -746,7 +817,11 @@ export default function BulkPage() {
       b.id === blastId ? { ...b, status: "IN_PROGRESS" as BlastStatus, sentCount: 0 } : b
     ));
     // Fire send in background — don't await
-    fetch(`/api/v2/organizer/email/blasts/${blastId}/send`, { method: "POST" })
+    fetch(`/api/v2/organizer/email/blasts/${blastId}/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope }),
+    })
       .then(r => r.json())
       .then(j => { if (j.error) showFlash(false, j.error); })
       .catch(() => showFlash(false, "Send failed."));

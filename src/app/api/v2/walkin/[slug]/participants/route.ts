@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { filterByLocation, resolveEffectiveStateId } from "@/lib/eventEligibility";
 
 export async function GET(
   req: NextRequest,
@@ -17,7 +16,7 @@ export async function GET(
     select: {
       id: true, passcode: true, active: true,
       walkInCompetitionId: true,
-      event: { select: { id: true, scope: true, stateId: true, zoneId: true } },
+      event: { select: { id: true } },
     },
   });
 
@@ -62,20 +61,13 @@ export async function GET(
       age: true, eduLevel: true, classGrade: true, ppki: true,
       contingentId: true,
       contingent: {
-        select: {
-          id: true, name: true, shortName: true, contingentType: true,
-          stateId: true,
-          school: { select: { stateId: true } },
-        },
+        select: { id: true, name: true, shortName: true },
       },
     },
   });
 
   const eligible = [];
   for (const p of participants) {
-    const effectiveStateId = resolveEffectiveStateId(p.contingent);
-    const [passes] = await filterByLocation([endpoint.event], effectiveStateId);
-    if (!passes) continue;
 
     if (targetGroups.length > 0) {
       const matchesGroup = targetGroups.some(tg => {
