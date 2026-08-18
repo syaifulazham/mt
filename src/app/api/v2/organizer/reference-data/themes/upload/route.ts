@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
-import { writeFile, mkdir } from "fs/promises";
-import { join, extname } from "path";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { extname } from "path";
 import { randomUUID } from "crypto";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/svg+xml", "image/webp"];
-const UPLOAD_DIR = join(process.cwd(), "public", "uploads", "themes");
+
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId:     process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+  },
+});
 
 export async function POST(req: NextRequest) {
   const session = await getOrganizerSession();
@@ -21,12 +29,17 @@ export async function POST(req: NextRequest) {
   if (!ALLOWED_TYPES.includes(file.type)) return NextResponse.json({ error: "INVALID_TYPE" }, { status: 400 });
   if (file.size > MAX_SIZE) return NextResponse.json({ error: "FILE_TOO_LARGE" }, { status: 400 });
 
-  const ext = extname(file.name) || ".png";
-  const filename = `${randomUUID()}${ext}`;
-
-  await mkdir(UPLOAD_DIR, { recursive: true });
+  const ext    = extname(file.name) || ".png";
+  const key    = `themes/${randomUUID()}${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(join(UPLOAD_DIR, filename), buffer);
 
-  return NextResponse.json({ url: `/uploads/themes/${filename}` }, { status: 201 });
+  await r2.send(new PutObjectCommand({
+    Bucket:      process.env.R2_BUCKET_NAME!,
+    Key:         key,
+    Body:        buffer,
+    ContentType: file.type || "image/png",
+  }));
+
+  const publicUrl = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
+  return NextResponse.json({ url: `${publicUrl}/${key}` }, { status: 201 });
 }
