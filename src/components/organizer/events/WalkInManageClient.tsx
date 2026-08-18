@@ -472,6 +472,18 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     setSavingChallenge(false);
   }
 
+  async function linkVibeBlocksChallenge() {
+    if (!selectedWic) return;
+    setSavingChallenge(true);
+    const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vibeBlocksChallengeId: vibeBlocksCreateForm.challengeId }),
+    });
+    if (res.ok) updateWic(selectedWic.id, { vibeBlocksChallengeId: vibeBlocksCreateForm.challengeId });
+    setSavingChallenge(false);
+  }
+
   async function setDroneChallenge(challengeId: string | null) {
     if (!selectedWic) return;
     setSavingChallenge(true);
@@ -998,7 +1010,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                               <select
                                 value={vibeBlocksCreateForm.challengeId}
                                 onChange={e => setVibeBlocksCreateForm(f => ({ ...f, challengeId: e.target.value }))}
-                                disabled={!!selectedWic.viblockChallengeId}
+                                disabled={!!(selectedWic.viblockChallengeId && selectedWic.vibeBlocksChallengeId)}
                                 className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
                               >
                                 <option value="">— Select challenge —</option>
@@ -1059,6 +1071,16 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                             >
                               {vibeBlocksCreating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                               Create Event
+                            </Button>
+                          ) : !selectedWic.vibeBlocksChallengeId ? (
+                            <Button
+                              size="sm"
+                              onClick={linkVibeBlocksChallenge}
+                              disabled={savingChallenge || !vibeBlocksCreateForm.challengeId}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
+                            >
+                              {savingChallenge && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                              Link Challenge
                             </Button>
                           ) : (
                             <Button
