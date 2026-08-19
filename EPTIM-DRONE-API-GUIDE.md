@@ -697,8 +697,10 @@ GET /endpoints/{endpoint_id}/tokens
 
 Called by the competition terminal to validate a participant's token. If valid, the token is **consumed** (marked as used) and the participant's identity is returned.
 
+This is a **public endpoint** — no `X-API-Key` header is required. The endpoint is identified via the `passcode` field in the request body.
+
 ```
-POST /endpoints/{endpoint_id}/validate
+POST /public/terminal/validate
 ```
 
 **Request Body:**
@@ -712,8 +714,8 @@ POST /endpoints/{endpoint_id}/validate
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `passcode` | Yes | The endpoint passcode entered on the terminal |
-| `token` | Yes | The 6-character participant token |
+| `passcode` | Yes | The endpoint passcode. Uniquely identifies the competition endpoint — the terminal operator enters this once when setting up the terminal. |
+| `token` | Yes | The 6-character participant token entered by the participant. |
 
 **Response (200) -- Token valid and consumed:**
 
@@ -857,8 +859,9 @@ curl -X PUT "$BASE/endpoints/ENDPOINT_UUID/tokens/STU-001" \
 
 # 5. Terminal validates a participant's token
 #    (called by the terminal software when participant enters their code)
-curl -X POST "$BASE/endpoints/ENDPOINT_UUID/validate" \
-  -H "X-API-Key: $API_KEY" \
+#    NOTE: this is a public endpoint — no X-API-Key header required.
+#    The passcode identifies the endpoint; the terminal operator configures it once.
+curl -X POST "$BASE/public/terminal/validate" \
   -H "Content-Type: application/json" \
   -d '{
     "passcode": "AB12CD34",
