@@ -556,11 +556,16 @@ GET /endpoints
       "name": "Hall A Terminals",
       "passcode_prefix": "AB12...",
       "is_active": true,
+      "challenge_id": "uuid-of-challenge",
       "created_at": "2026-08-17T08:00:00.000Z"
     }
   ]
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| `challenge_id` | UUID of the challenge this endpoint is scoped to. **Required** — Techlympics uses this to select the correct endpoint when generating participant tokens for a specific competition. Without it, token generation falls back to the first active endpoint, which may belong to a different challenge. |
 
 ---
 
