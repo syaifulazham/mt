@@ -51,7 +51,7 @@ export async function POST(
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   if (!droneConfigured()) return NextResponse.json({ error: "DRONE_NOT_CONFIGURED" }, { status: 400 });
-  const { regId } = await params;
+  const { wicId, regId } = await params;
   const force = req.nextUrl.searchParams.get("force") === "true";
 
   const reg = await db.walkInRegistration.findUnique({
@@ -93,8 +93,16 @@ export async function POST(
     let competitionToken: string | null = null;
     let endpointId: string | null = null;
     try {
+      const wic = await db.eventWalkInCompetition.findUnique({
+        where: { id: wicId },
+        select: { viblockChallengeId: true },
+      });
+      const challengeId = wic?.viblockChallengeId;
       const { endpoints } = await droneListEndpoints();
-      const activeEndpoint = endpoints.find(ep => ep.is_active);
+      // Prefer the endpoint whose challenge_id matches this competition; fall back to first active
+      const activeEndpoint =
+        (challengeId ? endpoints.find(ep => ep.is_active && ep.challenge_id === challengeId) : undefined)
+        ?? endpoints.find(ep => ep.is_active);
       if (activeEndpoint) {
         const tokenData = await droneGetOrCreateCompetitionToken(activeEndpoint.id, droneUserId);
         competitionToken = tokenData.token;
@@ -140,7 +148,7 @@ export async function PATCH(
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   if (!droneConfigured()) return NextResponse.json({ error: "DRONE_NOT_CONFIGURED" }, { status: 400 });
-  const { regId } = await params;
+  const { wicId, regId } = await params;
 
   const reg = await db.walkInRegistration.findUnique({
     where: { id: regId },
@@ -209,10 +217,17 @@ export async function PATCH(
         // Keep existing token if regeneration fails
       }
     } else {
-      // No endpoint stored — try to find one and create a token
+      // No endpoint stored — find the right endpoint for this competition and create a token
       try {
+        const wic = await db.eventWalkInCompetition.findUnique({
+          where: { id: wicId },
+          select: { viblockChallengeId: true },
+        });
+        const challengeId = wic?.viblockChallengeId;
         const { endpoints } = await droneListEndpoints();
-        const activeEndpoint = endpoints.find(ep => ep.is_active);
+        const activeEndpoint =
+          (challengeId ? endpoints.find(ep => ep.is_active && ep.challenge_id === challengeId) : undefined)
+          ?? endpoints.find(ep => ep.is_active);
         if (activeEndpoint) {
           const tokenData = await droneGetOrCreateCompetitionToken(activeEndpoint.id, activeUserid);
           competitionToken = tokenData.token;

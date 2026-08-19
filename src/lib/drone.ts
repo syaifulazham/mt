@@ -219,9 +219,9 @@ export async function droneListChallenges(): Promise<{
 
 export async function droneListEndpoints(): Promise<{
   event_id: string;
-  endpoints: Array<{ id: string; name: string; is_active: boolean; passcode_prefix: string }>;
+  endpoints: Array<{ id: string; name: string; is_active: boolean; passcode_prefix: string; challenge_id?: string }>;
 }> {
-  return req<{ event_id: string; endpoints: Array<{ id: string; name: string; is_active: boolean; passcode_prefix: string }> }>(
+  return req<{ event_id: string; endpoints: Array<{ id: string; name: string; is_active: boolean; passcode_prefix: string; challenge_id?: string }> }>(
     "GET",
     "/endpoints",
   );
