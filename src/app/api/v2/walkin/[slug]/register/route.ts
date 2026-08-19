@@ -94,12 +94,15 @@ export async function POST(
         userid:         droneUserId,
         fullName:       participant.name,
       });
-      // Try to generate a competition terminal token
+      // Try to generate a competition terminal token for the correct challenge endpoint
       let competitionToken: string | null = null;
       let endpointId: string | null = null;
       try {
+        const challengeId = wic.viblockChallengeId;
         const { endpoints } = await droneListEndpoints();
-        const activeEndpoint = endpoints.find(ep => ep.is_active);
+        const activeEndpoint =
+          (challengeId ? endpoints.find(ep => ep.is_active && ep.challenge_id === challengeId) : undefined)
+          ?? endpoints.find(ep => ep.is_active);
         if (activeEndpoint) {
           const tokenData = await droneGetOrCreateCompetitionToken(activeEndpoint.id, droneUserId);
           competitionToken = tokenData.token;
