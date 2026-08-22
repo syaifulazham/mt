@@ -104,5 +104,24 @@ export async function GET(
     });
   }
 
-  return NextResponse.json({ data: eligible });
+  // Pending public-form submissions matching the search (for verification at the counter)
+  const submissions = await db.walkInFormSubmission.findMany({
+    where: {
+      endpoint: { eventId: endpoint.event.id, active: true },
+      status: "PENDING",
+      OR: [
+        { ic: { contains: q.replace(/[\s-]/g, "") } },
+        { name: { contains: q, mode: "insensitive" } },
+      ],
+    },
+    take: 10,
+    select: {
+      id: true, ic: true, name: true, schoolName: true,
+      sessionNumber: true, slotNumber: true,
+      walkInCompetitionId: true,
+      walkInCompetition: { select: { competition: { select: { code: true, name: true } } } },
+    },
+  });
+
+  return NextResponse.json({ data: eligible, submissions });
 }

@@ -47,16 +47,27 @@ export async function POST(req: NextRequest) {
     if (!validSession || !validSlot)
       return NextResponse.json({ error: "SLOT_REQUIRED" }, { status: 400 });
 
-    const taken = await db.walkInRegistration.findFirst({
-      where: {
-        walkInCompetitionId,
-        sessionNumber: sessionNumber!,
-        slotNumber: slotNumber!,
-        status: { in: ["PENDING", "CONFIRMED"] },
-      },
-      select: { id: true },
-    });
-    if (taken) return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
+    const [takenReg, takenSub] = await Promise.all([
+      db.walkInRegistration.findFirst({
+        where: {
+          walkInCompetitionId,
+          sessionNumber: sessionNumber!,
+          slotNumber: slotNumber!,
+          status: { in: ["PENDING", "CONFIRMED"] },
+        },
+        select: { id: true },
+      }),
+      db.walkInFormSubmission.findFirst({
+        where: {
+          walkInCompetitionId,
+          sessionNumber: sessionNumber!,
+          slotNumber: slotNumber!,
+          status: "PENDING",
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (takenReg || takenSub) return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
   }
 
   // Penyertaan Unik: one active walk-in registration per participant per event

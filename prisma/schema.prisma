@@ -395,6 +395,7 @@ model Participant {
   sessions         ParticipantSession[]
   droneAccesses    DroneAccess[]
   walkInRegistrations WalkInRegistration[]
+  walkInFormSubmissions WalkInFormSubmission[]
 
   @@index([contingentId])
   @@map("contestants")
@@ -505,6 +506,7 @@ model Event {
   eventCompetitions   EventCompetition[]
   walkInCompetitions   EventWalkInCompetition[]
   walkInEndpoints      WalkInEndpoint[]
+  walkInFormEndpoints  WalkInFormEndpoint[]
   walkInJudgingEndpoints WalkInJudgingEndpoint[]
   teamEvents           TeamEvent[]
   resultsEndpoints     ResultsEndpoint[]
@@ -622,6 +624,7 @@ model EventWalkInCompetition {
   competition   Competition @relation(fields: [competitionId], references: [id])
   registrations    WalkInRegistration[]
   endpoints        WalkInEndpoint[]
+  formSubmissions  WalkInFormSubmission[]
   judgingTemplates EventWalkInCompetitionJudgingTemplate[]
   judgingEndpoints WalkInJudgingEndpoint[]
 
@@ -643,6 +646,52 @@ model WalkInEndpoint {
   walkInCompetition EventWalkInCompetition? @relation(fields: [walkInCompetitionId], references: [id], onDelete: SetNull)
 
   @@map("walkin_endpoints")
+}
+
+model WalkInFormEndpoint {
+  id        String   @id @default(cuid())
+  eventId   String
+  routeSlug String   @unique
+  label     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  event       Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  submissions WalkInFormSubmission[]
+
+  @@map("walkin_form_endpoints")
+}
+
+enum WalkInFormSubmissionStatus {
+  PENDING
+  PROCESSED
+  NO_MATCH
+}
+
+model WalkInFormSubmission {
+  id                   String                     @id @default(cuid())
+  endpointId           String
+  walkInCompetitionId  String
+  ic                   String
+  name                 String
+  schoolName           String?
+  sessionNumber        Int?
+  slotNumber           Int?
+  status               WalkInFormSubmissionStatus @default(PENDING)
+  participantId        String?
+  walkInRegistrationId String?
+  processedAt          DateTime?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  endpoint            WalkInFormEndpoint     @relation(fields: [endpointId],           references: [id], onDelete: Cascade)
+  walkInCompetition   EventWalkInCompetition @relation(fields: [walkInCompetitionId],  references: [id], onDelete: Cascade)
+  participant         Participant?           @relation(fields: [participantId],        references: [id])
+  walkInRegistration  WalkInRegistration?    @relation(fields: [walkInRegistrationId], references: [id])
+
+  @@index([endpointId, status])
+  @@index([ic])
+  @@map("walkin_form_submissions")
 }
 
 enum WalkInJudgingEndpointStatus {
@@ -710,6 +759,7 @@ model WalkInRegistration {
   participant       Participant            @relation(fields: [participantId],       references: [id])
   contingent        Contingent             @relation(fields: [contingentId],        references: [id])
   judgingScores     WalkInJudgingScore[]
+  formSubmissions   WalkInFormSubmission[]
 
   @@unique([walkInCompetitionId, participantId])
   @@map("walkin_registrations")

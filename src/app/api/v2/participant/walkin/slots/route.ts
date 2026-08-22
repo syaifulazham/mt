@@ -23,14 +23,26 @@ export async function GET(req: NextRequest) {
 
   const cfg: SlotScheduleConfig = rawCfg;
 
-  const booked = await db.walkInRegistration.findMany({
-    where: {
-      walkInCompetitionId: wicId,
-      status: { in: ["PENDING", "CONFIRMED"] },
-      sessionNumber: { not: null },
-    },
-    select: { sessionNumber: true, slotNumber: true },
-  });
+  // Booked slots: PENDING/CONFIRMED registrations + PENDING form submissions holding a slot
+  const [regs, subs] = await Promise.all([
+    db.walkInRegistration.findMany({
+      where: {
+        walkInCompetitionId: wicId,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        sessionNumber: { not: null },
+      },
+      select: { sessionNumber: true, slotNumber: true },
+    }),
+    db.walkInFormSubmission.findMany({
+      where: {
+        walkInCompetitionId: wicId,
+        status: "PENDING",
+        sessionNumber: { not: null },
+      },
+      select: { sessionNumber: true, slotNumber: true },
+    }),
+  ]);
+  const booked = [...regs, ...subs];
 
   const sessions = buildSlotSchedule(cfg)
     .filter((b): b is Extract<typeof b, { type: "session" }> => b.type === "session")

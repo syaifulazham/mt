@@ -50,6 +50,12 @@ type ParticipantResult = {
 };
 type DroneTokenData = { userid: string; password: string; accessToken: string; competitionToken?: string | null };
 type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null; droneToken?: DroneTokenData | null };
+type FormSubmissionHit = {
+  id: string; ic: string; name: string; schoolName: string | null;
+  sessionNumber: number | null; slotNumber: number | null;
+  walkInCompetitionId: string;
+  walkInCompetition: { competition: { code: string; name: string } };
+};
 type ScanResult = {
   id: string; alreadyConfirmed: boolean;
   participantName: string; ic: string | null; gender: string;
@@ -608,6 +614,8 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
   const [q,           setQ]           = useState("");
   const [searching,   setSearching]   = useState(false);
   const [results,     setResults]     = useState<ParticipantResult[]>([]);
+  const [matchedSubs, setMatchedSubs] = useState<FormSubmissionHit[]>([]);
+  const [processingSub, setProcessingSub] = useState<string | null>(null);
   const [selected,    setSelected]    = useState<ParticipantResult | null>(null);
   const [slotSessions, setSlotSessions] = useState<SessionSlots[] | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
@@ -663,13 +671,40 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
 
   async function handleSearch(value: string) {
     setQ(value); setSelected(null);
-    if (value.trim().length < 2) { setResults([]); return; }
+    if (value.trim().length < 2) { setResults([]); setMatchedSubs([]); return; }
     setSearching(true);
     const sp = new URLSearchParams({ q: value, passcode });
     if (activeWicId) sp.set("competitionId", activeWicId);
     const j = await fetch(`/api/v2/walkin/${slug}/participants?${sp}`).then(r => r.json());
     setResults(j.data ?? []);
+    setMatchedSubs(((j.submissions ?? []) as FormSubmissionHit[])
+      .filter(s => !activeWicId || s.walkInCompetitionId === activeWicId));
     setSearching(false);
+  }
+
+  // Process a public-form submission against the currently selected participant
+  async function handleProcessSub(sub: FormSubmissionHit) {
+    if (!selected) return;
+    setProcessingSub(sub.id); setRegErr("");
+    const res = await fetch(`/api/v2/walkin/${slug}/form-process`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submissionId: sub.id, participantId: selected.id, passcode }),
+    });
+    const j = await res.json();
+    if (!res.ok) {
+      setRegErr(
+        j.error === "SLOT_TAKEN" ? "Slot telah diambil oleh pendaftaran lain."
+        : j.error === "ALREADY_REGISTERED" ? "Peserta sudah berdaftar."
+        : j.error === "UNIQUE_PARTICIPATION" ? "Peserta sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
+        : j.error === "ALREADY_PROCESSED" ? "Borang ini telah diproses."
+        : (j.message ?? j.error ?? "Gagal memproses borang."),
+      );
+    } else {
+      setRegResult({ id: j.data.registrationId, status: j.data.status });
+      setSelected(null); setQ(""); setResults([]); setMatchedSubs([]);
+      setSlotChoice(null); setSlotRefreshKey(k => k + 1);
+    }
+    setProcessingSub(null);
   }
 
   async function handleRegister() {
@@ -694,7 +729,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
           : (j.message ?? j.error ?? "Gagal mendaftar."),
       );
     } else {
-      setRegResult(j.data); setSelected(null); setQ(""); setResults([]);
+      setRegResult(j.data); setSelected(null); setQ(""); setResults([]); setMatchedSubs([]);
       setSlotChoice(null); setSlotRefreshKey(k => k + 1);
     }
     setRegistering(false);
@@ -934,6 +969,50 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                 style={{ color: "rgba(255,255,255,.4)" }} />}
             </div>
 
+            {/* Matched public-form submissions */}
+            {matchedSubs.length > 0 && (
+              <div className="space-y-2">
+                {matchedSubs.map(s => (
+                  <div key={s.id}
+                    className="rounded-2xl border p-3.5 space-y-2"
+                    style={{ background: "rgba(242,220,12,.06)", borderColor: "rgba(242,220,12,.35)" }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: B.gold }}>
+                        Borang Awam
+                      </p>
+                      {s.sessionNumber != null && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(242,220,12,.15)", color: B.gold, border: "1px solid rgba(242,220,12,.3)" }}>
+                          Sesi {s.sessionNumber} · Slot {s.slotNumber}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white">{s.name}</p>
+                      <p className="text-[11px]" style={{ color: "rgba(255,255,255,.45)" }}>
+                        <span className="font-mono">{s.ic}</span>
+                        {s.schoolName && <> · {s.schoolName}</>}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,.35)" }}>
+                        <span className="font-mono">{s.walkInCompetition.competition.code}</span> {s.walkInCompetition.competition.name}
+                      </p>
+                    </div>
+                    <button type="button"
+                      onClick={() => handleProcessSub(s)}
+                      disabled={!selected || processingSub === s.id}
+                      title={selected ? `Daftar ${selected.name} mengikut borang ini` : "Pilih peserta yang sepadan daripada hasil carian dahulu"}
+                      className="w-full h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] disabled:opacity-50"
+                      style={{ background: "rgba(242,220,12,.9)", color: "#000" }}>
+                      {processingSub === s.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      {selected ? `Proses — ${selected.name}` : "Pilih peserta untuk proses borang ini"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {results.length > 0 ? (
               <div className="rounded-2xl border border-white/10 overflow-hidden divide-y divide-white/10"
                 style={{ background: "rgba(255,255,255,.05)", backdropFilter: "blur(12px)" }}>
@@ -1004,7 +1083,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                   );
                 })}
               </div>
-            ) : (
+            ) : matchedSubs.length === 0 && (
               <p className="text-center text-xs py-8" style={{ color: "rgba(255,255,255,.25)" }}>
                 {q.trim().length >= 2 ? "Tiada padanan ditemui." : "Taip nama atau IC untuk mencari peserta."}
               </p>

@@ -5,8 +5,10 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { WalkInFormSection } from "./WalkInFormSection";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DEFAULT_SLOT_SCHEDULE, buildSlotSchedule, fmtSlotMin, slotTimeToMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 export type { SlotScheduleConfig } from "@/lib/walkin-slots";
@@ -1093,6 +1095,11 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                   </>
                 )}
               </div>
+            )}
+
+            {/* Public form endpoints + submissions */}
+            {showGeneral && canWrite && (
+              <WalkInFormSection eventId={event.id} canWrite={canWrite} />
             )}
 
             {selectedWic && (

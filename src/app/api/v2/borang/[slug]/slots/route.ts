@@ -2,28 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { buildSlotSchedule, isValidSlotScheduleConfig, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
-// GET /api/v2/walkin/[slug]/slots?passcode=...&competitionId=...
-// Counter-facing slot availability (booked slots per session).
+// GET /api/v2/borang/[slug]/slots?competitionId=... — public slot availability (no auth)
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
-  const sp = req.nextUrl.searchParams;
-  const passcode = sp.get("passcode");
-  const competitionId = sp.get("competitionId");
+  const wicId = req.nextUrl.searchParams.get("competitionId");
+  if (!wicId) return NextResponse.json({ error: "MISSING_COMPETITION" }, { status: 400 });
 
-  const endpoint = await db.walkInEndpoint.findUnique({
+  const endpoint = await db.walkInFormEndpoint.findUnique({
     where: { routeSlug: slug },
-    select: { passcode: true, active: true, walkInCompetitionId: true, eventId: true },
+    select: { active: true, eventId: true },
   });
   if (!endpoint || !endpoint.active)
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  if (!endpoint.passcode || endpoint.passcode !== passcode)
-    return NextResponse.json({ error: "INVALID_PASSCODE" }, { status: 403 });
-
-  const wicId = endpoint.walkInCompetitionId ?? competitionId;
-  if (!wicId) return NextResponse.json({ error: "MISSING_COMPETITION" }, { status: 400 });
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId, eventId: endpoint.eventId },
