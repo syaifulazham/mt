@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Loader2, Link2, Copy, XCircle, FileText, Search, CheckCircle2,
-  UserX, X,
+  UserX, X, QrCode, Download,
 } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 
 type FormEndpoint = {
@@ -36,6 +37,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
   const [addingFormEp,   setAddingFormEp]   = useState(false);
   const [deletingEpId,   setDeletingEpId]   = useState<string | null>(null);
   const [copyMsg,        setCopyMsg]        = useState<string | null>(null);
+  const [qrEndpoint,     setQrEndpoint]     = useState<FormEndpoint | null>(null);
 
   const [subs,        setSubs]        = useState<Submission[]>([]);
   const [counts,      setCounts]      = useState<Counts>({ PENDING: 0, PROCESSED: 0, NO_MATCH: 0 });
@@ -182,14 +184,21 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                       </div>
                     </td>
                     <td className="px-3 py-2">
-                      {canWrite && (
+                      <div className="flex items-center gap-1.5">
                         <button type="button"
-                          onClick={() => deleteFormEndpoint(ep.id)}
-                          disabled={deletingEpId === ep.id}
-                          className="text-zinc-300 hover:text-red-500 transition-colors disabled:opacity-40">
-                          {deletingEpId === ep.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                          onClick={() => setQrEndpoint(ep)}
+                          className="text-zinc-400 hover:text-indigo-600 transition-colors" title="Papar QR Code">
+                          <QrCode className="h-3.5 w-3.5" />
                         </button>
-                      )}
+                        {canWrite && (
+                          <button type="button"
+                            onClick={() => deleteFormEndpoint(ep.id)}
+                            disabled={deletingEpId === ep.id}
+                            className="text-zinc-300 hover:text-red-500 transition-colors disabled:opacity-40">
+                            {deletingEpId === ep.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -279,6 +288,63 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
           </div>
         )}
       </div>
+
+      {/* ── QR Code dialog ────────────────────────────────────────────── */}
+      {qrEndpoint && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setQrEndpoint(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <p className="text-sm font-bold text-zinc-900">QR Code Borang</p>
+              <button type="button" onClick={() => setQrEndpoint(null)}
+                className="text-zinc-400 hover:text-zinc-700">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-6 flex flex-col items-center gap-4">
+              <div className="relative bg-white p-4 rounded-xl border shadow-sm">
+                <QRCodeCanvas
+                  id="qr-canvas"
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/borang/${qrEndpoint.routeSlug}`}
+                  size={220}
+                  level="H"
+                  marginSize={2}
+                  imageSettings={{
+                    src: "/logo-mt.svg",
+                    x: undefined,
+                    y: undefined,
+                    height: 44,
+                    width: 44,
+                    excavate: true,
+                  }}
+                />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="text-xs font-mono text-zinc-500">/borang/{qrEndpoint.routeSlug}</p>
+                <p className="text-[10px] text-zinc-400">{qrEndpoint.label ?? "Borang Awam Walk-in"}</p>
+              </div>
+              <div className="flex gap-2 w-full">
+                <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs"
+                  onClick={() => {
+                    const canvas = document.getElementById("qr-canvas") as HTMLCanvasElement | null;
+                    if (!canvas) return;
+                    const link = document.createElement("a");
+                    link.download = `qr-borang-${qrEndpoint.routeSlug}.png`;
+                    link.href = canvas.toDataURL("image/png");
+                    link.click();
+                  }}>
+                  <Download className="h-3.5 w-3.5" /> Muat Turun
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs"
+                  onClick={() => copyToClipboard(`${window.location.origin}/borang/${qrEndpoint.routeSlug}`)}>
+                  <Copy className="h-3.5 w-3.5" /> Salin URL
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Process dialog ───────────────────────────────────────────────── */}
       {processing && (

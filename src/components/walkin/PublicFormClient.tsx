@@ -6,6 +6,7 @@ import {
   CalendarDays, ClipboardList, AlertCircle, LayoutGrid, UserCheck, Trophy, User,
 } from "lucide-react";
 import { fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import { QRCodeCanvas } from "qrcode.react";
 
 /* ─── Pink & Black palette ──────────────────────────────────────────────── */
 const B = {
@@ -351,6 +352,27 @@ export function PublicFormClient({ slug }: { slug: string }) {
                   className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-bold border border-pink-500/20 text-white/70 transition-colors hover:border-pink-500/40 hover:text-white">
                   Cara Pendaftaran
                 </a>
+              </div>
+
+              {/* QR Code */}
+              <div className="pk-card-in pt-4 flex flex-col items-center gap-2" style={{ animationDelay: ".25s" }}>
+                <div className="rounded-xl p-3 border border-pink-500/20" style={{ background: "rgba(255,255,255,.95)" }}>
+                  <QRCodeCanvas
+                    value={typeof window !== "undefined" ? window.location.href : `https://techlympics.my/borang/${slug}`}
+                    size={120}
+                    level="H"
+                    marginSize={1}
+                    imageSettings={{
+                      src: "/logo-mt.svg",
+                      x: undefined,
+                      y: undefined,
+                      height: 24,
+                      width: 24,
+                      excavate: true,
+                    }}
+                  />
+                </div>
+                <p className="text-[9px] font-mono" style={{ color: "rgba(255,255,255,.3)" }}>Imbas untuk mendaftar</p>
               </div>
             </div>
           </section>
