@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
-import { WalkInManageClient } from "@/components/organizer/events/WalkInManageClient";
+import { WalkInManageClient, type SlotScheduleConfig } from "@/components/organizer/events/WalkInManageClient";
 
 export const metadata: Metadata = { title: "Walk-in Registration" };
 
@@ -28,6 +28,7 @@ export default async function WalkInManagePage({
           publishToPortal: true, useViblockarena: true, useDronearena: true, useVibeblocks: true,
           viblockChallengeId: true, viblockChallengeLocked: true, judgingTemplatesLocked: true,
           vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksStartsAt: true, vibeBlocksEndsAt: true, vibeBlocksRunDurationSec: true,
+          walkInSlotSchedule: true,
           competition: { select: { id: true, code: true, name: true } },
           _count: { select: { registrations: true } },
           endpoints: {
@@ -53,7 +54,8 @@ export default async function WalkInManagePage({
     walkInCompetitions: event.walkInCompetitions.map(wic => ({
       ...wic,
       vibeBlocksStartsAt: wic.vibeBlocksStartsAt?.toISOString() ?? null,
-      vibeBlocksEndsAt:   wic.vibeBlocksEndsAt?.toISOString() ?? null,
+      vibeBlocksEndsAt:   wic.vibeBlocksEndsAt?.toISOString()   ?? null,
+      walkInSlotSchedule: (wic.walkInSlotSchedule ?? null) as SlotScheduleConfig | null,
     })),
   };
 

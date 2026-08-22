@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DEFAULT_SLOT_SCHEDULE, buildSlotSchedule, fmtSlotMin, slotTimeToMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
+
+export type { SlotScheduleConfig } from "@/lib/walkin-slots";
 
 type JudgingTemplateSummary = {
   id: string; name: string; code: string; description: string | null;
@@ -30,6 +33,7 @@ type WalkInCompSummary = {
   competition: { id: string; code: string; name: string };
   _count: { registrations: number };
   endpoints: WalkInEndpointItem[];
+  walkInSlotSchedule: SlotScheduleConfig | null;
 };
 
 type ViblockChallenge = {
@@ -54,6 +58,8 @@ type Registration = {
   confirmedAt: string | null;
   createdAt: string;
   viblockToken: string | null;
+  sessionNumber: number | null;
+  slotNumber: number | null;
   participant: { id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null };
   contingent:  { id: string; name: string; shortName: string | null };
 };
@@ -107,6 +113,242 @@ function dateTimeLocalToISO(dtLocal: string): string {
   return dtLocal.length >= 16 ? dtLocal.slice(0, 16) + ":00.000Z" : dtLocal;
 }
 
+// ── Slot schedule ────────────────────────────────────────────────────────────
+
+function genUnlockCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+function SlotScheduleSection({ eventId, wicId, initial, canWrite, onSaved }: { eventId: string; wicId: string; initial: SlotScheduleConfig | null; canWrite: boolean; onSaved: (cfg: SlotScheduleConfig) => void }) {
+  const [cfg,       setCfg]       = useState<SlotScheduleConfig>(initial ?? DEFAULT_SLOT_SCHEDULE);
+  const [persisted, setPersisted] = useState(initial != null);
+  const [expanded,  setExpanded]  = useState(false);
+  const [unlocked,  setUnlocked]  = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [err,       setErr]       = useState("");
+  const [unlockCode,  setUnlockCode]  = useState<string | null>(null);
+  const [unlockInput, setUnlockInput] = useState("");
+  const [unlockErr,   setUnlockErr]   = useState("");
+
+  // Editable only for admins, and only when nothing saved yet or explicitly unlocked
+  const editable = canWrite && (!persisted || unlocked);
+
+  const set = (patch: Partial<SlotScheduleConfig>) => { setCfg(c => ({ ...c, ...patch })); setSaved(false); };
+
+  const blocks        = buildSlotSchedule(cfg);
+  const endMin        = slotTimeToMin(cfg.endTime);
+  const lastSession   = [...blocks].reverse().find(b => b.type === "session");
+  const overTime      = lastSession != null && lastSession.end > endMin;
+  const totalSlots    = cfg.totalSessions * cfg.slotsPerSession;
+  const sessionCount  = blocks.filter(b => b.type === "session").length;
+
+  async function save() {
+    setSaving(true); setErr(""); setSaved(false);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wicId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walkInSlotSchedule: cfg }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved(cfg);
+      setPersisted(true);
+      setUnlocked(false); // re-lock after save
+      setUnlockCode(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Gagal");
+    } finally { setSaving(false); }
+  }
+
+  function startUnlock() {
+    setUnlockCode(genUnlockCode());
+    setUnlockInput("");
+    setUnlockErr("");
+  }
+
+  function confirmUnlock() {
+    if (unlockInput.trim().toUpperCase() === unlockCode) {
+      setUnlocked(true);
+      setUnlockCode(null);
+      setUnlockErr("");
+    } else {
+      setUnlockErr("Kod tidak sepadan. Cuba lagi.");
+    }
+  }
+
+  const inputCls = "w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:bg-zinc-50 disabled:opacity-60";
+
+  return (
+    <div className="rounded-xl border bg-white p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Clock className="h-4 w-4 text-teal-600 shrink-0" />
+          <p className="text-sm font-semibold text-zinc-800">Jadual Slot</p>
+          {persisted
+            ? <span className="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full shrink-0">Disimpan</span>
+            : <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full shrink-0">Belum disahkan</span>}
+          {!expanded && persisted && (
+            <span className="text-[11px] text-zinc-400 truncate hidden sm:inline">
+              {sessionCount} sesi · {cfg.slotsPerSession} slot/sesi · kapasiti {totalSlots}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {editable && (
+            <Button size="sm" onClick={save} disabled={saving}
+              className="h-7 text-xs gap-1.5 bg-teal-600 hover:bg-teal-700 text-white">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+              {saving ? "Menyimpan…" : saved ? "Disimpan" : "Simpan Jadual"}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => setExpanded(e => !e)}
+            className="h-7 text-xs gap-1.5">
+            {expanded ? <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" /> : <ChevronDown className="h-3.5 w-3.5 transition-transform" />}
+            {expanded ? "Sembunyi" : "Lihat Konfigurasi Slot"}
+          </Button>
+        </div>
+      </div>
+
+      {expanded && (
+        <>
+          {/* First-time verification message */}
+          {!persisted && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <p className="text-xs text-amber-800">
+                <span className="font-semibold">Konfigurasi lalai dipaparkan.</span> Sila semak tetapan di bawah dan klik <span className="font-semibold">Simpan Jadual</span> untuk mengesahkan. Jadual akan dikunci selepas disimpan.
+              </p>
+            </div>
+          )}
+
+          {/* Locked notice + unlock flow */}
+          {persisted && !unlocked && (
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-zinc-600 flex items-center gap-1.5">
+                  <Lock className="h-3.5 w-3.5 text-zinc-400" />
+                  Konfigurasi telah disimpan dan dikunci.
+                </p>
+                {canWrite && !unlockCode && (
+                  <Button size="sm" variant="outline" onClick={startUnlock}
+                    className="h-7 text-xs gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50">
+                    <Unlock className="h-3.5 w-3.5" /> Buka Kunci
+                  </Button>
+                )}
+              </div>
+              {unlockCode && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-zinc-600">Masukkan kod <code className="font-mono font-bold tracking-widest text-zinc-900 bg-white border border-zinc-200 rounded px-1.5 py-0.5">{unlockCode}</code> untuk membuka kunci:</p>
+                  <input
+                    value={unlockInput}
+                    onChange={e => setUnlockInput(e.target.value.toUpperCase())}
+                    maxLength={5}
+                    placeholder="XXXXX"
+                    className="w-24 text-sm font-mono tracking-widest border border-zinc-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                  <Button size="sm" onClick={confirmUnlock} disabled={unlockInput.trim().length !== 5}
+                    className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white">
+                    Sahkan
+                  </Button>
+                  <button type="button" onClick={() => setUnlockCode(null)} className="text-xs text-zinc-400 hover:text-zinc-600">Batal</button>
+                  {unlockErr && <p className="text-xs text-red-500 w-full">{unlockErr}</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {persisted && unlocked && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <p className="text-xs text-amber-800 flex items-center gap-1.5">
+                <Unlock className="h-3.5 w-3.5" />
+                Konfigurasi dibuka kunci. Klik <span className="font-semibold">Simpan Jadual</span> untuk menyimpan perubahan dan mengunci semula.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Masa mula</label>
+              <input type="time" value={cfg.startTime} disabled={!editable}
+                onChange={e => set({ startTime: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Masa tamat</label>
+              <input type="time" value={cfg.endTime} disabled={!editable}
+                onChange={e => set({ endTime: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Jumlah sesi</label>
+              <input type="number" min={1} value={cfg.totalSessions} disabled={!editable}
+                onChange={e => set({ totalSessions: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Tempoh sesi (minit)</label>
+              <input type="number" min={1} value={cfg.sessionMinutes} disabled={!editable}
+                onChange={e => set({ sessionMinutes: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Slot setiap sesi</label>
+              <input type="number" min={1} value={cfg.slotsPerSession} disabled={!editable}
+                onChange={e => set({ slotsPerSession: Math.max(1, Number(e.target.value) || 1) })} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Persediaan antara sesi (minit)</label>
+              <input type="number" min={0} value={cfg.gapMinutes} disabled={!editable}
+                onChange={e => set({ gapMinutes: Math.max(0, Number(e.target.value) || 0) })} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Rehat mula</label>
+              <input type="time" value={cfg.restStart} disabled={!editable}
+                onChange={e => set({ restStart: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 block mb-0.5">Rehat tamat</label>
+              <input type="time" value={cfg.restEnd} disabled={!editable}
+                onChange={e => set({ restEnd: e.target.value })} className={inputCls} />
+            </div>
+          </div>
+
+          {err && <p className="text-xs text-red-500">{err}</p>}
+
+      {/* Schedule visualization */}
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
+          <span><span className="font-semibold text-zinc-700">{sessionCount}</span> sesi</span>
+          <span><span className="font-semibold text-zinc-700">{cfg.slotsPerSession}</span> slot / sesi</span>
+          <span>Kapasiti: <span className="font-semibold text-teal-700">{totalSlots}</span> slot</span>
+          {lastSession && (
+            <span>Sesi terakhir tamat: <span className={`font-semibold ${overTime ? "text-red-600" : "text-zinc-700"}`}>{fmtSlotMin(lastSession.end)}</span></span>
+          )}
+        </div>
+        {overTime && (
+          <p className="text-[11px] text-red-600">Jadual melebihi waktu tamat ({cfg.endTime}). Kurangkan jumlah sesi atau tempoh.</p>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-72 overflow-y-auto pr-1">
+          {blocks.map((b, i) => b.type === "rest" ? (
+            <div key={`rest-${i}`} className="sm:col-span-2 lg:col-span-3 rounded-md bg-amber-100 border border-amber-200 px-3 py-1.5 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">Rehat</span>
+              <span className="text-[11px] font-mono text-amber-700">{fmtSlotMin(b.start)} – {fmtSlotMin(b.end)}</span>
+            </div>
+          ) : (
+            <div key={`s-${b.n}`} className={`rounded-md border px-3 py-1.5 flex items-center justify-between ${
+              b.end > endMin ? "bg-red-50 border-red-200" : "bg-white border-zinc-200"
+            }`}>
+              <span className="text-[11px] font-semibold text-zinc-700">Sesi {b.n}</span>
+              <span className={`text-[11px] font-mono ${b.end > endMin ? "text-red-600" : "text-zinc-500"}`}>{fmtSlotMin(b.start)} – {fmtSlotMin(b.end)}</span>
+              <span className="text-[10px] text-zinc-400">{cfg.slotsPerSession} slot</span>
+            </div>
+          ))}
+        </div>
+      </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function WalkInManageClient({ event, canWrite }: { event: EventSummary; canWrite: boolean }) {
   const [wicList,       setWicList]       = useState<WalkInCompSummary[]>(event.walkInCompetitions);
   const [selectedWic,   setSelectedWic]   = useState<WalkInCompSummary | null>(
@@ -120,6 +362,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [stats,         setStats]         = useState<Stats>({});
   const [loading,       setLoading]       = useState(false);
   const [statusFilter,  setStatusFilter]  = useState<string>("ALL");
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [qrTarget,      setQrTarget]      = useState<Registration | null>(null);
   const [updating,      setUpdating]      = useState<string | null>(null);
 
@@ -184,6 +427,34 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     }, 30_000);
     return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
   }, [selectedWic, statusFilter, loadRegistrations]);
+
+  // Group registrations by session ("No Session" for those without a slot)
+  const tableColSpan = (canWrite ? 8 : 7)
+    + (selectedWic?.useViblockarena ? 1 : 0)
+    + (selectedWic?.useVibeblocks  ? 1 : 0)
+    + (selectedWic?.useDronearena  ? 1 : 0);
+
+  const regGroups = useMemo(() => {
+    const schedule = selectedWic?.walkInSlotSchedule ? buildSlotSchedule(selectedWic.walkInSlotSchedule) : [];
+    const timeOf = (n: number) => {
+      const b = schedule.find(blk => blk.type === "session" && blk.n === n);
+      return b && b.type === "session" ? `${fmtSlotMin(b.start)} – ${fmtSlotMin(b.end)}` : null;
+    };
+    const map = new Map<number | null, Registration[]>();
+    for (const r of registrations) {
+      const key = r.sessionNumber ?? null;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
+    }
+    return [...map.entries()]
+      .sort((a, b) => (a[0] ?? Infinity) - (b[0] ?? Infinity))
+      .map(([session, rows]) => ({
+        key:   session == null ? "none" : `s${session}`,
+        label: session == null ? "Tiada Sesi" : `Sesi ${session}`,
+        time:  session == null ? null : timeOf(session),
+        rows:  [...rows].sort((a, b) => (a.slotNumber ?? Infinity) - (b.slotNumber ?? Infinity)),
+      }));
+  }, [registrations, selectedWic?.walkInSlotSchedule]);
 
   const [viblockActionId, setViblockActionId] = useState<string | null>(null);
   const [droneActionId,   setDroneActionId]   = useState<string | null>(null);
@@ -826,6 +1097,15 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
 
             {selectedWic && (
               <>
+                <SlotScheduleSection
+                  key={selectedWic.id}
+                  eventId={event.id}
+                  wicId={selectedWic.id}
+                  initial={selectedWic.walkInSlotSchedule}
+                  canWrite={canWrite}
+                  onSaved={cfg => updateWic(selectedWic.id, { walkInSlotSchedule: cfg })}
+                />
+
                 {/* Configuration card */}
                 {canWrite && (
                   <div className="rounded-xl border bg-white p-4 space-y-4">
@@ -1295,6 +1575,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Peserta</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Kontinjen</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Kaedah</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Slot</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Status</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Masa Daftar</th>
                         {selectedWic?.useViblockarena && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Viblock</th>}
@@ -1305,14 +1586,29 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                     </thead>
                     <tbody className="divide-y">
                       {loading ? (
-                        <tr><td colSpan={(canWrite ? 7 : 6) + (selectedWic?.useViblockarena ? 1 : 0) + (selectedWic?.useVibeblocks ? 1 : 0) + (selectedWic?.useDronearena ? 1 : 0)} className="px-4 py-10 text-center text-zinc-400">
+                        <tr><td colSpan={tableColSpan} className="px-4 py-10 text-center text-zinc-400">
                           <Loader2 className="h-5 w-5 animate-spin mx-auto" />
                         </td></tr>
                       ) : registrations.length === 0 ? (
-                        <tr><td colSpan={(canWrite ? 7 : 6) + (selectedWic?.useViblockarena ? 1 : 0) + (selectedWic?.useVibeblocks ? 1 : 0) + (selectedWic?.useDronearena ? 1 : 0)} className="px-4 py-10 text-center text-xs text-zinc-400">
+                        <tr><td colSpan={tableColSpan} className="px-4 py-10 text-center text-xs text-zinc-400">
                           Tiada pendaftaran{statusFilter !== "ALL" ? ` dengan status ${statusFilter}` : ""}.
                         </td></tr>
-                      ) : registrations.map((reg, i) => (
+                      ) : regGroups.map((g) => (
+                        <Fragment key={g.key}>
+                        <tr className="bg-zinc-100/70 border-y border-zinc-200">
+                          <td colSpan={tableColSpan} className="px-4 py-2">
+                            <button type="button"
+                              onClick={() => setCollapsedGroups(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
+                              className="flex items-center gap-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 transition-colors"
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 text-zinc-400 transition-transform ${collapsedGroups[g.key] ? "-rotate-90" : ""}`} />
+                              {g.label}
+                              {g.time && <span className="font-mono font-normal text-zinc-400">{g.time}</span>}
+                              <span className="text-[10px] font-medium text-zinc-500 bg-white border border-zinc-200 rounded-full px-1.5 py-0.5 tabular-nums">{g.rows.length}</span>
+                            </button>
+                          </td>
+                        </tr>
+                        {!collapsedGroups[g.key] && g.rows.map((reg, i) => (
                         <tr key={reg.id} className="hover:bg-zinc-50/60">
                           <td className="px-4 py-3 text-xs text-zinc-400 tabular-nums">{i + 1}</td>
                           <td className="px-4 py-3">
@@ -1326,6 +1622,15 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                             <Badge variant="outline" className={`text-[10px] ${reg.method === "COUNTER" ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-zinc-50 text-zinc-600 border-zinc-200"}`}>
                               {reg.method}
                             </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-xs tabular-nums">
+                            {reg.sessionNumber != null && reg.slotNumber != null ? (
+                              <span className="font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 text-[11px]">
+                                {reg.slotNumber}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-300">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <Badge variant="outline" className={`text-[10px] ${STATUS_COLOR[reg.status]}`}>
@@ -1471,6 +1776,8 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                             </td>
                           )}
                         </tr>
+                        ))}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>

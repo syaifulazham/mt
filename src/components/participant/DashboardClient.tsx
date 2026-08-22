@@ -18,7 +18,10 @@ import {
   PartyPopper,
   Gamepad2,
   Eye,
+  Clock,
+  RefreshCw,
 } from "lucide-react";
+import { buildSlotSchedule, fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -54,6 +57,7 @@ type WalkInEntry = {
   id: string;
   maxSlots: number;
   useViblockarena: boolean;
+  walkInSlotSchedule: SlotScheduleConfig | null;
   registrations: number;
   event: {
     id: string;
@@ -66,6 +70,16 @@ type WalkInEntry = {
   competition: { id: string; code: string; name: string; participationType: string };
 };
 
+type WalkInReg = {
+  id: string;
+  status: string;
+  viblockToken: string | null;
+  sessionNumber: number | null;
+  slotNumber: number | null;
+};
+
+type SlotChoice = { sessionNumber: number; slotNumber: number };
+
 type Props = {
   participant: Participant;
   teams: TeamEntry[];
@@ -73,7 +87,7 @@ type Props = {
   competitions: CompetitionEntry[];
   totalCompetitions: number;
   walkInCompetitions: WalkInEntry[];
-  existingRegistrations: Record<string, { id: string; status: string; viblockToken: string | null }>;
+  existingRegistrations: Record<string, WalkInReg>;
 };
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -110,19 +124,29 @@ const STATUS_STYLE: Record<string, string> = {
 
 /* ── RegisterModal ─────────────────────────────────────────────────────── */
 
+type SessionSlots = { n: number; start: number; end: number; booked: number[] };
+
 function RegisterModal({
   target,
   registering,
   error,
+  refreshKey,
   onConfirm,
   onClose,
 }: {
   target: WalkInEntry;
   registering: boolean;
   error: string;
-  onConfirm: () => void;
+  refreshKey: number;
+  onConfirm: (slot: SlotChoice | null) => void;
   onClose: () => void;
 }) {
+  const cfg = target.walkInSlotSchedule;
+  const [sessions,     setSessions]     = useState<SessionSlots[] | null>(null);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsErr,     setSlotsErr]     = useState("");
+  const [selected,     setSelected]     = useState<SlotChoice | null>(null);
+
   // Close on Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -132,16 +156,39 @@ function RegisterModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Load live slot availability (re-fetches when refreshKey changes, e.g. after SLOT_TAKEN)
+  useEffect(() => {
+    if (!cfg) return;
+    let cancelled = false;
+    setSlotsLoading(true); setSlotsErr(""); setSelected(null);
+    fetch(`/api/v2/participant/walkin/slots?walkInCompetitionId=${target.id}`)
+      .then(async (r) => {
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? "Ralat");
+        return j;
+      })
+      .then((j) => { if (!cancelled) setSessions(j.sessions ?? []); })
+      .catch(() => { if (!cancelled) setSlotsErr("Gagal memuatkan slot. Tutup dan buka semula."); })
+      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    return () => { cancelled = true; };
+  }, [cfg, target.id, refreshKey]);
+
+  const selectedSession = selected && sessions
+    ? sessions.find((s) => s.n === selected.sessionNumber)
+    : null;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.5)" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-2xl p-6 space-y-4">
+      <div className={`w-full ${cfg ? "max-w-lg" : "max-w-sm"} rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto`}>
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-base font-bold dark:text-zinc-100">Sahkan Pendaftaran</h2>
+          <h2 className="text-base font-bold dark:text-zinc-100">
+            {cfg ? "Pilih Sesi & Slot" : "Sahkan Pendaftaran"}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -166,6 +213,80 @@ function RegisterModal({
           )}
         </div>
 
+        {/* Slot picker (cinema style) */}
+        {cfg && (
+          <div className="space-y-3">
+            {/* Legend */}
+            <div className="flex items-center gap-4 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3.5 w-3.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800" /> Tersedia
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3.5 w-3.5 rounded bg-zinc-300 dark:bg-zinc-600" /> Ditempah
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3.5 w-3.5 rounded bg-teal-500" /> Pilihan anda
+              </span>
+            </div>
+
+            {slotsLoading && (
+              <div className="flex items-center justify-center gap-2 py-8 text-zinc-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-xs">Memuatkan slot…</span>
+              </div>
+            )}
+            {slotsErr && <p className="text-xs text-red-500">{slotsErr}</p>}
+
+            {!slotsLoading && sessions && (
+              <div className="space-y-3">
+                {sessions.map((s) => (
+                  <div key={s.n} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+                        Sesi {s.n}
+                        <span className="ml-2 font-normal text-zinc-400">
+                          {cfg.slotsPerSession - s.booked.length}/{cfg.slotsPerSession} tersedia
+                        </span>
+                      </p>
+                      <p className="text-[10px] font-mono text-zinc-400">{fmtSlotMin(s.start)} – {fmtSlotMin(s.end)}</p>
+                    </div>
+                    <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
+                      {Array.from({ length: cfg.slotsPerSession }, (_, i) => i + 1).map((slot) => {
+                        const isBooked = s.booked.includes(slot);
+                        const isSel = selected?.sessionNumber === s.n && selected?.slotNumber === slot;
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            disabled={isBooked || registering}
+                            onClick={() => setSelected({ sessionNumber: s.n, slotNumber: slot })}
+                            className={`h-8 rounded-md text-[11px] font-semibold transition-colors ${
+                              isBooked
+                                ? "bg-zinc-300 dark:bg-zinc-600 text-zinc-500 dark:text-zinc-400 cursor-not-allowed"
+                                : isSel
+                                  ? "bg-teal-500 text-white ring-2 ring-teal-300"
+                                  : "bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:border-teal-400 hover:text-teal-600"
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Selection summary */}
+            {selected && selectedSession && (
+              <p className="text-xs font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-lg px-3 py-2">
+                Pilihan anda: Sesi {selected.sessionNumber} · Slot {selected.slotNumber} ({fmtSlotMin(selectedSession.start)} – {fmtSlotMin(selectedSession.end)})
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Warning */}
         <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
           Pendaftaran ini tidak boleh dibatalkan.
@@ -188,8 +309,8 @@ function RegisterModal({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            disabled={registering}
+            onClick={() => onConfirm(selected)}
+            disabled={registering || (cfg ? !selected || slotsLoading || !!slotsErr : false)}
             className="flex-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {registering ? (
@@ -405,14 +526,15 @@ export function DashboardClient({
   walkInCompetitions,
   existingRegistrations,
 }: Props) {
-  const [registrations, setRegistrations] = useState<Record<string, { id: string; status: string; viblockToken: string | null }>>(existingRegistrations);
+  const [registrations, setRegistrations] = useState<Record<string, WalkInReg>>(existingRegistrations);
   const [registerTarget, setRegisterTarget] = useState<WalkInEntry | null>(null);
   const [registering, setRegistering]     = useState(false);
   const [registerErr, setRegisterErr]     = useState("");
+  const [slotRefreshKey, setSlotRefreshKey] = useState(0);
   const [qrTarget, setQrTarget]           = useState<{ id: string; name: string } | null>(null);
   const [tokenTarget, setTokenTarget]     = useState<string | null>(null);
 
-  const handleRegister = useCallback(async () => {
+  const handleRegister = useCallback(async (slot: SlotChoice | null) => {
     if (!registerTarget) return;
     setRegistering(true);
     setRegisterErr("");
@@ -420,17 +542,22 @@ export function DashboardClient({
       const res = await fetch("/api/v2/participant/walkin/register", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ walkInCompetitionId: registerTarget.id }),
+        body:    JSON.stringify({ walkInCompetitionId: registerTarget.id, ...(slot ?? {}) }),
       });
       const j = await res.json();
       if (!res.ok) {
-        setRegisterErr(
-          j.error === "ALREADY_REGISTERED"
-            ? "Anda sudah berdaftar."
-            : j.error === "UNIQUE_PARTICIPATION"
-            ? "Anda sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
-            : (j.message ?? "Gagal mendaftar."),
-        );
+        if (j.error === "ALREADY_REGISTERED") {
+          setRegisterErr("Anda sudah berdaftar.");
+        } else if (j.error === "UNIQUE_PARTICIPATION") {
+          setRegisterErr("Anda sudah berdaftar untuk pertandingan walk-in lain dalam acara ini.");
+        } else if (j.error === "SLOT_TAKEN") {
+          setSlotRefreshKey((k) => k + 1); // refresh availability in the picker
+          setRegisterErr("Slot baru sahaja ditempah. Sila pilih slot lain.");
+        } else if (j.error === "SLOT_REQUIRED") {
+          setRegisterErr("Sila pilih sesi dan slot.");
+        } else {
+          setRegisterErr(j.message ?? "Gagal mendaftar.");
+        }
       } else {
         setRegistrations((prev) => ({ ...prev, [registerTarget.id]: j.data }));
         setRegisterTarget(null);
@@ -728,7 +855,22 @@ export function DashboardClient({
 
                       {/* Status message */}
                       {reg && (
-                        <div className="px-4 pb-3">
+                        <div className="px-4 pb-3 space-y-2">
+                          {reg.sessionNumber != null && reg.slotNumber != null && (
+                            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800">
+                              <Clock className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
+                              <p className="text-xs font-medium text-teal-700 dark:text-teal-300">
+                                Sesi {reg.sessionNumber} · Slot {reg.slotNumber}
+                                {(() => {
+                                  if (!wic.walkInSlotSchedule) return null;
+                                  const s = buildSlotSchedule(wic.walkInSlotSchedule).find(
+                                    (b) => b.type === "session" && b.n === reg.sessionNumber,
+                                  );
+                                  return s && s.type === "session" ? ` · ${fmtSlotMin(s.start)} – ${fmtSlotMin(s.end)}` : null;
+                                })()}
+                              </p>
+                            </div>
+                          )}
                           {reg.status === "CONFIRMED" ? (
                             <div className="space-y-2">
                               <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
@@ -782,6 +924,7 @@ export function DashboardClient({
           target={registerTarget}
           registering={registering}
           error={registerErr}
+          refreshKey={slotRefreshKey}
           onConfirm={handleRegister}
           onClose={() => { if (!registering) setRegisterTarget(null); }}
         />

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
 import { DashboardClient } from "@/components/participant/DashboardClient";
+import type { SlotScheduleConfig } from "@/lib/walkin-slots";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -92,6 +93,7 @@ export default async function DashboardPage() {
       id: true,
       maxSlots: true,
       useViblockarena: true,
+      walkInSlotSchedule: true,
       _count: { select: { registrations: true } },
       event: {
         select: {
@@ -113,7 +115,7 @@ export default async function DashboardPage() {
   // Existing walk-in registrations for this participant
   const existingRegs = await db.walkInRegistration.findMany({
     where: { participantId: session.participantId },
-    select: { id: true, walkInCompetitionId: true, status: true, viblockToken: true },
+    select: { id: true, walkInCompetitionId: true, status: true, viblockToken: true, sessionNumber: true, slotNumber: true },
   });
 
   // Serialize
@@ -140,6 +142,7 @@ export default async function DashboardPage() {
     id:              wic.id,
     maxSlots:        wic.maxSlots,
     useViblockarena: wic.useViblockarena,
+    walkInSlotSchedule: (wic.walkInSlotSchedule ?? null) as SlotScheduleConfig | null,
     registrations:   wic._count.registrations,
     event: {
       id:        wic.event.id,
@@ -152,9 +155,9 @@ export default async function DashboardPage() {
     competition: wic.competition,
   }));
 
-  const existingRegistrations: Record<string, { id: string; status: string; viblockToken: string | null }> = {};
+  const existingRegistrations: Record<string, { id: string; status: string; viblockToken: string | null; sessionNumber: number | null; slotNumber: number | null }> = {};
   for (const r of existingRegs) {
-    existingRegistrations[r.walkInCompetitionId] = { id: r.id, status: r.status, viblockToken: r.viblockToken };
+    existingRegistrations[r.walkInCompetitionId] = { id: r.id, status: r.status, viblockToken: r.viblockToken, sessionNumber: r.sessionNumber, slotNumber: r.slotNumber };
   }
 
   return (

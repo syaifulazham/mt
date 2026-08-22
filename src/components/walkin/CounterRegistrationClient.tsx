@@ -8,6 +8,7 @@ import {
   UserCheck, MapPin,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 /* ─── Brand palette ─────────────────────────────────────────────────────── */
 const B = {
@@ -23,6 +24,7 @@ const B = {
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 type WicSummary = {
   id: string; maxSlots: number;
+  walkInSlotSchedule: SlotScheduleConfig | null;
   competition: { id: string; code: string; name: string; participationType: string };
   _count: { registrations: number };
 };
@@ -31,10 +33,13 @@ type WicInfo =
       event: { id: string; name: string; slug: string; venue: string | null; startDate: string | null };
       walkInCompetitions: WicSummary[]; }
   | { isGeneral: false; endpointId: string; label: string | null;
-      id: string; maxSlots: number;
+      id: string; maxSlots: number; walkInSlotSchedule: SlotScheduleConfig | null;
       event: { id: string; name: string; slug: string; venue: string | null; startDate: string | null };
       competition: { id: string; code: string; name: string; participationType: string };
       _count: { registrations: number }; };
+
+type SessionSlots = { n: number; start: number; end: number; booked: number[] };
+type SlotChoice = { sessionNumber: number; slotNumber: number };
 
 type ParticipantResult = {
   id: string; name: string; ic: string | null; gender: string;
@@ -604,7 +609,10 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
   const [searching,   setSearching]   = useState(false);
   const [results,     setResults]     = useState<ParticipantResult[]>([]);
   const [selected,    setSelected]    = useState<ParticipantResult | null>(null);
-  const [registeredBy, setRegisteredBy] = useState("");
+  const [slotSessions, setSlotSessions] = useState<SessionSlots[] | null>(null);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotChoice,   setSlotChoice]   = useState<SlotChoice | null>(null);
+  const [slotRefreshKey, setSlotRefreshKey] = useState(0);
   const [registering,  setRegistering]  = useState(false);
   const [regResult,    setRegResult]    = useState<RegisteredResult | null>(null);
   const [regErr,       setRegErr]       = useState("");
@@ -630,6 +638,27 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
   }
 
   const activeWicId = wic && !wic.isGeneral ? wic.id : selectedWic?.id ?? null;
+  const activeCfg: SlotScheduleConfig | null = wic
+    ? (wic.isGeneral ? selectedWic?.walkInSlotSchedule ?? null : wic.walkInSlotSchedule)
+    : null;
+
+  // Load slot availability for the active competition (when a schedule is configured)
+  useEffect(() => {
+    if (!authed || !activeWicId || !activeCfg) { setSlotSessions(null); return; }
+    let cancelled = false;
+    setSlotsLoading(true); setSlotChoice(null);
+    const sp = new URLSearchParams({ passcode, competitionId: activeWicId });
+    fetch(`/api/v2/walkin/${slug}/slots?${sp}`)
+      .then(r => r.json())
+      .then(j => { if (!cancelled) setSlotSessions(j.sessions ?? null); })
+      .catch(() => { if (!cancelled) setSlotSessions(null); })
+      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    return () => { cancelled = true; };
+  }, [authed, activeWicId, activeCfg, slotRefreshKey, slug, passcode]);
+
+  const selectedSlotSession = slotChoice && slotSessions
+    ? slotSessions.find(s => s.n === slotChoice.sessionNumber)
+    : null;
 
   async function handleSearch(value: string) {
     setQ(value); setSelected(null);
@@ -647,17 +676,26 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
     setRegistering(true); setRegErr("");
     const res = await fetch(`/api/v2/walkin/${slug}/register`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ participantId: selected.id, passcode, registeredBy: registeredBy.trim() || null, competitionId: activeWicId }),
+      body: JSON.stringify({ participantId: selected.id, passcode, competitionId: activeWicId, ...(slotChoice ?? {}) }),
     });
     const j = await res.json();
-    if (!res.ok) setRegErr(
-      j.error === "ALREADY_REGISTERED"
-        ? "Peserta sudah berdaftar."
-        : j.error === "UNIQUE_PARTICIPATION"
-        ? "Peserta sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
-        : (j.message ?? j.error ?? "Gagal mendaftar."),
-    );
-    else { setRegResult(j.data); setSelected(null); setQ(""); setResults([]); }
+    if (!res.ok) {
+      if (j.error === "SLOT_TAKEN") {
+        setRegErr("Slot baru sahaja ditempah. Sila pilih slot lain.");
+        setSlotRefreshKey(k => k + 1);
+      } else setRegErr(
+        j.error === "ALREADY_REGISTERED"
+          ? "Peserta sudah berdaftar."
+          : j.error === "UNIQUE_PARTICIPATION"
+          ? "Peserta sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
+          : j.error === "SLOT_REQUIRED"
+          ? "Sila pilih sesi dan slot."
+          : (j.message ?? j.error ?? "Gagal mendaftar."),
+      );
+    } else {
+      setRegResult(j.data); setSelected(null); setQ(""); setResults([]);
+      setSlotChoice(null); setSlotRefreshKey(k => k + 1);
+    }
     setRegistering(false);
   }
 
@@ -879,14 +917,11 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       </div>
 
       {/* Content */}
-      <div className="relative z-10 max-w-lg mx-auto p-5 space-y-4">
+      <div className={`relative z-10 mx-auto p-5 space-y-4 ${tab === "register" ? "max-w-4xl" : "max-w-lg"}`}>
         {tab === "register" && (
-          <>
-            <input value={registeredBy} onChange={e => setRegisteredBy(e.target.value)}
-              placeholder="Nama kakitangan (pilihan)"
-              className="w-full h-10 rounded-xl px-4 text-sm text-white placeholder-white/25 focus:outline-none"
-              style={{ background: "rgba(255,255,255,.07)", border: "1px solid rgba(255,255,255,.12)" }} />
-
+          <div className="grid gap-4 md:grid-cols-2 items-start">
+          {/* ── Left: search + results ── */}
+          <div className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none"
                 style={{ color: "rgba(255,255,255,.3)" }} />
@@ -898,7 +933,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                 style={{ color: "rgba(255,255,255,.4)" }} />}
             </div>
 
-            {results.length > 0 && (
+            {results.length > 0 ? (
               <div className="rounded-2xl border border-white/10 overflow-hidden divide-y divide-white/10"
                 style={{ background: "rgba(255,255,255,.05)", backdropFilter: "blur(12px)" }}>
                 {results.map(p => {
@@ -968,9 +1003,16 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                   );
                 })}
               </div>
+            ) : (
+              <p className="text-center text-xs py-8" style={{ color: "rgba(255,255,255,.25)" }}>
+                {q.trim().length >= 2 ? "Tiada padanan ditemui." : "Taip nama atau IC untuk mencari peserta."}
+              </p>
             )}
+          </div>
 
-            {selected && (
+          {/* ── Right: selected details + slot booking ── */}
+          <div className="md:sticky md:top-4">
+            {selected ? (
               <div className="rounded-2xl p-4 space-y-3 border"
                 style={{ background: `rgba(8,87,130,.2)`, borderColor: `${B.navy}60` }}>
                 <p className="text-sm font-bold text-white">{selected.name}</p>
@@ -980,16 +1022,101 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                   {selected.ic && <span>IC: <strong className="text-white/80 font-mono">{selected.ic}</strong></span>}
                   {selected.age && <span>Umur: <strong className="text-white/80">{selected.age}</strong></span>}
                 </div>
+
+                {/* Slot picker */}
+                {activeCfg && (
+                  <div className="space-y-2.5 pt-3 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: B.gold }}>
+                        Pilih Slot
+                      </p>
+                      {/* Legend */}
+                      <div className="flex items-center gap-2.5 text-[9px]" style={{ color: "rgba(255,255,255,.4)" }}>
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block h-2.5 w-2.5 rounded" style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.2)" }} /> Tersedia
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block h-2.5 w-2.5 rounded" style={{ background: "rgba(255,255,255,.04)" }} /> Ditempah
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block h-2.5 w-2.5 rounded" style={{ background: B.gold }} /> Pilihan
+                        </span>
+                      </div>
+                    </div>
+
+                    {slotsLoading ? (
+                      <div className="flex items-center justify-center gap-2 py-6" style={{ color: "rgba(255,255,255,.4)" }}>
+                        <Loader2 className="h-4 w-4 animate-spin" style={{ color: B.gold }} />
+                        <span className="text-xs">Memuatkan slot…</span>
+                      </div>
+                    ) : slotSessions && (
+                      <div className="max-h-72 overflow-y-auto pr-1 space-y-3">
+                        {slotSessions.map(s => (
+                          <div key={s.n} className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] font-bold" style={{ color: "rgba(255,255,255,.75)" }}>
+                                Sesi {s.n}
+                                <span className="ml-1.5 font-normal" style={{ color: "rgba(255,255,255,.3)" }}>
+                                  {activeCfg.slotsPerSession - s.booked.length}/{activeCfg.slotsPerSession}
+                                </span>
+                              </p>
+                              <p className="text-[10px] font-mono" style={{ color: "rgba(255,255,255,.3)" }}>
+                                {fmtSlotMin(s.start)} – {fmtSlotMin(s.end)}
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-5 gap-1">
+                              {Array.from({ length: activeCfg.slotsPerSession }, (_, i) => i + 1).map(slot => {
+                                const isBooked = s.booked.includes(slot);
+                                const isSel = slotChoice?.sessionNumber === s.n && slotChoice?.slotNumber === slot;
+                                return (
+                                  <button key={slot} type="button"
+                                    disabled={isBooked || registering}
+                                    onClick={() => setSlotChoice({ sessionNumber: s.n, slotNumber: slot })}
+                                    className="h-7 rounded-md text-[10px] font-bold transition-all"
+                                    style={isBooked
+                                      ? { background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.2)", cursor: "not-allowed", textDecoration: "line-through" }
+                                      : isSel
+                                        ? { background: B.gold, color: "#000", boxShadow: `0 0 10px ${B.gold}50` }
+                                        : { background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.75)", border: "1px solid rgba(255,255,255,.15)" }}
+                                  >
+                                    {slot}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {slotChoice && selectedSlotSession && (
+                      <p className="text-[11px] font-semibold rounded-lg px-3 py-2"
+                        style={{ background: "rgba(242,220,12,.1)", color: B.gold, border: "1px solid rgba(242,220,12,.3)" }}>
+                        Pilihan: Sesi {slotChoice.sessionNumber} · Slot {slotChoice.slotNumber} ({fmtSlotMin(selectedSlotSession.start)} – {fmtSlotMin(selectedSlotSession.end)})
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {regErr && <p className="text-xs text-red-400">{regErr}</p>}
-                <button type="button" onClick={handleRegister} disabled={registering}
+                <button type="button" onClick={handleRegister}
+                  disabled={registering || (activeCfg ? !slotChoice || slotsLoading || !slotSessions : false)}
                   className="w-full h-11 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-60"
                   style={{ background: `linear-gradient(90deg, ${B.navy}, ${B.purple})`, color: "white" }}>
                   {registering && <Loader2 className="h-4 w-4 animate-spin" />}
                   Daftar Sekarang
                 </button>
               </div>
+            ) : (
+              <div className="hidden md:flex rounded-2xl border border-dashed p-10 items-center justify-center text-center min-h-44"
+                style={{ borderColor: "rgba(255,255,255,.15)" }}>
+                <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,.3)" }}>
+                  Pilih peserta daripada senarai carian<br />untuk melihat butiran dan pilih slot.
+                </p>
+              </div>
             )}
-          </>
+          </div>
+          </div>
         )}
 
         {tab === "scan" && (

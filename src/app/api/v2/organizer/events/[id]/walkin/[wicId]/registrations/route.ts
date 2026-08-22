@@ -35,6 +35,8 @@ export async function GET(
     confirmedAt: r.confirmedAt,
     createdAt: r.createdAt,
     viblockToken: r.viblockToken,
+    sessionNumber: r.sessionNumber,
+    slotNumber: r.slotNumber,
     participant: r.participant,
     contingent: r.contingent,
   }));

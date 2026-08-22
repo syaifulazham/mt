@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
@@ -19,6 +20,7 @@ export async function PATCH(
     useViblockarena, useDronearena, useVibeblocks,
     viblockChallengeId, viblockChallengeLocked, judgingTemplatesLocked,
     vibeBlocksChallengeId, vibeBlocksEventName, vibeBlocksStartsAt, vibeBlocksEndsAt, vibeBlocksRunDurationSec,
+    walkInSlotSchedule,
   } = await req.json();
 
   // Mutual exclusivity: turning one bot on turns the others off
@@ -47,6 +49,7 @@ export async function PATCH(
       ...(vibeBlocksStartsAt       !== undefined && { vibeBlocksStartsAt:       vibeBlocksStartsAt ? new Date(vibeBlocksStartsAt) : null }),
       ...(vibeBlocksEndsAt         !== undefined && { vibeBlocksEndsAt:         vibeBlocksEndsAt ? new Date(vibeBlocksEndsAt) : null }),
       ...(vibeBlocksRunDurationSec !== undefined && { vibeBlocksRunDurationSec: vibeBlocksRunDurationSec !== null ? Number(vibeBlocksRunDurationSec) : null }),
+      ...(walkInSlotSchedule !== undefined && { walkInSlotSchedule: walkInSlotSchedule ?? Prisma.JsonNull }),
     },
   });
   return NextResponse.json({ data: wic });

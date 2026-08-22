@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getParticipantSession } from "@/lib/auth/participant-session";
 import { Prisma } from "@prisma/client";
+import { isValidSlotScheduleConfig, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 export async function POST(req: NextRequest) {
   const session = await getParticipantSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const body = await req.json();
-  const { walkInCompetitionId } = body as { walkInCompetitionId?: string };
+  const { walkInCompetitionId, sessionNumber, slotNumber } = body as {
+    walkInCompetitionId?: string; sessionNumber?: number; slotNumber?: number;
+  };
   if (!walkInCompetitionId)
     return NextResponse.json({ error: "MISSING_WALK_IN_COMPETITION_ID" }, { status: 400 });
 
@@ -20,6 +23,7 @@ export async function POST(req: NextRequest) {
       maxSlots: true,
       publishToPortal: true,
       event: { select: { id: true, walkInUniqueParticipation: true } },
+      walkInSlotSchedule: true,
       _count: { select: { registrations: true } },
     },
   });
@@ -32,6 +36,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "SLOTS_FULL" }, { status: 409 });
 
   const { participantId, contingentId } = session;
+
+  // Slot selection required when a slot schedule is configured
+  const rawCfg = wic.walkInSlotSchedule;
+  const scheduleCfg = isValidSlotScheduleConfig(rawCfg) ? rawCfg : null;
+  if (scheduleCfg) {
+    const cfg = scheduleCfg;
+    const validSession = Number.isInteger(sessionNumber) && sessionNumber! >= 1 && sessionNumber! <= cfg.totalSessions;
+    const validSlot    = Number.isInteger(slotNumber)    && slotNumber!    >= 1 && slotNumber!    <= cfg.slotsPerSession;
+    if (!validSession || !validSlot)
+      return NextResponse.json({ error: "SLOT_REQUIRED" }, { status: 400 });
+
+    const taken = await db.walkInRegistration.findFirst({
+      where: {
+        walkInCompetitionId,
+        sessionNumber: sessionNumber!,
+        slotNumber: slotNumber!,
+        status: { in: ["PENDING", "CONFIRMED"] },
+      },
+      select: { id: true },
+    });
+    if (taken) return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
+  }
 
   // Penyertaan Unik: one active walk-in registration per participant per event
   if (wic.event.walkInUniqueParticipation) {
@@ -54,13 +80,18 @@ export async function POST(req: NextRequest) {
         contingentId,
         status: "PENDING",
         method: "PORTAL",
+        ...(scheduleCfg && { sessionNumber: sessionNumber!, slotNumber: slotNumber! }),
       },
-      select: { id: true, status: true },
+      select: { id: true, status: true, sessionNumber: true, slotNumber: true },
     });
     return NextResponse.json({ data: reg }, { status: 201 });
   } catch (e: unknown) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const target = (e.meta?.target as string[] | undefined) ?? [];
+      if (target.includes("sessionNumber"))
+        return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
       return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });
+    }
     throw e;
   }
 }
