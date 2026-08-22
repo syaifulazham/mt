@@ -67,64 +67,138 @@ const SCOPE_LABEL: Record<string, string> = {
   ONLINE_ZONE: "Online — Zon", ONLINE_OPEN: "Online — Terbuka",
 };
 
-// ── Topological layout ────────────────────────────────────────────────────────
+// ── Topological layout (grouped by connected chain) ─────────────────────────
 
-function computeLayout(nodes: GraphNode[]): Map<string, NodePos> {
-  // Kahn's algorithm — assign a column (level) to each node
-  const inDeg = new Map<string, number>();
-  const adj   = new Map<string, string[]>();
-  for (const n of nodes) { inDeg.set(n.id, 0); adj.set(n.id, []); }
+const CHAIN_GAP = 48; // vertical gap between chains
+const ISOLATED_COLS = 4; // columns for the isolated-events grid
+
+function computeLayout(nodes: GraphNode[]): { positions: Map<string, NodePos>; isolatedY: number } {
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+  // 1. Find connected components (undirected BFS)
+  const visited = new Set<string>();
+  const components: string[][] = [];
+
   for (const n of nodes) {
-    for (const sid of n.successorIds) {
-      adj.get(n.id)!.push(sid);
-      inDeg.set(sid, (inDeg.get(sid) ?? 0) + 1);
-    }
-  }
-
-  const level = new Map<string, number>();
-  const queue = nodes.filter((n) => (inDeg.get(n.id) ?? 0) === 0).map((n) => n.id);
-  for (const id of queue) level.set(id, 0);
-
-  let head = 0;
-  while (head < queue.length) {
-    const id = queue[head++];
-    for (const nid of adj.get(id) ?? []) {
-      const newLevel = (level.get(id) ?? 0) + 1;
-      if (!level.has(nid) || level.get(nid)! < newLevel) {
-        level.set(nid, newLevel);
+    if (visited.has(n.id)) continue;
+    const comp: string[] = [];
+    const bfs = [n.id];
+    visited.add(n.id);
+    let head = 0;
+    while (head < bfs.length) {
+      const cur = bfs[head++];
+      comp.push(cur);
+      const node = nodeMap.get(cur)!;
+      for (const nid of [...node.prerequisiteIds, ...node.successorIds]) {
+        if (!visited.has(nid) && nodeMap.has(nid)) {
+          visited.add(nid);
+          bfs.push(nid);
+        }
       }
-      inDeg.set(nid, (inDeg.get(nid) ?? 1) - 1);
-      if (inDeg.get(nid) === 0) queue.push(nid);
     }
-  }
-  // Fallback: any unleveled node goes to column 0
-  for (const n of nodes) { if (!level.has(n.id)) level.set(n.id, 0); }
-
-  // Group nodes by column
-  const cols = new Map<number, string[]>();
-  for (const [id, col] of level) {
-    if (!cols.has(col)) cols.set(col, []);
-    cols.get(col)!.push(id);
+    components.push(comp);
   }
 
-  // Sort columns
-  const sortedCols = [...cols.keys()].sort((a, b) => a - b);
+  // 2. Separate isolated (single-node, no edges) from chains
+  const chains = components.filter(c => c.length > 1 || (() => {
+    const n = nodeMap.get(c[0])!;
+    return n.prerequisiteIds.length > 0 || n.successorIds.length > 0;
+  })());
+  const isolated = components.filter(c => c.length === 1 && (() => {
+    const n = nodeMap.get(c[0])!;
+    return n.prerequisiteIds.length === 0 && n.successorIds.length === 0;
+  })());
 
-  // Assign x/y positions
+  // 3. Sort chains: largest first, then by earliest startDate
+  chains.sort((a, b) => {
+    if (b.length !== a.length) return b.length - a.length;
+    const dateA = a.map(id => nodeMap.get(id)!.startDate).filter(Boolean).sort()[0] ?? "";
+    const dateB = b.map(id => nodeMap.get(id)!.startDate).filter(Boolean).sort()[0] ?? "";
+    return dateA.localeCompare(dateB);
+  });
+
+  // 4. For each chain, run topological layout (Kahn's) and offset
   const positions = new Map<string, NodePos>();
-  sortedCols.forEach((col, colIdx) => {
-    const idsInCol = cols.get(col)!;
-    idsInCol.forEach((id, rowIdx) => {
+  let currentY = CANVAS_PAD;
+
+  for (const comp of chains) {
+    const compNodes = comp.map(id => nodeMap.get(id)!);
+
+    // Kahn's algorithm for this component
+    const inDeg = new Map<string, number>();
+    const adj   = new Map<string, string[]>();
+    for (const n of compNodes) { inDeg.set(n.id, 0); adj.set(n.id, []); }
+    for (const n of compNodes) {
+      for (const sid of n.successorIds) {
+        if (adj.has(sid)) {
+          adj.get(n.id)!.push(sid);
+          inDeg.set(sid, (inDeg.get(sid) ?? 0) + 1);
+        }
+      }
+    }
+
+    const level = new Map<string, number>();
+    const queue = compNodes.filter(n => (inDeg.get(n.id) ?? 0) === 0).map(n => n.id);
+    for (const id of queue) level.set(id, 0);
+
+    let head = 0;
+    while (head < queue.length) {
+      const id = queue[head++];
+      for (const nid of adj.get(id) ?? []) {
+        const newLevel = (level.get(id) ?? 0) + 1;
+        if (!level.has(nid) || level.get(nid)! < newLevel) level.set(nid, newLevel);
+        inDeg.set(nid, (inDeg.get(nid) ?? 1) - 1);
+        if (inDeg.get(nid) === 0) queue.push(nid);
+      }
+    }
+    for (const n of compNodes) { if (!level.has(n.id)) level.set(n.id, 0); }
+
+    // Group by column within this chain
+    const cols = new Map<number, string[]>();
+    for (const [id, col] of level) {
+      if (!cols.has(col)) cols.set(col, []);
+      cols.get(col)!.push(id);
+    }
+    const sortedCols = [...cols.keys()].sort((a, b) => a - b);
+
+    // Find the max rows in this chain
+    let maxRows = 0;
+    for (const col of sortedCols) maxRows = Math.max(maxRows, cols.get(col)!.length);
+
+    // Assign positions
+    for (const col of sortedCols) {
+      const idsInCol = cols.get(col)!;
+      idsInCol.forEach((id, rowIdx) => {
+        positions.set(id, {
+          x: CANVAS_PAD + col * (NODE_W + COL_GAP),
+          y: currentY + rowIdx * (NODE_H + ROW_GAP),
+          w: NODE_W,
+          h: NODE_H,
+        });
+      });
+    }
+
+    currentY += maxRows * (NODE_H + ROW_GAP) + CHAIN_GAP;
+  }
+
+  // 5. Layout isolated events in a grid below chains
+  const isolatedY = currentY;
+  const isolatedNodes = isolated.flat();
+  if (isolatedNodes.length > 0) {
+    currentY += 30; // space for separator label
+    isolatedNodes.forEach((id, i) => {
+      const col = i % ISOLATED_COLS;
+      const row = Math.floor(i / ISOLATED_COLS);
       positions.set(id, {
-        x: CANVAS_PAD + colIdx * (NODE_W + COL_GAP),
-        y: CANVAS_PAD + rowIdx * (NODE_H + ROW_GAP),
+        x: CANVAS_PAD + col * (NODE_W + COL_GAP),
+        y: currentY + row * (NODE_H + ROW_GAP),
         w: NODE_W,
         h: NODE_H,
       });
     });
-  });
+  }
 
-  return positions;
+  return { positions, isolatedY };
 }
 
 function canvasSize(positions: Map<string, NodePos>) {
@@ -244,6 +318,7 @@ export function EventFlowGraph({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [positions, setPositions] = useState<Map<string, NodePos>>(new Map());
+  const [isolatedY,  setIsolatedY]  = useState(0);
   const [canvas, setCanvas]   = useState({ w: 800, h: 600 });
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
 
@@ -259,8 +334,9 @@ export function EventFlowGraph({ onClose }: { onClose: () => void }) {
       .then((r) => r.json())
       .then((d: GraphData) => {
         setData(d);
-        const pos = computeLayout(d.nodes);
+        const { positions: pos, isolatedY: isoY } = computeLayout(d.nodes);
         setPositions(pos);
+        setIsolatedY(isoY);
         setCanvas(canvasSize(pos));
       })
       .catch(() => setError("Gagal memuatkan data graf."))
@@ -444,14 +520,19 @@ export function EventFlowGraph({ onClose }: { onClose: () => void }) {
               );
             })}
 
-            {/* Isolated events note */}
-            {data.nodes.filter((n) => n.prerequisiteIds.length === 0 && n.successorIds.length === 0).length > 0 && (
-              <div
-                style={{ position: "absolute", top: CANVAS_PAD - 22, right: CANVAS_PAD }}
-                className="text-[10px] text-zinc-400 italic"
-              >
-                Acara tanpa prasyarat ditunjukkan secara berasingan
-              </div>
+            {/* Isolated events separator */}
+            {isolatedY > 0 && data.nodes.some((n) => n.prerequisiteIds.length === 0 && n.successorIds.length === 0) && (
+              <>
+                <div
+                  style={{ position: "absolute", top: isolatedY - 8, left: CANVAS_PAD, right: CANVAS_PAD, height: 1, background: "#e4e4e7" }}
+                />
+                <div
+                  style={{ position: "absolute", top: isolatedY - 18, left: CANVAS_PAD }}
+                  className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400"
+                >
+                  Acara Tanpa Hubungan
+                </div>
+              </>
             )}
           </div>
         )}
