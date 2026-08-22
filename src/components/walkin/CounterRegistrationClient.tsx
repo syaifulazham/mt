@@ -644,6 +644,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
 
   // Load slot availability for the active competition (when a schedule is configured)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!authed || !activeWicId || !activeCfg) { setSlotSessions(null); return; }
     let cancelled = false;
     setSlotsLoading(true); setSlotChoice(null);

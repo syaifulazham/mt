@@ -160,6 +160,7 @@ function RegisterModal({
   useEffect(() => {
     if (!cfg) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSlotsLoading(true); setSlotsErr(""); setSelected(null);
     fetch(`/api/v2/participant/walkin/slots?walkInCompetitionId=${target.id}`)
       .then(async (r) => {

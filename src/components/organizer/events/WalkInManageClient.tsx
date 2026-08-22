@@ -454,7 +454,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
         time:  session == null ? null : timeOf(session),
         rows:  [...rows].sort((a, b) => (a.slotNumber ?? Infinity) - (b.slotNumber ?? Infinity)),
       }));
-  }, [registrations, selectedWic?.walkInSlotSchedule]);
+  }, [registrations, selectedWic]);
 
   const [viblockActionId, setViblockActionId] = useState<string | null>(null);
   const [droneActionId,   setDroneActionId]   = useState<string | null>(null);
