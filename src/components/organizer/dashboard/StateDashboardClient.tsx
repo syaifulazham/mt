@@ -33,6 +33,11 @@ type Stats = {
   higherContingents: number;
   independentContingents: number;
   internationalContingents: number;
+  primaryParticipation: number;
+  secondaryParticipation: number;
+  higherParticipation: number;
+  independentParticipation: number;
+  internationalParticipation: number;
 };
 
 type ChartRow = { label: string; count: number; schools?: number };
@@ -68,10 +73,12 @@ type ModalInfo = {
 // ── Stat card ──────────────────────────────────────────────────────────────────
 
 function StatCard({
-  label, value, icon: Icon, color, sub, onClick,
+  label, value, icon: Icon, color, sub, subValue, subLabel, onClick,
 }: {
   label: string; value: number | string;
   icon: React.ElementType; color: string; sub?: string;
+  subValue?: number | string;
+  subLabel?: string;
   onClick?: () => void;
 }) {
   const inner = (
@@ -82,10 +89,17 @@ function StatCard({
       <div className={cn("p-2.5 rounded-lg shrink-0", color)}>
         <Icon className="h-5 w-5 text-white" />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 w-full">
         <p className="text-xs text-zinc-500 font-medium">{label}</p>
-        <p className="text-2xl font-bold text-zinc-900 mt-0.5 tabular-nums">{value.toLocaleString()}</p>
+        <p className="text-2xl font-bold text-zinc-900 mt-0.5 tabular-nums">{typeof value === "number" ? value.toLocaleString() : value}</p>
         {sub && <p className="text-[11px] text-zinc-400 mt-0.5">{sub}</p>}
+        {subValue !== undefined && (
+          <>
+            <hr className="my-2 border-zinc-100" />
+            <p className="text-2xl font-bold text-zinc-900 tabular-nums">{typeof subValue === "number" ? subValue.toLocaleString() : subValue}</p>
+            {subLabel && <p className="text-xs text-zinc-500 font-medium mt-0.5">{subLabel}</p>}
+          </>
+        )}
         {onClick && <p className="text-[10px] text-blue-500 mt-1 font-medium">Lihat senarai →</p>}
       </div>
     </div>
@@ -332,26 +346,31 @@ function StateStatsPanel({
           <StatCard
             label="Primary School" value={stats.primaryContingents}
             icon={BookOpen} color="bg-emerald-400"
+            subValue={stats.primaryParticipation} subLabel="participations"
             onClick={() => onContingentTypeClick("PRIMARY", "Sekolah Rendah", true)}
           />
           <StatCard
             label="Secondary School" value={stats.secondaryContingents}
             icon={GraduationCap} color="bg-blue-400"
+            subValue={stats.secondaryParticipation} subLabel="participations"
             onClick={() => onContingentTypeClick("SECONDARY", "Sekolah Menengah", true)}
           />
           <StatCard
             label="Higher Institution" value={stats.higherContingents}
             icon={School} color="bg-purple-400"
+            subValue={stats.higherParticipation} subLabel="participations"
             onClick={() => onContingentTypeClick("HIGHER", "Institusi Pengajian Tinggi", false)}
           />
           <StatCard
             label="Independent" value={stats.independentContingents}
             icon={Briefcase} color="bg-amber-400"
+            subValue={stats.independentParticipation} subLabel="participations"
             onClick={() => onContingentTypeClick("INDEPENDENT", "Bebas", false)}
           />
           <StatCard
             label="International" value={stats.internationalContingents}
             icon={Users} color="bg-rose-400"
+            subValue={stats.internationalParticipation} subLabel="participations"
             onClick={() => onContingentTypeClick("INTERNATIONAL", "Antarabangsa", false)}
           />
         </div>

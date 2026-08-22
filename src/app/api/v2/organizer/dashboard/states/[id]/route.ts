@@ -80,6 +80,7 @@ export async function GET(
             school: {
               select: {
                 id: true,
+                level: true,
                 ppdCode: true,
                 districtId: true,
                 category: true,
@@ -136,6 +137,11 @@ export async function GET(
   const ppdMap:       Record<string, number> = {};
   const categoryMap:  Record<string, number> = {};
   let totalParticipation = 0;
+  let primaryParticipation      = 0;
+  let secondaryParticipation    = 0;
+  let higherParticipation       = 0;
+  let independentParticipation  = 0;
+  let internationalParticipation = 0;
 
   for (const comp of competitions) {
     for (const p of participants) {
@@ -148,6 +154,14 @@ export async function GET(
       if (!eligible) continue;
 
       totalParticipation++;
+      const ct = p.contingent.contingentType;
+      const sl = (p.contingent.school as { level?: string } | null)?.level;
+      if (ct === "SCHOOL") {
+        if (sl === "PRIMARY")   primaryParticipation++;
+        else if (sl === "SECONDARY") secondaryParticipation++;
+      } else if (ct === "HIGHER")        higherParticipation++;
+      else if (ct === "INDEPENDENT")     independentParticipation++;
+      else if (ct === "INTERNATIONAL")   internationalParticipation++;
 
       const gLabel = p.gender === "MALE" ? "Male" : "Female";
       genderMap[gLabel] = (genderMap[gLabel] ?? 0) + 1;
@@ -201,6 +215,11 @@ export async function GET(
       higherContingents,
       independentContingents,
       internationalContingents,
+      primaryParticipation,
+      secondaryParticipation,
+      higherParticipation,
+      independentParticipation,
+      internationalParticipation,
     },
     charts: { byGender, byEthnicity, byPpd, bySchoolCategory },
   });
