@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Loader2, Link2, Copy, XCircle, FileText, Search, CheckCircle2,
-  UserX, X, QrCode, Download,
+  UserX, X, QrCode, Download, FileDown,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -213,20 +213,51 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
       <div className="rounded-xl border bg-white p-4 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-zinc-800">Menunggu Diproses</p>
-          <div className="flex items-center gap-1">
-            {FILTER_TABS.map(t => (
-              <button key={t.key} type="button"
-                onClick={() => setFilter(t.key)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
-                  filter === t.key
-                    ? t.key === "PENDING" ? "bg-amber-50 border-amber-300 text-amber-700"
-                      : t.key === "PROCESSED" ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : "bg-red-50 border-red-300 text-red-600"
-                    : "border-zinc-200 text-zinc-400 hover:text-zinc-600"
-                }`}>
-                {t.label} <span className="font-normal">({counts[t.key]})</span>
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            {subs.length > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                onClick={() => {
+                  const sorted = [...subs].sort((a, b) => {
+                    const cA = a.walkInCompetition.competition.name;
+                    const cB = b.walkInCompetition.competition.name;
+                    if (cA !== cB) return cA.localeCompare(cB);
+                    if ((a.sessionNumber ?? 0) !== (b.sessionNumber ?? 0)) return (a.sessionNumber ?? 0) - (b.sessionNumber ?? 0);
+                    return (a.slotNumber ?? 0) - (b.slotNumber ?? 0);
+                  });
+                  const rows = sorted.map(s => [
+                    s.walkInCompetition.competition.name,
+                    s.sessionNumber != null ? `Sesi ${s.sessionNumber}` : "",
+                    s.slotNumber != null ? String(s.slotNumber) : "",
+                    s.name,
+                    s.ic,
+                    s.status,
+                  ]);
+                  const csv = [["Pertandingan", "Sesi", "Slot", "Nama", "IC", "Status"], ...rows]
+                    .map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+                  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+                  const link = document.createElement("a");
+                  link.href = URL.createObjectURL(blob);
+                  link.download = `borang-submissions-${filter.toLowerCase()}.csv`;
+                  link.click();
+                }}>
+                <FileDown className="h-3.5 w-3.5" /> CSV
+              </Button>
+            )}
+            <div className="flex items-center gap-1">
+              {FILTER_TABS.map(t => (
+                <button key={t.key} type="button"
+                  onClick={() => setFilter(t.key)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                    filter === t.key
+                      ? t.key === "PENDING" ? "bg-amber-50 border-amber-300 text-amber-700"
+                        : t.key === "PROCESSED" ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                        : "bg-red-50 border-red-300 text-red-600"
+                      : "border-zinc-200 text-zinc-400 hover:text-zinc-600"
+                  }`}>
+                  {t.label} <span className="font-normal">({counts[t.key]})</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -236,57 +267,78 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
           </div>
         ) : subs.length === 0 ? (
           <p className="text-xs text-zinc-400 italic py-2">Tiada borang dalam status ini.</p>
-        ) : (
-          <div className="rounded-lg border overflow-hidden">
-            <table className="w-full text-xs">
-              <thead className="bg-zinc-50 border-b">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Nama</th>
-                  <th className="px-3 py-2 text-left font-medium text-zinc-500">IC</th>
-                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Pertandingan</th>
-                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Slot</th>
-                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Status</th>
-                  <th className="px-3 py-2 text-left font-medium text-zinc-500">Masa</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {subs.map(s => {
-                  const meta = STATUS_META[s.status];
-                  const clickable = s.status === "PENDING" && canWrite;
-                  return (
-                    <tr key={s.id}
-                      onClick={() => clickable && openProcess(s)}
-                      className={`${clickable ? "cursor-pointer hover:bg-amber-50/40" : ""}`}>
-                      <td className="px-3 py-2">
-                        <p className="font-medium text-zinc-800">{s.name}</p>
-                        {s.schoolName && <p className="text-[10px] text-zinc-400 truncate max-w-[160px]">{s.schoolName}</p>}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-zinc-600">{s.ic}</td>
-                      <td className="px-3 py-2 text-zinc-600">
-                        <span className="font-mono text-[10px] text-zinc-400 mr-1">{s.walkInCompetition.competition.code}</span>
-                        {s.walkInCompetition.competition.name}
-                      </td>
-                      <td className="px-3 py-2 text-zinc-600 whitespace-nowrap">
-                        {s.sessionNumber != null ? `S${s.sessionNumber} · Slot ${s.slotNumber}` : "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${meta.cls}`}>
-                          {meta.label}
-                        </span>
-                        {s.status === "PROCESSED" && s.participant && (
-                          <p className="text-[10px] text-zinc-400 mt-0.5 truncate max-w-[140px]">→ {s.participant.name}</p>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-zinc-400 whitespace-nowrap">
-                        {new Date(s.createdAt).toLocaleString("ms-MY", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        ) : (() => {
+          const sorted = [...subs].sort((a, b) => {
+            const cA = a.walkInCompetition.competition.name;
+            const cB = b.walkInCompetition.competition.name;
+            if (cA !== cB) return cA.localeCompare(cB);
+            if ((a.sessionNumber ?? 0) !== (b.sessionNumber ?? 0)) return (a.sessionNumber ?? 0) - (b.sessionNumber ?? 0);
+            return (a.slotNumber ?? 0) - (b.slotNumber ?? 0);
+          });
+          const grouped: Record<string, { code: string; name: string; items: Submission[] }> = {};
+          for (const s of sorted) {
+            const key = s.walkInCompetition.id;
+            if (!grouped[key]) grouped[key] = { code: s.walkInCompetition.competition.code, name: s.walkInCompetition.competition.name, items: [] };
+            grouped[key].items.push(s);
+          }
+          return (
+            <div className="space-y-4">
+              {Object.entries(grouped).map(([key, g]) => (
+                <div key={key} className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] text-zinc-400">{g.code}</span>
+                    <p className="text-xs font-semibold text-zinc-700">{g.name}</p>
+                    <span className="text-[10px] text-zinc-400">({g.items.length})</span>
+                  </div>
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-zinc-50 border-b">
+                        <tr>
+                          <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Sesi</th>
+                          <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Slot</th>
+                          <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Nama</th>
+                          <th className="px-3 py-1.5 text-left font-medium text-zinc-500">IC</th>
+                          <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {g.items.map(s => {
+                          const meta = STATUS_META[s.status];
+                          const clickable = s.status === "PENDING" && canWrite;
+                          return (
+                            <tr key={s.id}
+                              onClick={() => clickable && openProcess(s)}
+                              className={`${clickable ? "cursor-pointer hover:bg-amber-50/40" : ""}`}>
+                              <td className="px-3 py-2 text-zinc-600 whitespace-nowrap">
+                                {s.sessionNumber != null ? `Sesi ${s.sessionNumber}` : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-zinc-600 whitespace-nowrap">
+                                {s.slotNumber != null ? s.slotNumber : "—"}
+                              </td>
+                              <td className="px-3 py-2">
+                                <p className="font-medium text-zinc-800">{s.name}</p>
+                                {s.schoolName && <p className="text-[10px] text-zinc-400 truncate max-w-[160px]">{s.schoolName}</p>}
+                              </td>
+                              <td className="px-3 py-2 font-mono text-zinc-600">{s.ic}</td>
+                              <td className="px-3 py-2">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${meta.cls}`}>
+                                  {meta.label}
+                                </span>
+                                {s.status === "PROCESSED" && s.participant && (
+                                  <p className="text-[10px] text-zinc-400 mt-0.5 truncate max-w-[140px]">→ {s.participant.name}</p>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── QR Code dialog ────────────────────────────────────────────── */}
