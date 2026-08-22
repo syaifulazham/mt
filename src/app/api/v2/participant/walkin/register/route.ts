@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       id: true,
       maxSlots: true,
       publishToPortal: true,
+      event: { select: { id: true, walkInUniqueParticipation: true } },
       _count: { select: { registrations: true } },
     },
   });
@@ -31,6 +32,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "SLOTS_FULL" }, { status: 409 });
 
   const { participantId, contingentId } = session;
+
+  // Penyertaan Unik: one active walk-in registration per participant per event
+  if (wic.event.walkInUniqueParticipation) {
+    const existing = await db.walkInRegistration.findFirst({
+      where: {
+        participantId,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        walkInCompetition: { eventId: wic.event.id },
+      },
+      select: { id: true },
+    });
+    if (existing) return NextResponse.json({ error: "UNIQUE_PARTICIPATION" }, { status: 409 });
+  }
 
   try {
     const reg = await db.walkInRegistration.create({

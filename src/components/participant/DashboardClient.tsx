@@ -427,6 +427,8 @@ export function DashboardClient({
         setRegisterErr(
           j.error === "ALREADY_REGISTERED"
             ? "Anda sudah berdaftar."
+            : j.error === "UNIQUE_PARTICIPATION"
+            ? "Anda sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
             : (j.message ?? "Gagal mendaftar."),
         );
       } else {

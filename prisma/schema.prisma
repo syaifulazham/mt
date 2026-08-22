@@ -494,6 +494,7 @@ model Event {
   registrationEnd     DateTime?
   status                  EventStatus @default(DRAFT)
   needManagerAcceptance   Boolean     @default(false)
+  walkInUniqueParticipation Boolean   @default(false)
   createdAt               DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 

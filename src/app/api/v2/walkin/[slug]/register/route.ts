@@ -22,7 +22,7 @@ export async function POST(
 
   const endpoint = await db.walkInEndpoint.findUnique({
     where: { routeSlug: slug },
-    select: { id: true, passcode: true, active: true, walkInCompetitionId: true, eventId: true },
+    select: { id: true, passcode: true, active: true, walkInCompetitionId: true, eventId: true, event: { select: { walkInUniqueParticipation: true } } },
   });
 
   if (!endpoint || !endpoint.active)
@@ -41,6 +41,19 @@ export async function POST(
   if (!wic) return NextResponse.json({ error: "COMPETITION_NOT_FOUND" }, { status: 404 });
   if (wic.maxSlots > 0 && wic._count.registrations >= wic.maxSlots)
     return NextResponse.json({ error: "SLOTS_FULL" }, { status: 409 });
+
+  // Penyertaan Unik: one active walk-in registration per participant per event
+  if (endpoint.event.walkInUniqueParticipation) {
+    const existing = await db.walkInRegistration.findFirst({
+      where: {
+        participantId,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        walkInCompetition: { eventId: endpoint.eventId },
+      },
+      select: { id: true },
+    });
+    if (existing) return NextResponse.json({ error: "UNIQUE_PARTICIPATION" }, { status: 409 });
+  }
 
   const participant = await db.participant.findUnique({
     where: { id: participantId },

@@ -650,7 +650,13 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       body: JSON.stringify({ participantId: selected.id, passcode, registeredBy: registeredBy.trim() || null, competitionId: activeWicId }),
     });
     const j = await res.json();
-    if (!res.ok) setRegErr(j.error === "ALREADY_REGISTERED" ? "Peserta sudah berdaftar." : (j.message ?? j.error ?? "Gagal mendaftar."));
+    if (!res.ok) setRegErr(
+      j.error === "ALREADY_REGISTERED"
+        ? "Peserta sudah berdaftar."
+        : j.error === "UNIQUE_PARTICIPATION"
+        ? "Peserta sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
+        : (j.message ?? j.error ?? "Gagal mendaftar."),
+    );
     else { setRegResult(j.data); setSelected(null); setQ(""); setResults([]); }
     setRegistering(false);
   }

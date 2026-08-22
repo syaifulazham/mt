@@ -43,6 +43,7 @@ type EventDetail = EventListItem & {
   registrationStart: string | null; registrationEnd: string | null;
   prerequisites: { prerequisite: PrerequisiteEvent }[];
   needManagerAcceptance: boolean;
+  walkInUniqueParticipation: boolean;
 };
 
 type StateOption = { id: string; name: string };
@@ -1473,11 +1474,34 @@ function WalkInPickerModal({ linkedIds, onAdd, onClose }: {
   );
 }
 
-function WalkInCompetitionsSection({ eventId, canWrite, hasViblockKey, hasDroneKey, hasVibeBlocksKey }: { eventId: string; canWrite: boolean; hasViblockKey: boolean; hasDroneKey: boolean; hasVibeBlocksKey: boolean }) {
+function WalkInCompetitionsSection({ event, canWrite, hasViblockKey, hasDroneKey, hasVibeBlocksKey, onSaved }: { event: EventDetail; canWrite: boolean; hasViblockKey: boolean; hasDroneKey: boolean; hasVibeBlocksKey: boolean; onSaved: (u: Partial<EventDetail>) => void }) {
+  const eventId = event.id;
   const [links,        setLinks]        = useState<WalkInComp[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [showPicker,   setShowPicker]   = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WalkInComp | null>(null);
+
+  // Penyertaan Unik switch
+  const [uniqueOn,   setUniqueOn]   = useState(event.walkInUniqueParticipation);
+  const [savingUniq, setSavingUniq] = useState(false);
+  const [uniqErr,    setUniqErr]    = useState("");
+
+  async function toggleUnique(next: boolean) {
+    if (!canWrite) return;
+    setUniqueOn(next);
+    setSavingUniq(true); setUniqErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walkInUniqueParticipation: next }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved({ walkInUniqueParticipation: next });
+    } catch (e) {
+      setUniqueOn(!next); // revert
+      setUniqErr(e instanceof Error ? e.message : "Gagal");
+    } finally { setSavingUniq(false); }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1547,6 +1571,37 @@ function WalkInCompetitionsSection({ eventId, canWrite, hasViblockKey, hasDroneK
         <p className="text-xs text-zinc-500">
           Pertandingan walk-in boleh menggunakan pertandingan yang sama tetapi pendaftaran dan keputusan adalah berasingan.
         </p>
+
+        {/* Penyertaan Unik — one walk-in registration per participant for this event */}
+        <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={uniqueOn}
+            disabled={!canWrite || savingUniq}
+            onClick={() => toggleUnique(!uniqueOn)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 ${
+              uniqueOn ? "bg-blue-600" : "bg-zinc-200"
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                uniqueOn ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-zinc-800">Penyertaan Unik</p>
+            <p className="text-xs text-zinc-500">
+              {savingUniq
+                ? "Menyimpan…"
+                : uniqueOn
+                  ? "Aktif — peserta hanya boleh mendaftar untuk satu pertandingan walk-in dalam acara ini."
+                  : "Peserta boleh mendaftar untuk lebih daripada satu pertandingan walk-in."}
+            </p>
+            {uniqErr && <p className="text-xs text-red-500 mt-0.5">{uniqErr}</p>}
+          </div>
+        </div>
 
         {links.length === 0 ? (
           <p className="text-sm text-zinc-400 italic">Tiada pertandingan walk-in ditambah.</p>
@@ -1982,7 +2037,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
             <ManagerAcceptanceSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
-            <WalkInCompetitionsSection eventId={selected.id} canWrite={canWrite} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} />
+            <WalkInCompetitionsSection event={selected} canWrite={canWrite} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} onSaved={handleSectionSaved} />
           </div>
         )}
       </main>
