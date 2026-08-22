@@ -43,6 +43,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
   const [counts,      setCounts]      = useState<Counts>({ PENDING: 0, PROCESSED: 0, NO_MATCH: 0 });
   const [filter,      setFilter]      = useState<Submission["status"]>("PENDING");
   const [subsLoading, setSubsLoading] = useState(false);
+  const [searchQ,     setSearchQ]     = useState("");
 
   const [processing,      setProcessing]      = useState<Submission | null>(null);
   const [procQ,           setProcQ]           = useState("");
@@ -261,6 +262,14 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
           </div>
         </div>
 
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+          <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
+            placeholder="Cari nama, IC, atau pertandingan…"
+            className="w-full h-8 rounded-lg border border-zinc-200 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+        </div>
+
         {subsLoading ? (
           <div className="flex items-center gap-2 py-6 justify-center text-zinc-400">
             <Loader2 className="h-4 w-4 animate-spin" /><span className="text-xs">Memuatkan…</span>
@@ -268,7 +277,16 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
         ) : subs.length === 0 ? (
           <p className="text-xs text-zinc-400 italic py-2">Tiada borang dalam status ini.</p>
         ) : (() => {
-          const sorted = [...subs].sort((a, b) => {
+          const q = searchQ.trim().toLowerCase();
+          const filtered = q ? subs.filter(s =>
+            s.name.toLowerCase().includes(q) ||
+            s.ic.toLowerCase().includes(q) ||
+            s.walkInCompetition.competition.name.toLowerCase().includes(q) ||
+            s.walkInCompetition.competition.code.toLowerCase().includes(q) ||
+            (s.schoolName && s.schoolName.toLowerCase().includes(q))
+          ) : subs;
+          if (filtered.length === 0) return <p className="text-xs text-zinc-400 italic py-2">Tiada padanan untuk &quot;{searchQ.trim()}&quot;</p>;
+          const sorted = [...filtered].sort((a, b) => {
             const cA = a.walkInCompetition.competition.name;
             const cB = b.walkInCompetition.competition.name;
             if (cA !== cB) return cA.localeCompare(cB);
