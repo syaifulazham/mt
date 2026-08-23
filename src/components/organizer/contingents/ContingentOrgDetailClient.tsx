@@ -825,7 +825,7 @@ type TeamDetail = {
   lmsUserId: string | null;
   lmsCourseEnrolled: boolean;
   enrolledCourseIds: string[];
-  competition: { id: string; code: string; name: string; eptimEduCourseId: string | null; eptimEduCourseTitle: string | null } | null;
+  competition: { id: string; code: string; name: string; maxTeamSize: number; eptimEduCourseId: string | null; eptimEduCourseTitle: string | null } | null;
   eventCourses: { eventId: string; eventName: string; courseId: string | null; courseTitle: string | null }[];
   members: { id: string; participant: { id: string; name: string; ic: string | null; email: string | null; gender: string; age: number | null; eduLevel: string; status: string } }[];
   trainers: { trainer: { id: string; name: string; ic: string | null; phoneNumber: string | null; status: string } }[];
@@ -846,6 +846,14 @@ function TeamsTab({ contingentId, teams }: {
 
   const [registeringLms, setRegisteringLms] = useState<string | null>(null);
   const [lmsRegError,    setLmsRegError]    = useState<Record<string, string>>({});
+
+  // Add-member state
+  const [addingTo,       setAddingTo]       = useState<string | null>(null); // teamId
+  const [addQ,           setAddQ]           = useState("");
+  const [addResults,     setAddResults]     = useState<Participant[]>([]);
+  const [addSearching,   setAddSearching]   = useState(false);
+  const [addBusy,        setAddBusy]        = useState(false);
+  const [addErr,         setAddErr]         = useState("");
 
   // Seed enrolledMap from EptimEdu-verified course IDs returned by the API
   function seedEnrolled(teamId: string, detail: TeamDetail) {
@@ -922,6 +930,44 @@ function TeamsTab({ contingentId, teams }: {
       setDetails((prev) => ({ ...prev, [teamId]: json }));
       seedEnrolled(teamId, json);
     } finally { setLoadingId(null); }
+  }
+
+  async function searchParticipants(teamId: string, query: string) {
+    if (query.trim().length < 2) { setAddResults([]); return; }
+    setAddSearching(true);
+    try {
+      const res = await fetch(`/api/v2/organizer/contingents/${contingentId}/participants?q=${encodeURIComponent(query)}&pageSize=10`);
+      const json = await res.json();
+      // Exclude participants already in this team
+      const detail = details[teamId];
+      const existingIds = new Set(detail?.members.map(m => m.participant.id) ?? []);
+      setAddResults((json.data ?? []).filter((p: Participant) => !existingIds.has(p.id)));
+    } finally { setAddSearching(false); }
+  }
+
+  async function addMember(teamId: string, participantId: string) {
+    setAddBusy(true); setAddErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/contingents/${contingentId}/teams/${teamId}/members`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json.error === "TEAM_FULL" ? `Pasukan penuh (maks ${json.maxTeamSize}).`
+          : json.error === "ALREADY_MEMBER" ? "Peserta sudah dalam pasukan ini."
+          : json.error ?? "Gagal menambah.";
+        setAddErr(msg); return;
+      }
+      // Update cached detail
+      setDetails(prev => {
+        const d = prev[teamId];
+        if (!d) return prev;
+        return { ...prev, [teamId]: { ...d, members: [...d.members, json.data] } };
+      });
+      setAddQ(""); setAddResults([]); setAddingTo(null);
+    } catch { setAddErr("Ralat rangkaian."); }
+    finally { setAddBusy(false); }
   }
 
   if (teams.length === 0) {
@@ -1116,9 +1162,18 @@ function TeamsTab({ contingentId, teams }: {
 
                     {/* Members */}
                     <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-2">
-                        Members ({detail.members.length})
-                      </h4>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                          Members ({detail.members.length}{detail.competition?.maxTeamSize ? ` / ${detail.competition.maxTeamSize}` : ""})
+                        </h4>
+                        {detail.competition && detail.members.length < detail.competition.maxTeamSize && (
+                          <button type="button"
+                            onClick={() => { setAddingTo(addingTo === t.id ? null : t.id); setAddQ(""); setAddResults([]); setAddErr(""); }}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                            <UserPlus className="h-3 w-3" /> Tambah Ahli
+                          </button>
+                        )}
+                      </div>
                       {detail.members.length === 0 ? (
                         <p className="text-xs text-zinc-400">No members.</p>
                       ) : (
@@ -1155,6 +1210,45 @@ function TeamsTab({ contingentId, teams }: {
                               ))}
                             </tbody>
                           </table>
+                        </div>
+                      )}
+
+                      {/* Add member inline */}
+                      {addingTo === t.id && (
+                        <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400" />
+                              <Input value={addQ}
+                                onChange={e => { setAddQ(e.target.value); searchParticipants(t.id, e.target.value); }}
+                                placeholder="Cari peserta (nama / IC)…"
+                                className="pl-8 h-7 text-xs" autoFocus />
+                            </div>
+                            <button type="button" onClick={() => { setAddingTo(null); setAddQ(""); setAddResults([]); setAddErr(""); }}
+                              className="p-1 rounded hover:bg-zinc-200 text-zinc-400">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          {addSearching && <p className="text-[10px] text-zinc-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Mencari…</p>}
+                          {addErr && <p className="text-[10px] text-red-600">{addErr}</p>}
+                          {addResults.length > 0 && (
+                            <div className="rounded-lg border bg-white overflow-hidden max-h-48 overflow-y-auto">
+                              {addResults.map(p => (
+                                <button key={p.id} type="button" disabled={addBusy}
+                                  onClick={() => addMember(t.id, p.id)}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex items-center justify-between gap-2 border-b last:border-0 disabled:opacity-50">
+                                  <div>
+                                    <p className="font-medium text-zinc-800">{p.name}</p>
+                                    <p className="text-[10px] text-zinc-400">{p.ic ?? "—"} · {p.gender} · {p.eduLevel}</p>
+                                  </div>
+                                  {addBusy ? <Loader2 className="h-3 w-3 animate-spin text-blue-500 shrink-0" /> : <Plus className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {addQ.trim().length >= 2 && !addSearching && addResults.length === 0 && !addErr && (
+                            <p className="text-[10px] text-zinc-400 italic">Tiada peserta ditemui.</p>
+                          )}
                         </div>
                       )}
                     </div>

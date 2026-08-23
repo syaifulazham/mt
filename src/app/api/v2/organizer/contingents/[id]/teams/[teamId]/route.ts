@@ -35,6 +35,7 @@ export async function GET(
           id: true,
           code: true,
           name: true,
+          maxTeamSize: true,
           eptimEduCourseId: true,
           eptimEduCourseTitle: true,
         },
