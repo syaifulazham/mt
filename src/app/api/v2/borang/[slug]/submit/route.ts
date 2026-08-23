@@ -23,7 +23,7 @@ export async function POST(
 
   const endpoint = await db.walkInFormEndpoint.findUnique({
     where: { routeSlug: slug },
-    select: { id: true, active: true, eventId: true },
+    select: { id: true, active: true, eventId: true, event: { select: { walkInUniqueParticipation: true } } },
   });
   if (!endpoint || !endpoint.active)
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -44,6 +44,30 @@ export async function POST(
     select: { id: true },
   });
   if (dup) return NextResponse.json({ error: "DUPLICATE_SUBMISSION" }, { status: 409 });
+
+  // Penyertaan Unik: one submission/registration per IC per event (across all competitions)
+  if (endpoint.event.walkInUniqueParticipation) {
+    const [existingSub, existingReg] = await Promise.all([
+      db.walkInFormSubmission.findFirst({
+        where: {
+          ic,
+          status: { in: ["PENDING", "PROCESSED"] },
+          walkInCompetition: { eventId: endpoint.eventId },
+        },
+        select: { id: true },
+      }),
+      db.walkInRegistration.findFirst({
+        where: {
+          participant: { ic },
+          status: { in: ["PENDING", "CONFIRMED"] },
+          walkInCompetition: { eventId: endpoint.eventId },
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (existingSub || existingReg)
+      return NextResponse.json({ error: "UNIQUE_PARTICIPATION" }, { status: 409 });
+  }
 
   // Slot selection required when a slot schedule is configured
   const rawCfg = wic.walkInSlotSchedule;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Loader2, CheckCircle2, ChevronRight, ChevronLeft, MapPin,
   CalendarDays, ClipboardList, AlertCircle, LayoutGrid, UserCheck, Trophy, User,
@@ -102,6 +102,7 @@ type Competition = {
 };
 type FormInfo = {
   endpointId: string; label: string | null;
+  uniqueParticipation: boolean;
   event: { id: string; name: string; slug: string; venue: string | null; startDate: string | null; endDate: string | null };
   competitions: Competition[];
 };
@@ -137,6 +138,25 @@ export function PublicFormClient({ slug }: { slug: string }) {
   const [success,    setSuccess]    = useState<{ id: string; sessionNumber: number | null; slotNumber: number | null } | null>(null);
   const [formStep,       setFormStep]       = useState<1 | 2>(1);
   const [activeSession,  setActiveSession]  = useState<number | null>(null);
+
+  // IC availability check
+  const [usedCompIds,    setUsedCompIds]    = useState<Set<string>>(new Set());
+  const [icChecking,     setIcChecking]     = useState(false);
+  const icCheckTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const checkIc = useCallback((icVal: string) => {
+    if (icCheckTimer.current) clearTimeout(icCheckTimer.current);
+    const clean = icVal.replace(/[\s-]/g, "");
+    if (clean.length < 6 || !info) { setUsedCompIds(new Set()); return; }
+    icCheckTimer.current = setTimeout(async () => {
+      setIcChecking(true);
+      try {
+        const j = await fetch(`/api/v2/borang/${slug}/check-ic?ic=${encodeURIComponent(clean)}`).then(r => r.json());
+        setUsedCompIds(new Set(j.usedCompetitionIds ?? []));
+      } catch { setUsedCompIds(new Set()); }
+      finally { setIcChecking(false); }
+    }, 400);
+  }, [slug, info]);
 
   useEffect(() => {
     fetch(`/api/v2/borang/${slug}`).then(r => r.json()).then(j => {
@@ -184,6 +204,8 @@ export function PublicFormClient({ slug }: { slug: string }) {
       } else setFormErr(
         j.error === "DUPLICATE_SUBMISSION"
           ? "IC ini telah menghantar borang untuk pertandingan ini."
+          : j.error === "UNIQUE_PARTICIPATION"
+          ? "IC ini sudah didaftarkan untuk pertandingan lain dalam acara ini. Hanya satu penyertaan dibenarkan."
           : j.error === "INVALID_IC"
           ? "No. IC tidak sah (6–12 digit, tanpa sengkang)."
           : j.error === "INVALID_NAME"
@@ -268,7 +290,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
               Rujukan: <span className="font-mono text-white/60">{success.id.slice(-8).toUpperCase()}</span>
             </p>
             <button type="button"
-              onClick={() => { setSuccess(null); setComp(null); setIc(""); setName(""); setSchoolName(""); setSlotChoice(null); }}
+              onClick={() => { setSuccess(null); setComp(null); setName(""); setSchoolName(""); setSlotChoice(null); checkIc(ic); }}
               className="w-full rounded-xl py-2.5 text-sm font-bold transition-transform hover:scale-[1.02] active:scale-[.98]"
               style={{ background: `linear-gradient(90deg, ${B.pinkDk}, ${B.pink})`, color: "white" }}>
               Selesai
@@ -402,7 +424,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
             </div>
           </section>
 
-          {/* ── Competitions ── */}
+          {/* ── IC entry + Competitions ── */}
           <section id="pertandingan" className="w-full max-w-3xl mx-auto px-6 pb-16 space-y-5">
             <div className="text-center space-y-1">
               <p className="text-[11px] font-bold tracking-[0.25em] uppercase" style={{ color: B.pinkLt }}>
@@ -410,33 +432,68 @@ export function PublicFormClient({ slug }: { slug: string }) {
               </p>
               <p className="text-xl font-extrabold text-white">Pertandingan Walk-in</p>
               <p className="text-xs" style={{ color: "rgba(255,255,255,.4)" }}>
-                Klik pertandingan untuk mengisi borang pendaftaran.
+                Masukkan IC anda dahulu, kemudian pilih pertandingan.
               </p>
+            </div>
+
+            {/* IC input on landing page */}
+            <div className="max-w-sm mx-auto space-y-1.5">
+              <label className="block text-[10px] font-bold tracking-[0.18em] uppercase text-center" style={{ color: B.pinkLt }}>
+                No. Kad Pengenalan
+              </label>
+              <div className="relative">
+                <input value={ic}
+                  onChange={e => { const v = e.target.value.replace(/[^\d]/g, "").slice(0, 12); setIc(v); checkIc(v); }}
+                  placeholder="cth. 120315045678" inputMode="numeric"
+                  className={`${inputCls} font-mono text-center`} style={inputStyle} />
+                {icChecking && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin" style={{ color: B.pink }} />}
+              </div>
+              <p className="text-[10px] text-center" style={{ color: "rgba(255,255,255,.25)" }}>6–12 digit, tanpa sengkang</p>
+              {usedCompIds.size > 0 && info.uniqueParticipation && (
+                <p className="text-[10px] text-center text-red-400 font-semibold pt-1">
+                  IC ini sudah didaftarkan. Hanya satu penyertaan dibenarkan.
+                </p>
+              )}
             </div>
             <div className={`grid gap-3 ${info.competitions.length > 1 ? "md:grid-cols-2" : ""}`}>
               {info.competitions.map((c, i) => (
-                <button key={c.id} type="button" onClick={() => setComp(c)}
-                  className="pk-card-in w-full text-left rounded-2xl border border-pink-500/10 p-4 flex flex-col gap-2.5 transition-all hover:border-pink-500/30 hover:scale-[1.01]"
-                  style={{ background: "rgba(236,72,153,.04)", backdropFilter: "blur(8px)", animationDelay: `${i * 0.06}s` }}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded"
-                      style={{ background: "rgba(236,72,153,.1)", color: B.pinkLt }}>
-                      {c.competition.code}
-                    </span>
-                    {c.walkInSlotSchedule && (
-                      <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: B.pink }}>
-                        Tempahan slot
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm font-bold text-white leading-snug">{c.competition.name}</p>
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px]" style={{ color: "rgba(255,255,255,.4)" }}>
-                      {c._count.registrations} daftar{c.maxSlots > 0 ? ` / ${c.maxSlots} slot` : ""}
-                    </p>
-                    <ChevronRight className="h-4 w-4" style={{ color: B.pink }} />
-                  </div>
-                </button>
+                (() => {
+                  const blocked = usedCompIds.has(c.id) || (info.uniqueParticipation && usedCompIds.size > 0);
+                  return (
+                    <button key={c.id} type="button"
+                      onClick={() => !blocked && setComp(c)}
+                      disabled={blocked}
+                      className={`pk-card-in w-full text-left rounded-2xl border p-4 flex flex-col gap-2.5 transition-all ${
+                        blocked
+                          ? "border-white/5 opacity-40 cursor-not-allowed"
+                          : "border-pink-500/10 hover:border-pink-500/30 hover:scale-[1.01]"
+                      }`}
+                      style={{ background: blocked ? "rgba(255,255,255,.02)" : "rgba(236,72,153,.04)", backdropFilter: "blur(8px)", animationDelay: `${i * 0.06}s` }}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded"
+                          style={{ background: "rgba(236,72,153,.1)", color: B.pinkLt }}>
+                          {c.competition.code}
+                        </span>
+                        {blocked ? (
+                          <span className="text-[9px] font-bold tracking-widest uppercase text-red-400">
+                            Sudah didaftarkan
+                          </span>
+                        ) : c.walkInSlotSchedule ? (
+                          <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: B.pink }}>
+                            Tempahan slot
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-sm font-bold text-white leading-snug">{c.competition.name}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px]" style={{ color: "rgba(255,255,255,.4)" }}>
+                          {c._count.registrations} daftar{c.maxSlots > 0 ? ` / ${c.maxSlots} slot` : ""}
+                        </p>
+                        {!blocked && <ChevronRight className="h-4 w-4" style={{ color: B.pink }} />}
+                      </div>
+                    </button>
+                  );
+                })()
               ))}
             </div>
           </section>
@@ -511,7 +568,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
                       <label className="block text-[10px] font-bold tracking-[0.18em] uppercase mb-1.5" style={{ color: B.pinkLt }}>
                         No. Kad Pengenalan
                       </label>
-                      <input value={ic} onChange={e => setIc(e.target.value.replace(/[^\d]/g, "").slice(0, 12))}
+                      <input value={ic} onChange={e => { const v = e.target.value.replace(/[^\d]/g, "").slice(0, 12); setIc(v); checkIc(v); }}
                         placeholder="cth. 120315045678" inputMode="numeric"
                         className={`${inputCls} font-mono`} style={inputStyle} />
                       <p className="text-[10px] mt-1" style={{ color: "rgba(255,255,255,.25)" }}>6–12 digit, tanpa sengkang</p>

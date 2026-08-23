@@ -16,6 +16,7 @@ export async function GET(
         select: {
           id: true, name: true, slug: true, venue: true,
           startDate: true, endDate: true,
+          walkInUniqueParticipation: true,
           walkInCompetitions: {
             select: {
               id: true, maxSlots: true, walkInSlotSchedule: true,
@@ -37,7 +38,8 @@ export async function GET(
     data: {
       endpointId: endpoint.id,
       label: endpoint.label,
-      event: { ...endpoint.event, walkInCompetitions: undefined },
+      uniqueParticipation: endpoint.event.walkInUniqueParticipation,
+      event: { ...endpoint.event, walkInCompetitions: undefined, walkInUniqueParticipation: undefined },
       competitions: endpoint.event.walkInCompetitions,
     },
   });

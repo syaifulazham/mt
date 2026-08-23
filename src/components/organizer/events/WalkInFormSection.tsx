@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Loader2, Link2, Copy, XCircle, FileText, Search, CheckCircle2,
-  UserX, X, QrCode, Download, FileDown,
+  UserX, X, QrCode, Download, FileDown, Trash2,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -130,6 +130,15 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
       loadSubs();
     }
     setProcBusy(false);
+  }
+
+  async function removeSubmission(subId: string) {
+    if (!confirm("Buang borang ini? Slot sesi akan dilepaskan.")) return;
+    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions/${subId}`, { method: "DELETE" });
+    if (res.ok) {
+      setProcessing(null);
+      loadSubs();
+    }
   }
 
   const FILTER_TABS: { key: Submission["status"]; label: string }[] = [
@@ -317,6 +326,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                           <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Nama</th>
                           <th className="px-3 py-1.5 text-left font-medium text-zinc-500">IC</th>
                           <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Status</th>
+                          {canWrite && <th className="px-2 py-1.5 w-8" />}
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -346,6 +356,15 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                                   <p className="text-[10px] text-zinc-400 mt-0.5 truncate max-w-[140px]">→ {s.participant.name}</p>
                                 )}
                               </td>
+                              {canWrite && (
+                                <td className="px-2 py-2 text-right">
+                                  <button type="button" title="Buang borang"
+                                    onClick={e => { e.stopPropagation(); removeSubmission(s.id); }}
+                                    className="p-1 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -500,6 +519,13 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                   className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
                   <UserX className="h-4 w-4" />
                   Tiada Padanan
+                </Button>
+                <Button variant="outline"
+                  onClick={() => removeSubmission(processing!.id)}
+                  disabled={procBusy}
+                  className="gap-1.5 text-zinc-500 border-zinc-200 hover:bg-zinc-50 hover:text-red-600">
+                  <Trash2 className="h-4 w-4" />
+                  Buang
                 </Button>
               </div>
             </div>
