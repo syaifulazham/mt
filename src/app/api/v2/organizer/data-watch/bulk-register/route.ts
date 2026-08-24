@@ -64,11 +64,11 @@ async function runJob(job: Job, overallPct: number, gradePcts: Record<string, nu
     const targetGroups = competition.targetGroups.map(ctg => ctg.targetGroup);
 
     // Already-registered participants (per-competition dedup guard)
-    const existingMembers = await db.teamMember.findMany({
-      where: { team: { competitionId: job.competitionId } },
+    const existingStats = await db.registrationStat.findMany({
+      where: { competitionId: job.competitionId },
       select: { participantId: true },
     });
-    const alreadyRegistered = new Set(existingMembers.map(m => m.participantId));
+    const alreadyRegistered = new Set(existingStats.map(s => s.participantId));
 
     // Eligible pool (ACTIVE, matches any target group, not yet registered)
     const participants = await db.participant.findMany({
@@ -106,14 +106,6 @@ async function runJob(job: Job, overallPct: number, gradePcts: Record<string, nu
             : c.contingentType === "HIGHER" ? (c.higherInstitution?.name ?? c.name)
             : c.name;
 
-          const team = await db.team.create({
-            data: {
-              name:          p.name,
-              competitionId: job.competitionId,
-              contingentId:  p.contingentId,
-            },
-          });
-          await db.teamMember.create({ data: { teamId: team.id, participantId: p.id } });
           await db.registrationStat.create({
             data: {
               batchId:         job.id,

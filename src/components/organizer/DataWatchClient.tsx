@@ -1075,7 +1075,7 @@ function EligibilitySection() {
               </div>
             )}
             <p className="text-[11px] text-zinc-400">
-              Peserta dipilih secara rawak daripada {modalComp?.eligibleCount} yang layak. Setiap peserta didaftarkan sebagai pasukan individu.
+              Peserta dipilih secara rawak daripada {modalComp?.eligibleCount} yang layak. Pendaftaran disimpan dalam jadual statistik sahaja — tiada pasukan diwujudkan.
             </p>
             {startErr && (
               <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" /> {startErr}</p>

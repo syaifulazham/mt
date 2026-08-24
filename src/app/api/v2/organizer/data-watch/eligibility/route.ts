@@ -59,10 +59,9 @@ export async function GET(_req: NextRequest) {
               )
           ) AS "eligibleCount",
           (
-            SELECT COUNT(DISTINCT tm."contestantId")
-            FROM   team_members tm
-            JOIN   teams t ON t.id = tm."teamId"
-            WHERE  t."competitionId" = c.id
+            SELECT COUNT(DISTINCT rs."contestantId")
+            FROM   registration_stats rs
+            WHERE  rs."competitionId" = c.id
           ) AS "registeredCount"
         FROM competitions c
       `,
