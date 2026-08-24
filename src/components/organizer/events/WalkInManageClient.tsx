@@ -48,6 +48,7 @@ type VibeBlocksChallenge = {
 
 type EventSummary = {
   id: string; name: string; slug: string;
+  startDate: string | null; endDate: string | null;
   walkInCompetitions: WalkInCompSummary[];
   walkInEndpoints: WalkInEndpointItem[];
 };
@@ -404,6 +405,18 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   });
   const [vibeBlocksCreating, setVibeBlocksCreating] = useState(false);
   const [vibeBlocksUpdating, setVibeBlocksUpdating] = useState(false);
+  const [vibeBlocksError,    setVibeBlocksError]    = useState("");
+  const [vbExpanded,   setVbExpanded]   = useState(false);
+  const [vbUnlocked,   setVbUnlocked]   = useState(false);
+  const [vbUnlockCode, setVbUnlockCode] = useState<string | null>(null);
+  const [vbUnlockInput, setVbUnlockInput] = useState("");
+  const [vbUnlockErr,   setVbUnlockErr]   = useState("");
+  const [vbRegErr,     setVbRegErr]     = useState("");
+  const [vbRegConfirm, setVbRegConfirm] = useState<string | null>(null); // regId pending force-new-entry confirmation
+
+  async function safeJson(res: Response): Promise<{ error?: string; message?: string; [k: string]: unknown }> {
+    try { return await res.json(); } catch { return { error: `HTTP ${res.status}` }; }
+  }
 
   const loadRegistrations = useCallback(async (wicId: string, filter: string) => {
     setLoading(true);
@@ -511,35 +524,45 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
 
   async function vibeBlocksRegisterParticipant(regId: string) {
     if (!selectedWic) return;
-    setVibeBlocksActionId(regId);
+    setVibeBlocksActionId(regId); setVbRegErr("");
     try {
       const res = await fetch(
         `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/vibeblocks`,
         { method: "POST" },
       );
-      const j = await res.json();
+      const j = await safeJson(res);
       if (res.ok)
         setRegistrations(prev => prev.map(r =>
           r.id === regId ? { ...r, viblockToken: `${j.entryToken}:${j.entryId}` } : r,
         ));
+      else
+        setVbRegErr(j.message ?? (j.error as string) ?? "Gagal mendaftar peserta ke VibeBlocks.");
     } finally {
       setVibeBlocksActionId(null);
     }
   }
 
-  async function vibeBlocksRenewParticipantToken(regId: string) {
+  async function vibeBlocksRenewParticipantToken(regId: string, force = false) {
     if (!selectedWic) return;
-    setVibeBlocksActionId(regId);
+    setVibeBlocksActionId(regId); setVbRegErr(""); setVbRegConfirm(null);
     try {
       const res = await fetch(
         `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/vibeblocks`,
-        { method: "PATCH" },
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ force }),
+        },
       );
-      const j = await res.json();
+      const j = await safeJson(res);
       if (res.ok)
         setRegistrations(prev => prev.map(r =>
           r.id === regId ? { ...r, viblockToken: `${j.entryToken}:${j.entryId}` } : r,
         ));
+      else if (j.error === "ENTRY_ALREADY_CONSUMED")
+        setVbRegConfirm(regId);
+      else
+        setVbRegErr(j.message ?? (j.error as string) ?? "Gagal mengganti token peserta.");
     } finally {
       setVibeBlocksActionId(null);
     }
@@ -657,11 +680,15 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   useEffect(() => {
     if (!selectedWic) return;
     const id = setTimeout(() => {
+      setVbUnlocked(false);
+      setVbUnlockCode(null);
+      setVbUnlockInput("");
+      setVbUnlockErr("");
       setVibeBlocksCreateForm({
         challengeId:    selectedWic.vibeBlocksChallengeId ?? "",
-        name:           selectedWic.vibeBlocksEventName ?? "",
-        startsAt:       isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt),
-        endsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt),
+        name:           selectedWic.vibeBlocksEventName ?? event.name,
+        startsAt:       isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt ?? event.startDate),
+        endsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt ?? event.endDate),
         runDurationSec: selectedWic.vibeBlocksRunDurationSec ?? 3600,
       });
     }, 0);
@@ -669,9 +696,25 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWic?.id]);
 
+  function vbStartUnlock() {
+    setVbUnlockCode(genUnlockCode());
+    setVbUnlockInput("");
+    setVbUnlockErr("");
+  }
+
+  function vbConfirmUnlock() {
+    if (vbUnlockInput.trim().toUpperCase() === vbUnlockCode) {
+      setVbUnlocked(true);
+      setVbUnlockCode(null);
+      setVbUnlockErr("");
+    } else {
+      setVbUnlockErr("Kod tidak sepadan. Cuba lagi.");
+    }
+  }
+
   async function createVibeBlocksEvent() {
     if (!selectedWic) return;
-    setVibeBlocksCreating(true);
+    setVibeBlocksCreating(true); setVibeBlocksError("");
     try {
       const res = await fetch(
         `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/vibeblocks-event`,
@@ -687,16 +730,24 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           }),
         },
       );
-      const j = await res.json();
+      const j = await safeJson(res);
       if (res.ok) {
         updateWic(selectedWic.id, {
-          viblockChallengeId:      j.eventId,
+          viblockChallengeId:      j.eventId as string,
           vibeBlocksChallengeId:   vibeBlocksCreateForm.challengeId,
           vibeBlocksEventName:     vibeBlocksCreateForm.name,
           vibeBlocksStartsAt:      dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
           vibeBlocksEndsAt:        dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
           vibeBlocksRunDurationSec: vibeBlocksCreateForm.runDurationSec,
         });
+        setVbUnlocked(false); // re-lock after create
+      } else {
+        setVibeBlocksError(
+          j.error === "MISSING_DATES" ? "Tarikh mula dan tamat diperlukan."
+          : j.error === "VIBEBLOCKS_NOT_CONFIGURED" ? "VibeBlocks API tidak dikonfigurasi."
+          : j.error === "CONFLICT" ? "Konfigurasi bercanggah dengan acara VibeBlocks sedia ada."
+          : (j.message ?? j.error ?? "Gagal mencipta acara VibeBlocks.")
+        );
       }
     } finally {
       setVibeBlocksCreating(false);
@@ -705,7 +756,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
 
   async function updateVibeBlocksEvent() {
     if (!selectedWic) return;
-    setVibeBlocksUpdating(true);
+    setVibeBlocksUpdating(true); setVibeBlocksError("");
     try {
       const res = await fetch(
         `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/vibeblocks-event`,
@@ -720,7 +771,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           }),
         },
       );
-      const j = await res.json();
+      const j = await safeJson(res);
       if (res.ok && j.updated) {
         updateWic(selectedWic.id, {
           vibeBlocksEventName:     vibeBlocksCreateForm.name,
@@ -728,6 +779,9 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           vibeBlocksEndsAt:        dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
           vibeBlocksRunDurationSec: vibeBlocksCreateForm.runDurationSec,
         });
+        setVbUnlocked(false); // re-lock after update
+      } else if (!res.ok) {
+        setVibeBlocksError(j.message ?? (j.error as string) ?? "Gagal mengemas kini acara VibeBlocks.");
       }
     } finally {
       setVibeBlocksUpdating(false);
@@ -1279,113 +1333,194 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                     )}
 
                     {/* VibeBlocks Competition Event */}
-                    {selectedWic.useVibeblocks && (
-                      <div className="space-y-3">
-                        <p className="text-xs text-zinc-500 flex items-center gap-1.5">
-                          <Gamepad2 className="h-3.5 w-3.5" /> VibeBlocks Competition Event
-                        </p>
-                        {selectedWic.viblockChallengeId && (
-                          <div className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-[11px] text-emerald-700">
-                            Event ID: <code className="font-mono">{selectedWic.viblockChallengeId}</code>
-                          </div>
-                        )}
-                        <div className="space-y-2">
-                          <div>
-                            <label className="text-[11px] text-zinc-400 block mb-0.5">Challenge</label>
-                            {vibeBlocksChallengesLoading ? (
-                              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                                <Loader2 className="h-3 w-3 animate-spin" /> Loading challenges…
-                              </div>
-                            ) : (
-                              <select
-                                value={vibeBlocksCreateForm.challengeId}
-                                onChange={e => setVibeBlocksCreateForm(f => ({ ...f, challengeId: e.target.value }))}
-                                disabled={!!(selectedWic.viblockChallengeId && selectedWic.vibeBlocksChallengeId)}
-                                className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
-                              >
-                                <option value="">— Select challenge —</option>
-                                {vibeBlocksChallenges.map(ch => (
-                                  <option key={ch.id} value={ch.id}>
-                                    {ch.name} ({ch.challenge_mode})
-                                  </option>
-                                ))}
-                              </select>
+                    {selectedWic.useVibeblocks && (() => {
+                      const vbLocked = !!selectedWic.viblockChallengeId && !vbUnlocked;
+                      return (
+                      <div className="rounded-xl border bg-white p-4 space-y-3">
+                        {/* Header: title + status + expand toggle */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Gamepad2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <p className="text-sm font-semibold text-zinc-800">VibeBlocks Competition Event</p>
+                            {selectedWic.viblockChallengeId
+                              ? <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full shrink-0">Dicipta</span>
+                              : <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full shrink-0">Belum dicipta</span>}
+                            {!vbExpanded && selectedWic.viblockChallengeId && (
+                              <span className="text-[11px] text-zinc-400 truncate hidden sm:inline">
+                                <code className="font-mono">{selectedWic.viblockChallengeId}</code>
+                                {selectedWic.vibeBlocksEventName ? ` · ${selectedWic.vibeBlocksEventName}` : ""}
+                              </span>
                             )}
                           </div>
-                          <div>
-                            <label className="text-[11px] text-zinc-400 block mb-0.5">Event Name</label>
-                            <input
-                              type="text"
-                              value={vibeBlocksCreateForm.name}
-                              onChange={e => setVibeBlocksCreateForm(f => ({ ...f, name: e.target.value }))}
-                              placeholder="Competition name"
-                              className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[11px] text-zinc-400 block mb-0.5">Start (UTC)</label>
-                              <input
-                                type="datetime-local"
-                                value={vibeBlocksCreateForm.startsAt}
-                                onChange={e => setVibeBlocksCreateForm(f => ({ ...f, startsAt: e.target.value }))}
-                                className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[11px] text-zinc-400 block mb-0.5">End (UTC)</label>
-                              <input
-                                type="datetime-local"
-                                value={vibeBlocksCreateForm.endsAt}
-                                onChange={e => setVibeBlocksCreateForm(f => ({ ...f, endsAt: e.target.value }))}
-                                className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-zinc-400 block mb-0.5">Run duration (seconds)</label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={vibeBlocksCreateForm.runDurationSec}
-                              onChange={e => setVibeBlocksCreateForm(f => ({ ...f, runDurationSec: Number(e.target.value) }))}
-                              className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                            />
-                          </div>
-                          {!selectedWic.viblockChallengeId ? (
-                            <Button
-                              size="sm"
-                              onClick={createVibeBlocksEvent}
-                              disabled={vibeBlocksCreating || !vibeBlocksCreateForm.challengeId || !vibeBlocksCreateForm.name}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
-                            >
-                              {vibeBlocksCreating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                              Create Event
-                            </Button>
-                          ) : !selectedWic.vibeBlocksChallengeId ? (
-                            <Button
-                              size="sm"
-                              onClick={linkVibeBlocksChallenge}
-                              disabled={savingChallenge || !vibeBlocksCreateForm.challengeId}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
-                            >
-                              {savingChallenge && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                              Link Challenge
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={updateVibeBlocksEvent}
-                              disabled={vibeBlocksUpdating || !vibeBlocksCreateForm.name}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
-                            >
-                              {vibeBlocksUpdating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                              Update Event
-                            </Button>
-                          )}
+                          <Button size="sm" variant="outline" onClick={() => setVbExpanded(e => !e)}
+                            className="h-7 text-xs gap-1.5 shrink-0">
+                            {vbExpanded ? <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" /> : <ChevronDown className="h-3.5 w-3.5 transition-transform" />}
+                            {vbExpanded ? "Sembunyi" : "Lihat Konfigurasi"}
+                          </Button>
                         </div>
+
+                        {vbExpanded && (
+                          <>
+                            {selectedWic.viblockChallengeId && (
+                              <div className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-[11px] text-emerald-700">
+                                Event ID: <code className="font-mono">{selectedWic.viblockChallengeId}</code>
+                              </div>
+                            )}
+
+                            {/* Locked notice + unlock flow */}
+                            {vbLocked && (
+                              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-xs text-zinc-600 flex items-center gap-1.5">
+                                    <Lock className="h-3.5 w-3.5 text-zinc-400" />
+                                    Konfigurasi dikunci.
+                                  </p>
+                                  {canWrite && !vbUnlockCode && (
+                                    <Button size="sm" variant="outline" onClick={vbStartUnlock}
+                                      className="h-7 text-xs gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50">
+                                      <Unlock className="h-3.5 w-3.5" /> Buka Kunci
+                                    </Button>
+                                  )}
+                                </div>
+                                {vbUnlockCode && (
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-xs text-zinc-600">Masukkan kod <code className="font-mono font-bold tracking-widest text-zinc-900 bg-white border border-zinc-200 rounded px-1.5 py-0.5">{vbUnlockCode}</code> untuk membuka kunci:</p>
+                                    <input
+                                      value={vbUnlockInput}
+                                      onChange={e => setVbUnlockInput(e.target.value.toUpperCase())}
+                                      maxLength={5}
+                                      placeholder="XXXXX"
+                                      className="w-24 text-sm font-mono tracking-widest border border-zinc-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                                    />
+                                    <Button size="sm" onClick={vbConfirmUnlock} disabled={vbUnlockInput.trim().length !== 5}
+                                      className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white">
+                                      Sahkan
+                                    </Button>
+                                    <button type="button" onClick={() => setVbUnlockCode(null)} className="text-xs text-zinc-400 hover:text-zinc-600">Batal</button>
+                                    {vbUnlockErr && <p className="text-xs text-red-500 w-full">{vbUnlockErr}</p>}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {!!selectedWic.viblockChallengeId && vbUnlocked && (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                                <p className="text-xs text-amber-800 flex items-center gap-1.5">
+                                  <Unlock className="h-3.5 w-3.5" />
+                                  Konfigurasi dibuka kunci. Klik <span className="font-semibold">Update Event</span> untuk menyimpan perubahan dan mengunci semula.
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="space-y-2">
+                              <div>
+                                <label className="text-[11px] text-zinc-400 block mb-0.5">Challenge</label>
+                                {vibeBlocksChallengesLoading ? (
+                                  <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                    <Loader2 className="h-3 w-3 animate-spin" /> Loading challenges…
+                                  </div>
+                                ) : (
+                                  <select
+                                    value={vibeBlocksCreateForm.challengeId}
+                                    onChange={e => setVibeBlocksCreateForm(f => ({ ...f, challengeId: e.target.value }))}
+                                    disabled={vbLocked || !!(selectedWic.viblockChallengeId && selectedWic.vibeBlocksChallengeId)}
+                                    className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
+                                  >
+                                    <option value="">— Select challenge —</option>
+                                    {vibeBlocksChallenges.map(ch => (
+                                      <option key={ch.id} value={ch.id}>
+                                        {ch.name} ({ch.challenge_mode})
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-zinc-400 block mb-0.5">Event Name</label>
+                                <input
+                                  type="text"
+                                  value={vibeBlocksCreateForm.name}
+                                  onChange={e => setVibeBlocksCreateForm(f => ({ ...f, name: e.target.value }))}
+                                  placeholder="Competition name"
+                                  disabled={vbLocked}
+                                  className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[11px] text-zinc-400 block mb-0.5">Start (UTC)</label>
+                                  <input
+                                    type="datetime-local"
+                                    value={vibeBlocksCreateForm.startsAt}
+                                    onChange={e => setVibeBlocksCreateForm(f => ({ ...f, startsAt: e.target.value }))}
+                                    disabled={vbLocked}
+                                    className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[11px] text-zinc-400 block mb-0.5">End (UTC)</label>
+                                  <input
+                                    type="datetime-local"
+                                    value={vibeBlocksCreateForm.endsAt}
+                                    onChange={e => setVibeBlocksCreateForm(f => ({ ...f, endsAt: e.target.value }))}
+                                    disabled={vbLocked}
+                                    className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-zinc-400 block mb-0.5">Run duration (seconds)</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={vibeBlocksCreateForm.runDurationSec}
+                                  onChange={e => setVibeBlocksCreateForm(f => ({ ...f, runDurationSec: Number(e.target.value) }))}
+                                  disabled={vbLocked}
+                                  className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
+                                />
+                              </div>
+                              {vibeBlocksError && (
+                                <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-1.5">
+                                  {vibeBlocksError}
+                                </p>
+                              )}
+                              {!selectedWic.viblockChallengeId ? (
+                                <Button
+                                  size="sm"
+                                  onClick={createVibeBlocksEvent}
+                                  disabled={vibeBlocksCreating || !vibeBlocksCreateForm.challengeId || !vibeBlocksCreateForm.name || !vibeBlocksCreateForm.startsAt || !vibeBlocksCreateForm.endsAt}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
+                                >
+                                  {vibeBlocksCreating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                  Create Event
+                                </Button>
+                              ) : !selectedWic.vibeBlocksChallengeId ? (
+                                <Button
+                                  size="sm"
+                                  onClick={linkVibeBlocksChallenge}
+                                  disabled={vbLocked || savingChallenge || !vibeBlocksCreateForm.challengeId}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
+                                >
+                                  {savingChallenge && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                  Link Challenge
+                                </Button>
+                              ) : vbUnlocked ? (
+                                <Button
+                                  size="sm"
+                                  onClick={updateVibeBlocksEvent}
+                                  disabled={vibeBlocksUpdating || !vibeBlocksCreateForm.name}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
+                                >
+                                  {vibeBlocksUpdating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                  Update Event
+                                </Button>
+                              ) : null}
+                            </div>
+                          </>
+                        )}
                       </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Drone Challenge */}
                     {selectedWic.useDronearena && (
@@ -1572,6 +1707,32 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                     Muat Semula
                   </button>
                 </div>
+
+                {vbRegErr && (
+                  <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                    <p className="text-xs text-red-700">{vbRegErr}</p>
+                    <button type="button" onClick={() => setVbRegErr("")} className="text-red-400 hover:text-red-600 shrink-0">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {vbRegConfirm && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
+                    <p className="text-xs text-amber-800">
+                      Token peserta ini <span className="font-semibold">telah digunakan</span> dan tidak boleh diganti. Daftar penyertaan baharu dengan token baharu? Peserta akan mempunyai dua rekod keputusan.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => vibeBlocksRenewParticipantToken(vbRegConfirm, true)}
+                        disabled={vibeBlocksActionId === vbRegConfirm}
+                        className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white gap-1.5">
+                        {vibeBlocksActionId === vbRegConfirm && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Daftar Penyertaan Baharu
+                      </Button>
+                      <button type="button" onClick={() => setVbRegConfirm(null)} className="text-xs text-zinc-500 hover:text-zinc-700">Batal</button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Registration table */}
                 <div className="rounded-xl border bg-white overflow-hidden">

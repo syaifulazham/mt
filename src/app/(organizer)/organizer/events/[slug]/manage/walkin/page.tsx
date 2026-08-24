@@ -21,6 +21,7 @@ export default async function WalkInManagePage({
     where: { slug },
     select: {
       id: true, name: true, slug: true,
+      startDate: true, endDate: true,
       walkInCompetitions: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -51,6 +52,8 @@ export default async function WalkInManagePage({
   // Serialize Date fields to strings for the client component
   const serializedEvent = {
     ...event,
+    startDate: event.startDate?.toISOString() ?? null,
+    endDate:   event.endDate?.toISOString()   ?? null,
     walkInCompetitions: event.walkInCompetitions.map(wic => ({
       ...wic,
       vibeBlocksStartsAt: wic.vibeBlocksStartsAt?.toISOString() ?? null,
