@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { AlertTriangle, RefreshCw, Wrench, ChevronDown, ChevronUp, Loader2, CheckCircle2, ScrollText, Trash2, Search, Pencil } from "lucide-react";
+import { AlertTriangle, RefreshCw, Wrench, ChevronDown, ChevronUp, Loader2, CheckCircle2, ScrollText, Trash2, Search, Pencil, Users } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const CANONICAL_GRADES = [
   "Prasekolah 5thn", "Prasekolah 6thn",
@@ -28,6 +31,18 @@ type GradeRow = {
   id: string; name: string; ic: string | null;
   classGrade: string | null; age: number; suggestedGrade: string | null;
   contingentName: string;
+};
+
+type EligibilityGroup = {
+  targetGroup: { id: string; code: string; name: string; schoolLevel: string; ageGroup: string };
+  competitions: { id: string; code: string; name: string; eligibleCount: number; registeredCount: number; grades: string[] }[];
+};
+
+type CompEntry = EligibilityGroup["competitions"][number];
+
+type BulkJob = {
+  jobId: string; competitionId: string; status: "RUNNING" | "DONE" | "ERROR";
+  total: number; done: number; registered: number; skipped: number; error: string | null;
 };
 
 // ── Section 1: Incomplete IC ──────────────────────────────────────────────────
@@ -500,7 +515,596 @@ function WrongGradeSection() {
   );
 }
 
-// ── Section 3: Error Log Watcher ─────────────────────────────────────────────
+// ── Section 3: Incomplete Details ───────────────────────────────────────────
+
+type IncompleteRow = {
+  id: string; name: string | null; ic: string | null; contingentName: string;
+};
+
+function IncompleteDetailsSection() {
+  const [rows,        setRows]        = useState<IncompleteRow[]>([]);
+  const [total,       setTotal]       = useState(0);
+  const [noNameCount, setNoNameCount] = useState(0);
+  const [loading,     setLoading]     = useState(true);
+  const [limit,       setLimit]       = useState(10);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting,    setDeleting]    = useState<string | null>(null);
+  const [deleted,     setDeleted]     = useState<number | null>(null);
+  const [deleteErr,   setDeleteErr]   = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ mode: "all" | "noName" | "selected"; label: string } | null>(null);
+
+  const load = useCallback(async (lim: number) => {
+    setLoading(true);
+    try {
+      const res  = await fetch(`/api/v2/organizer/data-watch/incomplete-details?limit=${lim}`);
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
+      setRows(json.data ?? []);
+      setTotal(json.total ?? 0);
+      setNoNameCount(json.noNameCount ?? 0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(limit); }, [load, limit]);
+
+  function toggleRow(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedIds(selectedIds.size === rows.length ? new Set() : new Set(rows.map(r => r.id)));
+  }
+
+  const allSelected  = rows.length > 0 && selectedIds.size === rows.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < rows.length;
+
+  function deleteLabel(mode: "all" | "noName" | "selected") {
+    return mode === "all"    ? `ALL ${total} participants with incomplete details` :
+           mode === "noName" ? `${noNameCount} participants with no name` :
+           `${selectedIds.size} selected participant${selectedIds.size !== 1 ? "s" : ""}`;
+  }
+
+  function requestDelete(mode: "all" | "noName" | "selected") {
+    setPendingDelete({ mode, label: deleteLabel(mode) });
+  }
+
+  async function handleDelete(mode: "all" | "noName" | "selected") {
+    setDeleting(mode);
+    setDeleted(null);
+    setDeleteErr(null);
+    try {
+      const res  = await fetch("/api/v2/organizer/data-watch/incomplete-details", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "selected" ? { mode, ids: [...selectedIds] } : { mode }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setDeleted(json.deleted ?? 0);
+      setSelectedIds(new Set());
+      await load(limit);
+    } catch (e) {
+      setDeleteErr(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 border-b border-zinc-100">
+        <div className="flex items-center gap-2.5">
+          <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Incomplete Details</h2>
+            <p className="text-xs text-zinc-500">Participants with no name or no IC number</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!loading && (
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              total > 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+            }`}>
+              {total} record{total !== 1 ? "s" : ""}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => load(limit)}
+            disabled={loading || !!deleting}
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+          {selectedIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => requestDelete("selected")}
+              disabled={!!deleting || loading}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 transition-colors"
+            >
+              {deleting === "selected" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete Selected ({selectedIds.size})
+            </button>
+          )}
+          {total > 0 && (
+            <button
+              type="button"
+              onClick={() => requestDelete("noName")}
+              disabled={!!deleting || loading}
+              className="flex items-center gap-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 transition-colors"
+            >
+              {deleting === "noName" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete No Names ({noNameCount})
+            </button>
+          )}
+          {total > 0 && (
+            <button
+              type="button"
+              onClick={() => requestDelete("all")}
+              disabled={!!deleting || loading}
+              className="flex items-center gap-1.5 rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 transition-colors"
+            >
+              {deleting === "all" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete All
+            </button>
+          )}
+        </div>
+      </div>
+
+      {deleted !== null && (
+        <div className="flex items-center gap-2 px-5 py-2.5 bg-green-50 border-b border-green-100 text-sm text-green-700">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {deleted} record{deleted !== 1 ? "s" : ""} deleted.
+        </div>
+      )}
+      {deleteErr && (
+        <div className="flex items-center gap-2 px-5 py-2.5 bg-red-50 border-b border-red-100 text-sm text-red-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {deleteErr}
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex items-center justify-center gap-2 py-10 text-zinc-400 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      )}
+
+      {!loading && total === 0 && (
+        <div className="flex items-center justify-center gap-2 py-10 text-green-600 text-sm">
+          <CheckCircle2 className="h-4 w-4" /> All participants have a name and IC number.
+        </div>
+      )}
+
+      {!loading && rows.length > 0 && (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-zinc-50 border-b border-zinc-100">
+                <tr>
+                  <th className="px-4 py-2.5 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected; }}
+                      onChange={toggleAll}
+                      className="rounded border-zinc-300 cursor-pointer"
+                    />
+                  </th>
+                  {["Name", "IC", "Contingent"].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-50">
+                {rows.map(r => {
+                  const checked = selectedIds.has(r.id);
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`hover:bg-zinc-50/60 cursor-pointer ${checked ? "bg-red-50/40" : ""}`}
+                      onClick={() => toggleRow(r.id)}
+                    >
+                      <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleRow(r.id)}
+                          className="rounded border-zinc-300 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-zinc-900">
+                        {r.name?.trim()
+                          ? r.name
+                          : <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-xs font-semibold">NO NAME</span>}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs">
+                        {r.ic?.trim()
+                          ? <span className="text-zinc-600">{r.ic}</span>
+                          : <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 font-sans font-semibold">NO IC</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-zinc-500">{r.contingentName}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {total > rows.length && (
+            <div className="px-4 py-3 border-t border-zinc-100 flex items-center justify-between">
+              <p className="text-xs text-zinc-400">Showing {rows.length} of {total}</p>
+              <button
+                type="button"
+                onClick={() => setLimit(l => l + 20)}
+                className="flex items-center gap-1 text-xs text-[#085782] hover:underline"
+              >
+                <ChevronDown className="h-3.5 w-3.5" /> Load more
+              </button>
+            </div>
+          )}
+          {total <= rows.length && total > 10 && (
+            <div className="px-4 py-3 border-t border-zinc-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setLimit(10)}
+                className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600"
+              >
+                <ChevronUp className="h-3.5 w-3.5" /> Collapse
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => { if (!o) setPendingDelete(null); }}
+        title="Padam Peserta?"
+        description={pendingDelete ? `Padam ${pendingDelete.label}? Tindakan ini turut membuang pendaftaran walk-in dan keahlian pasukan mereka, dan tidak boleh dikembalikan.` : undefined}
+        confirmLabel="Padam"
+        loading={!!deleting}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          const mode = pendingDelete.mode;
+          setPendingDelete(null);
+          await handleDelete(mode);
+        }}
+      />
+    </section>
+  );
+}
+
+// ── Section 4: Competition Eligibility ──────────────────────────────────────
+
+function EligibilitySection() {
+  const [groups,    setGroups]    = useState<EligibilityGroup[]>([]);
+  const [total,     setTotal]     = useState(0);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
+  const [jobs,      setJobs]      = useState<Record<string, BulkJob>>({});
+  const [modalComp, setModalComp] = useState<CompEntry | null>(null);
+  const [overallPct, setOverallPct] = useState("0");
+  const [gradePcts,  setGradePcts]  = useState<Record<string, string>>({});
+  const [starting,   setStarting]   = useState(false);
+  const [startErr,   setStartErr]   = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res  = await fetch("/api/v2/organizer/data-watch/eligibility");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setGroups(json.data ?? []);
+      setTotal(json.totalCompetitions ?? 0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, [load]);
+
+  // Poll running jobs every second
+  useEffect(() => {
+    const running = Object.values(jobs).filter(j => j.status === "RUNNING");
+    if (running.length === 0) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      return;
+    }
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      const current = Object.values(jobsRefSafe());
+      let anyDone = false;
+      for (const j of current.filter(x => x.status === "RUNNING")) {
+        try {
+          const res  = await fetch(`/api/v2/organizer/data-watch/bulk-register?jobId=${j.jobId}`);
+          const json = await res.json();
+          if (res.ok) {
+            setJobs(prev => ({ ...prev, [json.competitionId]: json as BulkJob }));
+            if (json.status !== "RUNNING") anyDone = true;
+          } else if (res.status === 404) {
+            // Job lost (server restart) — mark done and refresh counts
+            setJobs(prev => ({ ...prev, [j.competitionId]: { ...j, status: "DONE" } }));
+            anyDone = true;
+          }
+        } catch { /* transient */ }
+      }
+      if (anyDone) load();
+    }, 1000);
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, load]);
+
+  // Latest jobs snapshot for the poller (avoids stale closure)
+  const jobsStateRef = useRef(jobs);
+  jobsStateRef.current = jobs;
+  function jobsRefSafe() { return jobsStateRef.current; }
+
+  function openModal(c: CompEntry) {
+    setModalComp(c);
+    setOverallPct("0");
+    setGradePcts({});
+    setStartErr("");
+  }
+
+  async function startRegistration() {
+    if (!modalComp) return;
+    setStarting(true);
+    setStartErr("");
+    try {
+      const body = {
+        competitionId: modalComp.id,
+        overallPct: Number(overallPct) || 0,
+        gradePcts: Object.fromEntries(
+          Object.entries(gradePcts).filter(([, v]) => v !== "" && Number(v) > 0).map(([g, v]) => [g, Number(v)]),
+        ),
+      };
+      const res  = await fetch("/api/v2/organizer/data-watch/bulk-register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? json.error ?? `HTTP ${res.status}`);
+      setJobs(prev => ({
+        ...prev,
+        [modalComp.id]: {
+          jobId: json.jobId, competitionId: modalComp.id, status: "RUNNING",
+          total: 0, done: 0, registered: 0, skipped: 0, error: null,
+        },
+      }));
+      setModalComp(null);
+    } catch (e) {
+      setStartErr(e instanceof Error ? e.message : "Failed to start");
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
+        <div className="flex items-center gap-2.5">
+          <Users className="h-4 w-4 text-sky-500 shrink-0" />
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Competition Eligibility</h2>
+            <p className="text-xs text-zinc-500">Active participants eligible for each competition, grouped by target group</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {!loading && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
+              {total} competition{total !== 1 ? "s" : ""}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 px-5 py-2.5 bg-red-50 border-b border-red-100 text-sm text-red-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex items-center justify-center gap-2 py-10 text-zinc-400 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      )}
+
+      {!loading && !error && groups.length === 0 && (
+        <div className="flex items-center justify-center gap-2 py-10 text-zinc-400 text-sm">
+          No competitions found.
+        </div>
+      )}
+
+      {!loading && !error && groups.length > 0 && (
+        <div className="divide-y divide-zinc-100">
+          {groups.map(g => (
+            <div key={g.targetGroup.id}>
+              {/* Target group header */}
+              <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 bg-zinc-50">
+                <span className="text-xs font-semibold text-zinc-700">{g.targetGroup.name}</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white border border-zinc-200 text-zinc-500">
+                  {g.targetGroup.code}
+                </span>
+                {g.targetGroup.ageGroup && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">
+                    {g.targetGroup.ageGroup}
+                  </span>
+                )}
+              </div>
+              {/* Competitions under this target group */}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-100">
+                    <th className="px-5 py-2 text-left text-[10px] font-semibold text-zinc-400 uppercase tracking-wide">Competition</th>
+                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-400 uppercase tracking-wide w-24">Eligible</th>
+                    <th className="px-2 py-2 text-right text-[10px] font-semibold text-zinc-400 uppercase tracking-wide w-24">Registered</th>
+                    <th className="px-2 py-2 text-left text-[10px] font-semibold text-zinc-400 uppercase tracking-wide w-56">Progress</th>
+                    <th className="px-5 py-2 text-right text-[10px] font-semibold text-zinc-400 uppercase tracking-wide w-28">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {g.competitions.map(c => {
+                    const job = jobs[c.id];
+                    const running = job?.status === "RUNNING";
+                    const pct = c.eligibleCount > 0 ? Math.round((c.registeredCount / c.eligibleCount) * 100) : 0;
+                    const jobPct = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : running ? 0 : null;
+                    return (
+                      <tr key={c.id} className="hover:bg-zinc-50/60">
+                        <td className="px-5 py-2.5">
+                          <span className="font-mono text-xs text-zinc-500 mr-2">{c.code}</span>
+                          <span className="font-medium text-zinc-900">{c.name}</span>
+                        </td>
+                        <td className="px-2 py-2.5 text-right">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            c.eligibleCount > 0 ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-500"
+                          }`}>
+                            {c.eligibleCount}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2.5 text-right">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            c.registeredCount > 0 ? "bg-sky-100 text-sky-700" : "bg-zinc-100 text-zinc-500"
+                          }`}>
+                            {c.registeredCount}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2.5">
+                          {job && jobPct !== null ? (
+                            <div className="space-y-1">
+                              <div className="h-2 w-full rounded-full bg-zinc-100 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    job.status === "ERROR" ? "bg-red-500" : job.status === "DONE" ? "bg-emerald-500" : "bg-sky-500"
+                                  }`}
+                                  style={{ width: `${jobPct}%` }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-zinc-500">
+                                {job.status === "RUNNING" && `${job.done}/${job.total} diproses…`}
+                                {job.status === "DONE" && `Selesai — ${job.registered} didaftarkan${job.skipped > 0 ? `, ${job.skipped} dilangkau` : ""}`}
+                                {job.status === "ERROR" && (job.error ?? "Ralat")}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <div className="h-2 w-full rounded-full bg-zinc-100 overflow-hidden">
+                                <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                              </div>
+                              <p className="text-[10px] text-zinc-400">{pct}% berdaftar</p>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => openModal(c)}
+                            disabled={running || c.eligibleCount === 0}
+                            className="inline-flex items-center gap-1 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white text-xs font-medium px-2.5 py-1.5 transition-colors"
+                          >
+                            {running && <Loader2 className="h-3 w-3 animate-spin" />}
+                            Daftar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Registration target modal */}
+      <Dialog open={!!modalComp} onOpenChange={(o) => { if (!o && !starting) setModalComp(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Sasaran Pendaftaran</DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500">
+              {modalComp?.code} — {modalComp?.name} ({modalComp?.eligibleCount} layak)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-6 pb-2 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 mb-1">Keseluruhan (%)</label>
+              <input
+                type="number" min={0} max={100}
+                value={overallPct}
+                onChange={e => setOverallPct(e.target.value)}
+                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+              />
+            </div>
+            {modalComp && modalComp.grades.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-zinc-600 mb-2">Mengikut Tingkatan/Darjah <span className="text-zinc-400 font-normal">(mengatasi keseluruhan)</span></p>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  {modalComp.grades.map(gr => (
+                    <div key={gr} className="flex items-center gap-2">
+                      <span className="flex-1 text-xs text-zinc-600 truncate">{gr}</span>
+                      <input
+                        type="number" min={0} max={100} placeholder="—"
+                        value={gradePcts[gr] ?? ""}
+                        onChange={e => setGradePcts(prev => ({ ...prev, [gr]: e.target.value }))}
+                        className="w-16 rounded-md border border-zinc-200 px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-sky-300"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="text-[11px] text-zinc-400">
+              Peserta dipilih secara rawak daripada {modalComp?.eligibleCount} yang layak. Setiap peserta didaftarkan sebagai pasukan individu.
+            </p>
+            {startErr && (
+              <p className="text-xs text-red-600 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" /> {startErr}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setModalComp(null)} disabled={starting}>
+              Batal
+            </Button>
+            <Button
+              size="sm"
+              onClick={startRegistration}
+              disabled={starting || ((Number(overallPct) || 0) === 0 && Object.values(gradePcts).every(v => !v || Number(v) === 0))}
+              className="bg-emerald-600 hover:bg-emerald-500"
+            >
+              {starting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Mula Daftar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+// ── Section 4: Error Log Watcher ─────────────────────────────────────────────
 
 const LEVEL_STYLES: Record<string, { badge: string; row: string }> = {
   error: { badge: "bg-red-100 text-red-700",    row: "bg-red-50/40" },
@@ -532,8 +1136,9 @@ function ErrorLogSection() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
+  const [confirmClear, setConfirmClear] = useState(false);
+
   async function handleClear() {
-    if (!confirm("Clear all error log entries?")) return;
     setClearing(true);
     try {
       await fetch("/api/v2/organizer/data-watch/error-logs", { method: "DELETE" });
@@ -582,7 +1187,7 @@ function ErrorLogSection() {
           </button>
           {entries.length > 0 && (
             <button
-              onClick={handleClear}
+              onClick={() => setConfirmClear(true)}
               disabled={clearing}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-40 transition-colors"
             >
@@ -633,6 +1238,19 @@ function ErrorLogSection() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title="Clear Error Logs?"
+        description="Clear all error log entries? This cannot be undone."
+        confirmLabel="Clear"
+        loading={clearing}
+        onConfirm={async () => {
+          setConfirmClear(false);
+          await handleClear();
+        }}
+      />
     </section>
   );
 }
@@ -644,6 +1262,8 @@ export function DataWatchClient() {
     <div className="space-y-6">
       <IncompleteIcSection />
       <WrongGradeSection />
+      <IncompleteDetailsSection />
+      <EligibilitySection />
       <ErrorLogSection />
     </div>
   );

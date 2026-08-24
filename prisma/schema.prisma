@@ -1269,3 +1269,31 @@ model ContingentDistance {
   @@unique([eventId, contingentId])
   @@map("contingent_distances")
 }
+
+// BULK REGISTRATION STATS (Data Watch — denormalized snapshot per registration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model RegistrationStat {
+  id              String    @id @default(cuid())
+  batchId         String
+  competitionId   String
+  competitionCode String
+  participantId   String    @map("contestantId")
+  gender          String?
+  age             Int?
+  classGrade      String?
+  ethnic          String?
+  contingentId    String?
+  contingent      String?
+  contingentType  String?
+  zone            String?
+  state           String?
+  ppd             String?
+  schoolCategory  String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([competitionId, participantId])
+  @@index([competitionId])
+  @@index([batchId])
+  @@map("registration_stats")
+}
