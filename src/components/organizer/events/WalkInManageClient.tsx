@@ -412,7 +412,6 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [vbUnlockInput, setVbUnlockInput] = useState("");
   const [vbUnlockErr,   setVbUnlockErr]   = useState("");
   const [vbRegErr,     setVbRegErr]     = useState("");
-  const [vbRegConfirm, setVbRegConfirm] = useState<string | null>(null); // regId pending force-new-entry confirmation
 
   async function safeJson(res: Response): Promise<{ error?: string; message?: string; [k: string]: unknown }> {
     try { return await res.json(); } catch { return { error: `HTTP ${res.status}` }; }
@@ -542,25 +541,19 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     }
   }
 
-  async function vibeBlocksRenewParticipantToken(regId: string, force = false) {
+  async function vibeBlocksRenewParticipantToken(regId: string) {
     if (!selectedWic) return;
-    setVibeBlocksActionId(regId); setVbRegErr(""); setVbRegConfirm(null);
+    setVibeBlocksActionId(regId); setVbRegErr("");
     try {
       const res = await fetch(
         `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${regId}/vibeblocks`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ force }),
-        },
+        { method: "PATCH" },
       );
       const j = await safeJson(res);
       if (res.ok)
         setRegistrations(prev => prev.map(r =>
           r.id === regId ? { ...r, viblockToken: `${j.entryToken}:${j.entryId}` } : r,
         ));
-      else if (j.error === "ENTRY_ALREADY_CONSUMED")
-        setVbRegConfirm(regId);
       else
         setVbRegErr(j.message ?? (j.error as string) ?? "Gagal mengganti token peserta.");
     } finally {
@@ -1714,23 +1707,6 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                     <button type="button" onClick={() => setVbRegErr("")} className="text-red-400 hover:text-red-600 shrink-0">
                       <X className="h-3.5 w-3.5" />
                     </button>
-                  </div>
-                )}
-
-                {vbRegConfirm && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
-                    <p className="text-xs text-amber-800">
-                      Token peserta ini <span className="font-semibold">telah digunakan</span> dan tidak boleh diganti. Daftar penyertaan baharu dengan token baharu? Peserta akan mempunyai dua rekod keputusan.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => vibeBlocksRenewParticipantToken(vbRegConfirm, true)}
-                        disabled={vibeBlocksActionId === vbRegConfirm}
-                        className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white gap-1.5">
-                        {vibeBlocksActionId === vbRegConfirm && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                        Daftar Penyertaan Baharu
-                      </Button>
-                      <button type="button" onClick={() => setVbRegConfirm(null)} className="text-xs text-zinc-500 hover:text-zinc-700">Batal</button>
-                    </div>
                   </div>
                 )}
 

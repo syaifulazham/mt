@@ -77,7 +77,7 @@ export async function POST(
 
 // PATCH — replace (reissue) an entry token
 export async function PATCH(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string; wicId: string; regId: string }> },
 ) {
   const session = await getOrganizerSession();
@@ -85,10 +85,6 @@ export async function PATCH(
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   if (!vibeBlocksConfigured()) return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED" }, { status: 400 });
   const { regId } = await params;
-
-  // force=true: when the existing entry is consumed, register a fresh entry instead
-  const body = await req.json().catch(() => ({})) as { force?: boolean };
-  const force = body.force === true;
 
   const reg = await db.walkInRegistration.findUnique({
     where: { id: regId },
@@ -110,30 +106,9 @@ export async function PATCH(
       const result = await vibeBlocksReplaceToken(eventId, parsed.entryId, newEntryToken);
       entryId = result.entry_id;
     } catch (replaceErr) {
-      const rErr = replaceErr as { status?: number; body?: { error?: { code?: string } } };
-      // 409 ENTRY_ALREADY_CONSUMED = participant already used the token. The contract
-      // excludes replacing consumed tokens; the sanctioned reissue path is a fresh entry.
-      if (rErr.status === 409 && rErr.body?.error?.code === "ENTRY_ALREADY_CONSUMED") {
-        if (!force) {
-          return NextResponse.json(
-            { error: "ENTRY_ALREADY_CONSUMED", message: "Token telah digunakan oleh peserta dan tidak boleh diganti." },
-            { status: 409 },
-          );
-        }
-        const result = await vibeBlocksRegisterEntry(eventId, {
-          entryToken: newEntryToken,
-          partnerReference: regId,
-        });
-        entryId = result.entry_id;
-        await db.walkInRegistration.update({
-          where: { id: regId },
-          data: { viblockToken: encodeVibeBlocksToken(newEntryToken, entryId) },
-        });
-        return NextResponse.json({ entryToken: newEntryToken, entryId, newEntry: true });
-      }
       // 404 = entry no longer exists in VibeBlocks (e.g. event config changed after
       // registration). Re-register as a fresh entry under the current event.
-      if (rErr.status !== 404) throw replaceErr;
+      if ((replaceErr as { status?: number }).status !== 404) throw replaceErr;
       const result = await vibeBlocksRegisterEntry(eventId, {
         entryToken: newEntryToken,
         partnerReference: regId,
