@@ -817,18 +817,21 @@ function EligibilitySection() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
+  // Latest jobs snapshot for the poller (avoids stale closure)
+  const jobsRef = useRef(jobs);
+  useEffect(() => { jobsRef.current = jobs; }, [jobs]);
+
   // Poll running jobs every second
   useEffect(() => {
-    const running = Object.values(jobs).filter(j => j.status === "RUNNING");
-    if (running.length === 0) {
+    const running = Object.values(jobs).some(j => j.status === "RUNNING");
+    if (!running) {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       return;
     }
     if (pollRef.current) return;
     pollRef.current = setInterval(async () => {
-      const current = Object.values(jobsRefSafe());
       let anyDone = false;
-      for (const j of current.filter(x => x.status === "RUNNING")) {
+      for (const j of Object.values(jobsRef.current).filter(x => x.status === "RUNNING")) {
         try {
           const res  = await fetch(`/api/v2/organizer/data-watch/bulk-register?jobId=${j.jobId}`);
           const json = await res.json();
@@ -845,13 +848,7 @@ function EligibilitySection() {
       if (anyDone) load();
     }, 1000);
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs, load]);
-
-  // Latest jobs snapshot for the poller (avoids stale closure)
-  const jobsStateRef = useRef(jobs);
-  jobsStateRef.current = jobs;
-  function jobsRefSafe() { return jobsStateRef.current; }
 
   function openModal(c: CompEntry) {
     setModalComp(c);
