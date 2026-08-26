@@ -1734,7 +1734,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                 )}
 
                 {/* Registration table */}
-                <div className="rounded-xl border bg-white overflow-hidden">
+                <div className="rounded-xl border bg-white overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-zinc-50 border-b">
                       <tr>
@@ -1748,7 +1748,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                         {selectedWic?.useViblockarena && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Viblock</th>}
                         {selectedWic?.useVibeblocks  && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">VibeBlocks</th>}
                         {selectedWic?.useDronearena  && <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Drone</th>}
-                        {canWrite && <th className="px-4 py-3 w-32" />}
+                        {canWrite && <th className="px-4 py-3 w-36" />}
                       </tr>
                     </thead>
                     <tbody className="divide-y">
