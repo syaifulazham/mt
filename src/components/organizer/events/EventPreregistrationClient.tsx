@@ -818,6 +818,24 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }
 
+  async function updateAcceptance(teamId: string, newValue: string) {
+    const oldValue = teams.find(t => t.id === teamId)?.acceptance ?? "PENDING";
+    // Optimistic update
+    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, acceptance: newValue } : t));
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/preregistration/teams`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, acceptance: newValue }),
+      });
+      if (!res.ok) throw new Error("Ralat");
+      loadStats();
+    } catch {
+      // Revert on failure
+      setTeams(prev => prev.map(t => t.id === teamId ? { ...t, acceptance: oldValue } : t));
+    }
+  }
+
   // Add-teams modal: open
   function openAddTeamsModal() {
     setAddSearchQ("");
@@ -1507,7 +1525,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600 text-xs">{team.members}</td>
-                        <td className="px-4 py-2.5 text-center">
+                        <td className="px-4 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                           {(() => {
                             const a = team.acceptance ?? "PENDING";
                             const cls: Record<string, string> = {
@@ -1517,9 +1535,16 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                               REJECT:  "bg-red-50 text-red-700 border-red-200",
                             };
                             return (
-                              <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cls[a] ?? cls.PENDING}`}>
-                                {a}
-                              </span>
+                              <select
+                                value={a}
+                                onChange={(e) => updateAcceptance(team.id, e.target.value)}
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-pointer appearance-none text-center ${cls[a] ?? cls.PENDING}`}
+                              >
+                                <option value="PENDING">PENDING</option>
+                                <option value="HOLD">HOLD</option>
+                                <option value="ACCEPT">ACCEPT</option>
+                                <option value="REJECT">REJECT</option>
+                              </select>
                             );
                           })()}
                         </td>

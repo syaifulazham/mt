@@ -235,16 +235,30 @@ export async function PATCH(
   try {
     const body = await req.json();
     const teamId: string = body?.teamId;
-    const selected: boolean = body?.selected;
-    if (!teamId || typeof selected !== "boolean")
+    const selected: boolean | undefined = body?.selected;
+    const acceptance: string | undefined = body?.acceptance;
+
+    if (!teamId) return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
+
+    const VALID_ACCEPTANCE = ["PENDING", "HOLD", "ACCEPT", "REJECT"];
+    const data: Record<string, unknown> = {};
+
+    if (typeof selected === "boolean") data.selected = selected;
+    if (acceptance !== undefined) {
+      if (!VALID_ACCEPTANCE.includes(acceptance))
+        return NextResponse.json({ error: "INVALID_ACCEPTANCE" }, { status: 400 });
+      data.acceptance = acceptance;
+    }
+
+    if (Object.keys(data).length === 0)
       return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
 
     await db.teamEvent.update({
       where: { teamId_eventId: { teamId, eventId } },
-      data: { selected },
+      data,
     });
 
-    return NextResponse.json({ success: true, teamId, selected });
+    return NextResponse.json({ success: true, teamId, ...data });
   } catch (e) {
     console.error("[preregistration/teams PATCH]", e);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 422 });
