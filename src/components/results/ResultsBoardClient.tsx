@@ -636,14 +636,11 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [viewMode, setViewMode] = useState<"national" | "state">("national");
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
-  const [scales, setScales] = useState<ScaleConfig>(DEFAULT_SCALES);
+  const [scales, setScales] = useState<ScaleConfig>(() =>
+    typeof document === "undefined" ? DEFAULT_SCALES : readScaleCookie()
+  );
   const [showScalePanel, setShowScalePanel] = useState(false);
   const scalePanelRef = useRef<HTMLDivElement>(null);
-
-  // Load scales from cookie on mount
-  useEffect(() => {
-    setScales(readScaleCookie());
-  }, []);
 
   const updateScale = useCallback((key: ScaleKey, value: number) => {
     setScales(prev => {
