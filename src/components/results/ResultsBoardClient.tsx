@@ -6,6 +6,58 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+// ── Scale config (per-item font/element sizes, persisted in cookies) ──────────
+
+const SCALE_COOKIE = "results_spotlight_scales";
+
+type ScaleKey =
+  | "jata" | "logo" | "eventName" | "compName"
+  | "rank" | "contingentLogo" | "stateFlag" | "stateName"
+  | "contingentName" | "teamName" | "members" | "partners";
+
+type ScaleConfig = Record<ScaleKey, number>;
+
+const SCALE_LABELS: Record<ScaleKey, string> = {
+  jata:           "Jata Negara",
+  logo:           "Logo",
+  eventName:      "Nama Event",
+  compName:       "Nama Pertandingan",
+  rank:           "Tempat",
+  contingentLogo: "Logo Kontinjen",
+  stateFlag:      "Bendera Negeri",
+  stateName:      "Nama Negeri",
+  contingentName: "Nama Kontinjen",
+  teamName:       "Nama Pasukan",
+  members:        "Ahli Pasukan",
+  partners:       "Logo Rakan",
+};
+
+const DEFAULT_SCALES: ScaleConfig = {
+  jata: 1, logo: 1, eventName: 1, compName: 1,
+  rank: 1, contingentLogo: 1, stateFlag: 1, stateName: 1,
+  contingentName: 1, teamName: 1, members: 1, partners: 1,
+};
+
+function readScaleCookie(): ScaleConfig {
+  try {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${SCALE_COOKIE}=([^;]*)`));
+    if (!match) return { ...DEFAULT_SCALES };
+    const parsed = JSON.parse(decodeURIComponent(match[1]));
+    const result = { ...DEFAULT_SCALES };
+    for (const k of Object.keys(DEFAULT_SCALES) as ScaleKey[]) {
+      if (typeof parsed[k] === "number" && parsed[k] >= 0.3 && parsed[k] <= 3) {
+        result[k] = parsed[k];
+      }
+    }
+    return result;
+  } catch { return { ...DEFAULT_SCALES }; }
+}
+
+function writeScaleCookie(scales: ScaleConfig) {
+  const val = encodeURIComponent(JSON.stringify(scales));
+  document.cookie = `${SCALE_COOKIE}=${val};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type RankEntry = {
@@ -310,7 +362,7 @@ function TeamSpotlight({
   competitionName,
   onClose,
   isWalkIn = false,
-  scale = 1,
+  scales = DEFAULT_SCALES,
 }: {
   entry: RankEntry;
   eventName: string;
@@ -318,7 +370,7 @@ function TeamSpotlight({
   competitionName?: string;
   onClose: () => void;
   isWalkIn?: boolean;
-  scale?: number;
+  scales?: ScaleConfig;
 }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -393,7 +445,7 @@ function TeamSpotlight({
         {/* Top center: Jata Negara */}
         <div className="flex justify-center pt-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logos-white/Jata-01-white.png" alt="Jata Negara" className="w-auto" style={{ height: `${scale * 10}rem`, filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 12px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(255,255,255,0.1))" }} />
+          <img src="/logos-white/Jata-01-white.png" alt="Jata Negara" className="w-auto" style={{ height: `${scales.jata * 10}rem`, filter: "drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 12px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(255,255,255,0.1))" }} />
         </div>
 
         {/* Main two-column area */}
@@ -402,10 +454,10 @@ function TeamSpotlight({
           {/* Left: logo + event name + competition name */}
           <div className="flex flex-col items-center justify-center gap-5 flex-1 px-8 py-10 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="w-auto" style={{ height: `${scale * 16}rem` }} />
-            <p className="text-white font-black tracking-widest uppercase whitespace-nowrap drop-shadow-lg" style={{ fontSize: `${scale * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{eventName}</p>
+            <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="w-auto" style={{ height: `${scales.logo * 16}rem` }} />
+            <p className="text-white font-black tracking-widest uppercase whitespace-nowrap drop-shadow-lg" style={{ fontSize: `${scales.eventName * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{eventName}</p>
             {competitionName && (
-              <p className="text-white font-bold tracking-wide uppercase drop-shadow-lg" style={{ fontSize: `${scale * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{competitionCode} {competitionName}</p>
+              <p className="text-white font-bold tracking-wide uppercase drop-shadow-lg" style={{ fontSize: `${scales.compName * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{competitionCode} {competitionName}</p>
             )}
           </div>
 
@@ -417,33 +469,40 @@ function TeamSpotlight({
             {/* Rank label — top of right column */}
             <div className="flex items-center gap-3">
               <div className="h-px w-16 bg-white/20" />
-              <p className="font-black tracking-wide uppercase drop-shadow-lg text-amber-400" style={{ fontSize: `${scale * 1.875}rem`, fontFamily: "var(--font-poppins)" }}>
+              <p className="font-black tracking-wide uppercase drop-shadow-lg text-amber-400" style={{ fontSize: `${scales.rank * 1.875}rem`, fontFamily: "var(--font-poppins)" }}>
                 {tempatLabel(entry.rank)}
               </p>
               <div className="h-px w-16 bg-white/20" />
             </div>
             {/* Contingent logo + state flag */}
             <div className="flex items-center gap-6">
-              <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" style={{ width: `${scale * 6}rem`, height: `${scale * 6}rem` }} />
+              <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" style={{ width: `${scales.contingentLogo * 6}rem`, height: `${scales.contingentLogo * 6}rem` }} />
               {entry.stateFlag && (
-                <div className="rounded-lg overflow-hidden shrink-0" style={{ width: `${scale * 8}rem`, height: `${scale * 5}rem` }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={entry.stateFlag} alt={entry.stateName ?? "State"} className="w-full h-full object-contain" style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.3)" }} />
+                <div className="flex flex-col items-center gap-2">
+                  <div className="rounded-lg overflow-hidden shrink-0" style={{ width: `${scales.stateFlag * 8}rem`, height: `${scales.stateFlag * 5}rem` }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={entry.stateFlag} alt={entry.stateName ?? "State"} className="w-full h-full object-contain" style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.3)" }} />
+                  </div>
+                  {entry.stateName && (
+                    <p className="text-amber-400 font-black uppercase tracking-widest drop-shadow-lg" style={{ fontSize: `${scales.stateName * 1.125}rem`, WebkitTextStroke: "0.5px rgba(0,0,0,0.5)" }}>
+                      {entry.stateName}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
             {/* Contingent name */}
-            <p className="text-amber-400 font-black tracking-wide uppercase drop-shadow-lg" style={{ fontSize: `${scale * 1.875}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
+            <p className="text-amber-400 font-black tracking-wide uppercase drop-shadow-lg" style={{ fontSize: `${scales.contingentName * 1.875}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "1px rgba(0,0,0,0.6)" }}>
               {entry.contingentName}
             </p>
             {/* Team name */}
-            <p className="text-white font-black drop-shadow-lg" style={{ fontSize: `${scale * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.6)" }}>{entry.teamName}</p>
+            <p className="text-white font-black drop-shadow-lg" style={{ fontSize: `${scales.teamName * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.5)" }}>{entry.teamName}</p>
             {/* Members */}
             {!isWalkIn && entry.members.length > 0 && (
               <div className="flex flex-col items-center gap-2">
                 <p className="text-white/30 text-xs font-bold uppercase tracking-widest mb-1">Ahli Pasukan</p>
                 {entry.members.map((m) => (
-                  <p key={m.id} className="text-white font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ fontSize: `${scale * 1.25}rem`, WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
+                  <p key={m.id} className="text-white font-bold uppercase whitespace-nowrap drop-shadow-lg" style={{ fontSize: `${scales.members * 1.25}rem`, WebkitTextStroke: "0.3px rgba(0,0,0,0.5)" }}>{m.name}</p>
                 ))}
               </div>
             )}
@@ -455,7 +514,7 @@ function TeamSpotlight({
           <p className="text-white/40 text-[10px] font-bold tracking-widest uppercase leading-tight text-right">RAKAN<br />STRATEGIK</p>
           {PARTNER_LOGOS.map((f) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="w-auto opacity-60" style={{ height: `${scale * 2.4}rem` }} />
+            <img key={f} src={`/logos-white/${f}`} alt={f.replace("-white.svg", "")} className="w-auto opacity-60" style={{ height: `${scales.partners * 2.4}rem` }} />
           ))}
         </div>
       </div>
@@ -577,9 +636,27 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [viewMode, setViewMode] = useState<"national" | "state">("national");
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
-  const [scale, setScale] = useState(1);
+  const [scales, setScales] = useState<ScaleConfig>(DEFAULT_SCALES);
   const [showScalePanel, setShowScalePanel] = useState(false);
   const scalePanelRef = useRef<HTMLDivElement>(null);
+
+  // Load scales from cookie on mount
+  useEffect(() => {
+    setScales(readScaleCookie());
+  }, []);
+
+  const updateScale = useCallback((key: ScaleKey, value: number) => {
+    setScales(prev => {
+      const next = { ...prev, [key]: value };
+      writeScaleCookie(next);
+      return next;
+    });
+  }, []);
+
+  const resetScales = useCallback(() => {
+    setScales({ ...DEFAULT_SCALES });
+    writeScaleCookie(DEFAULT_SCALES);
+  }, []);
 
   useEffect(() => {
     if (!showScalePanel) return;
@@ -1004,7 +1081,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
           competitionName={activeResult?.name}
           onClose={() => setSpotlight(null)}
           isWalkIn={isWalkIn}
-          scale={scale}
+          scales={scales}
         />
       )}
 
@@ -1012,27 +1089,39 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       <div ref={scalePanelRef} className="fixed bottom-6 left-6 z-[150] flex flex-col items-start gap-2">
         {showScalePanel && (
           <div
-            className="bg-black/70 backdrop-blur-sm rounded-2xl px-4 py-3 flex flex-col gap-3 shadow-xl"
+            className="bg-black/70 backdrop-blur-sm rounded-2xl px-4 py-3 flex flex-col gap-2.5 shadow-xl max-h-[70vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between gap-4">
               <span className="text-white/60 text-xs font-semibold">Saiz</span>
-              <span className="text-white text-xs font-mono">{Math.round(scale * 100)}%</span>
-              {scale !== 1 && (
-                <button onClick={() => setScale(1)} className="text-white/40 hover:text-white text-[10px]">
-                  Set semula
-                </button>
-              )}
+              <button onClick={resetScales} className="text-white/40 hover:text-white text-[10px]">
+                Set semula
+              </button>
             </div>
-            <input
-              type="range"
-              min={0.5}
-              max={1.5}
-              step={0.05}
-              value={scale}
-              onChange={e => setScale(parseFloat(e.target.value))}
-              className="w-36 accent-violet-400"
-            />
+            {(Object.keys(SCALE_LABELS) as ScaleKey[]).map(key => (
+              <div key={key} className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-white/50 text-[10px]">{SCALE_LABELS[key]}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-white/40 text-[10px] font-mono">{Math.round(scales[key] * 100)}%</span>
+                    {scales[key] !== 1 && (
+                      <button onClick={() => updateScale(key, 1)} className="text-white/25 hover:text-white/60 text-[9px]">
+                        ⟲
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={0.3}
+                  max={3}
+                  step={0.05}
+                  value={scales[key]}
+                  onChange={e => updateScale(key, parseFloat(e.target.value))}
+                  className="w-44 accent-violet-400 h-1"
+                />
+              </div>
+            ))}
           </div>
         )}
         <button
