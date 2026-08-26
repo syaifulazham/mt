@@ -855,6 +855,63 @@ function TeamsTab({ contingentId, teams }: {
   const [addBusy,        setAddBusy]        = useState(false);
   const [addErr,         setAddErr]         = useState("");
 
+  // Register-to-event state
+  const [eventPickerFor, setEventPickerFor] = useState<string | null>(null); // teamId
+  const [eligibleEvents, setEligibleEvents] = useState<{ id: string; name: string; slug: string; status: string; startDate: string | null; endDate: string | null; scope: string; venue: string | null }[]>([]);
+  const [loadingEvents,  setLoadingEvents]  = useState(false);
+  const [registering,    setRegistering]    = useState<string | null>(null); // eventId
+  const [regEventErr,    setRegEventErr]    = useState("");
+  const [includeCompleted, setIncludeCompleted] = useState(false);
+
+  async function openEventPicker(teamId: string, inclCompleted = includeCompleted) {
+    setEventPickerFor(teamId);
+    setEligibleEvents([]);
+    setRegEventErr("");
+    setLoadingEvents(true);
+    try {
+      const res = await fetch(`/api/v2/organizer/contingents/${contingentId}/teams/${teamId}/events${inclCompleted ? "?includeCompleted=true" : ""}`);
+      const json = await res.json();
+      if (res.ok) setEligibleEvents(json.data ?? []);
+    } catch { /* ignore */ }
+    finally { setLoadingEvents(false); }
+  }
+
+  function toggleIncludeCompleted() {
+    const next = !includeCompleted;
+    setIncludeCompleted(next);
+    if (eventPickerFor) openEventPicker(eventPickerFor, next);
+  }
+
+  async function registerToEvent(teamId: string, eventId: string) {
+    setRegistering(eventId);
+    setRegEventErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/contingents/${contingentId}/teams/${teamId}/events`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json.error === "EVENT_REQUIRES_PREREQUISITE" ? "Event ini memerlukan prerequisite."
+          : json.error === "EVENT_LOCATION_MISMATCH" ? "Lokasi kontinjen tidak sepadan dengan skop event."
+          : json.error ?? "Gagal mendaftar.";
+        setRegEventErr(msg);
+        return;
+      }
+      // Refresh team detail and close picker
+      setEventPickerFor(null);
+      setDetails(prev => { const n = { ...prev }; delete n[teamId]; return n; });
+      setLoadingId(teamId);
+      try {
+        const r = await fetch(`/api/v2/organizer/contingents/${contingentId}/teams/${teamId}`);
+        const j = await r.json();
+        setDetails(prev => ({ ...prev, [teamId]: j }));
+      } finally { setLoadingId(null); }
+    } catch {
+      setRegEventErr("Ralat rangkaian. Cuba semula.");
+    } finally { setRegistering(null); }
+  }
+
   // Seed enrolledMap from EptimEdu-verified course IDs returned by the API
   function seedEnrolled(teamId: string, detail: TeamDetail) {
     const ids = detail.enrolledCourseIds ?? [];
@@ -1057,6 +1114,33 @@ function TeamsTab({ contingentId, teams }: {
                       )}
                       {lmsRegError[t.id] && (
                         <span className="text-xs text-red-600">{lmsRegError[t.id]}</span>
+                      )}
+                    </div>
+
+                    {/* Registered events + register button */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                          Events ({detail.eventCourses.length})
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => openEventPicker(t.id)}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <Plus className="h-3 w-3" /> Daftar ke Event
+                        </button>
+                      </div>
+                      {detail.eventCourses.length === 0 ? (
+                        <p className="text-xs text-zinc-400">Not registered to any event.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {detail.eventCourses.map(ec => (
+                            <span key={ec.eventId} className="inline-flex items-center rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs text-blue-700 font-medium">
+                              {ec.eventName}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
 
@@ -1298,6 +1382,72 @@ function TeamsTab({ contingentId, teams }: {
           </div>
         );
       })}
+
+      {/* Event picker dialog */}
+      <Dialog open={!!eventPickerFor} onOpenChange={(open) => { if (!open) setEventPickerFor(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Daftar ke Event
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 px-6 py-2 pb-6">
+            <p className="text-xs text-zinc-500">
+              Pilih event untuk mendaftarkan pasukan ini. Hanya event tanpa prerequisite dipaparkan.
+            </p>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={includeCompleted}
+                onClick={toggleIncludeCompleted}
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border transition-colors ${includeCompleted ? "bg-blue-600 border-blue-600" : "bg-zinc-200 border-zinc-300"}`}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-px ${includeCompleted ? "translate-x-[18px] ml-px" : "translate-x-0.5"}`} />
+              </button>
+              <span className="text-xs text-zinc-600">Termasuk event selesai (COMPLETED)</span>
+            </label>
+            {regEventErr && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{regEventErr}</p>
+            )}
+            {loadingEvents ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+              </div>
+            ) : eligibleEvents.length === 0 ? (
+              <p className="text-xs text-zinc-400 text-center py-6 italic">Tiada event yang layak.</p>
+            ) : (
+              <div className="divide-y divide-zinc-100 max-h-[50vh] overflow-y-auto rounded-lg border border-zinc-200">
+                {eligibleEvents.map(ev => (
+                  <button
+                    key={ev.id}
+                    type="button"
+                    disabled={!!registering}
+                    onClick={() => eventPickerFor && registerToEvent(eventPickerFor, ev.id)}
+                    className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-zinc-800 truncate">{ev.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-400">
+                        <span>{ev.scope}</span>
+                        {ev.status === "COMPLETED" && (
+                          <span className="inline-flex items-center rounded-full bg-zinc-100 border border-zinc-300 px-1.5 py-px text-zinc-500 font-semibold">COMPLETED</span>
+                        )}
+                        {ev.startDate && <span>{new Date(ev.startDate).toLocaleDateString("ms-MY")}</span>}
+                        {ev.venue && <span>· {ev.venue}</span>}
+                      </div>
+                    </div>
+                    {registering === ev.id
+                      ? <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+                      : <Plus className="h-4 w-4 text-blue-500 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Enrolment error modal */}
       <Dialog open={!!enrolError} onOpenChange={(open) => { if (!open) setEnrolError(null); }}>
