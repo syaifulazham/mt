@@ -28,3 +28,35 @@ export async function PATCH(
   });
   return NextResponse.json({ data: reg });
 }
+
+// DELETE — remove a registration (releases its session-slot)
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string; wicId: string; regId: string }> },
+) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  const { wicId, regId } = await params;
+
+  const reg = await db.walkInRegistration.findFirst({
+    where: { id: regId, walkInCompetitionId: wicId },
+    select: { id: true, _count: { select: { judgingScores: true } } },
+  });
+  if (!reg) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (reg._count.judgingScores > 0)
+    return NextResponse.json(
+      { error: "HAS_SCORES", message: "Pendaftaran ini mempunyai markah juri dan tidak boleh dibuang." },
+      { status: 409 },
+    );
+
+  await db.$transaction([
+    db.walkInFormSubmission.updateMany({
+      where: { walkInRegistrationId: reg.id },
+      data: { walkInRegistrationId: null },
+    }),
+    db.walkInRegistration.delete({ where: { id: reg.id } }),
+  ]);
+
+  return NextResponse.json({ deleted: true });
+}

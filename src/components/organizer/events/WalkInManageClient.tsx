@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Input } from "@/components/ui/input";
 import { WalkInFormSection } from "./WalkInFormSection";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DEFAULT_SLOT_SCHEDULE, buildSlotSchedule, fmtSlotMin, slotTimeToMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 export type { SlotScheduleConfig } from "@/lib/walkin-slots";
@@ -368,6 +369,9 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [qrTarget,      setQrTarget]      = useState<Registration | null>(null);
   const [updating,      setUpdating]      = useState<string | null>(null);
+  const [deleteRegTarget, setDeleteRegTarget] = useState<Registration | null>(null);
+  const [deletingReg,   setDeletingReg]   = useState(false);
+  const [deleteRegErr,  setDeleteRegErr]  = useState("");
 
   const [addingEndpoint,    setAddingEndpoint]    = useState(false);
   const [addingGeneralEp,   setAddingGeneralEp]   = useState(false);
@@ -927,6 +931,25 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
     } finally {
       setRemovingTemplateId(null);
     }
+  }
+
+  async function deleteRegistration() {
+    if (!selectedWic || !deleteRegTarget) return;
+    setDeletingReg(true); setDeleteRegErr("");
+    const res = await fetch(
+      `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/registrations/${deleteRegTarget.id}`,
+      { method: "DELETE" },
+    );
+    if (res.ok) {
+      const removed = deleteRegTarget;
+      setRegistrations(prev => prev.filter(r => r.id !== removed.id));
+      setStats(prev => ({ ...prev, [removed.status]: Math.max(0, (prev[removed.status] ?? 1) - 1) }));
+      setDeleteRegTarget(null);
+    } else {
+      const j = await res.json().catch(() => ({}));
+      setDeleteRegErr(j.message ?? "Gagal membuang pendaftaran.");
+    }
+    setDeletingReg(false);
   }
 
   async function updateStatus(reg: Registration, status: string) {
@@ -1916,6 +1939,11 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                                     <XCircle className="h-4 w-4" />
                                   </button>
                                 )}
+                                <button type="button"
+                                  onClick={() => { setDeleteRegTarget(reg); setDeleteRegErr(""); }}
+                                  className="p-1 rounded text-zinc-300 hover:text-red-600 hover:bg-red-50 transition-colors" title="Buang pendaftaran">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
                               </div>
                             </td>
                           )}
@@ -1931,6 +1959,16 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteRegTarget}
+        onOpenChange={o => { if (!o && !deletingReg) setDeleteRegTarget(null); }}
+        title="Buang Pendaftaran"
+        description={`Anda akan membuang pendaftaran ${deleteRegTarget?.participant.name ?? ""} daripada pertandingan ini. Slot yang ditempah akan dilepaskan.${deleteRegErr ? ` — ${deleteRegErr}` : ""}`}
+        confirmLabel="Buang"
+        loading={deletingReg}
+        onConfirm={deleteRegistration}
+      />
 
       {qrTarget && (
         <QrModal

@@ -123,5 +123,81 @@ export async function GET(
     },
   });
 
-  return NextResponse.json({ data: eligible, submissions });
+  // Bridge: a matched submission may belong to a different competition than the
+  // counter's active one, so its participant may have been filtered out above.
+  // Include exact-IC participant matches so the form can always be processed
+  // (form-process registers into the submission's own competition).
+  const eligibleIds = new Set(eligible.map(e => e.id));
+  const subIcWic = new Map<string, string>(); // clean IC -> submission's wicId
+  for (const s of submissions) {
+    const clean = s.ic.replace(/\D/g, "");
+    if (clean.length >= 6 && clean.length <= 12 && !subIcWic.has(clean))
+      subIcWic.set(clean, s.walkInCompetitionId);
+  }
+  if (subIcWic.size > 0) {
+    const candidates = await db.participant.findMany({
+      where: {
+        status: "ACTIVE",
+        OR: [...subIcWic.keys()].map(c => ({ ic: { contains: c.slice(0, 6) } })),
+      },
+      select: {
+        id: true, name: true, ic: true, gender: true,
+        age: true, eduLevel: true, classGrade: true,
+        contingentId: true,
+        contingent: { select: { id: true, name: true, shortName: true } },
+      },
+    });
+    for (const p of candidates) {
+      const clean = (p.ic ?? "").replace(/\D/g, "");
+      const subWicId = subIcWic.get(clean);
+      if (!subWicId || eligibleIds.has(p.id)) continue;
+      const alreadyRegistered = await db.walkInRegistration.findUnique({
+        where: { walkInCompetitionId_participantId: { walkInCompetitionId: subWicId, participantId: p.id } },
+        select: { id: true, status: true },
+      });
+      eligible.push({
+        id: p.id, name: p.name,
+        ic: p.ic ? `****${p.ic.slice(-4)}` : null,
+        gender: p.gender, age: p.age, eduLevel: p.eduLevel, classGrade: p.classGrade,
+        contingentId: p.contingentId,
+        contingentName: p.contingent.shortName ?? p.contingent.name,
+        alreadyRegistered:  !!alreadyRegistered,
+        registrationStatus: alreadyRegistered?.status ?? null,
+        registrationId:     alreadyRegistered?.id     ?? null,
+        viaSubmissionOnly:  true,
+      });
+    }
+  }
+
+  // Active registrations across the event matching the search — lets the counter
+  // show an "already registered" note instead of a bare empty result.
+  const qClean = q.replace(/[\s-]/g, "");
+  const regs = await db.walkInRegistration.findMany({
+    where: {
+      walkInCompetition: { eventId: endpoint.event.id },
+      status: { in: ["PENDING", "CONFIRMED"] },
+      participant: {
+        OR: [
+          ...(qClean.length >= 6 ? [{ ic: { contains: qClean.slice(0, 12) } }] : []),
+          { name: { contains: q, mode: "insensitive" as const } },
+        ],
+      },
+    },
+    take: 10,
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true, status: true, sessionNumber: true, slotNumber: true,
+      participant: { select: { name: true, ic: true } },
+      walkInCompetition: { select: { competition: { select: { code: true, name: true } } } },
+    },
+  });
+  const registrations = regs.map(r => ({
+    id: r.id, status: r.status,
+    sessionNumber: r.sessionNumber, slotNumber: r.slotNumber,
+    participantName: r.participant.name,
+    ic: r.participant.ic ? `****${r.participant.ic.slice(-4)}` : null,
+    competition: r.walkInCompetition.competition,
+  }));
+
+  return NextResponse.json({ data: eligible, submissions, registrations });
 }

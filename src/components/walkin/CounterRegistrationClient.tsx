@@ -47,6 +47,7 @@ type ParticipantResult = {
   contingentId: string; contingentName: string;
   alreadyRegistered: boolean; registrationStatus: string | null;
   registrationId: string | null;
+  viaSubmissionOnly?: boolean;
 };
 type DroneTokenData = { userid: string; password: string; accessToken: string; competitionToken?: string | null };
 type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null; droneToken?: DroneTokenData | null };
@@ -55,6 +56,12 @@ type FormSubmissionHit = {
   sessionNumber: number | null; slotNumber: number | null;
   walkInCompetitionId: string;
   walkInCompetition: { competition: { code: string; name: string } };
+};
+type RegistrationHit = {
+  id: string; status: string;
+  sessionNumber: number | null; slotNumber: number | null;
+  participantName: string; ic: string | null;
+  competition: { code: string; name: string };
 };
 type ScanResult = {
   id: string; alreadyConfirmed: boolean;
@@ -615,6 +622,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
   const [searching,   setSearching]   = useState(false);
   const [results,     setResults]     = useState<ParticipantResult[]>([]);
   const [matchedSubs, setMatchedSubs] = useState<FormSubmissionHit[]>([]);
+  const [matchedRegs, setMatchedRegs] = useState<RegistrationHit[]>([]);
   const [processingSub, setProcessingSub] = useState<string | null>(null);
   const [selected,    setSelected]    = useState<ParticipantResult | null>(null);
   const [slotSessions, setSlotSessions] = useState<SessionSlots[] | null>(null);
@@ -671,14 +679,16 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
 
   async function handleSearch(value: string) {
     setQ(value); setSelected(null);
-    if (value.trim().length < 2) { setResults([]); setMatchedSubs([]); return; }
+    if (value.trim().length < 2) { setResults([]); setMatchedSubs([]); setMatchedRegs([]); return; }
     setSearching(true);
     const sp = new URLSearchParams({ q: value, passcode });
     if (activeWicId) sp.set("competitionId", activeWicId);
     const j = await fetch(`/api/v2/walkin/${slug}/participants?${sp}`).then(r => r.json());
     setResults(j.data ?? []);
-    setMatchedSubs(((j.submissions ?? []) as FormSubmissionHit[])
-      .filter(s => !activeWicId || s.walkInCompetitionId === activeWicId));
+    // Show all matched submissions event-wide — each card displays its own
+    // competition, and form-process registers into the submission's competition.
+    setMatchedSubs((j.submissions ?? []) as FormSubmissionHit[]);
+    setMatchedRegs((j.registrations ?? []) as RegistrationHit[]);
     setSearching(false);
   }
 
@@ -701,7 +711,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       );
     } else {
       setRegResult({ id: j.data.registrationId, status: j.data.status });
-      setSelected(null); setQ(""); setResults([]); setMatchedSubs([]);
+      setSelected(null); setQ(""); setResults([]); setMatchedSubs([]); setMatchedRegs([]);
       setSlotChoice(null); setSlotRefreshKey(k => k + 1);
     }
     setProcessingSub(null);
@@ -729,7 +739,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
           : (j.message ?? j.error ?? "Gagal mendaftar."),
       );
     } else {
-      setRegResult(j.data); setSelected(null); setQ(""); setResults([]); setMatchedSubs([]);
+      setRegResult(j.data); setSelected(null); setQ(""); setResults([]); setMatchedSubs([]); setMatchedRegs([]);
       setSlotChoice(null); setSlotRefreshKey(k => k + 1);
     }
     setRegistering(false);
@@ -928,7 +938,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
         </div>
         {wic.isGeneral && (
           <button type="button"
-            onClick={() => { setSelectedWic(null); setQ(""); setResults([]); setSelected(null); }}
+            onClick={() => { setSelectedWic(null); setQ(""); setResults([]); setMatchedSubs([]); setMatchedRegs([]); setSelected(null); }}
             className="shrink-0 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors"
             style={{ background: `${B.navy}50`, color: "#7dd3fc", border: `1px solid ${B.navy}70` }}>
             Tukar
@@ -1013,6 +1023,39 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
               </div>
             )}
 
+            {/* Already-registered notes (event-wide) */}
+            {matchedRegs.length > 0 && (
+              <div className="space-y-2">
+                {matchedRegs.map(r => (
+                  <div key={r.id}
+                    className="rounded-2xl border p-3.5 space-y-1.5"
+                    style={{ background: "rgba(16,185,129,.06)", borderColor: "rgba(16,185,129,.3)" }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-emerald-400">
+                        Sudah Berdaftar
+                      </p>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={r.status === "CONFIRMED"
+                          ? { background: "rgba(16,185,129,.15)", color: "#34d399", border: "1px solid rgba(16,185,129,.3)" }
+                          : { background: "rgba(245,158,11,.15)", color: "#fbbf24", border: "1px solid rgba(245,158,11,.3)" }}>
+                        {r.status === "CONFIRMED" ? "Disahkan" : "Pre-daftar"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white">{r.participantName}</p>
+                      <p className="text-[11px]" style={{ color: "rgba(255,255,255,.45)" }}>
+                        {r.ic && <span className="font-mono">{r.ic}</span>}
+                        {r.sessionNumber != null && <> · Sesi {r.sessionNumber} · Slot {r.slotNumber}</>}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,.35)" }}>
+                        <span className="font-mono">{r.competition.code}</span> {r.competition.name}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {results.length > 0 ? (
               <div className="rounded-2xl border border-white/10 overflow-hidden divide-y divide-white/10"
                 style={{ background: "rgba(255,255,255,.05)", backdropFilter: "blur(12px)" }}>
@@ -1073,6 +1116,12 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                           {p.contingentName} · {p.eduLevel}{p.classGrade ? ` ${p.classGrade}` : ""}
                         </p>
                       </div>
+                      {p.viaSubmissionOnly && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0"
+                          style={{ background: "rgba(242,220,12,.15)", color: B.gold, border: "1px solid rgba(242,220,12,.3)" }}>
+                          Borang
+                        </span>
+                      )}
                       {selected?.id === p.id && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0"
                           style={{ background: `${B.navy}60`, color: "#7dd3fc", border: `1px solid ${B.navy}` }}>
@@ -1083,7 +1132,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                   );
                 })}
               </div>
-            ) : matchedSubs.length === 0 && (
+            ) : matchedSubs.length === 0 && matchedRegs.length === 0 && (
               <p className="text-center text-xs py-8" style={{ color: "rgba(255,255,255,.25)" }}>
                 {q.trim().length >= 2 ? "Tiada padanan ditemui." : "Taip nama atau IC untuk mencari peserta."}
               </p>
@@ -1103,8 +1152,15 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                   {selected.age && <span>Umur: <strong className="text-white/80">{selected.age}</strong></span>}
                 </div>
 
+                {selected.viaSubmissionOnly && (
+                  <p className="text-[11px] leading-relaxed rounded-lg px-3 py-2"
+                    style={{ background: "rgba(242,220,12,.08)", color: B.gold, border: "1px solid rgba(242,220,12,.25)" }}>
+                    Peserta ini dipadankan melalui borang awam. Klik <strong>Proses</strong> pada kad borang untuk mendaftar mengikut pertandingan borang tersebut.
+                  </p>
+                )}
+
                 {/* Slot picker */}
-                {activeCfg && (
+                {!selected.viaSubmissionOnly && activeCfg && (
                   <div className="space-y-2.5 pt-3 border-t border-white/10">
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: B.gold }}>
@@ -1179,6 +1235,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                 )}
 
                 {regErr && <p className="text-xs text-red-400">{regErr}</p>}
+                {!selected.viaSubmissionOnly && (
                 <button type="button" onClick={handleRegister}
                   disabled={registering || (activeCfg ? !slotChoice || slotsLoading || !slotSessions : false)}
                   className="w-full h-11 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-60"
@@ -1186,6 +1243,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                   {registering && <Loader2 className="h-4 w-4 animate-spin" />}
                   Daftar Sekarang
                 </button>
+                )}
               </div>
             ) : (
               <div className="hidden md:flex rounded-2xl border border-dashed p-10 items-center justify-center text-center min-h-44"
