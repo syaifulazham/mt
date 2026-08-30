@@ -64,7 +64,7 @@ type TeamEventEntry = {
   event: EventRef & { needManagerAcceptance: boolean };
 };
 
-type EligibleEvent = EventRef & { venue: string | null; description: string | null };
+type EligibleEvent = EventRef & { venue: string | null; description: string | null; eligible: boolean; reasons: string[] };
 
 type Team = {
   id: string;
@@ -499,7 +499,11 @@ function AddMemberDialog({
       setEligible((prev) => prev.filter((p) => p.id !== participantId));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setError(msg === "TEAM_FULL" ? "Team is full." : msg);
+      setError(
+        msg === "TEAM_FULL" ? "Team is full."
+        : msg === "PARTICIPANT_IN_SAME_EVENT" ? "This participant is already registered in another team for the same event."
+        : msg
+      );
     } finally {
       setAdding(null);
     }
@@ -1051,7 +1055,11 @@ function JoinEventDialog({
         body: JSON.stringify({ eventId }),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        if (j.error === "PARTICIPANT_IN_SAME_EVENT")
+          throw new Error(`${j.participant ?? "A member"} is already registered in another team for this event.`);
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
       onJoined(j.data as TeamEventEntry);
       setEvents(prev => prev.filter(e => e.id !== eventId));
     } catch (e) {
@@ -1106,7 +1114,7 @@ function JoinEventDialog({
             const st = STATUS_LABEL[ev.status] ?? { label: ev.status, cls: "bg-zinc-100 text-zinc-600" };
             const isJoining = joining === ev.id;
             return (
-              <div key={ev.id} className="flex items-start gap-3 rounded-lg border p-3 bg-white dark:bg-zinc-900 dark:border-zinc-800">
+              <div key={ev.id} className={`flex items-start gap-3 rounded-lg border p-3 bg-white dark:bg-zinc-900 dark:border-zinc-800 ${!ev.eligible ? "opacity-75 border-zinc-200" : ""}`}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium truncate">{ev.name}</p>
@@ -1130,10 +1138,19 @@ function JoinEventDialog({
                       </span>
                     )}
                   </div>
+                  {!ev.eligible && ev.reasons.length > 0 && (
+                    <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 space-y-0.5">
+                      {ev.reasons.map((r, i) => (
+                        <p key={i} className="flex items-start gap-1.5 text-[11px] text-amber-800 leading-snug">
+                          <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />{r}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <Button
                   size="sm" className="shrink-0 h-7 text-xs"
-                  disabled={!!joining}
+                  disabled={!!joining || !ev.eligible}
                   onClick={() => handleJoin(ev.id)}
                 >
                   {isJoining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Join"}
@@ -1306,7 +1323,7 @@ export function TeamsClient({ contingents }: { contingents: Contingent[] }) {
                     {comp.minTeamSize}–{comp.maxTeamSize} members/team
                   </span>
                 </div>
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-start">
                   {compTeams.map((t) => (
                     <TeamCard
                       key={t.id}

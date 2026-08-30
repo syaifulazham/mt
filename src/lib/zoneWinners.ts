@@ -11,10 +11,20 @@ const ZONE_SCOPES = ["ZONE", "ONLINE_ZONE"] as const;
  * per event competition, ties broken by best (lowest) time.
  */
 export async function getZoneWinnerParticipantIds(maxRank: number): Promise<Set<string>> {
+  const details = await getZoneWinnerDetails(maxRank);
+  return new Set(details.keys());
+}
+
+/**
+ * Like getZoneWinnerParticipantIds but returns a map of
+ * participantId -> set of zone names (fallback: event name) they won in.
+ */
+export async function getZoneWinnerDetails(maxRank: number): Promise<Map<string, Set<string>>> {
   const zoneEventComps = await db.eventCompetition.findMany({
     where: { event: { scope: { in: [...ZONE_SCOPES] }, status: "COMPLETED" } },
     select: {
       id: true,
+      event: { select: { name: true, zone: { select: { name: true } } } },
       judgingTasks: {
         select: {
           scores: {
@@ -25,7 +35,8 @@ export async function getZoneWinnerParticipantIds(maxRank: number): Promise<Set<
     },
   });
 
-  const winnerTeamIds = new Set<string>();
+  // teamId -> set of zone/event labels where this team placed within maxRank
+  const teamWins = new Map<string, Set<string>>();
 
   for (const ec of zoneEventComps) {
     const agg = new Map<string, { total: number; best: number | null }>();
@@ -49,17 +60,29 @@ export async function getZoneWinnerParticipantIds(maxRank: number): Promise<Set<
       return a[1].best - b[1].best;
     });
 
-    ranked.slice(0, maxRank).forEach(([teamId]) => winnerTeamIds.add(teamId));
+    const label = ec.event.zone?.name ?? ec.event.name;
+    ranked.slice(0, maxRank).forEach(([teamId]) => {
+      if (!teamWins.has(teamId)) teamWins.set(teamId, new Set());
+      teamWins.get(teamId)!.add(label);
+    });
   }
 
-  if (winnerTeamIds.size === 0) return new Set();
+  const result = new Map<string, Set<string>>();
+  if (teamWins.size === 0) return result;
 
   const members = await db.teamMember.findMany({
-    where: { teamId: { in: [...winnerTeamIds] } },
-    select: { participantId: true },
+    where: { teamId: { in: [...teamWins.keys()] } },
+    select: { participantId: true, teamId: true },
   });
 
-  return new Set(members.map(m => m.participantId));
+  for (const m of members) {
+    const labels = teamWins.get(m.teamId);
+    if (!labels) continue;
+    if (!result.has(m.participantId)) result.set(m.participantId, new Set());
+    labels.forEach(l => result.get(m.participantId)!.add(l));
+  }
+
+  return result;
 }
 
 /**

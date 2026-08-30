@@ -57,6 +57,8 @@ export async function GET(
           targetGroups: { include: { targetGroup: true } },
         },
       },
+      members:    { select: { participantId: true } },
+      teamEvents: { select: { eventId: true } },
     },
   });
   if (!team) return NextResponse.json({ error: "TEAM_NOT_FOUND" }, { status: 404 });
@@ -65,12 +67,21 @@ export async function GET(
 
   const targetGroups  = team.competition.targetGroups.map((ctg) => ctg.targetGroup);
 
-  // Exclude participants already in ANY team
-  const allTeamMembers = await db.teamMember.findMany({
-    where: { team: { contingentId: { in: contingentIds } } },
-    select: { participantId: true },
-  });
-  const alreadyInTeam = new Set(allTeamMembers.map((m) => m.participantId));
+  // Exclude participants already in THIS team, or in another team registered
+  // for any event this team has joined (no double registration per event)
+  const ownMembers = new Set(team.members.map((m) => m.participantId));
+  const eventIds   = team.teamEvents.map((te) => te.eventId);
+
+  const conflicting = eventIds.length > 0
+    ? await db.teamMember.findMany({
+        where: {
+          teamId: { not: teamId },
+          team: { teamEvents: { some: { eventId: { in: eventIds } } } },
+        },
+        select: { participantId: true },
+      })
+    : [];
+  const conflictSet = new Set(conflicting.map((m) => m.participantId));
 
   const participants = await db.participant.findMany({
     where: {
@@ -81,7 +92,7 @@ export async function GET(
   });
 
   const eligible = participants.filter(
-    (p) => !alreadyInTeam.has(p.id) && isEligible(p, targetGroups),
+    (p) => !ownMembers.has(p.id) && !conflictSet.has(p.id) && isEligible(p, targetGroups),
   );
 
   return NextResponse.json({ data: eligible, targetGroups });

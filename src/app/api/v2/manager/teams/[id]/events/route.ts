@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { teamHasZoneWinner } from "@/lib/zoneWinners";
+import { getZoneWinnerDetails, teamHasZoneWinner } from "@/lib/zoneWinners";
 
 // Resolve team and contingent — returns contingent's effective stateId
 async function resolveTeam(userId: string, teamId: string) {
@@ -18,6 +18,7 @@ async function resolveTeam(userId: string, teamId: string) {
       id: true,
       competitionId: true,
       contingentId: true,
+      members: { select: { participantId: true, participant: { select: { name: true } } } },
       contingent: {
         select: {
           contingentType: true,
@@ -35,7 +36,13 @@ async function resolveTeam(userId: string, teamId: string) {
       ? (team.contingent.school?.stateId ?? null)
       : (team.contingent.stateId ?? null);
 
-  return { id: team.id, competitionId: team.competitionId, contingentId: team.contingentId, effectiveStateId };
+  return {
+    id: team.id,
+    competitionId: team.competitionId,
+    contingentId: team.contingentId,
+    effectiveStateId,
+    members: team.members.map(m => ({ id: m.participantId, name: m.participant.name })),
+  };
 }
 
 type EventRow = {
@@ -103,7 +110,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: {
       status: { notIn: ["DRAFT", "COMPLETED", "ARCHIVE"] },
       id: { notIn: joinedIds },
-      participationPolicy: { not: "PREREQUISITE_SELECTED" },
       eventCompetitions: { some: { competitionId: team.competitionId } },
     },
     select: {
@@ -116,20 +122,44 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     orderBy: { startDate: "asc" },
   });
 
-  const byLocation = await filterByLocation(events, team.effectiveStateId);
+  const locationOk = new Set((await filterByLocation(events, team.effectiveStateId)).map(e => e.id));
 
-  // Filter out zone-winner-restricted events when this team has excluded winners
-  const eligible: typeof byLocation = [];
-  for (const ev of byLocation) {
-    if (ev.participationPolicy === "ALL_EXCEPT_ZONE_WINNERS") {
-      const excluded = await teamHasZoneWinner(id, ev.winnerExclusionRank ?? 3);
-      if (excluded) continue;
-    }
-    eligible.push(ev);
+  // Zone-winner exclusion details, computed once per distinct rank cutoff
+  const winnerSetsByRank = new Map<number, Map<string, Set<string>>>();
+  async function winnerDetailsFor(rank: number): Promise<Map<string, Set<string>>> {
+    if (!winnerSetsByRank.has(rank)) winnerSetsByRank.set(rank, await getZoneWinnerDetails(rank));
+    return winnerSetsByRank.get(rank)!;
   }
 
-  // Strip internal fields before returning
-  const data = eligible.map(({ stateId: _s, zoneId: _z, participationPolicy: _p, winnerExclusionRank: _w, ...rest }) => rest);
+  // Per-event eligibility with human-readable notes
+  const data = await Promise.all(events.map(async (ev) => {
+    const reasons: string[] = [];
+
+    if (!locationOk.has(ev.id)) {
+      reasons.push("Lokasi kontinjen tidak layak untuk skop acara ini.");
+    }
+
+    if (ev.participationPolicy === "PREREQUISITE_SELECTED") {
+      reasons.push("Hanya pasukan yang dipilih daripada acara prasyarat boleh menyertai acara ini.");
+    }
+
+    if (ev.participationPolicy === "ALL_EXCEPT_ZONE_WINNERS") {
+      const cutoff = ev.winnerExclusionRank ?? 3;
+      const winners = await winnerDetailsFor(cutoff);
+      const blocked = team.members.filter(m => winners.has(m.id));
+      if (blocked.length > 0) {
+        for (const b of blocked) {
+          const zones = [...winners.get(b.id)!].join(", ");
+          reasons.push(
+            `${b.name} pernah diisytihar pemenang (Tempat 1 hingga ${cutoff}) acara berskop Zon (${zones}).`
+          );
+        }
+      }
+    }
+
+    const { stateId: _s, zoneId: _z, participationPolicy: _p, winnerExclusionRank: _w, ...rest } = ev;
+    return { ...rest, eligible: reasons.length === 0, reasons };
+  }));
 
   return NextResponse.json({ data });
 }
@@ -172,6 +202,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const allowed = await filterByLocation([event], team.effectiveStateId);
   if (allowed.length === 0) return NextResponse.json({ error: "EVENT_LOCATION_MISMATCH" }, { status: 403 });
+
+  // Reject if any member is already registered in another team for this event
+  // (a participant may not compete in multiple competitions within the same event)
+  const memberConflict = await db.teamMember.findFirst({
+    where: {
+      team: { id: { not: id }, teamEvents: { some: { eventId } } },
+      participant: { teamMembers: { some: { teamId: id } } },
+    },
+    select: { participant: { select: { name: true } } },
+  });
+  if (memberConflict)
+    return NextResponse.json({ error: "PARTICIPANT_IN_SAME_EVENT", participant: memberConflict.participant.name }, { status: 400 });
 
   const teamEvent = await db.teamEvent.upsert({
     where: { teamId_eventId: { teamId: id, eventId } },
