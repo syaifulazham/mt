@@ -50,9 +50,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     venue, address, city, latitude, longitude,
     startDate, endDate, registrationStart, registrationEnd, status,
     prerequisiteEventIds, needManagerAcceptance, walkInUniqueParticipation,
+    participationPolicy, winnerExclusionRank,
   } = await req.json();
 
+  const VALID_POLICIES = ["ALL", "PREREQUISITE_SELECTED", "ALL_EXCEPT_ZONE_WINNERS"];
+  if (participationPolicy !== undefined && !VALID_POLICIES.includes(participationPolicy))
+    return NextResponse.json({ error: "INVALID_POLICY" }, { status: 400 });
+
   try {
+    // When prerequisites are assigned and no explicit policy given, default to PREREQUISITE_SELECTED
+    let autoPolicy: string | undefined;
+    if (Array.isArray(prerequisiteEventIds) && prerequisiteEventIds.length > 0 && participationPolicy === undefined) {
+      const current = await db.event.findUnique({ where: { id }, select: { participationPolicy: true } });
+      if (current?.participationPolicy === "ALL") autoPolicy = "PREREQUISITE_SELECTED";
+    }
+
     const event = await db.event.update({
       where: { id },
       data: {
@@ -80,6 +92,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }),
         ...(needManagerAcceptance !== undefined && { needManagerAcceptance: Boolean(needManagerAcceptance) }),
         ...(walkInUniqueParticipation !== undefined && { walkInUniqueParticipation: Boolean(walkInUniqueParticipation) }),
+        ...(participationPolicy !== undefined && { participationPolicy }),
+        ...(autoPolicy !== undefined && { participationPolicy: autoPolicy as "PREREQUISITE_SELECTED" }),
+        ...(winnerExclusionRank !== undefined && { winnerExclusionRank: winnerExclusionRank != null ? Number(winnerExclusionRank) : null }),
       },
     });
     return NextResponse.json({ data: event });

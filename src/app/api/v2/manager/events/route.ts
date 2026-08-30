@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { getZoneWinnerParticipantIds } from "@/lib/zoneWinners";
 
 const STATE_SCOPES = new Set(["STATE", "ONLINE_STATE"]);
 const ZONE_SCOPES  = new Set(["ZONE",  "ONLINE_ZONE"]);
@@ -45,6 +46,7 @@ export async function GET() {
       contingentId: true,
       competition: { select: { id: true, name: true, code: true } },
       teamEvents: { select: { eventId: true } },
+      members: { select: { participantId: true } },
       _count: { select: { members: true } },
     },
   });
@@ -69,6 +71,8 @@ export async function GET() {
       endDate: true,
       stateId: true,
       zoneId: true,
+      participationPolicy: true,
+      winnerExclusionRank: true,
       eventCompetitions: {
         where: { competitionId: { in: competitionIds } },
         select: { competitionId: true },
@@ -125,16 +129,48 @@ export async function GET() {
     joinedTeamIdsByEvent.set(event.id, new Set(event.teamEvents.map((te) => te.team.id)));
   }
 
-  const data = events
-    .map((event) => {
+  // Zone-winner exclusion sets, computed once per distinct rank cutoff
+  const winnerSetsByRank = new Map<number, Set<string>>();
+  async function winnerSetFor(rank: number): Promise<Set<string>> {
+    if (!winnerSetsByRank.has(rank)) winnerSetsByRank.set(rank, await getZoneWinnerParticipantIds(rank));
+    return winnerSetsByRank.get(rank)!;
+  }
+
+  const data = (await Promise.all(events
+    .map(async (event) => {
       const eventCompIds = new Set(event.eventCompetitions.map((ec) => ec.competitionId));
       const joined = joinedTeamIdsByEvent.get(event.id)!;
+
+      // Events restricted to prerequisite-selected teams are never self-joinable
+      if (event.participationPolicy === "PREREQUISITE_SELECTED") {
+        const participatingTeams = event.teamEvents.map((te) => ({
+          id: te.team.id,
+          name: te.team.name,
+          status: te.team.status,
+          competitionId: te.team.competitionId,
+          contingentId: te.team.contingentId,
+          competition: te.team.competition,
+          memberCount: te.team._count.members,
+        }));
+        return {
+          id: event.id, name: event.name, slug: event.slug, status: event.status,
+          scope: event.scope, venue: event.venue, description: event.description,
+          startDate: event.startDate, endDate: event.endDate,
+          participatingTeams, eligibleTeams: [],
+        };
+      }
+
+      let excludedParticipantIds: Set<string> | null = null;
+      if (event.participationPolicy === "ALL_EXCEPT_ZONE_WINNERS") {
+        excludedParticipantIds = await winnerSetFor(event.winnerExclusionRank ?? 3);
+      }
 
       const eligibleTeams = teams
         .filter((t) =>
           eventCompIds.has(t.competitionId) &&
           !joined.has(t.id) &&
-          isLocationEligible(event.scope, event.stateId, event.zoneId, t.contingentId)
+          isLocationEligible(event.scope, event.stateId, event.zoneId, t.contingentId) &&
+          (!excludedParticipantIds || !t.members.some(m => excludedParticipantIds.has(m.participantId)))
         )
         .map((t) => ({
           id: t.id,
@@ -169,7 +205,7 @@ export async function GET() {
         participatingTeams,
         eligibleTeams,
       };
-    })
+    })))
     // Show event only if the contingent is already participating OR has eligible teams
     .filter((ev) => ev.participatingTeams.length > 0 || ev.eligibleTeams.length > 0);
 

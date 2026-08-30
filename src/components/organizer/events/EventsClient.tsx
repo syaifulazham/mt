@@ -44,6 +44,8 @@ type EventDetail = EventListItem & {
   prerequisites: { prerequisite: PrerequisiteEvent }[];
   needManagerAcceptance: boolean;
   walkInUniqueParticipation: boolean;
+  participationPolicy: "ALL" | "PREREQUISITE_SELECTED" | "ALL_EXCEPT_ZONE_WINNERS";
+  winnerExclusionRank: number | null;
 };
 
 type StateOption = { id: string; name: string };
@@ -684,6 +686,110 @@ function ManagerAcceptanceSection({ event, canWrite, onSaved }: {
         </span>
       </div>
       {err && <p className="text-xs text-red-500">{err}</p>}
+    </SectionCard>
+  );
+}
+
+const POLICY_OPTIONS = [
+  {
+    value: "ALL",
+    label: "Semua",
+    desc: "Pengurus portal kontinjen boleh menambah pasukan ke acara ini secara langsung.",
+  },
+  {
+    value: "PREREQUISITE_SELECTED",
+    label: "Terpilih dari Acara Prasyarat",
+    desc: "Hanya pasukan yang dipilih daripada acara prasyarat boleh menyertai acara ini.",
+  },
+  {
+    value: "ALL_EXCEPT_ZONE_WINNERS",
+    label: "Semua kecuali yang pernah diisytihar pemenang acara berskop Zon yang berstatus COMPLETED",
+    desc: "Semua pasukan boleh menyertai kecuali mereka yang pernah menjadi pemenang dalam mana-mana acara berskop Zon yang telah selesai (COMPLETED).",
+  },
+] as const;
+
+function ParticipationPolicySection({ event, canWrite, onSaved }: {
+  event: EventDetail; canWrite: boolean;
+  onSaved: (u: Partial<EventDetail>) => void;
+}) {
+  const [policy, setPolicy] = useState<EventDetail["participationPolicy"]>(event.participationPolicy ?? "ALL");
+  const [rank,   setRank]   = useState<number>(event.winnerExclusionRank ?? 3);
+  const [saving, setSaving] = useState(false);
+  const [err,    setErr]    = useState("");
+
+  async function save(nextPolicy: EventDetail["participationPolicy"], nextRank: number) {
+    if (!canWrite) return;
+    const prevPolicy = policy, prevRank = rank;
+    setPolicy(nextPolicy); setRank(nextRank);
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          participationPolicy: nextPolicy,
+          winnerExclusionRank: nextPolicy === "ALL_EXCEPT_ZONE_WINNERS" ? nextRank : null,
+        }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved({
+        participationPolicy: nextPolicy,
+        winnerExclusionRank: nextPolicy === "ALL_EXCEPT_ZONE_WINNERS" ? nextRank : null,
+      });
+    } catch (e) {
+      setPolicy(prevPolicy); setRank(prevRank); // revert
+      setErr(e instanceof Error ? e.message : "Gagal");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <SectionCard title="Pertandingan Dibuka kepada">
+      <div className="space-y-2">
+        {POLICY_OPTIONS.map(opt => {
+          const active = policy === opt.value;
+          return (
+            <label key={opt.value}
+              className={`flex items-start gap-3 rounded-lg border px-4 py-3 transition-colors ${
+                active ? "border-blue-400 bg-blue-50/60" : "border-zinc-200 hover:border-zinc-300"
+              } ${canWrite && !saving ? "cursor-pointer" : "opacity-70 cursor-not-allowed"}`}
+            >
+              <input
+                type="radio"
+                name="participationPolicy"
+                className="mt-1 accent-blue-600"
+                checked={active}
+                disabled={!canWrite || saving}
+                onChange={() => save(opt.value, rank)}
+              />
+              <div className="min-w-0">
+                <p className={`text-sm font-medium ${active ? "text-blue-800" : "text-zinc-700"}`}>{opt.label}</p>
+                <p className="text-xs text-zinc-500 mt-0.5">{opt.desc}</p>
+                {opt.value === "ALL_EXCEPT_ZONE_WINNERS" && active && (
+                  <div className="mt-2" onClick={e => e.preventDefault()}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-500">Kedudukan minimum pemenang yang dikecualikan:</span>
+                      <select
+                        value={rank}
+                        disabled={!canWrite || saving}
+                        onChange={e => save(policy, Number(e.target.value))}
+                        className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {[1, 2, 3, 4, 5].map(r => (
+                          <option key={r} value={r}>{r === 1 ? "Tempat 1 sahaja" : `Tempat 1 hingga ${r}`}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
+                      Peserta yang pernah memperoleh <span className="font-medium text-zinc-700">{rank === 1 ? "Tempat 1" : `Tempat 1 hingga ${rank}`}</span> dalam mana-mana acara berskop Zon yang berstatus COMPLETED <span className="font-medium text-red-600">tidak dibenarkan</span> menyertai acara ini. Peserta lain boleh menyertai seperti biasa.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </label>
+          );
+        })}
+      </div>
+      {saving && <p className="text-xs text-zinc-400 mt-2">Menyimpan…</p>}
+      {err && <p className="text-xs text-red-500 mt-2">{err}</p>}
     </SectionCard>
   );
 }
@@ -2035,6 +2141,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
             <DatesSection      event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <VenueSection        event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <ManagerAcceptanceSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
+            <ParticipationPolicySection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
             <WalkInCompetitionsSection event={selected} canWrite={canWrite} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} onSaved={handleSectionSaved} />

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { teamHasZoneWinner } from "@/lib/zoneWinners";
 
 // Resolve team and contingent — returns contingent's effective stateId
 async function resolveTeam(userId: string, teamId: string) {
@@ -41,6 +42,7 @@ type EventRow = {
   id: string; name: string; slug: string; status: string; startDate: Date | null;
   endDate: Date | null; scope: string; venue: string | null; description: string | null;
   stateId: string | null; zoneId: string | null;
+  participationPolicy: string; winnerExclusionRank: number | null;
 };
 
 // Check whether a contingent's state is eligible for an event given its scope
@@ -101,7 +103,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: {
       status: { notIn: ["DRAFT", "COMPLETED", "ARCHIVE"] },
       id: { notIn: joinedIds },
-      prerequisites: { none: {} },
+      participationPolicy: { not: "PREREQUISITE_SELECTED" },
       eventCompetitions: { some: { competitionId: team.competitionId } },
     },
     select: {
@@ -109,15 +111,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       startDate: true, endDate: true, scope: true,
       venue: true, description: true,
       stateId: true, zoneId: true,
+      participationPolicy: true, winnerExclusionRank: true,
     },
     orderBy: { startDate: "asc" },
   });
 
-  const eligible = await filterByLocation(events, team.effectiveStateId);
+  const byLocation = await filterByLocation(events, team.effectiveStateId);
+
+  // Filter out zone-winner-restricted events when this team has excluded winners
+  const eligible: typeof byLocation = [];
+  for (const ev of byLocation) {
+    if (ev.participationPolicy === "ALL_EXCEPT_ZONE_WINNERS") {
+      const excluded = await teamHasZoneWinner(id, ev.winnerExclusionRank ?? 3);
+      if (excluded) continue;
+    }
+    eligible.push(ev);
+  }
 
   // Strip internal fields before returning
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const data = eligible.map(({ stateId: _s, zoneId: _z, ...rest }) => rest);
+  const data = eligible.map(({ stateId: _s, zoneId: _z, participationPolicy: _p, winnerExclusionRank: _w, ...rest }) => rest);
 
   return NextResponse.json({ data });
 }
@@ -143,12 +155,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify location eligibility
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, venue: true, description: true, stateId: true, zoneId: true, _count: { select: { prerequisites: true } } },
+    select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, venue: true, description: true, stateId: true, zoneId: true, participationPolicy: true, winnerExclusionRank: true, _count: { select: { prerequisites: true } } },
   });
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
 
-  // Reject direct joins for events that require a prerequisite
-  if (event._count.prerequisites > 0) return NextResponse.json({ error: "EVENT_REQUIRES_PREREQUISITE" }, { status: 403 });
+  // Reject direct joins for events restricted to prerequisite-selected teams
+  if (event.participationPolicy === "PREREQUISITE_SELECTED" || event._count.prerequisites > 0)
+    return NextResponse.json({ error: "EVENT_REQUIRES_PREREQUISITE" }, { status: 403 });
+
+  // Reject teams with members who are zone winners when the event excludes them
+  if (event.participationPolicy === "ALL_EXCEPT_ZONE_WINNERS") {
+    const excluded = await teamHasZoneWinner(id, event.winnerExclusionRank ?? 3);
+    if (excluded)
+      return NextResponse.json({ error: "TEAM_HAS_ZONE_WINNERS" }, { status: 403 });
+  }
 
   const allowed = await filterByLocation([event], team.effectiveStateId);
   if (allowed.length === 0) return NextResponse.json({ error: "EVENT_LOCATION_MISMATCH" }, { status: 403 });

@@ -476,6 +476,12 @@ model Theme {
 // EVENTS & COMPETITIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
+enum ParticipationPolicy {
+  ALL
+  PREREQUISITE_SELECTED
+  ALL_EXCEPT_ZONE_WINNERS
+}
+
 model Event {
   id                  String      @id @default(cuid())
   name                String
@@ -496,6 +502,8 @@ model Event {
   status                  EventStatus @default(DRAFT)
   needManagerAcceptance   Boolean     @default(false)
   walkInUniqueParticipation Boolean   @default(false)
+  participationPolicy     ParticipationPolicy @default(ALL)
+  winnerExclusionRank     Int?
   createdAt               DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
