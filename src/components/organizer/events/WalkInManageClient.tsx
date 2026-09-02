@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2 } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2, Trophy } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Input } from "@/components/ui/input";
 import { WalkInFormSection } from "./WalkInFormSection";
@@ -99,6 +99,155 @@ function QrModal({ regId, participantName, competitionName, onClose }: {
         <QRCodeSVG value={regId} size={200} level="M" />
         <p className="text-[10px] text-zinc-400 font-mono break-all text-center">{regId}</p>
         <Button size="sm" variant="outline" onClick={onClose} className="w-full">Tutup</Button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+type VbResultRow = {
+  entryId: string;
+  rank: number | null;
+  status: "ready" | "in_progress" | "completed" | "timed_out";
+  completedStageCount: number;
+  officialElapsedMs: number | null;
+  isUsed: boolean;
+  consumedAt: string | null;
+  registrationId: string | null;
+  sessionNumber: number | null;
+  slotNumber: number | null;
+  participant: { name: string; eduLevel: string; classGrade: string | null } | null;
+  contingent:  { name: string; shortName: string | null } | null;
+};
+
+const VB_STATUS: Record<VbResultRow["status"], { label: string; cls: string }> = {
+  ready:       { label: "Belum mula",  cls: "bg-zinc-100 text-zinc-600 border-zinc-200" },
+  in_progress: { label: "Sedang main", cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  completed:   { label: "Selesai",     cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  timed_out:   { label: "Tamat masa",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
+};
+
+function fmtElapsed(ms: number | null): string {
+  if (ms == null) return "—";
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  const cs = Math.floor((ms % 1000) / 10);
+  return `${m}:${String(s).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+}
+
+function VibeBlocksResultsModal({ eventId, wicId, competitionName, onClose }: {
+  eventId: string; wicId: string; competitionName: string; onClose: () => void;
+}) {
+  const [rows,    setRows]    = useState<VbResultRow[]>([]);
+  const [missing, setMissing] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err,     setErr]     = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wicId}/vibeblocks-results`);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`);
+      setRows(j.data ?? []);
+      setMissing(j.missing ?? []);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Gagal memuatkan keputusan");
+    } finally { setLoading(false); }
+  }, [eventId, wicId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const completed = rows.filter(r => r.status === "completed").length;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b bg-zinc-50/80">
+          <div className="flex items-center gap-2 min-w-0">
+            <Gamepad2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-zinc-800 truncate">Keputusan VibeBlocks</p>
+              <p className="text-[11px] text-zinc-500 truncate">{competitionName}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!loading && !err && (
+              <span className="text-[11px] text-zinc-500">{completed}/{rows.length} selesai</span>
+            )}
+            <Button size="sm" variant="outline" onClick={load} disabled={loading} className="h-7 text-xs gap-1.5">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Muat semula
+            </Button>
+            <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto">
+          {loading && (
+            <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-zinc-300" /></div>
+          )}
+          {!loading && err && (
+            <p className="text-sm text-red-500 text-center py-12">{err}</p>
+          )}
+          {!loading && !err && rows.length === 0 && (
+            <p className="text-sm text-zinc-400 text-center py-12">Tiada peserta berdaftar dengan VibeBlocks.</p>
+          )}
+          {!loading && !err && rows.length > 0 && (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-zinc-50 border-b text-[11px] text-zinc-500">
+                <tr>
+                  <th className="px-3 py-2 text-center w-12">#</th>
+                  <th className="px-3 py-2 text-left">Peserta</th>
+                  <th className="px-3 py-2 text-left">Kontinjen</th>
+                  <th className="px-3 py-2 text-center">Sesi/Slot</th>
+                  <th className="px-3 py-2 text-center">Status</th>
+                  <th className="px-3 py-2 text-center">Peringkat</th>
+                  <th className="px-3 py-2 text-right">Masa</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map(r => {
+                  const st = VB_STATUS[r.status] ?? { label: r.status, cls: "bg-zinc-100 text-zinc-600 border-zinc-200" };
+                  return (
+                    <tr key={r.entryId} className="hover:bg-zinc-50/60">
+                      <td className="px-3 py-2 text-center font-semibold text-zinc-700">
+                        {r.rank != null ? r.rank : <span className="text-zinc-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="font-medium text-zinc-800">{r.participant?.name ?? <span className="text-zinc-400 italic">Tidak dikenali</span>}</p>
+                        {r.participant && (
+                          <p className="text-[10px] text-zinc-400">{r.participant.eduLevel}{r.participant.classGrade ? ` · ${r.participant.classGrade}` : ""}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-zinc-600">{r.contingent?.shortName ?? r.contingent?.name ?? "—"}</td>
+                      <td className="px-3 py-2 text-center text-zinc-500 font-mono">
+                        {r.sessionNumber != null ? `S${r.sessionNumber}` : "—"}{r.slotNumber != null ? `/${r.slotNumber}` : ""}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-block px-1.5 py-0.5 rounded-full border text-[10px] font-medium ${st.cls}`}>{st.label}</span>
+                      </td>
+                      <td className="px-3 py-2 text-center text-zinc-600">{r.completedStageCount}</td>
+                      <td className="px-3 py-2 text-right font-mono text-zinc-700">{fmtElapsed(r.officialElapsedMs)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {!loading && missing.length > 0 && (
+            <p className="px-4 py-2 text-[11px] text-amber-700 bg-amber-50 border-t border-amber-200">
+              Tiada rekod di VibeBlocks untuk: {missing.join(", ")}
+            </p>
+          )}
+        </div>
       </div>
     </div>,
     document.body,
@@ -416,6 +565,7 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [vbUnlockInput, setVbUnlockInput] = useState("");
   const [vbUnlockErr,   setVbUnlockErr]   = useState("");
   const [vbRegErr,     setVbRegErr]     = useState("");
+  const [vbResultsOpen, setVbResultsOpen] = useState(false);
 
   async function safeJson(res: Response): Promise<{ error?: string; message?: string; [k: string]: unknown }> {
     try { return await res.json(); } catch { return { error: `HTTP ${res.status}` }; }
@@ -1368,11 +1518,19 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                               </span>
                             )}
                           </div>
-                          <Button size="sm" variant="outline" onClick={() => setVbExpanded(e => !e)}
-                            className="h-7 text-xs gap-1.5 shrink-0">
-                            {vbExpanded ? <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" /> : <ChevronDown className="h-3.5 w-3.5 transition-transform" />}
-                            {vbExpanded ? "Sembunyi" : "Lihat Konfigurasi"}
-                          </Button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {selectedWic.viblockChallengeId && (
+                              <Button size="sm" onClick={() => setVbResultsOpen(true)}
+                                className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+                                <Trophy className="h-3.5 w-3.5" /> Lihat Keputusan
+                              </Button>
+                            )}
+                            <Button size="sm" variant="outline" onClick={() => setVbExpanded(e => !e)}
+                              className="h-7 text-xs gap-1.5">
+                              {vbExpanded ? <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" /> : <ChevronDown className="h-3.5 w-3.5 transition-transform" />}
+                              {vbExpanded ? "Sembunyi" : "Lihat Konfigurasi"}
+                            </Button>
+                          </div>
                         </div>
 
                         {vbExpanded && (
@@ -1976,6 +2134,15 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           participantName={qrTarget.participant.name}
           competitionName={selectedWic?.competition.name ?? ""}
           onClose={() => setQrTarget(null)}
+        />
+      )}
+
+      {vbResultsOpen && selectedWic && (
+        <VibeBlocksResultsModal
+          eventId={event.id}
+          wicId={selectedWic.id}
+          competitionName={selectedWic.competition.name}
+          onClose={() => setVbResultsOpen(false)}
         />
       )}
 
