@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2, Trophy } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { Input } from "@/components/ui/input";
 import { WalkInFormSection } from "./WalkInFormSection";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -157,6 +156,7 @@ function VibeBlocksResultsModal({ eventId, wicId, competitionName, onClose }: {
     } finally { setLoading(false); }
   }, [eventId, wicId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
