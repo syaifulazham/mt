@@ -169,7 +169,7 @@ function VibeBlocksResultsModal({ eventId, wicId, competitionName, onClose }: {
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] m-4 sm:m-6 flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b bg-zinc-50/80">
           <div className="flex items-center gap-2 min-w-0">
