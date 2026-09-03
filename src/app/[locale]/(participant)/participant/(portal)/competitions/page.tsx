@@ -47,6 +47,7 @@ export default async function CompetitionsPage() {
     db.eventWalkInCompetition.findMany({
       where: {
         publishToPortal: true,
+        event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
         competition: {
           targetGroups: {
             some: {

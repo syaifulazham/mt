@@ -85,6 +85,7 @@ export default async function DashboardPage() {
   const walkInLinks = await db.eventWalkInCompetition.findMany({
     where: {
       publishToPortal: true,
+      event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
       competition: {
         targetGroups: { some: { targetGroup: targetGroupFilter } },
       },

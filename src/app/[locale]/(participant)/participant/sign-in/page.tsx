@@ -27,7 +27,7 @@ export default function ParticipantSignInPage() {
       });
 
       if (res.ok) {
-        window.location.href = "/participant/profile";
+        window.location.href = "/participant/dashboard";
         return;
       }
 
