@@ -625,12 +625,13 @@ function LinkedEventsSection({ competition }: { competition: CompetitionDetail }
 
 // ── Third-party integrations section ─────────────────────────────────────────
 
-type AvailableIntegrations = { drone: boolean; fc1: boolean };
+type AvailableIntegrations = { drone: boolean; fc1: boolean; webcraft: boolean };
 
 const INTEGRATIONS = [
-  { value: "none",       label: "None",        desc: "No third-party integration",              key: null          },
-  { value: "eptim-drone", label: "Eptim Drone", desc: "Integrate with Eptim Drone platform",     key: "drone"       },
-  { value: "eptim-fc1",  label: "Eptim FC-1",  desc: "Integrate with Eptim FC-1 platform",      key: "fc1"         },
+  { value: "none",         label: "None",          desc: "No third-party integration",              key: null          },
+  { value: "eptim-drone",  label: "Eptim Drone",   desc: "Integrate with Eptim Drone platform",     key: "drone"       },
+  { value: "eptim-fc1",    label: "Eptim FC-1",    desc: "Integrate with Eptim FC-1 platform",      key: "fc1"         },
+  { value: "eptim-webcraft", label: "Eptim Webcraft", desc: "Integrate with Eptim Webcraft platform", key: "webcraft"     },
 ] as const;
 
 function ThirdPartySection({

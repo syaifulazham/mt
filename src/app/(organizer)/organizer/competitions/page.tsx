@@ -13,8 +13,9 @@ export default async function CompetitionsPage() {
   if (!session) redirect("/organizer/login");
 
   const availableIntegrations = {
-    drone: !!process.env.EPTIMDRONE_API_KEY,
-    fc1:   !!process.env.EPTIMFC1_API_KEY,
+    drone:    !!process.env.EPTIMDRONE_API_KEY,
+    fc1:      !!process.env.EPTIMFC1_API_KEY,
+    webcraft: !!process.env.EPTIM_WEBCRAFT_API_KEY,
   };
 
   return (

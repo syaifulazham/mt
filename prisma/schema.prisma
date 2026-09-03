@@ -394,6 +394,7 @@ model Participant {
   teamMembers      TeamMember[]
   sessions         ParticipantSession[]
   droneAccesses    DroneAccess[]
+  webcraftAccess   ParticipantWebcraftAccess?
   walkInRegistrations WalkInRegistration[]
   walkInFormSubmissions WalkInFormSubmission[]
 
@@ -1215,6 +1216,18 @@ model TeamDroneAccess {
   team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@map("team_drone_access")
+}
+
+model ParticipantWebcraftAccess {
+  id               String      @id @default(cuid())
+  participantId    String      @unique
+  webcraftUserId   String
+  webcraftPassword String
+  createdAt        DateTime    @default(now())
+
+  participant      Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@map("participant_webcraft_access")
 }
 
 model EmailBlast {

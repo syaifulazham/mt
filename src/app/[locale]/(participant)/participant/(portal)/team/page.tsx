@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { Swords, Users, User2, Phone, MapPin, Calendar, CalendarDays } from "lucide-react";
 import { EptimEduLoginButton } from "@/components/participant/EptimEduLoginButton";
 import { EptimDroneTeamButton } from "@/components/participant/EptimDroneTeamButton";
+import { EptimWebcraftButton } from "@/components/participant/EptimWebcraftButton";
 
 export const metadata: Metadata = { title: "Pasukan Saya" };
 
@@ -255,6 +256,9 @@ export default async function TeamPage() {
                             )}
                             {comp.thirdPartyIntegration === "eptim-drone" && (
                               <EptimDroneTeamButton teamId={team.id} />
+                            )}
+                            {comp.thirdPartyIntegration === "eptim-webcraft" && (
+                              <EptimWebcraftButton />
                             )}
                           </div>
                         </div>
