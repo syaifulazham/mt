@@ -24,6 +24,11 @@ type Stats = {
   higherContingentTotal: number;
   independentContingents: number;
   internationalContingents: number;
+  primaryParticipations: number;
+  secondaryParticipations: number;
+  higherParticipations: number;
+  independentParticipations: number;
+  internationalParticipations: number;
 };
 type ChartRow    = { label: string; count: number };
 type CatChartRow = { key: string; label: string; count: number };
@@ -50,20 +55,29 @@ const COLORS = ["#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4"
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
 function StatCard({
-  label, value, icon: Icon, color, sub,
+  label, value, icon: Icon, color, sub, subValue, subLabel,
 }: {
   label: string; value: number | string;
   icon: React.ElementType; color: string; sub?: string;
+  subValue?: number | string;
+  subLabel?: string;
 }) {
   return (
     <div className="bg-white rounded-xl border shadow-sm p-5 flex items-start gap-4">
       <div className={cn("p-2.5 rounded-lg shrink-0", color)}>
         <Icon className="h-5 w-5 text-white" />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 w-full">
         <p className="text-xs text-zinc-500 font-medium">{label}</p>
-        <p className="text-2xl font-bold text-zinc-900 mt-0.5 tabular-nums">{value.toLocaleString()}</p>
+        <p className="text-2xl font-bold text-zinc-900 mt-0.5 tabular-nums">{typeof value === "number" ? value.toLocaleString() : value}</p>
         {sub && <p className="text-[11px] text-zinc-400 mt-0.5">{sub}</p>}
+        {subValue !== undefined && (
+          <>
+            <hr className="my-2 border-zinc-100" />
+            <p className="text-2xl font-bold text-zinc-900 tabular-nums">{typeof subValue === "number" ? subValue.toLocaleString() : subValue}</p>
+            {subLabel && <p className="text-xs text-zinc-500 font-medium mt-0.5">{subLabel}</p>}
+          </>
+        )}
       </div>
     </div>
   );
@@ -356,11 +370,11 @@ export function DashboardClient({ userName }: { userName: string }) {
       <div>
         <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Contingents by Type</h2>
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard label="Primary School"      value={stats.primaryContingents}      icon={BookOpen}      color="bg-emerald-400" />
-          <StatCard label="Secondary School"    value={stats.secondaryContingents}    icon={GraduationCap} color="bg-blue-400"    />
-          <StatCard label="Higher Institution"  value={stats.higherContingents}       icon={School}        color="bg-purple-400"  sub={`${stats.higherContingentTotal} group management`} />
-          <StatCard label="Independent"         value={stats.independentContingents}  icon={Briefcase}     color="bg-amber-400"   />
-          <StatCard label="International"       value={stats.internationalContingents} icon={Users}        color="bg-rose-400"    />
+          <StatCard label="Primary School"      value={stats.primaryContingents}       icon={BookOpen}      color="bg-emerald-400" subValue={stats.primaryParticipations}       subLabel="participations" />
+          <StatCard label="Secondary School"    value={stats.secondaryContingents}     icon={GraduationCap} color="bg-blue-400"    subValue={stats.secondaryParticipations}     subLabel="participations" />
+          <StatCard label="Higher Institution"  value={stats.higherContingents}        icon={School}        color="bg-purple-400"  sub={`${stats.higherContingentTotal} group management`} subValue={stats.higherParticipations} subLabel="participations" />
+          <StatCard label="Independent"         value={stats.independentContingents}   icon={Briefcase}     color="bg-amber-400"   subValue={stats.independentParticipations}   subLabel="participations" />
+          <StatCard label="International"       value={stats.internationalContingents} icon={Users}        color="bg-rose-400"    subValue={stats.internationalParticipations} subLabel="participations" />
         </div>
       </div>
 

@@ -116,6 +116,7 @@ export async function GET() {
             state: { select: { id: true, name: true } },
             school: {
               select: {
+                level: true,
                 zone:  { select: { name: true } },
                 state: { select: { id: true, name: true } },
               },
@@ -184,6 +185,7 @@ export async function GET() {
   const zoneMap:      Record<string, number> = {};
   const stateMap:     Record<string, number> = {};
   const ethnicityMap: Record<string, number> = {};
+  const partTypeMap:  Record<string, number> = {};
 
   for (const comp of competitions) {
     let compCount = 0;
@@ -216,6 +218,9 @@ export async function GET() {
           ?? "No Zone";
         zoneMap[zoneName]   = (zoneMap[zoneName]   ?? 0) + 1;
         stateMap[stateName] = (stateMap[stateName] ?? 0) + 1;
+
+        const typeKey = isSchool ? (c.school?.level ?? "SCHOOL") : c.contingentType;
+        partTypeMap[typeKey] = (partTypeMap[typeKey] ?? 0) + 1;
       }
     }
     compCounts[comp.id] = { code: comp.code, name: comp.name, count: compCount };
@@ -241,6 +246,11 @@ export async function GET() {
       higherContingentTotal,
       independentContingents,
       internationalContingents,
+      primaryParticipations:       partTypeMap["PRIMARY"]       ?? 0,
+      secondaryParticipations:     partTypeMap["SECONDARY"]     ?? 0,
+      higherParticipations:        partTypeMap["HIGHER"]        ?? 0,
+      independentParticipations:   partTypeMap["INDEPENDENT"]   ?? 0,
+      internationalParticipations: partTypeMap["INTERNATIONAL"] ?? 0,
     },
     charts: {
       byGender, byEthnicity, byZone, byState, byCompetition,
