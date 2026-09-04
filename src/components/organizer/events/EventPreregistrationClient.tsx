@@ -371,13 +371,34 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [statsLoading, setStatsLoading] = useState(false);
   const [exporting, setExporting]       = useState<"xlsx" | "docx" | null>(null);
   const [downloading, setDownloading]   = useState(false);
+  const [dlMenuOpen, setDlMenuOpen]     = useState(false);
 
   // Select-all checkbox indeterminate ref (teams)
   const selectAllRef = useRef<HTMLInputElement>(null);
 
-  async function handleDownload() {
+  async function handleDownload(format: "plain" | "formatted" = "plain") {
     setDownloading(true);
     try {
+      if (listTab === "participants" && format === "formatted") {
+        // Server-side styled xlsx (exceljs) — merged cells per contingent/team
+        const sp = new URLSearchParams();
+        if (debouncedQ)    sp.set("q",             debouncedQ);
+        if (competitionId) sp.set("competitionId", competitionId);
+        if (stateId)       sp.set("stateId",       stateId);
+        if (targetGroupId) sp.set("targetGroupId", targetGroupId);
+        const res = await fetch(
+          `/api/v2/organizer/events/${event.id}/preregistration/participants/xlsx?${sp}`,
+        );
+        if (!res.ok) throw new Error("Export failed");
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `peserta-${event.slug}-berformat.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
       if (listTab === "trainers") {
         // Server-side styled xlsx (exceljs) with merged cells + contingent colours
         const sp = new URLSearchParams();
@@ -1081,23 +1102,74 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
               : (trainersLoading ? "Memuatkan…" : `${trainersTotal} jurulatih`)}
         </span>
 
-        <button
-          onClick={handleDownload}
-          disabled={downloading}
-          title={
-            listTab === "participants"
-              ? "Muat turun senarai peserta (.xlsx)"
-              : listTab === "teams"
+        {listTab === "participants" ? (
+          <div className="relative shrink-0">
+            <div className="flex items-stretch rounded-lg border border-zinc-200 bg-white overflow-hidden">
+              <button
+                onClick={() => handleDownload("plain")}
+                disabled={downloading}
+                title="Muat turun senarai peserta — biasa (.xlsx)"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+              >
+                {downloading
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Download className="h-3.5 w-3.5" />}
+                Peserta
+              </button>
+              <button
+                onClick={() => setDlMenuOpen(v => !v)}
+                disabled={downloading}
+                title="Pilihan format muat turun"
+                className="px-1.5 border-l border-zinc-200 text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600 disabled:opacity-50 transition-colors"
+              >
+                <ChevronDown className={`h-3 w-3 transition-transform ${dlMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+            {dlMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setDlMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg border border-zinc-200 bg-white shadow-lg overflow-hidden">
+                  <button
+                    onClick={() => { setDlMenuOpen(false); handleDownload("plain"); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-zinc-400" />
+                    <span className="flex-1 text-left">
+                      <span className="block font-medium">Biasa</span>
+                      <span className="block text-[10px] text-zinc-400">Senarai rata, satu baris per peserta</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { setDlMenuOpen(false); handleDownload("formatted"); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors border-t border-zinc-100"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                    <span className="flex-1 text-left">
+                      <span className="block font-medium">Berformat</span>
+                      <span className="block text-[10px] text-zinc-400">Dikumpul mengikut kontingen & pasukan</span>
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={() => handleDownload("plain")}
+            disabled={downloading}
+            title={
+              listTab === "teams"
                 ? "Muat turun senarai pasukan (.xlsx)"
                 : "Muat turun senarai jurulatih (.xlsx)"
-          }
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors shrink-0"
-        >
-          {downloading
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : <Download className="h-3.5 w-3.5" />}
-          {listTab === "participants" ? "Peserta" : listTab === "teams" ? "Pasukan" : "Jurulatih"}
-        </button>
+            }
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors shrink-0"
+          >
+            {downloading
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Download className="h-3.5 w-3.5" />}
+            {listTab === "teams" ? "Pasukan" : "Jurulatih"}
+          </button>
+        )}
 
         {/* Toggle duplicate member filter (teams tab) */}
         {listTab === "teams" && (
