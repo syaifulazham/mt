@@ -6,7 +6,10 @@ import ExcelJS from "exceljs";
 import { targetGroupMatchSql } from "@/lib/targetGroupMatch";
 
 type ParticipantRow = {
+  id:              string;
   name:            string;
+  gender:          string;
+  contingentId:    string | null;
   contingentName:  string | null;
   contingentType:  string | null;
   ppd:             string | null;
@@ -44,7 +47,10 @@ export async function GET(
 
   const rows = await db.$queryRaw<ParticipantRow[]>`
     SELECT
+      p.id,
       p.name,
+      p.gender,
+      cont.id   AS "contingentId",
       cont.name AS "contingentName",
       cont."contingentType" AS "contingentType",
       sch."ppdCode" AS ppd,
@@ -84,6 +90,108 @@ export async function GET(
   }
   const stateKeys = [...byState.keys()].sort((a, b) =>
     a === "Lain-lain" ? 1 : b === "Lain-lain" ? -1 : a.localeCompare(b));
+
+  // ── Sheet 1: Statistik (state → PPD summary) ───────────────────────────────
+  type StatAgg = { contingents: Set<string>; participants: Set<string>; males: Set<string>; females: Set<string> };
+  const statsByState = new Map<string, Map<string, StatAgg>>();
+
+  for (const r of rows) {
+    const state = r.stateName ?? "Lain-lain";
+    const ppdLabel = r.contingentType === "SCHOOL" ? (r.ppd ?? "Lain-lain") : "Bukan Kontingen Sekolah";
+    if (!statsByState.has(state)) statsByState.set(state, new Map());
+    const m = statsByState.get(state)!;
+    if (!m.has(ppdLabel)) {
+      m.set(ppdLabel, { contingents: new Set(), participants: new Set(), males: new Set(), females: new Set() });
+    }
+    const a = m.get(ppdLabel)!;
+    if (r.contingentId) a.contingents.add(r.contingentId);
+    a.participants.add(r.id);
+    if (r.gender === "MALE") a.males.add(r.id);
+    else if (r.gender === "FEMALE") a.females.add(r.id);
+  }
+
+  const stWs = wb.addWorksheet("Statistik");
+  stWs.columns = [
+    { width: 32 }, // A PPD
+    { width: 14 }, // B Jum. Sekolah
+    { width: 14 }, // C Jum. Peserta
+    { width: 10 }, // D Lelaki
+    { width: 12 }, // E Perempuan
+  ];
+
+  let stRow = 1;
+  for (const stateName of stateKeys) {
+    const groups = statsByState.get(stateName)!;
+
+    // State title row
+    stWs.mergeCells(`A${stRow}:E${stRow}`);
+    const titleCell = stWs.getCell(`A${stRow}`);
+    titleCell.value = stateName.toUpperCase();
+    titleCell.font      = { bold: true, size: 12, color: { argb: "FFFFFFFF" }, name: "Calibri" };
+    titleCell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F7A1F" } };
+    titleCell.alignment = { vertical: "middle", horizontal: "left" };
+    for (let i = 2; i <= 5; i++) stWs.getRow(stRow).getCell(i).fill = titleCell.fill;
+    for (let i = 1; i <= 5; i++) stWs.getRow(stRow).getCell(i).border = BORDER;
+    stWs.getRow(stRow).height = 22;
+    stRow++;
+
+    // Column header row
+    ["PPD", "Jum. Sekolah", "Jum. Peserta", "Lelaki", "Perempuan"].forEach((h, i) => {
+      const cell = stWs.getRow(stRow).getCell(i + 1);
+      cell.value = h;
+      cell.font      = { bold: true, size: 10, color: { argb: "FF1F3D1F" }, name: "Calibri" };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } };
+      cell.alignment = { vertical: "middle", horizontal: i === 0 ? "left" : "center" };
+      cell.border    = BORDER;
+    });
+    stWs.getRow(stRow).height = 18;
+    stRow++;
+
+    // PPD rows
+    let totConts = 0; const totParts = new Set<string>(); const totMale = new Set<string>(); const totFemale = new Set<string>();
+    for (const ppd of [...groups.keys()].sort((a, b) =>
+      a === "Lain-lain" || a === "Bukan Kontingen Sekolah" ? 1 :
+      b === "Lain-lain" || b === "Bukan Kontingen Sekolah" ? -1 : a.localeCompare(b))) {
+      const a = groups.get(ppd)!;
+      a.participants.forEach(id => totParts.add(id));
+      a.males.forEach(id => totMale.add(id));
+      a.females.forEach(id => totFemale.add(id));
+      totConts += a.contingents.size;
+
+      const r = stWs.getRow(stRow);
+      r.getCell(1).value = ppd;
+      r.getCell(2).value = a.contingents.size;
+      r.getCell(3).value = a.participants.size;
+      r.getCell(4).value = a.males.size;
+      r.getCell(5).value = a.females.size;
+      r.eachCell({ includeEmpty: true }, (cell, colNum) => {
+        cell.border = BORDER;
+        cell.font   = { name: "Calibri", size: 10 };
+        cell.alignment = colNum === 1
+          ? { vertical: "middle", horizontal: "left", wrapText: true }
+          : { vertical: "middle", horizontal: "center" };
+      });
+      stRow++;
+    }
+
+    // State subtotal row
+    const r = stWs.getRow(stRow);
+    r.getCell(1).value = `Jumlah ${stateName}`;
+    r.getCell(2).value = totConts;
+    r.getCell(3).value = totParts.size;
+    r.getCell(4).value = totMale.size;
+    r.getCell(5).value = totFemale.size;
+    r.eachCell({ includeEmpty: true }, (cell, colNum) => {
+      cell.border = BORDER;
+      cell.font   = { name: "Calibri", size: 10, bold: true };
+      cell.fill   = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
+      cell.alignment = colNum === 1
+        ? { vertical: "middle", horizontal: "left" }
+        : { vertical: "middle", horizontal: "center" };
+    });
+    stWs.getRow(stRow).height = 18;
+    stRow += 2; // blank separator row
+  }
 
   const usedSheetNames = new Set<string>();
   for (const stateName of stateKeys) {
