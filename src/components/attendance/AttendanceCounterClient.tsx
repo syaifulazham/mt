@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Camera, CameraOff, Scan, Loader2, ShieldCheck,
   CheckCircle2, RotateCcw, X, WifiOff,
-  Search, ChevronRight, Users2,
+  Search, ChevronRight, Users2, Trophy, UserCheck,
 } from "lucide-react";
 
 /* ─── Brand palette ──────────────────────────────────────────────────────── */
@@ -253,8 +253,8 @@ function GreetingOverlay({
 /* ─── Camera scanner ─────────────────────────────────────────────────────── */
 const QR_DIV_ID = "at-qr-reader";
 
-function CameraScanner({ onScan, onError }: {
-  onScan: (text: string) => void; onError?: (msg: string) => void;
+function CameraScanner({ onScan, onError, hint = "Imbas QR Kontingen" }: {
+  onScan: (text: string) => void; onError?: (msg: string) => void; hint?: string;
 }) {
   const [active, setActive]           = useState(false);
   const [loading, setLoading]         = useState(false);
@@ -323,7 +323,7 @@ function CameraScanner({ onScan, onError }: {
             />
           </div>
           <p className="text-white/70 text-xs font-semibold tracking-widest uppercase">
-            Imbas QR Kontingen
+            {hint}
           </p>
         </div>
       </div>
@@ -462,9 +462,9 @@ function BarcodeReader({ onScan, disabled }: { onScan: (code: string) => void; d
 
 /* ─── Tab pill ───────────────────────────────────────────────────────────── */
 function Pill({
-  active, onClick, children,
+  active, onClick, activeBackground, children,
 }: {
-  active: boolean; onClick: () => void; children: React.ReactNode;
+  active: boolean; onClick: () => void; activeBackground?: string; children: React.ReactNode;
 }) {
   return (
     <button
@@ -473,7 +473,7 @@ function Pill({
       className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition-all"
       style={
         active
-          ? { background: "rgba(255,255,255,0.14)", color: "white", border: "1px solid rgba(255,255,255,.2)" }
+          ? { background: activeBackground ?? "rgba(255,255,255,0.14)", color: "white", border: "1px solid rgba(255,255,255,.2)" }
           : { background: "transparent", color: "rgba(255,255,255,.35)", border: "1px solid rgba(255,255,255,.07)" }
       }
     >
@@ -717,6 +717,253 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
   );
 }
 
+/* ─── Participant competition-counter tab ─────────────────────────────────── */
+
+type ParticipantScanResult = {
+  teamEventId: string;
+  participantId: string;
+  participantName: string;
+  teamName: string;
+  competitionCode: string;
+  competitionName: string;
+  contingentName: string;
+  contingentShortName: string | null;
+  state: string | null;
+  teammates: string[];
+  attendedAt: string | null;
+  alreadyAttended: boolean;
+};
+
+type MultiTeamOption = {
+  teamEventId: string; teamName: string; competitionCode: string; competitionName: string;
+};
+
+function CompetitionTab({ code, passcode }: { code: string; passcode: string }) {
+  const [busy, setBusy]       = useState(false);
+  const [result, setResult]   = useState<ParticipantScanResult | null>(null);
+  const [multi, setMulti]     = useState<{
+    participantId: string; participantName: string; teamEvents: MultiTeamOption[];
+  } | null>(null);
+  const [err, setErr]         = useState("");
+  const [undoing, setUndoing] = useState(false);
+  const [scanKey, setScanKey] = useState(0);
+
+  const finish = useCallback(() => {
+    setResult(null); setMulti(null); setErr(""); setScanKey(k => k + 1);
+  }, []);
+
+  // Auto-return to scanner after showing the result
+  useEffect(() => {
+    if (!result) return;
+    const id = setTimeout(finish, 10_000);
+    return () => clearTimeout(id);
+  }, [result, finish]);
+
+  async function submit(participantId: string, teamEventId?: string) {
+    setBusy(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/attendance/${code}/participant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode, participantId, teamEventId }),
+      });
+      const json = await res.json();
+      if (res.status === 409 && json.error === "MULTI_TEAM") {
+        setErr(""); setMulti(json);
+        return;
+      }
+      if (!res.ok) {
+        const msgs: Record<string, string> = {
+          PARTICIPANT_NOT_FOUND: "QR tidak dikenali. Pastikan mengimbas QR peserta yang betul.",
+          NO_TEAM:               "Peserta ini tiada pasukan yang diterima dalam acara ini.",
+          INVALID_PASSCODE:      "Passcode tidak sah.",
+          MISSING_PARTICIPANT:   "Kandungan QR tidak sah.",
+        };
+        setErr(msgs[json.error] ?? json.error ?? "Ralat tidak diketahui.");
+        return;
+      }
+      setMulti(null);
+      setResult(json);
+    } catch {
+      setErr("Ralat sambungan. Sila cuba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function undo() {
+    if (!result) return;
+    setUndoing(true);
+    try {
+      const res = await fetch(`/api/v2/attendance/${code}/participant`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          passcode,
+          participantId: result.participantId,
+          teamEventId:   result.teamEventId,
+        }),
+      });
+      if (res.ok) finish();
+    } finally {
+      setUndoing(false);
+    }
+  }
+
+  const fmtTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  /* ── Recording in progress ── */
+  if (busy) return (
+    <div className="flex flex-col items-center gap-3 py-10">
+      <Loader2 className="h-8 w-8 animate-spin" style={{ color: B.gold }} />
+      <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,.5)" }}>
+        Merekod kehadiran…
+      </p>
+    </div>
+  );
+
+  /* ── Error ── */
+  if (err) return (
+    <div
+      className="rounded-2xl px-5 py-5 text-center space-y-4 border"
+      style={{ background: "rgba(220,38,38,.1)", borderColor: "rgba(220,38,38,.25)" }}
+    >
+      <p className="text-sm font-semibold text-red-300">Ralat Imbasan</p>
+      <p className="text-xs text-red-400/80">{err}</p>
+      <button
+        type="button"
+        onClick={finish}
+        className="flex items-center gap-1.5 mx-auto px-5 py-2 rounded-xl text-sm font-semibold"
+        style={{ background: `linear-gradient(90deg, ${B.navy}, #1565c0)`, color: "white" }}
+      >
+        <RotateCcw className="h-3.5 w-3.5" /> Cuba Lagi
+      </button>
+    </div>
+  );
+
+  /* ── Multi-competition selection ── */
+  if (multi) return (
+    <div className="space-y-3">
+      <p className="text-sm font-semibold text-white">
+        {multi.participantName} mendaftar dalam <span style={{ color: B.gold }}>{multi.teamEvents.length} pertandingan</span>.
+        Pilih pertandingan semasa:
+      </p>
+      {multi.teamEvents.map((t) => (
+        <button
+          key={t.teamEventId}
+          type="button"
+          onClick={() => submit(multi.participantId, t.teamEventId)}
+          className="w-full text-left rounded-2xl px-4 py-3 border transition-all hover:scale-[1.01] active:scale-[.99]"
+          style={{ background: "rgba(255,255,255,.05)", borderColor: "rgba(255,255,255,.12)" }}
+        >
+          <p className="text-[11px] font-bold tracking-widest uppercase" style={{ color: B.gold }}>
+            {t.competitionCode}
+          </p>
+          <p className="text-sm font-semibold text-white">{t.competitionName}</p>
+          <p className="text-xs" style={{ color: "rgba(255,255,255,.4)" }}>{t.teamName}</p>
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={finish}
+        className="w-full py-2 rounded-xl text-xs font-semibold"
+        style={{ background: "rgba(255,255,255,.06)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.1)" }}
+      >
+        Batal
+      </button>
+    </div>
+  );
+
+  /* ── Result card ── */
+  if (result) return (
+    <div
+      className="rounded-2xl border overflow-hidden at-pop-in"
+      style={{
+        background: result.alreadyAttended ? "rgba(245,158,11,.08)" : "rgba(16,185,129,.08)",
+        borderColor: result.alreadyAttended ? "rgba(245,158,11,.3)" : "rgba(16,185,129,.3)",
+      }}
+    >
+      <div className="p-5 space-y-4">
+        {/* Participant */}
+        <div className="flex items-start gap-3">
+          <div
+            className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{
+              background: result.alreadyAttended ? "rgba(245,158,11,.18)" : "rgba(16,185,129,.18)",
+              border: `1px solid ${result.alreadyAttended ? "rgba(245,158,11,.35)" : "rgba(16,185,129,.35)"}`,
+            }}
+          >
+            <UserCheck className="h-5 w-5" style={{ color: result.alreadyAttended ? "#fbbf24" : "#34d399" }} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-base font-bold text-white leading-snug">{result.participantName}</p>
+            <p className="text-xs font-semibold" style={{ color: result.alreadyAttended ? "#fbbf24" : "#34d399" }}>
+              {result.alreadyAttended
+                ? `Telah diimbas sebelum ini${result.attendedAt ? ` · ${fmtTime(result.attendedAt)}` : ""}`
+                : `Kehadiran direkodkan${result.attendedAt ? ` · ${fmtTime(result.attendedAt)}` : ""}`}
+            </p>
+          </div>
+        </div>
+
+        {/* Details */}
+        <div className="space-y-2 rounded-xl px-4 py-3" style={{ background: "rgba(0,0,0,.25)" }}>
+          {[
+            { label: "Pertandingan",      value: result.competitionName },
+            { label: "Pasukan",           value: result.teamName },
+            { label: "Kontingen",         value: result.contingentShortName
+                ? `${result.contingentName} (${result.contingentShortName})`
+                : result.contingentName },
+            { label: "Negeri",            value: result.state ?? "—" },
+            { label: "Ahli pasukan lain", value: result.teammates.length > 0
+                ? result.teammates.join(", ")
+                : "Tiada (individu)" },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex gap-3 text-xs">
+              <span className="w-28 shrink-0 font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,.35)" }}>
+                {label}
+              </span>
+              <span className="text-white/85 font-medium">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={undoing}
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold disabled:opacity-50"
+            style={{ background: "rgba(255,255,255,.07)", color: "rgba(255,255,255,.45)", border: "1px solid rgba(255,255,255,.12)" }}
+          >
+            {undoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            Batal Rekod
+          </button>
+          <button
+            type="button"
+            onClick={finish}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[.98]"
+            style={{ background: `linear-gradient(90deg, ${B.navy}, #1565c0)`, color: "white" }}
+          >
+            <Camera className="h-4 w-4" /> Peserta Seterusnya
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ── Idle: camera ── */
+  return (
+    <CameraScanner
+      key={scanKey}
+      hint="Imbas QR Peserta"
+      onScan={(text) => submit(text.trim())}
+      onError={(msg) => setErr(msg)}
+    />
+  );
+}
+
 /* ─── Retired screen ─────────────────────────────────────────────────────── */
 function RetiredScreen({ eventName }: { eventName: string }) {
   return (
@@ -757,7 +1004,7 @@ export function AttendanceCounterClient({ code }: { code: string }) {
   const [passcode, setPasscode] = useState("");
   const [gateErr, setGateErr]   = useState("");
   const [authed, setAuthed]     = useState(false);
-  const [tab, setTab]           = useState<"manual" | "camera" | "scanner">("camera");
+  const [tab, setTab]           = useState<"manual" | "camera" | "scanner" | "competition">("camera");
   const [phase, setPhase]       = useState<Phase>("gate");
   const [scanErr, setScanErr]   = useState("");
   const [greeting, setGreeting] = useState<ScanResult | null>(null);
@@ -818,12 +1065,15 @@ export function AttendanceCounterClient({ code }: { code: string }) {
     setPhase("gate"); setScanErr(""); setScanKey((k) => k + 1);
   }
 
-  /* Page background style */
+  /* Page background style — green theme for the competition counter */
   const pageBg: React.CSSProperties = {
     minHeight: "100vh",
-    background: "linear-gradient(150deg, #050e1f 0%, #0a1e40 55%, #0a3064 100%)",
+    background: tab === "competition"
+      ? "linear-gradient(150deg, #04140b 0%, #0a2b16 55%, #0f4423 100%)"
+      : "linear-gradient(150deg, #050e1f 0%, #0a1e40 55%, #0a3064 100%)",
     position: "relative",
     overflow: "hidden",
+    transition: "background .4s ease",
   };
 
   /* ── Loading ── */
@@ -961,6 +1211,9 @@ export function AttendanceCounterClient({ code }: { code: string }) {
         <Pill active={tab === "scanner"} onClick={() => { setTab("scanner"); resetScan(); }}>
           <Scan className="h-4 w-4" /> Pengimbas 2D
         </Pill>
+        <Pill active={tab === "competition"} onClick={() => { setTab("competition"); resetScan(); }} activeBackground="rgba(16,100,50,.55)">
+          <Trophy className="h-4 w-4" /> Kaunter Pertandingan
+        </Pill>
       </div>
 
       {/* Content */}
@@ -968,6 +1221,8 @@ export function AttendanceCounterClient({ code }: { code: string }) {
         {/* Manual tab — no scan phase applies */}
         {tab === "manual" ? (
           <ManualTab code={code} passcode={passcode} />
+        ) : tab === "competition" ? (
+          <CompetitionTab code={code} passcode={passcode} />
         ) : phase === "error" ? (
           <div
             className="rounded-2xl px-5 py-5 text-center space-y-4 border"

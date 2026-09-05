@@ -393,6 +393,7 @@ model Participant {
   contingent  Contingent    @relation(fields: [contingentId], references: [id], onDelete: Cascade)
   teamMembers      TeamMember[]
   sessions         ParticipantSession[]
+  competitionAttendance TeamEventParticipantAttendance[]
   droneAccesses    DroneAccess[]
   webcraftAccess   ParticipantWebcraftAccess?
   walkInRegistrations WalkInRegistration[]
@@ -1173,9 +1174,22 @@ model TeamEvent {
 
   team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  participantAttendance TeamEventParticipantAttendance[]
 
   @@unique([teamId, eventId])
   @@map("team_events")
+}
+
+model TeamEventParticipantAttendance {
+  teamEventId   String
+  participantId String
+  attendedAt    DateTime @default(now())
+
+  teamEvent   TeamEvent   @relation(fields: [teamEventId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@id([teamEventId, participantId])
+  @@map("team_event_participant_attendance")
 }
 
 model Announcement {
