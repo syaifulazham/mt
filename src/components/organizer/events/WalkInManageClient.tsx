@@ -32,6 +32,7 @@ type WalkInCompSummary = {
   vibeBlocksStartsAt: string | null;
   vibeBlocksEndsAt: string | null;
   vibeBlocksRunDurationSec: number | null;
+  vibeBlocksCompetitionRound: string | null;
   competition: { id: string; code: string; name: string };
   _count: { registrations: number };
   endpoints: WalkInEndpointItem[];
@@ -554,7 +555,8 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
   const [vibeBlocksChallengesLoading,  setVibeBlocksChallengesLoading]  = useState(false);
   const [vibeBlocksActionId,           setVibeBlocksActionId]           = useState<string | null>(null);
   const [vibeBlocksCreateForm, setVibeBlocksCreateForm] = useState({
-    challengeId: "", name: "", startsAt: "", endsAt: "", runDurationSec: 3600,
+    challengeId: "", name: "", competitionRound: "qualifier" as "qualifier" | "final",
+    startsAt: "", endsAt: "", runDurationSec: 3600,
   });
   const [vibeBlocksCreating, setVibeBlocksCreating] = useState(false);
   const [vibeBlocksUpdating, setVibeBlocksUpdating] = useState(false);
@@ -832,11 +834,12 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
       setVbUnlockInput("");
       setVbUnlockErr("");
       setVibeBlocksCreateForm({
-        challengeId:    selectedWic.vibeBlocksChallengeId ?? "",
-        name:           selectedWic.vibeBlocksEventName ?? event.name,
-        startsAt:       isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt ?? event.startDate),
-        endsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt ?? event.endDate),
-        runDurationSec: selectedWic.vibeBlocksRunDurationSec ?? 3600,
+        challengeId:      selectedWic.vibeBlocksChallengeId ?? "",
+        name:             selectedWic.vibeBlocksEventName ?? event.name,
+        competitionRound: (selectedWic.vibeBlocksCompetitionRound === "final" ? "final" : "qualifier") as "qualifier" | "final",
+        startsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt ?? event.startDate),
+        endsAt:           isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt ?? event.endDate),
+        runDurationSec:   selectedWic.vibeBlocksRunDurationSec ?? 3600,
       });
     }, 0);
     return () => clearTimeout(id);
@@ -869,23 +872,25 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            challengeId:    vibeBlocksCreateForm.challengeId,
-            name:           vibeBlocksCreateForm.name,
-            startsAt:       dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
-            endsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
-            runDurationSec: vibeBlocksCreateForm.runDurationSec,
+            challengeId:       vibeBlocksCreateForm.challengeId,
+            name:              vibeBlocksCreateForm.name,
+            competitionRound:  vibeBlocksCreateForm.competitionRound,
+            startsAt:          dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+            endsAt:            dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+            runDurationSec:    vibeBlocksCreateForm.runDurationSec,
           }),
         },
       );
       const j = await safeJson(res);
       if (res.ok) {
         updateWic(selectedWic.id, {
-          viblockChallengeId:      j.eventId as string,
-          vibeBlocksChallengeId:   vibeBlocksCreateForm.challengeId,
-          vibeBlocksEventName:     vibeBlocksCreateForm.name,
-          vibeBlocksStartsAt:      dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
-          vibeBlocksEndsAt:        dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
-          vibeBlocksRunDurationSec: vibeBlocksCreateForm.runDurationSec,
+          viblockChallengeId:         j.eventId as string,
+          vibeBlocksChallengeId:      vibeBlocksCreateForm.challengeId,
+          vibeBlocksEventName:        vibeBlocksCreateForm.name,
+          vibeBlocksCompetitionRound: vibeBlocksCreateForm.competitionRound,
+          vibeBlocksStartsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+          vibeBlocksEndsAt:           dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+          vibeBlocksRunDurationSec:   vibeBlocksCreateForm.runDurationSec,
         });
         setVbUnlocked(false); // re-lock after create
       } else {
@@ -911,20 +916,22 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name:           vibeBlocksCreateForm.name,
-            startsAt:       dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
-            endsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
-            runDurationSec: vibeBlocksCreateForm.runDurationSec,
+            name:              vibeBlocksCreateForm.name,
+            competitionRound:  vibeBlocksCreateForm.competitionRound,
+            startsAt:          dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+            endsAt:            dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+            runDurationSec:    vibeBlocksCreateForm.runDurationSec,
           }),
         },
       );
       const j = await safeJson(res);
       if (res.ok && j.updated) {
         updateWic(selectedWic.id, {
-          vibeBlocksEventName:     vibeBlocksCreateForm.name,
-          vibeBlocksStartsAt:      dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
-          vibeBlocksEndsAt:        dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
-          vibeBlocksRunDurationSec: vibeBlocksCreateForm.runDurationSec,
+          vibeBlocksEventName:        vibeBlocksCreateForm.name,
+          vibeBlocksCompetitionRound: vibeBlocksCreateForm.competitionRound,
+          vibeBlocksStartsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
+          vibeBlocksEndsAt:           dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
+          vibeBlocksRunDurationSec:   vibeBlocksCreateForm.runDurationSec,
         });
         setVbUnlocked(false); // re-lock after update
       } else if (!res.ok) {
@@ -1641,6 +1648,18 @@ export function WalkInManageClient({ event, canWrite }: { event: EventSummary; c
                                     className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
                                   />
                                 </div>
+                              </div>
+                              <div>
+                                <label className="text-[11px] text-zinc-400 block mb-0.5">Competition round</label>
+                                <select
+                                  value={vibeBlocksCreateForm.competitionRound}
+                                  onChange={e => setVibeBlocksCreateForm(f => ({ ...f, competitionRound: e.target.value as "qualifier" | "final" }))}
+                                  disabled={vbLocked}
+                                  className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
+                                >
+                                  <option value="qualifier">Qualifier</option>
+                                  <option value="final">Final</option>
+                                </select>
                               </div>
                               <div>
                                 <label className="text-[11px] text-zinc-400 block mb-0.5">Run duration (seconds)</label>

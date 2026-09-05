@@ -66,10 +66,13 @@ async function req<T = unknown>(path: string, options?: RequestInit): Promise<T>
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+export type VibeBlocksCompetitionRound = "qualifier" | "final";
+
 export type VibeBlocksEvent = {
   event_id: string;
   challenge_id: string;
   name: string;
+  competition_round: VibeBlocksCompetitionRound;
   status: "draft" | "open" | "closed";
   starts_at: string;
   ends_at: string;
@@ -180,6 +183,7 @@ export type VibeBlocksCreateEventRequest = {
   event_id: string;
   challenge_id: string;
   name: string;
+  competition_round: VibeBlocksCompetitionRound;
   starts_at: string;
   ends_at: string;
   run_duration_sec: number;
@@ -210,7 +214,7 @@ export async function vibeBlocksCreateEvent(opts: VibeBlocksCreateEventRequest) 
 
 export async function vibeBlocksUpdateEvent(
   eventId: string,
-  patch: Partial<Pick<VibeBlocksCreateEventRequest, "name" | "starts_at" | "ends_at" | "run_duration_sec">> & { status?: "open" | "closed" },
+  patch: Partial<Pick<VibeBlocksCreateEventRequest, "name" | "competition_round" | "starts_at" | "ends_at" | "run_duration_sec">> & { status?: "open" | "closed" },
 ) {
   return req<VibeBlocksUpdateEventResponse>(`/v1/partner/events/${encodeURIComponent(eventId)}`, {
     method: "PATCH",

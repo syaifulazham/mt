@@ -28,7 +28,7 @@ export default async function WalkInManagePage({
           id: true, competitionId: true, picName: true, maxSlots: true,
           publishToPortal: true, useViblockarena: true, useDronearena: true, useVibeblocks: true,
           viblockChallengeId: true, viblockChallengeLocked: true, judgingTemplatesLocked: true,
-          vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksStartsAt: true, vibeBlocksEndsAt: true, vibeBlocksRunDurationSec: true,
+          vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksStartsAt: true, vibeBlocksEndsAt: true, vibeBlocksRunDurationSec: true, vibeBlocksCompetitionRound: true,
           walkInSlotSchedule: true,
           competition: { select: { id: true, code: true, name: true } },
           _count: { select: { registrations: true } },

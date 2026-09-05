@@ -20,17 +20,21 @@ export async function POST(
   const body = await req.json() as {
     challengeId?: string;
     name?: string;
+    competitionRound?: string;
     startsAt?: string;
     endsAt?: string;
     runDurationSec?: number;
   };
-  const { challengeId, name, startsAt, endsAt, runDurationSec } = body;
+  const { challengeId, name, competitionRound, startsAt, endsAt, runDurationSec } = body;
 
   if (!challengeId || !name || runDurationSec === undefined) {
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
   }
   if (!startsAt || !endsAt) {
     return NextResponse.json({ error: "MISSING_DATES", message: "Start and end dates are required." }, { status: 400 });
+  }
+  if (competitionRound !== "qualifier" && competitionRound !== "final") {
+    return NextResponse.json({ error: "INVALID_ROUND", message: "competitionRound must be \"qualifier\" or \"final\"." }, { status: 400 });
   }
 
   if (!vibeBlocksConfigured())
@@ -46,6 +50,7 @@ export async function POST(
       event_id: vbEventId,
       challenge_id: challengeId,
       name,
+      competition_round: competitionRound,
       starts_at: startsAt,
       ends_at: endsAt,
       run_duration_sec: runDurationSec,
@@ -57,6 +62,7 @@ export async function POST(
         viblockChallengeId:      vbEventId,
         vibeBlocksChallengeId:   challengeId,
         vibeBlocksEventName:     name,
+        vibeBlocksCompetitionRound: competitionRound,
         vibeBlocksStartsAt:      new Date(startsAt),
         vibeBlocksEndsAt:        new Date(endsAt),
         vibeBlocksRunDurationSec: runDurationSec,
@@ -107,19 +113,25 @@ export async function PATCH(
 
   const body = await req.json() as {
     name?: string;
+    competitionRound?: "qualifier" | "final";
     startsAt?: string;
     endsAt?: string;
     runDurationSec?: number;
     status?: "open" | "closed";
   };
-  const { name, startsAt, endsAt, runDurationSec, status } = body;
+  const { name, competitionRound, startsAt, endsAt, runDurationSec, status } = body;
+
+  if (competitionRound !== undefined && competitionRound !== "qualifier" && competitionRound !== "final") {
+    return NextResponse.json({ error: "INVALID_ROUND", message: "competitionRound must be \"qualifier\" or \"final\"." }, { status: 400 });
+  }
 
   const vbPatch: Parameters<typeof vibeBlocksUpdateEvent>[1] = {};
-  if (name !== undefined)          vbPatch.name             = name;
-  if (startsAt !== undefined)      vbPatch.starts_at        = startsAt;
-  if (endsAt !== undefined)        vbPatch.ends_at          = endsAt;
-  if (runDurationSec !== undefined) vbPatch.run_duration_sec = runDurationSec;
-  if (status !== undefined)        vbPatch.status           = status;
+  if (name !== undefined)            vbPatch.name              = name;
+  if (competitionRound !== undefined) vbPatch.competition_round = competitionRound;
+  if (startsAt !== undefined)        vbPatch.starts_at         = startsAt;
+  if (endsAt !== undefined)          vbPatch.ends_at           = endsAt;
+  if (runDurationSec !== undefined)  vbPatch.run_duration_sec  = runDurationSec;
+  if (status !== undefined)          vbPatch.status            = status;
 
   let result: { updated: boolean };
   try {
@@ -134,7 +146,8 @@ export async function PATCH(
   }
 
   const dbPatch: Record<string, unknown> = {};
-  if (name !== undefined)           dbPatch.vibeBlocksEventName      = name;
+  if (name !== undefined)            dbPatch.vibeBlocksEventName          = name;
+  if (competitionRound !== undefined) dbPatch.vibeBlocksCompetitionRound  = competitionRound;
   if (startsAt !== undefined)       dbPatch.vibeBlocksStartsAt       = new Date(startsAt);
   if (endsAt !== undefined)         dbPatch.vibeBlocksEndsAt         = new Date(endsAt);
   if (runDurationSec !== undefined) dbPatch.vibeBlocksRunDurationSec = runDurationSec;

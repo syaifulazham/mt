@@ -623,6 +623,7 @@ model EventWalkInCompetition {
   vibeBlocksStartsAt       DateTime?
   vibeBlocksEndsAt         DateTime?
   vibeBlocksRunDurationSec Int?
+  vibeBlocksCompetitionRound String?
   viblockChallengeLocked Boolean  @default(false)
   judgingTemplatesLocked Boolean  @default(false)
   walkInSlotSchedule     Json?
