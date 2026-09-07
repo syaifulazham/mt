@@ -39,9 +39,13 @@ async function req<T = unknown>(path: string, options?: RequestInit): Promise<T>
         ...(options?.headers ?? {}),
       },
     });
-    const json = await res.json().catch(() => null);
+    const text = await res.text().catch(() => "");
+    const json = text ? (JSON.parse(text) as { error?: string; message?: string } | null) ?? null : null;
     if (!res.ok)
-      throw Object.assign(new Error(json?.error ?? "WebCraft API error"), { status: res.status });
+      throw Object.assign(
+        new Error(json?.error ?? json?.message ?? `WebCraft API error (${res.status})`),
+        { status: res.status, detail: text.slice(0, 500) },
+      );
     return json as T;
   } finally {
     clearTimeout(timer);

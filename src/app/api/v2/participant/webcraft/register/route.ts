@@ -42,7 +42,11 @@ export async function POST() {
       },
     });
   } catch (e: unknown) {
-    const err = e as { message?: string; status?: number };
+    const err = e as { message?: string; status?: number; detail?: string };
+    console.error(
+      `[webcraft] createUser failed for ${participant.id} (${webcraftUserId}):`,
+      err.message, "| upstream:", err.detail ?? "—",
+    );
     if (err.status === 401)
       return NextResponse.json({ error: "Kunci API WebCraft ditolak (EPTIM_WEBCRAFT_API_KEY). Hubungi pentadbir." }, { status: 502 });
     if (err.status !== 409)
