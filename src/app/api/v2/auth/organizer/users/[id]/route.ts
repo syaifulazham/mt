@@ -49,7 +49,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  // Prevent self-demotion for SUPER_ADMIN
+  // Only SUPER_ADMIN can change a user's active status
+  if (parsed.data.isActive !== undefined && session.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: { code: "FORBIDDEN", message: "Only SUPER_ADMIN can change a user's status" } }, { status: 403 });
+  }
+
+  // Prevent self-deactivation
   if (id === session.id && parsed.data.isActive === false) {
     return NextResponse.json({ error: { code: "FORBIDDEN", message: "Cannot deactivate your own account" } }, { status: 403 });
   }

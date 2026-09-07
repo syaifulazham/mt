@@ -150,6 +150,9 @@ export function UsersClient({
   const [createdUser, setCreatedUser] = useState<{ name: string; email: string; temporaryPassword: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Role change
+  const [roleTarget,  setRoleTarget]  = useState<User | null>(null);
+
   // Password renewal
   const [renewTarget,  setRenewTarget]  = useState<User | null>(null);
   const [renewCode,    setRenewCode]    = useState("");
@@ -204,6 +207,7 @@ export function UsersClient({
     });
     if (res.ok) {
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+      setRoleTarget(null);
     } else {
       alert("Failed to change role.");
     }
@@ -392,21 +396,14 @@ export function UsersClient({
                 <td className="px-4 py-3 text-zinc-600">{user.email}</td>
                 <td className="px-4 py-3">
                   {currentRole === "SUPER_ADMIN" && user.role !== "SUPER_ADMIN" && user.id !== currentUserId ? (
-                    <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRoleTarget(user)}
+                      title="Change role"
+                      className="rounded transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-zinc-300"
+                    >
                       <Badge variant={ROLE_COLORS[user.role]}>{user.role.replace(/_/g, " ")}</Badge>
-                      <select
-                        className="h-7 rounded-md border border-input bg-background px-2 text-xs text-zinc-500 hover:text-zinc-900"
-                        value={user.role}
-                        onChange={(e) => {
-                          const role = e.target.value as OrganizerRole;
-                          if (role !== user.role) changeRole(user.id, role);
-                        }}
-                      >
-                        {(["ADMIN", "OPERATOR", "PARTICIPANTS_MANAGER", "JUDGE_COORDINATOR", "VIEWER"] as OrganizerRole[]).map((r) => (
-                          <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
-                        ))}
-                      </select>
-                    </div>
+                    </button>
                   ) : (
                     <Badge variant={ROLE_COLORS[user.role]}>{user.role.replace(/_/g, " ")}</Badge>
                   )}
@@ -433,7 +430,7 @@ export function UsersClient({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    {user.id !== currentUserId && (
+                    {currentRole === "SUPER_ADMIN" && user.id !== currentUserId && (
                       <button
                         onClick={() => toggleActive(user.id, user.isActive)}
                         className="text-xs text-zinc-500 hover:text-zinc-900 underline"
@@ -456,6 +453,34 @@ export function UsersClient({
           </tbody>
         </table>
       </div>
+      <Dialog open={roleTarget !== null} onOpenChange={(open) => { if (!open) setRoleTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change role</DialogTitle>
+            <DialogDescription>
+              {roleTarget?.name} — currently {roleTarget?.role.replace(/_/g, " ")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 px-6 py-4">
+            {(["ADMIN", "OPERATOR", "PARTICIPANTS_MANAGER", "JUDGE_COORDINATOR", "VIEWER"] as OrganizerRole[]).map((r) => (
+              <button
+                key={r}
+                type="button"
+                disabled={r === roleTarget?.role}
+                onClick={() => roleTarget && changeRole(roleTarget.id, r)}
+                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
+                  r === roleTarget?.role
+                    ? "cursor-default border-zinc-200 bg-zinc-50 text-zinc-400"
+                    : "hover:border-zinc-400 hover:bg-zinc-50"
+                }`}
+              >
+                <Badge variant={ROLE_COLORS[r]}>{r.replace(/_/g, " ")}</Badge>
+                {r === roleTarget?.role && <Check className="h-4 w-4 text-zinc-400" />}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
       <RenewPasswordDialog
         user={renewTarget}
         confirmCode={renewCode}
