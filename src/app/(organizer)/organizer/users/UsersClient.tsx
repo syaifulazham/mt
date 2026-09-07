@@ -196,6 +196,19 @@ export function UsersClient({
     router.refresh();
   }
 
+  async function changeRole(userId: string, role: OrganizerRole) {
+    const res = await fetch(`/api/v2/auth/organizer/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    if (res.ok) {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+    } else {
+      alert("Failed to change role.");
+    }
+  }
+
   async function toggleActive(userId: string, current: boolean) {
     await fetch(`/api/v2/auth/organizer/users/${userId}`, {
       method: "PATCH",
@@ -378,7 +391,25 @@ export function UsersClient({
                 <td className="px-4 py-3 font-medium">{user.name}</td>
                 <td className="px-4 py-3 text-zinc-600">{user.email}</td>
                 <td className="px-4 py-3">
-                  <Badge variant={ROLE_COLORS[user.role]}>{user.role.replace(/_/g, " ")}</Badge>
+                  {currentRole === "SUPER_ADMIN" && user.role !== "SUPER_ADMIN" && user.id !== currentUserId ? (
+                    <div className="flex items-center gap-2">
+                      <Badge variant={ROLE_COLORS[user.role]}>{user.role.replace(/_/g, " ")}</Badge>
+                      <select
+                        className="h-7 rounded-md border border-input bg-background px-2 text-xs text-zinc-500 hover:text-zinc-900"
+                        value={user.role}
+                        onChange={(e) => {
+                          const role = e.target.value as OrganizerRole;
+                          if (role !== user.role) changeRole(user.id, role);
+                        }}
+                      >
+                        {(["ADMIN", "OPERATOR", "PARTICIPANTS_MANAGER", "JUDGE_COORDINATOR", "VIEWER"] as OrganizerRole[]).map((r) => (
+                          <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <Badge variant={ROLE_COLORS[user.role]}>{user.role.replace(/_/g, " ")}</Badge>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   {user.forcePasswordChange ? (

@@ -34,12 +34,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const target = await db.organizerUser.findUnique({ where: { id, deletedAt: null } });
   if (!target) return NextResponse.json({ error: { code: "NOT_FOUND" } }, { status: 404 });
 
-  if (
-    parsed.data.role &&
-    ["SUPER_ADMIN", "ADMIN"].includes(parsed.data.role) &&
-    session.role !== "SUPER_ADMIN"
-  ) {
-    return NextResponse.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
+  if (parsed.data.role) {
+    if (session.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Only SUPER_ADMIN can change roles" } }, { status: 403 });
+    }
+    if (target.role === "SUPER_ADMIN") {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Cannot change the role of a SUPER_ADMIN" } }, { status: 403 });
+    }
+    if (id === session.id) {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Cannot change your own role" } }, { status: 403 });
+    }
+    if (parsed.data.role === "SUPER_ADMIN") {
+      return NextResponse.json({ error: { code: "FORBIDDEN", message: "Users cannot be promoted to SUPER_ADMIN from this screen" } }, { status: 403 });
+    }
   }
 
   // Prevent self-demotion for SUPER_ADMIN
