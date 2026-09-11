@@ -132,15 +132,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // Per-event eligibility with human-readable notes
-  const data = await Promise.all(events.map(async (ev) => {
+  // Events restricted to prerequisite-selected teams are never shown as joinable options
+  const data = await Promise.all(events.filter(ev => ev.participationPolicy !== "PREREQUISITE_SELECTED").map(async (ev) => {
     const reasons: string[] = [];
 
     if (!locationOk.has(ev.id)) {
       reasons.push("Lokasi kontinjen tidak layak untuk skop acara ini.");
-    }
-
-    if (ev.participationPolicy === "PREREQUISITE_SELECTED") {
-      reasons.push("Hanya pasukan yang dipilih daripada acara prasyarat boleh menyertai acara ini.");
     }
 
     if (ev.participationPolicy === "ALL_EXCEPT_ZONE_WINNERS") {
