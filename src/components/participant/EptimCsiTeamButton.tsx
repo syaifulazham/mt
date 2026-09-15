@@ -69,10 +69,13 @@ export function EptimCsiTeamButton({ teamId }: { teamId: string }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       const { loginUrl } = json as { loginUrl: string };
-      // The link is single-use and expires in 120s, so follow it immediately —
-      // and in this tab if the popup was blocked.
-      const opened = window.open(loginUrl, "_blank", "noopener,noreferrer");
-      if (!opened) window.location.assign(loginUrl);
+      // Open in a new tab and never touch this one: `noopener` makes
+      // window.open() return null by spec, so a "popup was blocked" fallback
+      // based on that return value navigates the portal away on every click —
+      // and since the link is single-use, the new tab burns the token and this
+      // tab lands on /login?error=auth. If the popup really is blocked, the
+      // user clicks the button again for a fresh link.
+      window.open(loginUrl, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Log masuk gagal");
     } finally {
