@@ -40,7 +40,18 @@ async function req<T = unknown>(path: string, options?: RequestInit): Promise<T>
       },
     });
     const text = await res.text().catch(() => "");
-    const json = text ? (JSON.parse(text) as { error?: string; message?: string } | null) ?? null : null;
+    let json: { error?: string; message?: string } | null = null;
+    try {
+      json = text ? (JSON.parse(text) as { error?: string; message?: string } | null) ?? null : null;
+    } catch {
+      // A misconfigured EPTIM_WEBCRAFT_BASE_URL (e.g. one that already ends in
+      // /api/v1) hits a Next.js 404 page, and the HTML body used to surface as
+      // "Unexpected token '<'" with no status attached.
+      throw Object.assign(
+        new Error(`WebCraft returned a non-JSON response (${res.status}) — check EPTIM_WEBCRAFT_BASE_URL`),
+        { status: res.status, detail: text.slice(0, 500) },
+      );
+    }
     if (!res.ok)
       throw Object.assign(
         new Error(json?.error ?? json?.message ?? `WebCraft API error (${res.status})`),

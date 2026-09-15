@@ -14,6 +14,18 @@ function emailToUsername(email: string): string {
     .padEnd(3, "x");
 }
 
+function randomPassword(len = 8) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+// EptimEdu validates `email` with a strict schema and 400s the whole enrolment
+// when it doesn't parse — some team emails were typed with commas for dots.
+// Omitting it lets EptimEdu synthesise an internal address instead.
+function validEmail(email: string): string | undefined {
+  return /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email) ? email : undefined;
+}
+
 /**
  * POST { teamId?, eventId? }
  *
@@ -96,7 +108,22 @@ export async function POST(req: NextRequest) {
     courseId = team.competition.eptimEduCourseId ?? null;
   }
 
-  if (!courseId && !team.lmsUserId) {
+  // Never trust `lmsUserId` on its own: accounts deleted upstream (or a DB
+  // restored from an older snapshot) left teams permanently stuck here — enrol
+  // failures were swallowed because the team "already had" an account, and SSO
+  // then 404'd forever on a user that no longer exists.
+  const accountExists = await eptimEdu.userExists(username)
+    .then((r) => !!r?.exists)
+    .catch(() => !!team.lmsUserId); // EptimEdu unreachable — fall back to what we know
+  if (!accountExists && team.lmsUserId) {
+    console.warn("[bengkel/signin POST] stale lmsUserId — account missing upstream:", { username, teamId: team.id });
+    db.team.update({
+      where: { id: team.id },
+      data: { lmsUserId: null, lmsCourseEnrolled: false },
+    }).catch(() => {});
+  }
+
+  if (!courseId && !accountExists) {
     return NextResponse.json(
       { error: "Tiada kursus ditetapkan untuk acara ini. Hubungi pengurus anda." },
       { status: 400 },
@@ -104,25 +131,37 @@ export async function POST(req: NextRequest) {
   }
 
   // Enrol team in the course (force=true bypasses invite-only restrictions).
-  // enrol() also auto-provisions the LMS account if it doesn't exist yet.
+  // enrol() also auto-provisions the LMS account if it doesn't exist yet — pass
+  // a password so the account we (re)create has usable credentials.
+  let enrolled = false;
   if (courseId) {
+    const password = randomPassword();
     try {
-      const enrolResult = await eptimEdu.enrol(username, courseId, { force: true, name: team.name, email: team.email });
-      // If this was the first enrolment, persist the new lmsUserId
-      if (enrolResult?.userId && !team.lmsUserId) {
+      const enrolResult = await eptimEdu.enrol(username, courseId, {
+        force: true,
+        name:  team.name.slice(0, 100),
+        email: validEmail(team.email),
+        ...(accountExists ? {} : { password }),
+      });
+      enrolled = true;
+      if (enrolResult?.userId && !(accountExists && team.lmsUserId)) {
         db.team.update({
           where: { id: team.id },
-          data: { lmsUserId: enrolResult.userId, lmsCourseEnrolled: true },
+          data: {
+            lmsUserId: enrolResult.userId,
+            lmsCourseEnrolled: true,
+            ...(accountExists ? {} : { lmsPassword: password }),
+          },
         }).catch(() => {});
       }
     } catch (e: unknown) {
       const httpStatus = (e as { status?: number }).status;
       if (httpStatus === 409) {
-        // Already enrolled — fine, continue to SSO
+        enrolled = true; // already enrolled — fine, continue to SSO
       } else {
         console.error("[bengkel/signin POST] enrol error:", e instanceof Error ? e.message : e, { username, courseId });
-        // If the account has never been provisioned, SSO will also fail — surface the error
-        if (!team.lmsUserId) {
+        // Without an account upstream, SSO will fail too — surface the error
+        if (!accountExists) {
           const msg = e instanceof Error ? e.message : "Gagal mendaftar kursus. Cuba lagi atau hubungi pentadbir.";
           return NextResponse.json({ error: msg }, { status: 422 });
         }
@@ -133,10 +172,10 @@ export async function POST(req: NextRequest) {
   // Generate SSO token
   try {
     const result = await eptimEdu.createSsoToken(username);
-    return NextResponse.json({ loginUrl: result.loginUrl, enrolled: !!courseId });
+    return NextResponse.json({ loginUrl: result.loginUrl, enrolled });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "EptimEdu API error";
-    console.error("[bengkel/signin POST] sso error:", msg, { username, teamId, eventId });
+    console.error("[bengkel/signin POST] sso error:", msg, { username, teamId, eventId, accountExists, enrolled });
     return NextResponse.json({ error: msg }, { status: 422 });
   }
 }

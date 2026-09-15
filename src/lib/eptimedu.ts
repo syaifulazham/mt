@@ -6,6 +6,29 @@ export function eptimEduConfigured() {
   return !!API_KEY && !!BASE_URL;
 }
 
+type ZodFlattened = { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
+
+/**
+ * EptimEdu returns `{ error: <string> }` for most failures but `{ error: <zod
+ * flatten> }` for 400s. Passing the object straight to `new Error()` produced
+ * "[object Object]" in the logs and in the error shown to the user.
+ */
+function errorMessage(json: unknown, status: number): string {
+  const raw = (json as { error?: unknown; message?: unknown } | null)?.error
+           ?? (json as { message?: unknown } | null)?.message;
+  if (typeof raw === "string") return raw;
+  if (raw && typeof raw === "object") {
+    const { formErrors, fieldErrors } = raw as ZodFlattened;
+    const parts = [
+      ...(formErrors ?? []),
+      ...Object.entries(fieldErrors ?? {}).map(([field, msgs]) => `${field}: ${msgs.join(", ")}`),
+    ];
+    if (parts.length) return parts.join("; ");
+    return JSON.stringify(raw).slice(0, 300);
+  }
+  return `EptimEdu API error (${status})`;
+}
+
 async function req(path: string, options?: RequestInit) {
   if (!API_KEY)  throw new Error("EPTIMEDU_API_KEY not configured");
   if (!BASE_URL) throw new Error("EPTIMEDU_BASE_URL not configured");
@@ -24,7 +47,7 @@ async function req(path: string, options?: RequestInit) {
       },
     });
     const json = await res.json().catch(() => null);
-    if (!res.ok) throw Object.assign(new Error(json?.error ?? "EptimEdu API error"), { status: res.status, body: json });
+    if (!res.ok) throw Object.assign(new Error(errorMessage(json, res.status)), { status: res.status, body: json });
     return json;
   } finally {
     clearTimeout(timer);
