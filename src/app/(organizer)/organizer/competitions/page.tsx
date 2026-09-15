@@ -16,6 +16,7 @@ export default async function CompetitionsPage() {
     drone:    !!process.env.EPTIMDRONE_API_KEY,
     fc1:      !!process.env.EPTIMFC1_API_KEY,
     webcraft: !!process.env.EPTIM_WEBCRAFT_API_KEY,
+    csi:      !!process.env.EPTIMCSI_API_KEY,
   };
 
   return (

@@ -894,6 +894,7 @@ model Team {
   trainers       TeamTrainer[]
   teamEvents     TeamEvent[]
   droneAccess    TeamDroneAccess?
+  csiAccess      TeamCsiAccess?
   judgingScores  JudgingScore[]
 
   @@map("teams")
@@ -1231,6 +1232,19 @@ model TeamDroneAccess {
   team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@map("team_drone_access")
+}
+
+model TeamCsiAccess {
+  id          String   @id @default(cuid())
+  teamId      String   @unique
+  csiUserId   String
+  csiPassword String
+  csiAlias    String?
+  createdAt   DateTime @default(now())
+
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("team_csi_access")
 }
 
 model ParticipantWebcraftAccess {

@@ -6,6 +6,7 @@ import { Swords, Users, User2, Phone, MapPin, Calendar, CalendarDays } from "luc
 import { EptimEduLoginButton } from "@/components/participant/EptimEduLoginButton";
 import { EptimDroneTeamButton } from "@/components/participant/EptimDroneTeamButton";
 import { EptimWebcraftButton } from "@/components/participant/EptimWebcraftButton";
+import { EptimCsiTeamButton } from "@/components/participant/EptimCsiTeamButton";
 
 export const metadata: Metadata = { title: "Pasukan Saya" };
 
@@ -134,6 +135,13 @@ export default async function TeamPage() {
                   <EptimEduLoginButton teamId={team.id} />
                 )}
               </div>
+
+              {/* Eptim CSI account is per team, not per event */}
+              {comp.thirdPartyIntegration === "eptim-csi" && (
+                <div className="flex flex-wrap">
+                  <EptimCsiTeamButton teamId={team.id} />
+                </div>
+              )}
 
               {/* Venue + dates */}
               <div className="flex flex-col sm:flex-row gap-2 text-sm text-zinc-500 dark:text-zinc-400">
