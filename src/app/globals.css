@@ -402,3 +402,33 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ── Certificate editor fonts ──────────────────────────────────────────────────
+   The editor canvas is an SVG overlay drawn in PDF points, so it must use the
+   same faces render.ts embeds — otherwise the canvas would lie about widths and
+   centred text would drift. `helvetica` maps to the local Helvetica/Arial the
+   standard-14 PDF font resolves to on the viewer's machine. */
+@font-face {
+  font-family: "CertInter";
+  src: url("/fonts/certificates/Inter_400Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "CertInter";
+  src: url("/fonts/certificates/Inter_700Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "CertLora";
+  src: url("/fonts/certificates/Lora_400Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "CertLora";
+  src: url("/fonts/certificates/Lora_700Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}

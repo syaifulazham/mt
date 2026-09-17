@@ -29,6 +29,8 @@ import {
   Mail,
   Send,
   Users2,
+  FileBadge,
+  BadgeCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
@@ -54,6 +56,13 @@ const NAV: NavItem[] = [
   { label: "Participation",  href: "/organizer/participation",  icon: UserCheck },
   { label: "Events",         href: "/organizer/events",         icon: CalendarDays },
   { label: "Judging",        href: "/organizer/judging",        icon: Gavel },
+  {
+    label: "Certificates", href: "/organizer/certificates", icon: FileBadge,
+    children: [
+      { label: "Templates", href: "/organizer/certificates",        icon: FileBadge },
+      { label: "Issued",    href: "/organizer/certificates/issued", icon: BadgeCheck },
+    ],
+  },
   {
     label: "Landing Page", href: "/organizer/landing", icon: Globe,
     children: [

@@ -72,9 +72,9 @@ enum OrganizerRole {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ManagerProfile {
-  id                  String          @id @default(cuid())
-  clerkUserId         String          @unique
-  email               String          @unique
+  id                  String           @id @default(cuid())
+  clerkUserId         String           @unique
+  email               String           @unique
   name                String
   phone               String?
   idType              IdType?
@@ -85,16 +85,16 @@ model ManagerProfile {
   schoolId            String?
   higherInstitutionId String?
   countryId           String?
-  profileComplete     Boolean         @default(false)
+  profileComplete     Boolean          @default(false)
   lmsUserId           String?
   lmsPassword         String?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
   deletedAt           DateTime?
 
-  school            School?            @relation(fields: [schoolId], references: [id])
-  higherInstitution HigherInstitution? @relation(fields: [higherInstitutionId], references: [id])
-  country           Country?           @relation(fields: [countryId], references: [id])
+  school             School?             @relation(fields: [schoolId], references: [id])
+  higherInstitution  HigherInstitution?  @relation(fields: [higherInstitutionId], references: [id])
+  country            Country?            @relation(fields: [countryId], references: [id])
   contingentManagers ContingentManager[]
 
   @@map("manager_profiles")
@@ -123,8 +123,8 @@ model Country {
   codeIso3 String  @unique @db.Char(3)
   isActive Boolean @default(true)
 
-  states     State[]
-  managers   ManagerProfile[]
+  states      State[]
+  managers    ManagerProfile[]
   contingents Contingent[]
 
   @@map("countries")
@@ -144,12 +144,12 @@ model State {
   flagUrl   String?
   countryId String
 
-  country           Country             @relation(fields: [countryId], references: [id])
-  zoneStates        ZoneState[]
-  schools           School[]
+  country            Country             @relation(fields: [countryId], references: [id])
+  zoneStates         ZoneState[]
+  schools            School[]
   higherInstitutions HigherInstitution[]
-  contingents       Contingent[]
-  events            Event[]
+  contingents        Contingent[]
+  events             Event[]
 
   @@map("states")
 }
@@ -171,7 +171,7 @@ model ZoneState {
   zoneId  String
   stateId String
 
-  zone  Zone  @relation(fields: [zoneId],  references: [id], onDelete: Cascade)
+  zone  Zone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
   state State @relation(fields: [stateId], references: [id], onDelete: Cascade)
 
   @@id([zoneId, stateId])
@@ -208,11 +208,11 @@ model School {
   latitude      Float?
   longitude     Float?
 
-  state      State     @relation(fields: [stateId], references: [id])
-  zone       Zone?     @relation(fields: [zoneId], references: [id])
-  district   District? @relation(fields: [districtId], references: [id])
+  state       State            @relation(fields: [stateId], references: [id])
+  zone        Zone?            @relation(fields: [zoneId], references: [id])
+  district    District?        @relation(fields: [districtId], references: [id])
   contingents Contingent[]
-  managers   ManagerProfile[]
+  managers    ManagerProfile[]
 
   @@map("schools")
 }
@@ -223,11 +223,11 @@ model HigherInstitution {
   code       String? @unique
   stateId    String?
   isActive   Boolean @default(true)
-  heiType    String  @default("HQ")   // HQ or BRANCH
-  parentCode String?                   // for BRANCH: code of the parent HQ
-  sector     String?                   // PUBLIC, PRIVATE, FOREIGN_BRANCH
+  heiType    String  @default("HQ") // HQ or BRANCH
+  parentCode String? // for BRANCH: code of the parent HQ
+  sector     String? // PUBLIC, PRIVATE, FOREIGN_BRANCH
 
-  state       State?          @relation(fields: [stateId], references: [id])
+  state       State?           @relation(fields: [stateId], references: [id])
   contingents Contingent[]
   managers    ManagerProfile[]
 
@@ -242,44 +242,44 @@ enum SchoolLevel {
 
 enum SchoolCategory {
   // ── Public national schools ───────────────────────────────────────────────
-  SEKOLAH_KEBANGSAAN                     @map("Sekolah Kebangsaan")
-  SEKOLAH_MENENGAH_KEBANGSAAN            @map("Sekolah Menengah Kebangsaan")
-  SEKOLAH_JENIS_KEBANGSAAN_CINA          @map("Sekolah Jenis Kebangsaan Cina")
-  SEKOLAH_JENIS_KEBANGSAAN_TAMIL         @map("Sekolah Jenis Kebangsaan Tamil")
+  SEKOLAH_KEBANGSAAN             @map("Sekolah Kebangsaan")
+  SEKOLAH_MENENGAH_KEBANGSAAN    @map("Sekolah Menengah Kebangsaan")
+  SEKOLAH_JENIS_KEBANGSAAN_CINA  @map("Sekolah Jenis Kebangsaan Cina")
+  SEKOLAH_JENIS_KEBANGSAAN_TAMIL @map("Sekolah Jenis Kebangsaan Tamil")
 
   // ── Religious schools ─────────────────────────────────────────────────────
-  SEKOLAH_MENENGAH_KEBANGSAAN_AGAMA      @map("Sekolah Menengah Kebangsaan Agama")
+  SEKOLAH_MENENGAH_KEBANGSAAN_AGAMA       @map("Sekolah Menengah Kebangsaan Agama")
   SEKOLAH_MENENGAH_AGAMA_BANTUAN_KERAJAAN @map("Sekolah Menengah Agama Bantuan Kerajaan")
-  SEKOLAH_RENDAH_AGAMA_BANTUAN_KERAJAAN  @map("Sekolah Rendah Agama Bantuan Kerajaan")
-  SEKOLAH_MENENGAH_AGAMA                 @map("Sekolah Menengah Agama")
-  SEKOLAH_RENDAH_AGAMA                   @map("Sekolah Rendah Agama")
-  SEKOLAH_KEBANGSAAN_TAHFIZ              @map("Sekolah Kebangsaan Tahfiz")
+  SEKOLAH_RENDAH_AGAMA_BANTUAN_KERAJAAN   @map("Sekolah Rendah Agama Bantuan Kerajaan")
+  SEKOLAH_MENENGAH_AGAMA                  @map("Sekolah Menengah Agama")
+  SEKOLAH_RENDAH_AGAMA                    @map("Sekolah Rendah Agama")
+  SEKOLAH_KEBANGSAAN_TAHFIZ               @map("Sekolah Kebangsaan Tahfiz")
 
   // ── Elite / residential ───────────────────────────────────────────────────
-  SEKOLAH_BERASRAMA_PENUH                @map("Sekolah Berasrama Penuh")
-  MAKTAB_RENDAH_SAINS_MARA               @map("Maktab Rendah Sains MARA")
+  SEKOLAH_BERASRAMA_PENUH  @map("Sekolah Berasrama Penuh")
+  MAKTAB_RENDAH_SAINS_MARA @map("Maktab Rendah Sains MARA")
 
   // ── Vocational & technical ────────────────────────────────────────────────
-  KOLEJ_VOKASIONAL                       @map("Kolej Vokasional")
-  SEKOLAH_MENENGAH_TEKNIK                @map("Sekolah Menengah Teknik")
+  KOLEJ_VOKASIONAL        @map("Kolej Vokasional")
+  SEKOLAH_MENENGAH_TEKNIK @map("Sekolah Menengah Teknik")
 
   // ── Special needs ─────────────────────────────────────────────────────────
-  SEKOLAH_KEBANGSAAN_PENDIDIKAN_KHAS     @map("Sekolah Kebangsaan Pendidikan Khas")
-  SEKOLAH_MENENGAH_PENDIDIKAN_KHAS       @map("Sekolah Menengah Pendidikan Khas")
-  SEKOLAH_BIMBINGAN_JALINAN_KASIH        @map("Sekolah Bimbingan Jalinan Kasih")
-  SEKOLAH_MODEL_KHAS                     @map("Sekolah Model Khas")
+  SEKOLAH_KEBANGSAAN_PENDIDIKAN_KHAS @map("Sekolah Kebangsaan Pendidikan Khas")
+  SEKOLAH_MENENGAH_PENDIDIKAN_KHAS   @map("Sekolah Menengah Pendidikan Khas")
+  SEKOLAH_BIMBINGAN_JALINAN_KASIH    @map("Sekolah Bimbingan Jalinan Kasih")
+  SEKOLAH_MODEL_KHAS                 @map("Sekolah Model Khas")
 
   // ── Specialised public schools ────────────────────────────────────────────
-  SEKOLAH_SENI_MALAYSIA                  @map("Sekolah Seni Malaysia")
-  SEKOLAH_SUKAN_MALAYSIA                 @map("Sekolah Sukan Malaysia")
-  PUSAT_TINGKATAN_ENAM                   @map("Pusat Tingkatan Enam")
-  KOLEJ_TINGKATAN_ENAM                   @map("Kolej Tingkatan Enam")
+  SEKOLAH_SENI_MALAYSIA  @map("Sekolah Seni Malaysia")
+  SEKOLAH_SUKAN_MALAYSIA @map("Sekolah Sukan Malaysia")
+  PUSAT_TINGKATAN_ENAM   @map("Pusat Tingkatan Enam")
+  KOLEJ_TINGKATAN_ENAM   @map("Kolej Tingkatan Enam")
 
   // ── Private & independent ─────────────────────────────────────────────────
-  SEKOLAH_ANTARABANGSA                   @map("Sekolah Antarabangsa")
-  SEKOLAH_MENENGAH_PERSENDIRIAN_CINA     @map("Sekolah Menengah Persendirian Cina")
-  SEKOLAH_MENENGAH_AKADEMIK              @map("Sekolah Menengah Akademik")
-  SEKOLAH_RENDAH_AKADEMIK                @map("Sekolah Rendah Akademik")
+  SEKOLAH_ANTARABANGSA               @map("Sekolah Antarabangsa")
+  SEKOLAH_MENENGAH_PERSENDIRIAN_CINA @map("Sekolah Menengah Persendirian Cina")
+  SEKOLAH_MENENGAH_AKADEMIK          @map("Sekolah Menengah Akademik")
+  SEKOLAH_RENDAH_AKADEMIK            @map("Sekolah Rendah Akademik")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -303,15 +303,15 @@ model Contingent {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  school            School?            @relation(fields: [schoolId], references: [id])
-  higherInstitution HigherInstitution? @relation(fields: [higherInstitutionId], references: [id])
-  state             State?             @relation(fields: [stateId], references: [id])
-  zone              Zone?              @relation(fields: [zoneId], references: [id])
-  country           Country?           @relation(fields: [countryId], references: [id])
-  managers          ContingentManager[]
-  participants      Participant[]
-  teams             Team[]
-  trainers          Trainer[]
+  school              School?              @relation(fields: [schoolId], references: [id])
+  higherInstitution   HigherInstitution?   @relation(fields: [higherInstitutionId], references: [id])
+  state               State?               @relation(fields: [stateId], references: [id])
+  zone                Zone?                @relation(fields: [zoneId], references: [id])
+  country             Country?             @relation(fields: [countryId], references: [id])
+  managers            ContingentManager[]
+  participants        Participant[]
+  teams               Team[]
+  trainers            Trainer[]
   walkInRegistrations WalkInRegistration[]
 
   @@unique([schoolId])
@@ -372,31 +372,31 @@ enum ContingentManagerStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Participant {
-  id          String        @id @default(cuid())
-  name        String
-  ic          String?
-  email       String?
-  phoneNumber String?
-  gender      Gender
-  age         Int?
-  eduLevel    EduLevel
-  classGrade  String?
-  className   String?
-  ethnicity   Ethnicity?
-  status        String        @default("ACTIVE")
-  ppki          Boolean       @default(false)
-  passwordHash  String?
-  contingentId  String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id           String     @id @default(cuid())
+  name         String
+  ic           String?
+  email        String?
+  phoneNumber  String?
+  gender       Gender
+  age          Int?
+  eduLevel     EduLevel
+  classGrade   String?
+  className    String?
+  ethnicity    Ethnicity?
+  status       String     @default("ACTIVE")
+  ppki         Boolean    @default(false)
+  passwordHash String?
+  contingentId String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  contingent  Contingent    @relation(fields: [contingentId], references: [id], onDelete: Cascade)
-  teamMembers      TeamMember[]
-  sessions         ParticipantSession[]
+  contingent            Contingent                       @relation(fields: [contingentId], references: [id], onDelete: Cascade)
+  teamMembers           TeamMember[]
+  sessions              ParticipantSession[]
   competitionAttendance TeamEventParticipantAttendance[]
-  droneAccesses    DroneAccess[]
-  webcraftAccess   ParticipantWebcraftAccess?
-  walkInRegistrations WalkInRegistration[]
+  droneAccesses         DroneAccess[]
+  webcraftAccess        ParticipantWebcraftAccess?
+  walkInRegistrations   WalkInRegistration[]
   walkInFormSubmissions WalkInFormSubmission[]
 
   @@index([contingentId])
@@ -404,13 +404,13 @@ model Participant {
 }
 
 model ParticipantSession {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   participantId String
-  token         String      @unique @default(cuid())
+  token         String   @unique @default(cuid())
   expiresAt     DateTime
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime @default(now())
 
-  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@index([participantId])
   @@map("participant_sessions")
@@ -485,42 +485,42 @@ enum ParticipationPolicy {
 }
 
 model Event {
-  id                  String      @id @default(cuid())
-  name                String
-  slug                String      @unique
-  description         String?
-  scope               EventScope  @default(NATIONAL)
-  stateId             String?
-  zoneId              String?
-  venue               String?
-  address             String?
-  city                String?
-  latitude            Float?
-  longitude           Float?
-  startDate           DateTime?
-  endDate             DateTime?
-  registrationStart   DateTime?
-  registrationEnd     DateTime?
-  status                  EventStatus @default(DRAFT)
-  needManagerAcceptance   Boolean     @default(false)
-  walkInUniqueParticipation Boolean   @default(false)
-  participationPolicy     ParticipationPolicy @default(ALL)
-  winnerExclusionRank     Int?
-  createdAt               DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id                        String              @id @default(cuid())
+  name                      String
+  slug                      String              @unique
+  description               String?
+  scope                     EventScope          @default(NATIONAL)
+  stateId                   String?
+  zoneId                    String?
+  venue                     String?
+  address                   String?
+  city                      String?
+  latitude                  Float?
+  longitude                 Float?
+  startDate                 DateTime?
+  endDate                   DateTime?
+  registrationStart         DateTime?
+  registrationEnd           DateTime?
+  status                    EventStatus         @default(DRAFT)
+  needManagerAcceptance     Boolean             @default(false)
+  walkInUniqueParticipation Boolean             @default(false)
+  participationPolicy       ParticipationPolicy @default(ALL)
+  winnerExclusionRank       Int?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
 
-  state               State?              @relation(fields: [stateId], references: [id])
-  zone                Zone?               @relation(fields: [zoneId], references: [id])
-  prerequisites       EventPrerequisite[] @relation("EventPrerequisites")
-  asPrerequisiteOf    EventPrerequisite[] @relation("EventAsPrerequisite")
-  eventCompetitions   EventCompetition[]
-  walkInCompetitions   EventWalkInCompetition[]
-  walkInEndpoints      WalkInEndpoint[]
-  walkInFormEndpoints  WalkInFormEndpoint[]
+  state                  State?                   @relation(fields: [stateId], references: [id])
+  zone                   Zone?                    @relation(fields: [zoneId], references: [id])
+  prerequisites          EventPrerequisite[]      @relation("EventPrerequisites")
+  asPrerequisiteOf       EventPrerequisite[]      @relation("EventAsPrerequisite")
+  eventCompetitions      EventCompetition[]
+  walkInCompetitions     EventWalkInCompetition[]
+  walkInEndpoints        WalkInEndpoint[]
+  walkInFormEndpoints    WalkInFormEndpoint[]
   walkInJudgingEndpoints WalkInJudgingEndpoint[]
-  teamEvents           TeamEvent[]
-  resultsEndpoints     ResultsEndpoint[]
-  attendanceEndpoints  AttendanceEndpoint[]
+  teamEvents             TeamEvent[]
+  resultsEndpoints       ResultsEndpoint[]
+  attendanceEndpoints    AttendanceEndpoint[]
 
   @@map("events")
 }
@@ -529,7 +529,7 @@ model EventPrerequisite {
   eventId        String
   prerequisiteId String
 
-  event        Event @relation("EventPrerequisites",  fields: [eventId],        references: [id], onDelete: Cascade)
+  event        Event @relation("EventPrerequisites", fields: [eventId], references: [id], onDelete: Cascade)
   prerequisite Event @relation("EventAsPrerequisite", fields: [prerequisiteId], references: [id], onDelete: Cascade)
 
   @@id([eventId, prerequisiteId])
@@ -537,48 +537,48 @@ model EventPrerequisite {
 }
 
 model Competition {
-  id                          String              @id @default(cuid())
-  code                        String              @unique
-  name                        String
-  description                 String?
-  themeId                     String?
-  participationType           ParticipationType   @default(INDIVIDUAL)
-  minTeamSize                 Int                 @default(1)
-  maxTeamSize                 Int                 @default(1)
-  maxParticipantsPerContingent Int                @default(0)
-  maxTotalParticipants        Int                 @default(0)
-  venue                       String?
-  address                     String?
-  startDate                   DateTime?
-  endDate                     DateTime?
-  registrationStart           DateTime?
-  registrationEnd             DateTime?
-  judgingType                 JudgingType         @default(PERCENTAGE)
-  eptimEduCourseId            String?
-  eptimEduCourseTitle         String?
-  thirdPartyIntegration       String?             @default("none")
-  createdAt                   DateTime            @default(now())
-  updatedAt                   DateTime            @updatedAt
+  id                           String            @id @default(cuid())
+  code                         String            @unique
+  name                         String
+  description                  String?
+  themeId                      String?
+  participationType            ParticipationType @default(INDIVIDUAL)
+  minTeamSize                  Int               @default(1)
+  maxTeamSize                  Int               @default(1)
+  maxParticipantsPerContingent Int               @default(0)
+  maxTotalParticipants         Int               @default(0)
+  venue                        String?
+  address                      String?
+  startDate                    DateTime?
+  endDate                      DateTime?
+  registrationStart            DateTime?
+  registrationEnd              DateTime?
+  judgingType                  JudgingType       @default(PERCENTAGE)
+  eptimEduCourseId             String?
+  eptimEduCourseTitle          String?
+  thirdPartyIntegration        String?           @default("none")
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
 
-  theme                Theme?                     @relation(fields: [themeId], references: [id])
-  targetGroups         CompetitionTargetGroup[]
-  judgingCriteria      JudgingCriteria[]
-  eventCompetitions    EventCompetition[]
-  walkInCompetitions   EventWalkInCompetition[]
-  teams                Team[]
-  docs                 CompetitionDoc[]
+  theme              Theme?                   @relation(fields: [themeId], references: [id])
+  targetGroups       CompetitionTargetGroup[]
+  judgingCriteria    JudgingCriteria[]
+  eventCompetitions  EventCompetition[]
+  walkInCompetitions EventWalkInCompetition[]
+  teams              Team[]
+  docs               CompetitionDoc[]
 
   @@map("competitions")
 }
 
 model CompetitionDoc {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   competitionId String
   name          String
   url           String
   key           String
   size          Int?
-  uploadedAt    DateTime    @default(now())
+  uploadedAt    DateTime @default(now())
 
   competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
 
@@ -587,52 +587,52 @@ model CompetitionDoc {
 }
 
 model EventCompetition {
-  id            String   @id @default(cuid())
-  eventId       String
-  competitionId String
-  picName       String?
-  picContact    String?
+  id                  String   @id @default(cuid())
+  eventId             String
+  competitionId       String
+  picName             String?
+  picContact          String?
   maxTeams            Int      @default(0)
   eptimEduCourseId    String?
   eptimEduCourseTitle String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  event              Event                              @relation(fields: [eventId],       references: [id], onDelete: Cascade)
-  competition        Competition                        @relation(fields: [competitionId], references: [id], onDelete: Cascade)
-  judgingTemplates   EventCompetitionJudgingTemplate[]
-  judgingTasks       JudgingTask[]
+  event            Event                             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  competition      Competition                       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  judgingTemplates EventCompetitionJudgingTemplate[]
+  judgingTasks     JudgingTask[]
 
   @@unique([eventId, competitionId])
   @@map("event_competitions")
 }
 
 model EventWalkInCompetition {
-  id              String   @id @default(cuid())
-  eventId         String
-  competitionId   String
-  picName         String?
-  picContact      String?
-  maxSlots        Int      @default(0)
-  publishToPortal  Boolean  @default(false)
-  useViblockarena    Boolean  @default(false)
-  useDronearena      Boolean  @default(false)
-  useVibeblocks      Boolean  @default(false)
-  viblockChallengeId       String?
-  vibeBlocksChallengeId    String?
-  vibeBlocksEventName      String?
-  vibeBlocksStartsAt       DateTime?
-  vibeBlocksEndsAt         DateTime?
-  vibeBlocksRunDurationSec Int?
+  id                         String    @id @default(cuid())
+  eventId                    String
+  competitionId              String
+  picName                    String?
+  picContact                 String?
+  maxSlots                   Int       @default(0)
+  publishToPortal            Boolean   @default(false)
+  useViblockarena            Boolean   @default(false)
+  useDronearena              Boolean   @default(false)
+  useVibeblocks              Boolean   @default(false)
+  viblockChallengeId         String?
+  vibeBlocksChallengeId      String?
+  vibeBlocksEventName        String?
+  vibeBlocksStartsAt         DateTime?
+  vibeBlocksEndsAt           DateTime?
+  vibeBlocksRunDurationSec   Int?
   vibeBlocksCompetitionRound String?
-  viblockChallengeLocked Boolean  @default(false)
-  judgingTemplatesLocked Boolean  @default(false)
-  walkInSlotSchedule     Json?
-  createdAt              DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  viblockChallengeLocked     Boolean   @default(false)
+  judgingTemplatesLocked     Boolean   @default(false)
+  walkInSlotSchedule         Json?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
-  event         Event       @relation(fields: [eventId],       references: [id], onDelete: Cascade)
-  competition   Competition @relation(fields: [competitionId], references: [id])
+  event            Event                                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  competition      Competition                             @relation(fields: [competitionId], references: [id])
   registrations    WalkInRegistration[]
   endpoints        WalkInEndpoint[]
   formSubmissions  WalkInFormSubmission[]
@@ -646,14 +646,14 @@ model EventWalkInCompetition {
 model WalkInEndpoint {
   id                  String   @id @default(cuid())
   eventId             String
-  walkInCompetitionId String?  // null = general endpoint (any competition in the event)
+  walkInCompetitionId String? // null = general endpoint (any competition in the event)
   routeSlug           String   @unique
   passcode            String
   label               String?
   active              Boolean  @default(true)
   createdAt           DateTime @default(now())
 
-  event             Event                   @relation(fields: [eventId],             references: [id], onDelete: Cascade)
+  event             Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   walkInCompetition EventWalkInCompetition? @relation(fields: [walkInCompetitionId], references: [id], onDelete: SetNull)
 
   @@map("walkin_endpoints")
@@ -695,10 +695,10 @@ model WalkInFormSubmission {
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
 
-  endpoint            WalkInFormEndpoint     @relation(fields: [endpointId],           references: [id], onDelete: Cascade)
-  walkInCompetition   EventWalkInCompetition @relation(fields: [walkInCompetitionId],  references: [id], onDelete: Cascade)
-  participant         Participant?           @relation(fields: [participantId],        references: [id])
-  walkInRegistration  WalkInRegistration?    @relation(fields: [walkInRegistrationId], references: [id])
+  endpoint           WalkInFormEndpoint     @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  walkInCompetition  EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
+  participant        Participant?           @relation(fields: [participantId], references: [id])
+  walkInRegistration WalkInRegistration?    @relation(fields: [walkInRegistrationId], references: [id])
 
   @@index([endpointId, status])
   @@index([ic])
@@ -722,9 +722,9 @@ model WalkInJudgingEndpoint {
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
 
-  event             Event                  @relation(fields: [eventId],             references: [id], onDelete: Cascade)
+  event             Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   walkInCompetition EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
-  judgingTemplate   JudgingTemplate        @relation(fields: [judgingTemplateId],   references: [id], onDelete: Cascade)
+  judgingTemplate   JudgingTemplate        @relation(fields: [judgingTemplateId], references: [id], onDelete: Cascade)
   scores            WalkInJudgingScore[]
 
   @@index([walkInCompetitionId])
@@ -743,8 +743,8 @@ model WalkInJudgingScore {
   updatedAt               DateTime @updatedAt
 
   walkInJudgingEndpoint WalkInJudgingEndpoint @relation(fields: [walkInJudgingEndpointId], references: [id], onDelete: Cascade)
-  walkInRegistration    WalkInRegistration    @relation(fields: [walkInRegistrationId],    references: [id], onDelete: Cascade)
-  criterion             JudgingCriterion      @relation(fields: [criterionId],             references: [id], onDelete: Cascade)
+  walkInRegistration    WalkInRegistration    @relation(fields: [walkInRegistrationId], references: [id], onDelete: Cascade)
+  criterion             JudgingCriterion      @relation(fields: [criterionId], references: [id], onDelete: Cascade)
 
   @@unique([walkInJudgingEndpointId, walkInRegistrationId, criterionId])
   @@index([walkInJudgingEndpointId])
@@ -767,8 +767,8 @@ model WalkInRegistration {
   updatedAt           DateTime     @updatedAt
 
   walkInCompetition EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
-  participant       Participant            @relation(fields: [participantId],       references: [id])
-  contingent        Contingent             @relation(fields: [contingentId],        references: [id])
+  participant       Participant            @relation(fields: [participantId], references: [id])
+  contingent        Contingent             @relation(fields: [contingentId], references: [id])
   judgingScores     WalkInJudgingScore[]
   formSubmissions   WalkInFormSubmission[]
 
@@ -795,7 +795,7 @@ model EventCompetitionJudgingTemplate {
   createdAt          DateTime @default(now())
 
   eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
-  judgingTemplate  JudgingTemplate  @relation(fields: [judgingTemplateId],  references: [id], onDelete: Cascade)
+  judgingTemplate  JudgingTemplate  @relation(fields: [judgingTemplateId], references: [id], onDelete: Cascade)
 
   @@unique([eventCompetitionId, judgingTemplateId])
   @@map("event_competition_judging_templates")
@@ -808,7 +808,7 @@ model EventWalkInCompetitionJudgingTemplate {
   createdAt           DateTime @default(now())
 
   walkInCompetition EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
-  judgingTemplate   JudgingTemplate        @relation(fields: [judgingTemplateId],   references: [id], onDelete: Cascade)
+  judgingTemplate   JudgingTemplate        @relation(fields: [judgingTemplateId], references: [id], onDelete: Cascade)
 
   @@unique([walkInCompetitionId, judgingTemplateId])
   @@map("event_walkin_competition_judging_templates")
@@ -870,32 +870,31 @@ enum JudgingType {
   SCORE
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // TEAMS
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Team {
-  id            String   @id @default(cuid())
-  name          String
-  email              String?
-  lmsUserId          String?
-  lmsPassword        String?
-  lmsCourseEnrolled  Boolean  @default(false)
-  competitionId String
-  contingentId  String
-  status        String   @default("ACTIVE")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String
+  email             String?
+  lmsUserId         String?
+  lmsPassword       String?
+  lmsCourseEnrolled Boolean  @default(false)
+  competitionId     String
+  contingentId      String
+  status            String   @default("ACTIVE")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  competition    Competition @relation(fields: [competitionId], references: [id])
-  contingent     Contingent  @relation(fields: [contingentId], references: [id])
-  members        TeamMember[]
-  trainers       TeamTrainer[]
-  teamEvents     TeamEvent[]
-  droneAccess    TeamDroneAccess?
-  csiAccess      TeamCsiAccess?
-  judgingScores  JudgingScore[]
+  competition   Competition      @relation(fields: [competitionId], references: [id])
+  contingent    Contingent       @relation(fields: [contingentId], references: [id])
+  members       TeamMember[]
+  trainers      TeamTrainer[]
+  teamEvents    TeamEvent[]
+  droneAccess   TeamDroneAccess?
+  csiAccess     TeamCsiAccess?
+  judgingScores JudgingScore[]
 
   @@map("teams")
 }
@@ -928,7 +927,7 @@ model Trainer {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  contingent Contingent   @relation(fields: [contingentId], references: [id], onDelete: Cascade)
+  contingent Contingent    @relation(fields: [contingentId], references: [id], onDelete: Cascade)
   teams      TeamTrainer[]
 
   @@index([contingentId])
@@ -936,12 +935,12 @@ model Trainer {
 }
 
 model TeamTrainer {
-  id         String   @id @default(cuid())
-  teamId     String
-  trainerId  String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  teamId    String
+  trainerId String
+  createdAt DateTime @default(now())
 
-  team    Team    @relation(fields: [teamId],    references: [id], onDelete: Cascade)
+  team    Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, trainerId])
@@ -972,11 +971,11 @@ model JudgingTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  criterions           JudgingCriterion[]
-  eventCompetitions    EventCompetitionJudgingTemplate[]
-  walkInCompetitions   EventWalkInCompetitionJudgingTemplate[]
+  criterions             JudgingCriterion[]
+  eventCompetitions      EventCompetitionJudgingTemplate[]
+  walkInCompetitions     EventWalkInCompetitionJudgingTemplate[]
   walkInJudgingEndpoints WalkInJudgingEndpoint[]
-  judgingTasks         JudgingTask[]
+  judgingTasks           JudgingTask[]
 
   @@map("judging_templates")
 }
@@ -993,7 +992,7 @@ model JudgingTask {
   updatedAt          DateTime          @updatedAt
 
   eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
-  judgingTemplate  JudgingTemplate  @relation(fields: [judgingTemplateId],  references: [id], onDelete: Cascade)
+  judgingTemplate  JudgingTemplate  @relation(fields: [judgingTemplateId], references: [id], onDelete: Cascade)
   scores           JudgingScore[]
 
   @@index([eventCompetitionId])
@@ -1008,14 +1007,14 @@ model JudgingCriterion {
   type       CriterionType
   maxScore   Float?
   minScore   Float?
-  maxTime    Int?          // seconds, for TIME type
+  maxTime    Int? // seconds, for TIME type
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  template JudgingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  options  JudgingOption[]
-  scores   JudgingScore[]
+  template            JudgingTemplate      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  options             JudgingOption[]
+  scores              JudgingScore[]
   walkInJudgingScores WalkInJudgingScore[]
 
   @@index([templateId])
@@ -1023,11 +1022,11 @@ model JudgingCriterion {
 }
 
 model JudgingOption {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   criterionId String
   label       String
-  weight      Float    @default(0)
-  order       Int      @default(0)
+  weight      Float  @default(0)
+  order       Int    @default(0)
 
   criterion JudgingCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
 
@@ -1040,8 +1039,8 @@ model JudgingScore {
   judgingTaskId String
   teamId        String
   criterionId   String
-  score         Float?   // NUMBER / SINGLE_OPTION / MULTIPLE_OPTION
-  timeSeconds   Int?     // TIME type
+  score         Float? // NUMBER / SINGLE_OPTION / MULTIPLE_OPTION
+  timeSeconds   Int? // TIME type
   optionIds     String[] // selected option ids (for display)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -1104,11 +1103,11 @@ model AttendanceEndpoint {
 
 model KnowledgeBase {
   id         String   @id @default(cuid())
-  path       String   @unique   // e.g. "events/zon-tengah"
+  path       String   @unique // e.g. "events/zon-tengah"
   title      String
   content    String   @db.Text
-  entityType String?            // "event" | "competition" | null = custom
-  entityId   String?            // source entity id for auto-push
+  entityType String? // "event" | "competition" | null = custom
+  entityId   String? // source entity id for auto-push
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -1173,8 +1172,8 @@ model TeamEvent {
   attendedAt DateTime?
   createdAt  DateTime  @default(now())
 
-  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  team                  Team                             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  event                 Event                            @relation(fields: [eventId], references: [id], onDelete: Cascade)
   participantAttendance TeamEventParticipantAttendance[]
 
   @@unique([teamId, eventId])
@@ -1211,13 +1210,13 @@ model Announcement {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model DroneAccess {
-  id            String      @id @default(cuid())
-  participantId String      @unique
+  id            String   @id @default(cuid())
+  participantId String   @unique
   droneUserId   String
   dronePassword String
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime @default(now())
 
-  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@map("drone_access")
 }
@@ -1229,7 +1228,7 @@ model TeamDroneAccess {
   dronePassword String
   createdAt     DateTime @default(now())
 
-  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@map("team_drone_access")
 }
@@ -1242,19 +1241,19 @@ model TeamCsiAccess {
   csiAlias    String?
   createdAt   DateTime @default(now())
 
-  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@map("team_csi_access")
 }
 
 model ParticipantWebcraftAccess {
-  id               String      @id @default(cuid())
-  participantId    String      @unique
+  id               String   @id @default(cuid())
+  participantId    String   @unique
   webcraftUserId   String
   webcraftPassword String
-  createdAt        DateTime    @default(now())
+  createdAt        DateTime @default(now())
 
-  participant      Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@map("participant_webcraft_access")
 }
@@ -1274,19 +1273,19 @@ model EmailBlast {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  createdBy  OrganizerUser        @relation(fields: [createdById], references: [id])
+  createdBy  OrganizerUser         @relation(fields: [createdById], references: [id])
   recipients EmailBlastRecipient[]
 
   @@map("email_blasts")
 }
 
 model EmailBlastRecipient {
-  id      String  @id @default(cuid())
+  id      String    @id @default(cuid())
   blastId String
   email   String
   name    String
   meta    String?
-  status  String  @default("PENDING")
+  status  String    @default("PENDING")
   sentAt  DateTime?
 
   blast EmailBlast @relation(fields: [blastId], references: [id], onDelete: Cascade)
@@ -1324,11 +1323,11 @@ model ContingentDistance {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model RegistrationStat {
-  id              String    @id @default(cuid())
+  id              String   @id @default(cuid())
   batchId         String
   competitionId   String
   competitionCode String
-  participantId   String    @map("contestantId")
+  participantId   String   @map("contestantId")
   gender          String?
   age             Int?
   classGrade      String?
@@ -1340,10 +1339,192 @@ model RegistrationStat {
   state           String?
   ppd             String?
   schoolCategory  String?
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime @default(now())
 
   @@unique([competitionId, participantId])
   @@index([competitionId])
   @@index([batchId])
   @@map("registration_stats")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CERTIFICATES
+//
+// ARCHIVAL CONTRACT — do not "normalise" this away:
+// `certificates` has foreign keys to `seasons` and `cert_template_versions` and
+// to NOTHING else. participantId / contingentId / teamId / eventId /
+// competitionId are opaque strings with no referential integrity ON PURPOSE, so
+// that purging a past season's participants, teams, contingents and events can
+// neither cascade into certificates nor fail on a constraint. A certificate
+// renders from its own snapshot columns plus its frozen template version.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Season {
+  id           String    @id @default(cuid())
+  code         String    @unique // "MT25", "MT26" — identity
+  serialPrefix String // prefix printed in the serial; shared by a legacy season and its live counterpart
+  year         Int
+  name         String
+  isCurrent    Boolean   @default(false) // exactly one true — partial unique index in the migration
+  archivedAt   DateTime? // operational data absent/purged: render + lookup only, no issuing
+  createdAt    DateTime  @default(now())
+
+  templates      CertTemplate[]
+  certificates   Certificate[]
+  serialCounters CertSerialCounter[]
+
+  @@index([year])
+  @@map("seasons")
+}
+
+model CertTemplate {
+  id               String             @id @default(cuid())
+  seasonId         String
+  name             String
+  targetType       CertTargetType
+  status           CertTemplateStatus @default(DRAFT)
+  draftConfig      Json // edited freely; frozen into a version on publish
+  baseAssetUrl     String? // draft base asset (R2)
+  baseAssetType    CertAssetType?
+  currentVersionId String?            @unique
+  competitionId    String? // soft refs — optional narrowing only
+  eventId          String?
+  winnerRankFrom   Int?
+  winnerRankTo     Int?
+  prerequisites    Json? // phase 3
+  createdBy        String
+  updatedBy        String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  season         Season                @relation(fields: [seasonId], references: [id])
+  versions       CertTemplateVersion[] @relation("TemplateVersions")
+  currentVersion CertTemplateVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+
+  @@index([seasonId, targetType])
+  @@index([status])
+  @@map("cert_templates")
+}
+
+model CertTemplateVersion {
+  id            String        @id @default(cuid())
+  templateId    String
+  version       Int
+  baseAssetUrl  String
+  baseAssetType CertAssetType
+  configuration Json // config v2 — see src/lib/certificates/config-schema.ts
+  publishedAt   DateTime      @default(now())
+  publishedBy   String?
+
+  template     CertTemplate  @relation("TemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
+  headOf       CertTemplate? @relation("CurrentVersion")
+  certificates Certificate[]
+
+  @@unique([templateId, version])
+  @@map("cert_template_versions")
+}
+
+model Certificate {
+  id                String @id @default(cuid())
+  seasonId          String
+  templateVersionId String
+
+  serialNumber  String     @unique // MT25/GEN/000001 — printed, immutable
+  uniqueCode    String     @unique // opaque token for public verification
+  status        CertStatus @default(READY)
+  issuedAt      DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+
+  // Snapshot — everything the PDF needs, frozen at issue time
+  recipientName   String
+  recipientType   CertRecipientType
+  recipientIc     String?
+  recipientEmail  String?
+  contingentName  String?
+  schoolName      String?
+  stateName       String?
+  teamName        String?
+  competitionName String?
+  competitionCode String?
+  eventName       String?
+  awardTitle      String?
+  rank            Int?
+  meta            Json?
+
+  // Soft references — plain columns, deliberately NOT relations (see contract above)
+  participantId       String?
+  contingentId        String?
+  teamId              String?
+  eventId             String?
+  competitionId       String?
+  legacyCertId        Int?    @unique // mt25 certificate.id — import idempotency key
+  legacyParticipantId Int?
+  legacyContingentId  Int?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  season          Season              @relation(fields: [seasonId], references: [id])
+  templateVersion CertTemplateVersion @relation(fields: [templateVersionId], references: [id])
+
+  @@index([seasonId, status])
+  @@index([participantId])
+  @@index([contingentId])
+  @@index([recipientIc])
+  @@index([recipientName])
+  @@index([templateVersionId])
+  @@map("certificates")
+}
+
+model CertSerialCounter {
+  id           String   @id @default(cuid())
+  seasonId     String
+  typeCode     String   @db.VarChar(10)
+  lastSequence Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  season Season @relation(fields: [seasonId], references: [id])
+
+  @@unique([seasonId, typeCode])
+  @@map("cert_serial_counters")
+}
+
+enum CertTargetType {
+  GENERAL
+  EVENT_PARTICIPANT
+  EVENT_WINNER
+  NON_CONTEST_PARTICIPANT
+  QUIZ_PARTICIPANT
+  QUIZ_WINNER
+  TRAINER
+  CONTINGENT
+  SCHOOL_WINNER
+}
+
+enum CertTemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum CertAssetType {
+  PDF
+  IMAGE
+}
+
+enum CertStatus {
+  DRAFT
+  LISTED
+  READY
+  REVOKED
+}
+
+enum CertRecipientType {
+  PARTICIPANT
+  TRAINER
+  CONTINGENT
+  MANAGER
+  OTHER
 }
