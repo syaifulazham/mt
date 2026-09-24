@@ -6,6 +6,7 @@ import {
   UploadCloud, CheckCircle2, XCircle, Trophy,
   Baby, BookOpen, Award, GraduationCap as CourseIcon, Sparkles,
   Maximize2, Minimize2, FileText, Upload, X, Download,
+  Fingerprint, AlertTriangle,
 } from "lucide-react";
 import { AIImportDialog } from "./AIImportDialog";
 import type { LucideIcon } from "lucide-react";
@@ -32,6 +33,9 @@ type CompetitionDetail = CompetitionListItem & {
   eptimEduCourseId: string | null;
   eptimEduCourseTitle: string | null;
   thirdPartyIntegration: string | null;
+  eptimCsiCompetitionId: string | null;
+  eptimCsiCompetitionName: string | null;
+  eptimCsiCases: CsiCaseRef[] | null;
   eventCompetitions: LinkedEventRow[];
   docs: CompetitionDoc[];
   _count: { teams: number };
@@ -623,6 +627,192 @@ function LinkedEventsSection({ competition }: { competition: CompetitionDetail }
   );
 }
 
+// ── Eptim CSI configuration ──────────────────────────────────────────────────
+
+type CsiCaseRef = { id: string; slug: string; title: string };
+
+type CsiCompetitionOption = {
+  id: string; name: string; description: string | null;
+  time_limit_minutes: number | null; case_count: number;
+};
+
+type CsiCaseOption = CsiCaseRef & {
+  status: string; difficulty: number | null; max_score: number | null;
+};
+
+const CSI_PLAYABLE_STATUSES = new Set(["published", "competition"]);
+
+/**
+ * Picks one CSI competition and the subset of its cases this competition plays.
+ * State lives in ThirdPartySection so the card keeps a single Save button.
+ */
+function EptimCsiConfig({
+  canWrite, csiCompetitionId, selectedCases, onChange,
+}: {
+  canWrite: boolean;
+  csiCompetitionId: string;
+  selectedCases: CsiCaseRef[];
+  onChange: (next: { id: string; name: string | null; cases: CsiCaseRef[] }) => void;
+}) {
+  const [comps,        setComps]        = useState<CsiCompetitionOption[]>([]);
+  const [cases,        setCases]        = useState<CsiCaseOption[]>([]);
+  const [loadingComps, setLoadingComps] = useState(true);
+  const [loadingCases, setLoadingCases] = useState(false);
+  const [err,          setErr]          = useState("");
+
+  useEffect(() => {
+    fetch("/api/v2/organizer/csi/competitions")
+      .then(r => r.json())
+      .then(j => { if (j.error) setErr(j.error); else setComps(j.data ?? []); })
+      .catch(() => setErr("Gagal memuatkan pertandingan Eptim CSI."))
+      .finally(() => setLoadingComps(false));
+  }, []);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!csiCompetitionId) { setCases([]); return; }
+    setLoadingCases(true);
+    setErr("");
+    /* eslint-enable react-hooks/set-state-in-effect */
+    fetch(`/api/v2/organizer/csi/competitions/${csiCompetitionId}/cases`)
+      .then(r => r.json())
+      .then(j => { if (j.error) setErr(j.error); else setCases(j.data ?? []); })
+      .catch(() => setErr("Gagal memuatkan kes pertandingan."))
+      .finally(() => setLoadingCases(false));
+  }, [csiCompetitionId]);
+
+  const selectedIds = new Set(selectedCases.map(c => c.id));
+
+  // Switching competition drops the picked cases: they belong to the old one.
+  function pickCompetition(id: string) {
+    onChange({ id, name: comps.find(c => c.id === id)?.name ?? null, cases: [] });
+  }
+
+  function toggleCase(c: CsiCaseOption) {
+    const next = selectedIds.has(c.id)
+      ? selectedCases.filter(s => s.id !== c.id)
+      : [...selectedCases, { id: c.id, slug: c.slug, title: c.title }];
+    onChange({ id: csiCompetitionId, name: comps.find(c2 => c2.id === csiCompetitionId)?.name ?? null, cases: next });
+  }
+
+  function toggleAll() {
+    const all = selectedIds.size === cases.length;
+    onChange({
+      id: csiCompetitionId,
+      name: comps.find(c => c.id === csiCompetitionId)?.name ?? null,
+      cases: all ? [] : cases.map(c => ({ id: c.id, slug: c.slug, title: c.title })),
+    });
+  }
+
+  // CSI treats both 'published' and 'competition' as playable — see
+  // eptim-csi/lib/auth-helpers.ts. Anything else cannot be started by a player.
+  const unplayable = selectedCases.filter(s => {
+    const live = cases.find(c => c.id === s.id);
+    return live && !CSI_PLAYABLE_STATUSES.has(live.status);
+  });
+
+  return (
+    <div className="ml-7 mt-2 rounded-lg border border-blue-200 bg-white px-4 py-3 space-y-3">
+      <div className="flex items-center gap-1.5">
+        <Fingerprint className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+        <span className="text-xs font-semibold text-blue-700">Konfigurasi Eptim CSI</span>
+      </div>
+
+      {loadingComps ? (
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />Loading CSI competitions…
+        </div>
+      ) : (
+        <>
+          <div>
+            <label className="text-xs text-zinc-500 font-medium block mb-1">CSI Competition</label>
+            <select
+              value={csiCompetitionId}
+              onChange={e => pickCompetition(e.target.value)}
+              disabled={!canWrite}
+              className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="">— No CSI competition linked —</option>
+              {comps.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.case_count} kes{c.time_limit_minutes ? `, ${c.time_limit_minutes} min` : ""})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {csiCompetitionId && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-zinc-500 font-medium">
+                  Kes {selectedCases.length > 0 && <span className="text-blue-600">({selectedCases.length} dipilih)</span>}
+                </label>
+                {canWrite && cases.length > 0 && (
+                  <button type="button" onClick={toggleAll} className="text-[11px] text-blue-600 hover:underline">
+                    {selectedIds.size === cases.length ? "Kosongkan" : "Pilih semua"}
+                  </button>
+                )}
+              </div>
+
+              {loadingCases ? (
+                <div className="flex items-center gap-2 text-xs text-zinc-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />Loading cases…
+                </div>
+              ) : cases.length === 0 ? (
+                <p className="text-xs text-zinc-400">Pertandingan ini belum mempunyai kes.</p>
+              ) : (
+                <div className="space-y-1 max-h-56 overflow-y-auto">
+                  {cases.map(c => (
+                    <label
+                      key={c.id}
+                      className={`flex items-start gap-2 rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors ${
+                        selectedIds.has(c.id) ? "border-blue-300 bg-blue-50" : "border-zinc-200 hover:bg-zinc-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        disabled={!canWrite}
+                        onChange={() => toggleCase(c)}
+                        className="mt-0.5 accent-blue-600"
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm text-zinc-800">{c.title}</span>
+                          <span className={`rounded-full px-1.5 text-[10px] border ${
+                            CSI_PLAYABLE_STATUSES.has(c.status)
+                              ? "bg-green-50 border-green-200 text-green-700"
+                              : "bg-amber-50 border-amber-200 text-amber-700"
+                          }`}>
+                            {c.status}
+                          </span>
+                        </span>
+                        <span className="block text-[11px] text-zinc-400 font-mono truncate">
+                          {c.slug}{c.max_score ? ` · ${c.max_score} mata` : ""}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {unplayable.length > 0 && (
+                <p className="mt-1.5 flex items-start gap-1 text-[11px] text-amber-600">
+                  <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                  {unplayable.length} kes dipilih belum boleh dimainkan — hanya status{" "}
+                  <span className="font-mono">published</span> atau <span className="font-mono">competition</span> boleh dimulakan oleh pemain.
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {err && <p className="text-xs text-red-500">{err}</p>}
+    </div>
+  );
+}
+
 // ── Third-party integrations section ─────────────────────────────────────────
 
 type AvailableIntegrations = { drone: boolean; fc1: boolean; webcraft: boolean; csi: boolean };
@@ -644,20 +834,32 @@ function ThirdPartySection({
   onSaved: (u: Partial<CompetitionDetail>) => void;
 }) {
   const [value,  setValue]  = useState(competition.thirdPartyIntegration ?? "none");
+  const [csiId,   setCsiId]   = useState(competition.eptimCsiCompetitionId ?? "");
+  const [csiName, setCsiName] = useState<string | null>(competition.eptimCsiCompetitionName ?? null);
+  const [csiCases, setCsiCases] = useState<CsiCaseRef[]>(competition.eptimCsiCases ?? []);
   const [dirty,  setDirty]  = useState(false);
   const [saving, setSaving] = useState(false);
   const [err,    setErr]    = useState("");
 
   async function save() {
     setSaving(true); setErr("");
+    // Config for an integration that is no longer selected is cleared rather
+    // than left behind to go stale.
+    const isCsi = value === "eptim-csi";
+    const patch = {
+      thirdPartyIntegration:   value,
+      eptimCsiCompetitionId:   isCsi ? (csiId || null) : null,
+      eptimCsiCompetitionName: isCsi ? (csiId ? csiName : null) : null,
+      eptimCsiCases:           isCsi && csiId ? csiCases : null,
+    };
     try {
       const res = await fetch(`/api/v2/organizer/competitions/${competition.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thirdPartyIntegration: value }),
+        body: JSON.stringify(patch),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Gagal");
-      onSaved({ thirdPartyIntegration: value });
+      onSaved(patch);
       setDirty(false);
     } catch (e) { setErr(e instanceof Error ? e.message : "Gagal menyimpan."); }
     finally { setSaving(false); }
@@ -670,8 +872,8 @@ function ThirdPartySection({
           const available = opt.key === null || availableIntegrations[opt.key];
           const checked   = value === opt.value;
           return (
+            <div key={opt.value}>
             <label
-              key={opt.value}
               className={`flex items-start gap-3 rounded-lg border px-4 py-3 transition-colors cursor-pointer ${
                 !available        ? "opacity-40 cursor-not-allowed border-zinc-200 bg-zinc-50" :
                 checked           ? "border-blue-400 bg-blue-50"
@@ -704,6 +906,17 @@ function ThirdPartySection({
                 <p className="text-xs text-zinc-500 mt-0.5">{opt.desc}</p>
               </div>
             </label>
+            {opt.value === "eptim-csi" && checked && available && (
+              <EptimCsiConfig
+                canWrite={canWrite}
+                csiCompetitionId={csiId}
+                selectedCases={csiCases}
+                onChange={({ id, name, cases }) => {
+                  setCsiId(id); setCsiName(name); setCsiCases(cases); setDirty(true);
+                }}
+              />
+            )}
+            </div>
           );
         })}
       </div>

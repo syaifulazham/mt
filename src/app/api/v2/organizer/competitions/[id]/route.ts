@@ -41,6 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     targetGroupIds,
     eptimEduCourseId, eptimEduCourseTitle,
     thirdPartyIntegration,
+    eptimCsiCompetitionId, eptimCsiCompetitionName, eptimCsiCases,
   } = await req.json();
 
   try {
@@ -69,6 +70,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(eptimEduCourseId       !== undefined && { eptimEduCourseId:    eptimEduCourseId    || null }),
           ...(eptimEduCourseTitle    !== undefined && { eptimEduCourseTitle: eptimEduCourseTitle || null }),
           ...(thirdPartyIntegration  !== undefined && { thirdPartyIntegration: thirdPartyIntegration || "none" }),
+          ...(eptimCsiCompetitionId   !== undefined && { eptimCsiCompetitionId:   eptimCsiCompetitionId   || null }),
+          ...(eptimCsiCompetitionName !== undefined && { eptimCsiCompetitionName: eptimCsiCompetitionName || null }),
+          ...(eptimCsiCases !== undefined && {
+            eptimCsiCases: Array.isArray(eptimCsiCases) && eptimCsiCases.length > 0 ? eptimCsiCases : Prisma.DbNull,
+          }),
         },
         include: {
           targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },

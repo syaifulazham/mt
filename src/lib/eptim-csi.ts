@@ -30,6 +30,11 @@ export type CsiCase = {
   difficulty: number | null; status: string; max_score: number | null;
   cover_url: string | null; briefing_path: string; published_at: string | null;
 };
+export type CsiCompetition = {
+  id: string; name: string; description: string | null;
+  time_limit_minutes: number | null; case_count: number;
+  competition_path: string; created_at: string;
+};
 
 async function req<T = unknown>(path: string, options?: RequestInit): Promise<T> {
   if (!BASE_URL) throw new Error("EPTIMCSI_APP_URL not configured");
@@ -101,6 +106,20 @@ export async function csiGetUser(userId: string): Promise<CsiUser | null> {
 export async function csiListCases(status = "published"): Promise<CsiCase[]> {
   const json = await req<{ cases?: CsiCase[] }>(`/api/v1/cases?status=${encodeURIComponent(status)}`);
   return json.cases ?? [];
+}
+
+/** The organization's CSI competitions, newest first. */
+export async function csiListCompetitions(): Promise<CsiCompetition[]> {
+  const json = await req<{ competitions?: CsiCompetition[] }>("/api/v1/competitions");
+  return json.competitions ?? [];
+}
+
+/** The cases attached to one CSI competition, in the order CSI lists them. */
+export async function csiListCompetitionCases(competitionId: string) {
+  return req<{
+    competition: { id: string; name: string; time_limit_minutes: number | null };
+    cases: CsiCase[];
+  }>(`/api/v1/competitions/${encodeURIComponent(competitionId)}/cases`);
 }
 
 /**
