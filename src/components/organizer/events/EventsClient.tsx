@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network, Fingerprint, AlertTriangle,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -53,6 +53,15 @@ type ZoneOption  = { id: string; name: string };
 
 type CsiCaseRef = { id: string; slug: string; title: string };
 
+/** One quiz assignment. `grade` is null when assigning per target group. */
+type QuizzlyQuizAssignment = {
+  targetGroupId: string;
+  targetGroupName: string;
+  grade: string | null;
+  quizId: string;
+  quizTitle: string;
+};
+
 type EventCompLink = {
   id: string; competitionId: string;
   picName: string | null; picContact: string | null; maxTeams: number;
@@ -61,13 +70,34 @@ type EventCompLink = {
   eptimCsiCompetitionId:   string | null;
   eptimCsiCompetitionName: string | null;
   eptimCsiCases:           CsiCaseRef[] | null;
+  quizzlySessionId:    string | null;
+  quizzlySessionTitle: string | null;
+  quizzlyAssignBy:     "target_group" | "grade" | null;
+  quizzlyQuizMap:      QuizzlyQuizAssignment[] | null;
   competition: {
     id: string; code: string; name: string;
     participationType: string; minTeamSize: number; maxTeamSize: number;
     thirdPartyIntegration: string | null;
-    targetGroups: { targetGroup: { id: string; name: string } }[];
+    targetGroups: { targetGroup: TargetGroupRef }[];
     _count: { teams: number };
   };
+};
+
+type TargetGroupRef = {
+  id: string; name: string;
+  code?: string; schoolLevel?: string;
+  classGrades?: string[]; ageGroup?: string; minAge?: number; maxAge?: number;
+};
+
+type QuizzlySessionOption = {
+  id: string; slug: string; title: string;
+  session_type: string; is_active: boolean; quiz_count: number;
+};
+
+type QuizzlyQuizOption = {
+  quiz: { id: string; slug: string; title: string };
+  version: number; status: string; label: string | null;
+  time_limit_seconds: number | null;
 };
 
 type CsiCompetitionOption = {
@@ -716,6 +746,284 @@ function EptimCsiLinkModal({
   );
 }
 
+// ── Asia Spark Quizzly link modal ─────────────────────────────────────────────
+
+/**
+ * The grade values a target group covers. Class-grade groups carry them in
+ * `classGrades` (see Reference Data → Target Groups); age-range groups have
+ * none, so the whole group is offered as a single row rather than being dropped.
+ */
+function gradesOf(tg: TargetGroupRef): { grade: string; synthetic: boolean }[] {
+  if (tg.classGrades?.length) return tg.classGrades.map((g) => ({ grade: g, synthetic: false }));
+  const label = tg.ageGroup || (tg.minAge || tg.maxAge ? `${tg.minAge}–${tg.maxAge}` : "Semua");
+  return [{ grade: label, synthetic: true }];
+}
+
+/**
+ * Picks one Quizzly competition session and maps its quizzes onto the
+ * competition's target groups — either one quiz per target group, or one quiz per
+ * grade within each target group. Only offered for competitions whose integration
+ * is `asiaspark-quizzly`.
+ */
+function QuizzlyLinkModal({
+  open, ecId, eventId, competitionName, targetGroups,
+  currentSessionId, currentAssignBy, currentMap, onClose, onSaved,
+}: {
+  open: boolean;
+  ecId: string | null;
+  eventId: string;
+  competitionName: string;
+  targetGroups: TargetGroupRef[];
+  currentSessionId: string | null;
+  currentAssignBy: "target_group" | "grade" | null;
+  currentMap: QuizzlyQuizAssignment[];
+  onClose: () => void;
+  onSaved: (
+    sessionId: string | null, sessionTitle: string | null,
+    assignBy: "target_group" | "grade" | null, map: QuizzlyQuizAssignment[],
+  ) => void;
+}) {
+  const [sessions,  setSessions]  = useState<QuizzlySessionOption[]>([]);
+  const [quizzes,   setQuizzes]   = useState<QuizzlyQuizOption[]>([]);
+  const [sessionId, setSessionId] = useState("");
+  const [assignBy,  setAssignBy]  = useState<"target_group" | "grade">("target_group");
+  // keyed `${targetGroupId}` in target-group mode, `${targetGroupId}::${grade}` in grade mode
+  const [picks,     setPicks]     = useState<Record<string, string>>({});
+  const [fetching,  setFetching]  = useState(false);
+  const [loadingQz, setLoadingQz] = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState("");
+
+  const keyFor = (tgId: string, grade: string | null) => (grade === null ? tgId : `${tgId}::${grade}`);
+
+  useEffect(() => {
+    if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setSessionId(currentSessionId ?? "");
+    setAssignBy(currentAssignBy ?? "target_group");
+    setPicks(Object.fromEntries(currentMap.map(m => [keyFor(m.targetGroupId, m.grade), m.quizId])));
+    setError("");
+    setFetching(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    fetch("/api/v2/organizer/quizzly/competition-sessions")
+      .then(r => r.json())
+      .then(j => { if (j.error) setError(j.error); else setSessions(j.data ?? []); })
+      .catch(() => setError("Gagal memuatkan sesi Asia Spark Quizzly."))
+      .finally(() => setFetching(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!open || !sessionId) { setQuizzes([]); return; }
+    setLoadingQz(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    fetch(`/api/v2/organizer/quizzly/competition-sessions/${sessionId}/quizzes`)
+      .then(r => r.json())
+      .then(j => { if (j.error) setError(j.error); else setQuizzes(j.data ?? []); })
+      .catch(() => setError("Gagal memuatkan kuiz sesi ini."))
+      .finally(() => setLoadingQz(false));
+  }, [open, sessionId]);
+
+  const sessionTitle = sessions.find(s => s.id === sessionId)?.title ?? null;
+
+  // Rows are derived, so switching mode never loses the other mode's picks.
+  const rows: { tg: TargetGroupRef; grade: string | null; synthetic: boolean }[] =
+    assignBy === "target_group"
+      ? targetGroups.map(tg => ({ tg, grade: null, synthetic: false }))
+      : targetGroups.flatMap(tg => gradesOf(tg).map(g => ({ tg, grade: g.grade, synthetic: g.synthetic })));
+
+  const assigned = rows.filter(r => picks[keyFor(r.tg.id, r.grade)]).length;
+
+  function buildMap(): QuizzlyQuizAssignment[] {
+    return rows.flatMap(r => {
+      const quizId = picks[keyFor(r.tg.id, r.grade)];
+      if (!quizId) return [];
+      const quiz = quizzes.find(q => q.quiz.id === quizId);
+      return [{
+        targetGroupId:   r.tg.id,
+        targetGroupName: r.tg.name,
+        grade:           r.grade,
+        quizId,
+        quizTitle:       quiz?.quiz.title ?? "",
+      }];
+    });
+  }
+
+  async function handleSave() {
+    if (!ecId) return;
+    setSaving(true); setError("");
+    const cleared = !sessionId;
+    const map = cleared ? [] : buildMap();
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${ecId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quizzlySessionId:    cleared ? null : sessionId,
+          quizzlySessionTitle: cleared ? null : sessionTitle,
+          quizzlyAssignBy:     cleared ? null : assignBy,
+          quizzlyQuizMap:      cleared ? null : map,
+        }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error ?? "Gagal menyimpan"); }
+      onSaved(cleared ? null : sessionId, cleared ? null : sessionTitle, cleared ? null : assignBy, map);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-2xl p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <ListChecks className="h-4 w-4 text-indigo-500" />Konfigurasi Asia Spark Quizzly
+          </DialogTitle>
+          <p className="text-xs text-zinc-400 mt-0.5 truncate">{competitionName}</p>
+        </DialogHeader>
+
+        <div className="px-6 pt-4 space-y-3">
+          {fetching ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs">Sesi pertandingan</Label>
+                <select
+                  value={sessionId}
+                  onChange={e => setSessionId(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="">— Tiada sesi (nyahpautan) —</option>
+                  {sessions.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.title} ({s.quiz_count} kuiz{s.is_active ? "" : ", tidak aktif"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {sessionId && (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
+                      {([
+                        ["target_group", "Ikut Kumpulan Sasaran"],
+                        ["grade",        "Ikut Darjah/Tingkatan"],
+                      ] as const).map(([mode, label]) => (
+                        <button
+                          key={mode} type="button" onClick={() => setAssignBy(mode)}
+                          className={`rounded-md px-3 py-1 text-xs transition-colors ${
+                            assignBy === mode ? "bg-indigo-600 text-white" : "text-zinc-500 hover:text-zinc-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-[11px] text-zinc-400">
+                      {assigned}/{rows.length} dipadankan
+                    </span>
+                  </div>
+
+                  {loadingQz ? (
+                    <div className="flex items-center gap-2 py-2 text-xs text-zinc-400">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />Memuatkan kuiz…
+                    </div>
+                  ) : quizzes.length === 0 ? (
+                    <p className="text-xs text-zinc-400 italic py-1">Sesi ini belum mempunyai kuiz.</p>
+                  ) : targetGroups.length === 0 ? (
+                    <p className="text-xs text-amber-600 py-1">
+                      Pertandingan ini belum mempunyai kumpulan sasaran. Tetapkannya dahulu di Pertandingan.
+                    </p>
+                  ) : (
+                    <div className="rounded-lg border border-zinc-200 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-zinc-50 text-left text-[11px] uppercase tracking-wide text-zinc-500">
+                          <tr>
+                            <th className="px-3 py-1.5">Kumpulan sasaran</th>
+                            {assignBy === "grade" && <th className="px-3 py-1.5">Darjah / Tingkatan</th>}
+                            <th className="px-3 py-1.5">Kuiz</th>
+                          </tr>
+                        </thead>
+                        <tbody className="max-h-72">
+                          {rows.map((r, i) => {
+                            const k = keyFor(r.tg.id, r.grade);
+                            const firstOfGroup = i === 0 || rows[i - 1].tg.id !== r.tg.id;
+                            return (
+                              <tr key={k} className="border-t">
+                                <td className="px-3 py-1.5 align-middle">
+                                  {firstOfGroup ? (
+                                    <span className="text-xs">
+                                      {r.tg.name}
+                                      {r.tg.code && <span className="text-zinc-400 font-mono"> · {r.tg.code}</span>}
+                                    </span>
+                                  ) : null}
+                                </td>
+                                {assignBy === "grade" && (
+                                  <td className="px-3 py-1.5 text-xs text-zinc-600">
+                                    {r.grade}
+                                    {r.synthetic && <span className="text-zinc-400"> (julat umur)</span>}
+                                  </td>
+                                )}
+                                <td className="px-3 py-1.5">
+                                  <select
+                                    value={picks[k] ?? ""}
+                                    onChange={e => setPicks(prev => {
+                                      const next = { ...prev };
+                                      if (e.target.value) next[k] = e.target.value; else delete next[k];
+                                      return next;
+                                    })}
+                                    className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                                  >
+                                    <option value="">— Tiada kuiz —</option>
+                                    {quizzes.map(q => (
+                                      <option key={q.quiz.id} value={q.quiz.id}>
+                                        {q.label || q.quiz.title} (v{q.version}
+                                        {q.time_limit_seconds ? `, ${Math.round(q.time_limit_seconds / 60)} min` : ""})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {assigned < rows.length && quizzes.length > 0 && targetGroups.length > 0 && (
+                    <p className="flex items-start gap-1 text-[11px] text-amber-600">
+                      <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                      Baris tanpa kuiz tidak akan dimasukkan — peserta dalam kumpulan itu tiada kuiz untuk acara ini.
+                    </p>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />{error}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t gap-2 mt-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Batal</Button>
+          <Button onClick={handleSave} disabled={saving || fetching}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Simpan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Competitions section ───────────────────────────────────────────────────────
 
 // ── Prerequisite Event section ────────────────────────────────────────────────
@@ -1160,6 +1468,7 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
   const [deleteTarget,   setDeleteTarget]   = useState<EventCompLink | null>(null);
   const [linkCourseFor,  setLinkCourseFor]  = useState<EventCompLink | null>(null);
   const [linkCsiFor,     setLinkCsiFor]     = useState<EventCompLink | null>(null);
+  const [linkQuizzlyFor, setLinkQuizzlyFor] = useState<EventCompLink | null>(null);
 
   // Judging templates (edit form only)
   const [assignedTemplates,   setAssignedTemplates]   = useState<JudgingTemplateSummary[]>([]);
@@ -1411,6 +1720,33 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                           ) : null}
                         </div>
                       )}
+                      {/* Asia Spark Quizzly session + quiz mapping */}
+                      {link.competition.thirdPartyIntegration === "asiaspark-quizzly" && (
+                        <div className="mt-1">
+                          {canWrite ? (
+                            <button type="button" onClick={() => setLinkQuizzlyFor(link)}
+                              className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors w-fit ${
+                                link.quizzlySessionId
+                                  ? "bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+                                  : "border border-dashed border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600"
+                              }`}>
+                              <ListChecks className="h-3 w-3 shrink-0" />
+                              <span>
+                                {link.quizzlySessionId
+                                  ? `${link.quizzlySessionTitle ?? "Sesi Quizzly"} · ${link.quizzlyQuizMap?.length ?? 0} kuiz ${
+                                      link.quizzlyAssignBy === "grade" ? "ikut darjah" : "ikut kumpulan"}`
+                                  : "Konfigurasi Asia Spark Quizzly…"}
+                              </span>
+                              {link.quizzlySessionId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
+                            </button>
+                          ) : link.quizzlySessionId ? (
+                            <div className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 w-fit">
+                              <ListChecks className="h-3 w-3 shrink-0" />
+                              <span>{link.quizzlySessionTitle} · {link.quizzlyQuizMap?.length ?? 0} kuiz</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                       {(link.picName || link.picContact || link.maxTeams > 0) && (
                         <div className="flex items-center gap-3 mt-1 text-zinc-400">
                           {link.picName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{link.picName}</span>}
@@ -1648,6 +1984,26 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
               : l
           ));
           setLinkCsiFor(null);
+        }}
+      />
+
+      <QuizzlyLinkModal
+        open={!!linkQuizzlyFor}
+        ecId={linkQuizzlyFor?.id ?? null}
+        eventId={eventId}
+        competitionName={linkQuizzlyFor?.competition.name ?? ""}
+        targetGroups={linkQuizzlyFor?.competition.targetGroups.map(tg => tg.targetGroup) ?? []}
+        currentSessionId={linkQuizzlyFor?.quizzlySessionId ?? null}
+        currentAssignBy={linkQuizzlyFor?.quizzlyAssignBy ?? null}
+        currentMap={linkQuizzlyFor?.quizzlyQuizMap ?? []}
+        onClose={() => setLinkQuizzlyFor(null)}
+        onSaved={(sessionId, sessionTitle, assignBy, map) => {
+          setLinks(prev => prev.map(l =>
+            l.id === linkQuizzlyFor?.id
+              ? { ...l, quizzlySessionId: sessionId, quizzlySessionTitle: sessionTitle, quizzlyAssignBy: assignBy, quizzlyQuizMap: map }
+              : l
+          ));
+          setLinkQuizzlyFor(null);
         }}
       />
 

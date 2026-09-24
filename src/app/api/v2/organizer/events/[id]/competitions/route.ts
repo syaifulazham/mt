@@ -10,7 +10,14 @@ function makeEcInclude(eventId: string) {
     competition: {
       include: {
         theme:        { select: { id: true, name: true, color: true } },
-        targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },
+        // classGrades/ageGroup are needed by the Quizzly "By Grade" mapping table.
+        targetGroups: {
+          include: {
+            targetGroup: {
+              select: { id: true, name: true, code: true, schoolLevel: true, classGrades: true, ageGroup: true, minAge: true, maxAge: true },
+            },
+          },
+        },
         _count:       { select: { teams: { where: { teamEvents: { some: { eventId } } } } } },
       },
     },

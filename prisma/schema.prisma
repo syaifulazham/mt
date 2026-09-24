@@ -598,6 +598,10 @@ model EventCompetition {
   eptimCsiCompetitionId   String?
   eptimCsiCompetitionName String?
   eptimCsiCases           Json? // [{ id, slug, title }] — cases picked from the CSI competition
+  quizzlySessionId    String?
+  quizzlySessionTitle String?
+  quizzlyAssignBy     String? // "target_group" | "grade" — how quizzes are matched to participants
+  quizzlyQuizMap      Json? // [{ targetGroupId, targetGroupName, grade, quizId, quizTitle }] — grade is null in target_group mode
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

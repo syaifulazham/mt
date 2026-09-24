@@ -10,7 +10,14 @@ function makeEcInclude(eventId: string) {
     competition: {
       include: {
         theme:        { select: { id: true, name: true, color: true } },
-        targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },
+        // classGrades/ageGroup are needed by the Quizzly "By Grade" mapping table.
+        targetGroups: {
+          include: {
+            targetGroup: {
+              select: { id: true, name: true, code: true, schoolLevel: true, classGrades: true, ageGroup: true, minAge: true, maxAge: true },
+            },
+          },
+        },
         _count:       { select: { teams: { where: { teamEvents: { some: { eventId } } } } } },
       },
     },
@@ -28,7 +35,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     picName, picContact, maxTeams,
     eptimEduCourseId, eptimEduCourseTitle,
     eptimCsiCompetitionId, eptimCsiCompetitionName, eptimCsiCases,
+    quizzlySessionId, quizzlySessionTitle, quizzlyAssignBy, quizzlyQuizMap,
   } = await req.json();
+
+  if (quizzlyAssignBy !== undefined && quizzlyAssignBy !== null
+      && !["target_group", "grade"].includes(quizzlyAssignBy))
+    return NextResponse.json({ error: "INVALID_QUIZZLY_ASSIGN_BY" }, { status: 400 });
 
   const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId } });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -45,6 +57,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(eptimCsiCompetitionName !== undefined && { eptimCsiCompetitionName: eptimCsiCompetitionName || null }),
       ...(eptimCsiCases !== undefined && {
         eptimCsiCases: Array.isArray(eptimCsiCases) && eptimCsiCases.length > 0 ? eptimCsiCases : Prisma.DbNull,
+      }),
+      ...(quizzlySessionId    !== undefined && { quizzlySessionId:    quizzlySessionId    || null }),
+      ...(quizzlySessionTitle !== undefined && { quizzlySessionTitle: quizzlySessionTitle || null }),
+      ...(quizzlyAssignBy     !== undefined && { quizzlyAssignBy:     quizzlyAssignBy     || null }),
+      ...(quizzlyQuizMap !== undefined && {
+        quizzlyQuizMap: Array.isArray(quizzlyQuizMap) && quizzlyQuizMap.length > 0 ? quizzlyQuizMap : Prisma.DbNull,
       }),
     },
     include: makeEcInclude(eventId),
