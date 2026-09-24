@@ -122,6 +122,38 @@ export async function csiListCompetitionCases(competitionId: string) {
   }>(`/api/v1/competitions/${encodeURIComponent(competitionId)}/cases`);
 }
 
+export type CsiSubscription = {
+  id: string; source: string; created_at: string;
+  case: { id: string; slug: string; title: string; status: string; difficulty: number | null };
+};
+
+/**
+ * A player's enrolments. Competition registration writes the same
+ * case_subscriptions record, so this one call answers "registered?" for every
+ * case at once instead of probing each registration endpoint.
+ */
+export async function csiListSubscriptions(userId: string): Promise<CsiSubscription[]> {
+  const json = await req<{ subscriptions?: CsiSubscription[] }>(
+    `/api/v1/subscriptions?user_id=${encodeURIComponent(userId)}`,
+  );
+  return json.subscriptions ?? [];
+}
+
+/**
+ * Register a player onto one case of a CSI competition. Idempotent, and CSI
+ * rejects a case that is not part of the competition with 409.
+ */
+export function csiRegisterCompetitionCase(competitionId: string, userId: string, caseId: string) {
+  return req<{
+    id: string; competition_id: string; user_id: string;
+    case: { id: string; slug: string; title: string; status: string };
+    already_registered: boolean; created_at: string;
+  }>(`/api/v1/competitions/${encodeURIComponent(competitionId)}/registrations`, {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, case_id: caseId }),
+  });
+}
+
 /**
  * Mint a one-time browser login link. It is single-use and expires in 120
  * seconds, so it must be requested at the moment of the click and followed

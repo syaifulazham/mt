@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -51,18 +51,37 @@ type EventDetail = EventListItem & {
 type StateOption = { id: string; name: string };
 type ZoneOption  = { id: string; name: string };
 
+type CsiCaseRef = { id: string; slug: string; title: string };
+
 type EventCompLink = {
   id: string; competitionId: string;
   picName: string | null; picContact: string | null; maxTeams: number;
   eptimEduCourseId:    string | null;
   eptimEduCourseTitle: string | null;
+  eptimCsiCompetitionId:   string | null;
+  eptimCsiCompetitionName: string | null;
+  eptimCsiCases:           CsiCaseRef[] | null;
   competition: {
     id: string; code: string; name: string;
     participationType: string; minTeamSize: number; maxTeamSize: number;
+    thirdPartyIntegration: string | null;
     targetGroups: { targetGroup: { id: string; name: string } }[];
     _count: { teams: number };
   };
 };
+
+type CsiCompetitionOption = {
+  id: string; name: string; description: string | null;
+  time_limit_minutes: number | null; case_count: number;
+};
+
+type CsiCaseOption = CsiCaseRef & {
+  status: string; difficulty: number | null; max_score: number | null;
+};
+
+// CSI treats both 'published' (public) and 'competition' (scoped to a
+// competition inside the org) as playable — eptim-csi/lib/auth-helpers.ts.
+const CSI_PLAYABLE_STATUSES = new Set(["published", "competition"]);
 
 type EduCourse = {
   id: string; title: string; status: string; level: string | null;
@@ -490,6 +509,206 @@ function EptimEduLinkModal({
           <Button onClick={handleSave} disabled={saving || fetching}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             {selectedId ? "Pautan Kursus" : "Simpan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Eptim CSI link modal ──────────────────────────────────────────────────────
+
+/**
+ * Picks one CSI competition and the subset of its cases this event–competition
+ * plays. Only offered for competitions whose integration is `eptim-csi`.
+ */
+function EptimCsiLinkModal({
+  open, ecId, eventId, competitionName, currentCsiId, currentCases, onClose, onSaved,
+}: {
+  open: boolean;
+  ecId: string | null;
+  eventId: string;
+  competitionName: string;
+  currentCsiId: string | null;
+  currentCases: CsiCaseRef[];
+  onClose: () => void;
+  onSaved: (csiId: string | null, csiName: string | null, cases: CsiCaseRef[]) => void;
+}) {
+  const [comps,        setComps]        = useState<CsiCompetitionOption[]>([]);
+  const [cases,        setCases]        = useState<CsiCaseOption[]>([]);
+  const [csiId,        setCsiId]        = useState<string>("");
+  const [picked,       setPicked]       = useState<CsiCaseRef[]>([]);
+  const [fetching,     setFetching]     = useState(false);
+  const [loadingCases, setLoadingCases] = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [error,        setError]        = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setCsiId(currentCsiId ?? "");
+    setPicked(currentCases);
+    setError("");
+    setFetching(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    fetch("/api/v2/organizer/csi/competitions")
+      .then(r => r.json())
+      .then(j => { if (j.error) setError(j.error); else setComps(j.data ?? []); })
+      .catch(() => setError("Gagal memuatkan pertandingan Eptim CSI."))
+      .finally(() => setFetching(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!open || !csiId) { setCases([]); return; }
+    setLoadingCases(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    fetch(`/api/v2/organizer/csi/competitions/${csiId}/cases`)
+      .then(r => r.json())
+      .then(j => { if (j.error) setError(j.error); else setCases(j.data ?? []); })
+      .catch(() => setError("Gagal memuatkan kes pertandingan."))
+      .finally(() => setLoadingCases(false));
+  }, [open, csiId]);
+
+  const pickedIds = new Set(picked.map(c => c.id));
+  const csiName   = comps.find(c => c.id === csiId)?.name ?? null;
+
+  const unplayable = picked.filter(p => {
+    const live = cases.find(c => c.id === p.id);
+    return live && !CSI_PLAYABLE_STATUSES.has(live.status);
+  });
+
+  async function handleSave() {
+    if (!ecId) return;
+    setSaving(true); setError("");
+    const cleared = !csiId;
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${ecId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eptimCsiCompetitionId:   cleared ? null : csiId,
+          eptimCsiCompetitionName: cleared ? null : csiName,
+          eptimCsiCases:           cleared ? null : picked,
+        }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error ?? "Gagal menyimpan"); }
+      onSaved(cleared ? null : csiId, cleared ? null : csiName, cleared ? [] : picked);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Gagal menyimpan");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-5 pb-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Fingerprint className="h-4 w-4 text-blue-500" />Konfigurasi Eptim CSI
+          </DialogTitle>
+          <p className="text-xs text-zinc-400 mt-0.5 truncate">{competitionName}</p>
+        </DialogHeader>
+
+        <div className="px-6 pt-4 space-y-3">
+          {fetching ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs">Pertandingan CSI</Label>
+                <select
+                  value={csiId}
+                  onChange={e => { setCsiId(e.target.value); setPicked([]); }}
+                  className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="">— Tiada pertandingan CSI (nyahpautan) —</option>
+                  {comps.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.case_count} kes{c.time_limit_minutes ? `, ${c.time_limit_minutes} min` : ""})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {csiId && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs">
+                      Kes {picked.length > 0 && <span className="text-blue-600 font-normal">({picked.length} dipilih)</span>}
+                    </Label>
+                    {cases.length > 0 && (
+                      <button type="button"
+                        onClick={() => setPicked(pickedIds.size === cases.length ? [] : cases.map(c => ({ id: c.id, slug: c.slug, title: c.title })))}
+                        className="text-[11px] text-blue-600 hover:underline">
+                        {pickedIds.size === cases.length ? "Kosongkan" : "Pilih semua"}
+                      </button>
+                    )}
+                  </div>
+
+                  {loadingCases ? (
+                    <div className="flex items-center gap-2 py-2 text-xs text-zinc-400">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />Memuatkan kes…
+                    </div>
+                  ) : cases.length === 0 ? (
+                    <p className="text-xs text-zinc-400 italic py-1">Pertandingan ini belum mempunyai kes.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                      {cases.map(c => (
+                        <label key={c.id}
+                          className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${
+                            pickedIds.has(c.id) ? "border-blue-500 bg-blue-50" : "border-zinc-200 hover:bg-zinc-50"
+                          }`}>
+                          <input
+                            type="checkbox"
+                            checked={pickedIds.has(c.id)}
+                            onChange={() => setPicked(prev => pickedIds.has(c.id)
+                              ? prev.filter(p => p.id !== c.id)
+                              : [...prev, { id: c.id, slug: c.slug, title: c.title }])}
+                            className="mt-0.5 accent-blue-600"
+                          />
+                          <span className="flex-1 min-w-0">
+                            <span className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-medium">{c.title}</span>
+                              <span className={`rounded-full px-1.5 text-[10px] border ${
+                                CSI_PLAYABLE_STATUSES.has(c.status)
+                                  ? "bg-green-50 border-green-200 text-green-700"
+                                  : "bg-amber-50 border-amber-200 text-amber-700"
+                              }`}>{c.status}</span>
+                            </span>
+                            <span className="block text-[11px] text-zinc-400 font-mono truncate">
+                              {c.slug}{c.max_score ? ` · ${c.max_score} mata` : ""}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {unplayable.length > 0 && (
+                    <p className="mt-2 flex items-start gap-1 text-[11px] text-amber-600">
+                      <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                      {unplayable.length} kes dipilih belum boleh dimainkan — hanya status{" "}
+                      <span className="font-mono">published</span> atau <span className="font-mono">competition</span> boleh dimulakan oleh pemain.
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />{error}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t gap-2 mt-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Batal</Button>
+          <Button onClick={handleSave} disabled={saving || fetching}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Simpan
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -940,6 +1159,7 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
 
   const [deleteTarget,   setDeleteTarget]   = useState<EventCompLink | null>(null);
   const [linkCourseFor,  setLinkCourseFor]  = useState<EventCompLink | null>(null);
+  const [linkCsiFor,     setLinkCsiFor]     = useState<EventCompLink | null>(null);
 
   // Judging templates (edit form only)
   const [assignedTemplates,   setAssignedTemplates]   = useState<JudgingTemplateSummary[]>([]);
@@ -1165,6 +1385,32 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                           </div>
                         ) : null}
                       </div>
+                      {/* Eptim CSI competition + cases — only for CSI-integrated competitions */}
+                      {link.competition.thirdPartyIntegration === "eptim-csi" && (
+                        <div className="mt-1">
+                          {canWrite ? (
+                            <button type="button" onClick={() => setLinkCsiFor(link)}
+                              className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors w-fit ${
+                                link.eptimCsiCompetitionId
+                                  ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                                  : "border border-dashed border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600"
+                              }`}>
+                              <Fingerprint className="h-3 w-3 shrink-0" />
+                              <span>
+                                {link.eptimCsiCompetitionId
+                                  ? `${link.eptimCsiCompetitionName ?? "Pertandingan CSI"} · ${link.eptimCsiCases?.length ?? 0} kes`
+                                  : "Konfigurasi Eptim CSI…"}
+                              </span>
+                              {link.eptimCsiCompetitionId && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
+                            </button>
+                          ) : link.eptimCsiCompetitionId ? (
+                            <div className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 w-fit">
+                              <Fingerprint className="h-3 w-3 shrink-0" />
+                              <span>{link.eptimCsiCompetitionName} · {link.eptimCsiCases?.length ?? 0} kes</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                       {(link.picName || link.picContact || link.maxTeams > 0) && (
                         <div className="flex items-center gap-3 mt-1 text-zinc-400">
                           {link.picName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{link.picName}</span>}
@@ -1384,6 +1630,24 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
               : l
           ));
           setLinkCourseFor(null);
+        }}
+      />
+
+      <EptimCsiLinkModal
+        open={!!linkCsiFor}
+        ecId={linkCsiFor?.id ?? null}
+        eventId={eventId}
+        competitionName={linkCsiFor?.competition.name ?? ""}
+        currentCsiId={linkCsiFor?.eptimCsiCompetitionId ?? null}
+        currentCases={linkCsiFor?.eptimCsiCases ?? []}
+        onClose={() => setLinkCsiFor(null)}
+        onSaved={(csiId, csiName, cases) => {
+          setLinks(prev => prev.map(l =>
+            l.id === linkCsiFor?.id
+              ? { ...l, eptimCsiCompetitionId: csiId, eptimCsiCompetitionName: csiName, eptimCsiCases: cases }
+              : l
+          ));
+          setLinkCsiFor(null);
         }}
       />
 

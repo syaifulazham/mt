@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
@@ -23,7 +24,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id: eventId, ecId } = await params;
 
-  const { picName, picContact, maxTeams, eptimEduCourseId, eptimEduCourseTitle } = await req.json();
+  const {
+    picName, picContact, maxTeams,
+    eptimEduCourseId, eptimEduCourseTitle,
+    eptimCsiCompetitionId, eptimCsiCompetitionName, eptimCsiCases,
+  } = await req.json();
 
   const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId } });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -36,6 +41,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(maxTeams            !== undefined && { maxTeams:            Number(maxTeams)   || 0    }),
       ...(eptimEduCourseId    !== undefined && { eptimEduCourseId:    eptimEduCourseId    ?? null }),
       ...(eptimEduCourseTitle !== undefined && { eptimEduCourseTitle: eptimEduCourseTitle ?? null }),
+      ...(eptimCsiCompetitionId   !== undefined && { eptimCsiCompetitionId:   eptimCsiCompetitionId   || null }),
+      ...(eptimCsiCompetitionName !== undefined && { eptimCsiCompetitionName: eptimCsiCompetitionName || null }),
+      ...(eptimCsiCases !== undefined && {
+        eptimCsiCases: Array.isArray(eptimCsiCases) && eptimCsiCases.length > 0 ? eptimCsiCases : Prisma.DbNull,
+      }),
     },
     include: makeEcInclude(eventId),
   });

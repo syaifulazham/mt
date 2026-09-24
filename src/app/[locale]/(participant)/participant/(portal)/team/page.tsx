@@ -7,6 +7,7 @@ import { EptimEduLoginButton } from "@/components/participant/EptimEduLoginButto
 import { EptimDroneTeamButton } from "@/components/participant/EptimDroneTeamButton";
 import { EptimWebcraftButton } from "@/components/participant/EptimWebcraftButton";
 import { EptimCsiTeamButton } from "@/components/participant/EptimCsiTeamButton";
+import { EptimCsiCasesTable } from "@/components/participant/EptimCsiCasesTable";
 
 export const metadata: Metadata = { title: "Pasukan Saya" };
 
@@ -68,6 +69,7 @@ export default async function TeamPage() {
                       competitionId: true,
                       eptimEduCourseId: true,
                       eptimEduCourseTitle: true,
+                      eptimCsiCompetitionId: true,
                     },
                   },
                 },
@@ -248,27 +250,32 @@ export default async function TeamPage() {
                       return (
                         <div
                           key={event.id}
-                          className="flex items-center justify-between gap-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700/50 px-3 py-2.5"
+                          className="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-700/50 px-3 py-2.5"
                         >
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium dark:text-zinc-200 truncate">
-                              {event.name}
-                            </p>
-                            <p className="text-xs text-zinc-400">
-                              {formatDateRange(event.startDate, event.endDate)}
-                            </p>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium dark:text-zinc-200 truncate">
+                                {event.name}
+                              </p>
+                              <p className="text-xs text-zinc-400">
+                                {formatDateRange(event.startDate, event.endDate)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {courseId && (
+                                <EptimEduLoginButton teamId={team.id} eventId={event.id} />
+                              )}
+                              {comp.thirdPartyIntegration === "eptim-drone" && (
+                                <EptimDroneTeamButton teamId={team.id} />
+                              )}
+                              {comp.thirdPartyIntegration === "eptim-webcraft" && (
+                                <EptimWebcraftButton />
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {courseId && (
-                              <EptimEduLoginButton teamId={team.id} eventId={event.id} />
-                            )}
-                            {comp.thirdPartyIntegration === "eptim-drone" && (
-                              <EptimDroneTeamButton teamId={team.id} />
-                            )}
-                            {comp.thirdPartyIntegration === "eptim-webcraft" && (
-                              <EptimWebcraftButton />
-                            )}
-                          </div>
+                          {ec?.eptimCsiCompetitionId && (
+                            <EptimCsiCasesTable teamId={team.id} eventId={event.id} />
+                          )}
                         </div>
                       );
                     })}

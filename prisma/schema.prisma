@@ -557,9 +557,6 @@ model Competition {
   eptimEduCourseId             String?
   eptimEduCourseTitle          String?
   thirdPartyIntegration        String?           @default("none")
-  eptimCsiCompetitionId        String?
-  eptimCsiCompetitionName      String?
-  eptimCsiCases                Json? // [{ id, slug, title }] — snapshot of the cases picked from the CSI competition
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
 
@@ -598,6 +595,9 @@ model EventCompetition {
   maxTeams            Int      @default(0)
   eptimEduCourseId    String?
   eptimEduCourseTitle String?
+  eptimCsiCompetitionId   String?
+  eptimCsiCompetitionName String?
+  eptimCsiCases           Json? // [{ id, slug, title }] — cases picked from the CSI competition
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
