@@ -18,8 +18,11 @@ import {
   PartyPopper,
   Gamepad2,
   Eye,
+  EyeOff,
+  Copy,
   Clock,
   RefreshCw,
+  KeyRound,
 } from "lucide-react";
 import { buildSlotSchedule, fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
@@ -80,6 +83,24 @@ type WalkInReg = {
 
 type SlotChoice = { sessionNumber: number; slotNumber: number };
 
+type QuizzlyToken = {
+  token: string;
+  startUrl: string | null;
+  quizTitle: string | null;
+  expiresAt: string | null;
+};
+
+type QuizzlyEntry = {
+  id: string;
+  sessionTitle: string | null;
+  assignBy: string | null;
+  targetGroupName: string | null;
+  quiz: { id: string; title: string; grade: string | null } | null;
+  token: QuizzlyToken | null;
+  event: { id: string; name: string; slug: string; startDate: string | null; endDate: string | null };
+  competition: { id: string; code: string; name: string; theme: { name: string; color: string | null } | null };
+};
+
 type Props = {
   participant: Participant;
   teams: TeamEntry[];
@@ -88,6 +109,9 @@ type Props = {
   totalCompetitions: number;
   walkInCompetitions: WalkInEntry[];
   existingRegistrations: Record<string, WalkInReg>;
+  quizzlyCompetitions: QuizzlyEntry[];
+  quizzlyRegistered: boolean;
+  quizzlyCanRegister: boolean;
 };
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -526,7 +550,52 @@ export function DashboardClient({
   totalCompetitions,
   walkInCompetitions,
   existingRegistrations,
+  quizzlyCompetitions,
+  quizzlyRegistered,
+  quizzlyCanRegister,
 }: Props) {
+  const [quizzlyReg, setQuizzlyReg]       = useState(quizzlyRegistered);
+  const [quizzlyBusy, setQuizzlyBusy]     = useState<string | null>(null); // "register" | eventCompetitionId
+  const [quizzlyErr, setQuizzlyErr]       = useState("");
+  const [tokens, setTokens]               = useState<Record<string, QuizzlyToken>>(
+    Object.fromEntries(quizzlyCompetitions.flatMap((q) => (q.token ? [[q.id, q.token]] : []))),
+  );
+  const [shownTokens, setShownTokens]     = useState<Record<string, boolean>>({});
+  const [copiedToken, setCopiedToken]     = useState<string | null>(null);
+
+  async function registerQuizzly() {
+    setQuizzlyBusy("register"); setQuizzlyErr("");
+    try {
+      const res  = await fetch("/api/v2/participant/quizzly/register", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Pendaftaran gagal");
+      setQuizzlyReg(true);
+    } catch (e) {
+      setQuizzlyErr(e instanceof Error ? e.message : "Pendaftaran gagal");
+    } finally { setQuizzlyBusy(null); }
+  }
+
+  async function requestToken(eventCompetitionId: string) {
+    setQuizzlyBusy(eventCompetitionId); setQuizzlyErr("");
+    try {
+      const res = await fetch("/api/v2/participant/quizzly/token", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventCompetitionId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Gagal memohon token");
+      setTokens((prev) => ({ ...prev, [eventCompetitionId]: json as QuizzlyToken }));
+      setShownTokens((prev) => ({ ...prev, [eventCompetitionId]: true }));
+    } catch (e) {
+      setQuizzlyErr(e instanceof Error ? e.message : "Gagal memohon token");
+    } finally { setQuizzlyBusy(null); }
+  }
+
+  async function copyToken(id: string, token: string) {
+    await navigator.clipboard.writeText(token).catch(() => {});
+    setCopiedToken(id);
+    setTimeout(() => setCopiedToken((c) => (c === id ? null : c)), 1500);
+  }
   const [registrations, setRegistrations] = useState<Record<string, WalkInReg>>(existingRegistrations);
   const [registerTarget, setRegisterTarget] = useState<WalkInEntry | null>(null);
   const [registering, setRegistering]     = useState(false);
@@ -723,6 +792,163 @@ export function DashboardClient({
           )}
         </div>
       </div>
+
+      {/* ── Asia Spark Quiz ─────────────────────────────────────────── */}
+      {quizzlyCompetitions.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold dark:text-zinc-100">Asia Spark Quiz</h2>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Kuiz dalam talian yang layak untuk anda, mengikut kumpulan sasaran
+                {participant.classGrade ? ` dan ${participant.classGrade}` : ""}.
+              </p>
+            </div>
+
+            {/* Account state — one registration covers every quiz below */}
+            {quizzlyReg ? (
+              <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 px-2.5 py-1 text-xs font-medium">
+                <CheckCircle className="h-3.5 w-3.5" /> Akaun berdaftar
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={registerQuizzly}
+                disabled={quizzlyBusy !== null || !quizzlyCanRegister}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 text-xs font-medium transition-colors"
+              >
+                {quizzlyBusy === "register"
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <KeyRound className="h-3.5 w-3.5" />}
+                Daftar Asia Spark Quiz
+              </button>
+            )}
+          </div>
+
+          {!quizzlyCanRegister && !quizzlyReg && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Nombor kad pengenalan diperlukan untuk mendaftar. Kemas kini di Profil dahulu.
+            </p>
+          )}
+          {quizzlyErr && (
+            <p className="text-xs text-red-500 dark:text-red-400">{quizzlyErr}</p>
+          )}
+
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden">
+            {quizzlyCompetitions.map((q) => (
+              <div key={q.id} className="px-4 py-3 flex items-start gap-3 flex-wrap sm:flex-nowrap">
+                <span className="mt-0.5 shrink-0 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 p-1.5">
+                  <Gamepad2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                </span>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                    <span className="font-mono text-xs text-zinc-400 mr-1.5">{q.competition.code}</span>
+                    {q.competition.name}
+                  </p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                    <span className="truncate">{q.event.name}</span>
+                    {(q.event.startDate || q.event.endDate) && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3 shrink-0" />
+                        {q.event.startDate === q.event.endDate
+                          ? fmt(q.event.startDate)
+                          : `${fmt(q.event.startDate) ?? "?"} – ${fmt(q.event.endDate) ?? "?"}`}
+                      </span>
+                    )}
+                    {q.sessionTitle && <span className="truncate">{q.sessionTitle}</span>}
+                  </div>
+
+                  {/* Which quiz, and why this one */}
+                  {q.quiz ? (
+                    <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 font-medium">
+                        {q.quiz.title}
+                      </span>
+                      <span className="text-zinc-400">
+                        {q.assignBy === "grade" && q.quiz.grade
+                          ? `untuk ${q.quiz.grade}`
+                          : q.targetGroupName
+                            ? `untuk ${q.targetGroupName}`
+                            : ""}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
+                      Kuiz belum ditetapkan untuk kumpulan anda — hubungi penganjur.
+                    </p>
+                  )}
+                </div>
+
+                {/* Token: request, reveal, copy, start */}
+                <div className="shrink-0 self-center">
+                  {!q.quiz ? null : !quizzlyReg ? (
+                    <span className="text-[11px] text-zinc-400">Daftar dahulu</span>
+                  ) : !tokens[q.id] ? (
+                    <button
+                      type="button"
+                      onClick={() => requestToken(q.id)}
+                      disabled={quizzlyBusy !== null}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 disabled:opacity-50 text-indigo-700 dark:text-indigo-300 px-2.5 py-1.5 text-xs font-medium transition-colors"
+                    >
+                      {quizzlyBusy === q.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <KeyRound className="h-3.5 w-3.5" />}
+                      Mohon token
+                    </button>
+                  ) : (
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-1">
+                        <code className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-1 text-sm font-mono tracking-[0.2em] text-zinc-800 dark:text-zinc-100">
+                          {shownTokens[q.id] ? tokens[q.id].token : "••••••"}
+                        </code>
+                        <button
+                          type="button"
+                          title={shownTokens[q.id] ? "Sembunyi" : "Papar"}
+                          onClick={() => setShownTokens((p) => ({ ...p, [q.id]: !p[q.id] }))}
+                          className="rounded-md p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                        >
+                          {shownTokens[q.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          title="Salin token"
+                          onClick={() => copyToken(q.id, tokens[q.id].token)}
+                          className="rounded-md p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                        >
+                          {copiedToken === q.id
+                            ? <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                            : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                      {tokens[q.id].startUrl && (
+                        <a
+                          href={tokens[q.id].startUrl!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                        >
+                          Mula kuiz <ArrowUpRight className="h-3 w-3" />
+                        </a>
+                      )}
+                      {tokens[q.id].expiresAt && (
+                        <span className="text-[10px] text-zinc-400">
+                          Sah hingga {fmt(tokens[q.id].expiresAt)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-zinc-400 dark:text-zinc-500">
+            Token hanya boleh digunakan sekali. Jangan kongsi dengan orang lain — sesiapa yang
+            memilikinya boleh menduduki kuiz sebagai anda.
+          </p>
+        </div>
+      )}
 
       {/* ── Walk-in section ─────────────────────────────────────────── */}
       {walkInCompetitions.length > 0 && (

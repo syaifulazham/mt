@@ -398,9 +398,55 @@ model Participant {
   webcraftAccess        ParticipantWebcraftAccess?
   walkInRegistrations   WalkInRegistration[]
   walkInFormSubmissions WalkInFormSubmission[]
+  quizzlyAccess         ParticipantQuizzlyAccess?
+  quizzlyTokens         ParticipantQuizzlyToken[]
 
   @@index([contingentId])
   @@map("contestants")
+}
+
+/**
+ * Proof that this participant exists in Asia Spark Quizzly. Quizzly has no
+ * "look up by personal_id" endpoint, so registration state has to be recorded
+ * here; `personalId` is what was sent (the IC), and creation is idempotent
+ * upstream via ?upsert=true.
+ */
+model ParticipantQuizzlyAccess {
+  id                 String   @id @default(cuid())
+  participantId      String   @unique
+  quizzlyParticipantId String
+  personalId         String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@map("participant_quizzly_access")
+}
+
+/**
+ * The most recent login token issued to a participant for one event-competition.
+ * Quizzly tokens are single-use 6-digit codes, so re-issuing replaces the row —
+ * the previous code is dead the moment it is redeemed anyway.
+ */
+model ParticipantQuizzlyToken {
+  id                 String    @id @default(cuid())
+  participantId      String
+  eventCompetitionId String
+  quizId             String
+  quizTitle          String?
+  tokenId            String
+  token              String
+  startUrl           String?
+  expiresAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, eventCompetitionId])
+  @@index([participantId])
+  @@map("participant_quizzly_tokens")
 }
 
 model ParticipantSession {

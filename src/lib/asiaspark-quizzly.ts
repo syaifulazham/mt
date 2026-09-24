@@ -87,9 +87,115 @@ export async function quizzlySessionQuizzes(sessionId: string): Promise<{
   return { session: json.session ?? null, data: json.data ?? [] };
 }
 
+export type QuizzlyParticipant = {
+  id: string; personal_id: string; full_name: string;
+  grade: string | null; school: string | null; nationality: string | null;
+};
+
+export type QuizzlyIssuedToken = {
+  token: string; token_id: string;
+  participant: { id: string; personal_id: string; full_name: string };
+  quiz: { id: string; title: string; version: number; question_count?: number; time_limit_seconds?: number | null };
+  competition_session_id: string | null;
+  start_url: string;
+  expires_at: string;
+  single_use: boolean;
+};
+
+/**
+ * Create or update the participant. `?upsert=true` makes this idempotent on
+ * `personal_id`, so re-registering is safe and returns 200 instead of a 409.
+ */
+export function quizzlyUpsertParticipant(input: {
+  personalId: string; fullName: string;
+  grade?: string | null; school?: string | null; nationality?: string | null;
+  email?: string | null; age?: number | null; gender?: "male" | "female" | null;
+}) {
+  return req<QuizzlyParticipant>("/api/v1/participants?upsert=true", {
+    method: "POST",
+    body: JSON.stringify({
+      personal_id: input.personalId,
+      full_name:   input.fullName,
+      ...(input.grade       ? { grade:       input.grade.slice(0, 50) }   : {}),
+      ...(input.school      ? { school:      input.school.slice(0, 200) } : {}),
+      ...(input.nationality ? { nationality: input.nationality }          : {}),
+      ...(input.email       ? { email:       input.email }                : {}),
+      ...(input.age != null ? { age:         input.age }                  : {}),
+      ...(input.gender      ? { gender:      input.gender }               : {}),
+    }),
+  });
+}
+
+/**
+ * Mint a single-use login token. `competition_session_id` is passed on purpose:
+ * without it the attempt does not show under that session in Quizzly's results,
+ * and the quiz-in-session check (422) never runs.
+ */
+export function quizzlyIssueToken(input: {
+  personalId: string; quizId: string; competitionSessionId?: string | null; expiresInSeconds?: number;
+}) {
+  return req<QuizzlyIssuedToken>("/api/v1/sessions/tokens", {
+    method: "POST",
+    body: JSON.stringify({
+      personal_id: input.personalId,
+      quiz_id:     input.quizId,
+      ...(input.competitionSessionId ? { competition_session_id: input.competitionSessionId } : {}),
+      expires_in:  input.expiresInSeconds ?? 172_800, // 48 h
+    }),
+  });
+}
+
+export type QuizzlyTokenStatus = {
+  token_id: string;
+  status: "active" | "not_yet_valid" | "redeemed" | "expired" | "revoked";
+  expires_at: string | null; redeemed_at: string | null;
+  session: { state: string; percentage: number | null; raw_score: number | null; max_score: number | null } | null;
+};
+
+export function quizzlyTokenStatus(tokenId: string) {
+  return req<QuizzlyTokenStatus>(`/api/v1/sessions/tokens/${encodeURIComponent(tokenId)}`);
+}
+
 /** Confirms the key and reports its effective scopes — useful for diagnosis. */
 export function quizzlyPing() {
   return req<{ status: string; org_id: string; scopes: string[]; quiz_ids: string[] | null }>("/api/v1/ping");
+}
+
+/** One row of `EventCompetition.quizzlyQuizMap`; `grade` is null in target-group mode. */
+export type QuizzlyQuizAssignment = {
+  targetGroupId: string;
+  targetGroupName: string;
+  grade: string | null;
+  quizId: string;
+  quizTitle: string;
+};
+
+/**
+ * Which quiz a participant sits for one event-competition, given the target
+ * groups they fall into.
+ *
+ * In grade mode the match is on the participant's class grade. Age-range target
+ * groups have no class grades, so the organizer's table holds a single row
+ * labelled with the age range instead — those fall back to a per-group match,
+ * otherwise a BELIA participant would be silently quizless.
+ */
+export function resolveQuizzlyAssignment(
+  map: QuizzlyQuizAssignment[],
+  assignBy: string | null,
+  matchedGroups: { id: string; classGrades: string[] }[],
+  classGrade: string | null,
+): QuizzlyQuizAssignment | null {
+  const ids = new Set(matchedGroups.map((g) => g.id));
+  const gradeless = new Set(matchedGroups.filter((g) => g.classGrades.length === 0).map((g) => g.id));
+
+  if (assignBy === "grade") {
+    return map.find((m) => ids.has(m.targetGroupId) && m.grade === classGrade)
+        ?? map.find((m) => gradeless.has(m.targetGroupId))
+        ?? null;
+  }
+  return map.find((m) => ids.has(m.targetGroupId) && m.grade === null)
+      ?? map.find((m) => ids.has(m.targetGroupId))
+      ?? null;
 }
 
 export function quizzlyErrorMessage(err: { status?: number; message?: string }): string {

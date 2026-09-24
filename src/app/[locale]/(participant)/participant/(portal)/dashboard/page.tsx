@@ -4,6 +4,8 @@ import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
 import { DashboardClient } from "@/components/participant/DashboardClient";
 import type { SlotScheduleConfig } from "@/lib/walkin-slots";
+import { matchingTargetGroups } from "@/lib/targetGroupMatch";
+import { resolveQuizzlyAssignment, type QuizzlyQuizAssignment } from "@/lib/asiaspark-quizzly";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -20,7 +22,10 @@ export default async function DashboardPage() {
       eduLevel: true,
       classGrade: true,
       ppki: true,
+      age: true,
+      ic: true,
       contingent: { select: { name: true, shortName: true } },
+      quizzlyAccess: { select: { personalId: true } },
     },
   });
   if (!participant) redirect("/participant/sign-in");
@@ -113,6 +118,81 @@ export default async function DashboardPage() {
     orderBy: [{ event: { startDate: "asc" } }, { competition: { code: "asc" } }],
   });
 
+  // ── Asia Spark Quizzly ──────────────────────────────────────────────────
+  // Event-competitions whose competition is Quizzly-integrated and which have a
+  // session configured. Eligibility is the precise target-group rule (class
+  // grade / age range), not just the school-level filter used above, because the
+  // quiz a participant sits is chosen by exactly that.
+  const quizzlyLinks = await db.eventCompetition.findMany({
+    where: {
+      quizzlySessionId: { not: null },
+      competition: { thirdPartyIntegration: "asiaspark-quizzly" },
+      event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
+    },
+    select: {
+      id: true,
+      quizzlySessionTitle: true,
+      quizzlyAssignBy: true,
+      quizzlyQuizMap: true,
+      event: { select: { id: true, name: true, slug: true, startDate: true, endDate: true } },
+      competition: {
+        select: {
+          id: true, code: true, name: true,
+          theme: { select: { name: true, color: true } },
+          targetGroups: {
+            select: {
+              targetGroup: {
+                select: { id: true, name: true, schoolLevel: true, ppki: true, classGrades: true, minAge: true, maxAge: true },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ event: { startDate: "asc" } }, { competition: { code: "asc" } }],
+  });
+
+  const quizzlyTokens = await db.participantQuizzlyToken.findMany({
+    where:  { participantId: session.participantId },
+    select: { eventCompetitionId: true, token: true, startUrl: true, quizTitle: true, expiresAt: true },
+  });
+  const tokenByEc = new Map(quizzlyTokens.map((t) => [t.eventCompetitionId, t]));
+
+  const quizzlyData = quizzlyLinks.flatMap((ec) => {
+    const groups  = ec.competition.targetGroups.map((tg) => tg.targetGroup);
+    const matched = matchingTargetGroups(participant, groups);
+    if (matched.length === 0) return [];
+
+    const map = (ec.quizzlyQuizMap as QuizzlyQuizAssignment[] | null) ?? [];
+    const assignment = resolveQuizzlyAssignment(map, ec.quizzlyAssignBy, matched, participant.classGrade);
+
+    const issued = tokenByEc.get(ec.id);
+
+    return [{
+      id:              ec.id,
+      sessionTitle:    ec.quizzlySessionTitle,
+      assignBy:        ec.quizzlyAssignBy,
+      targetGroupName: matched[0].name,
+      quiz:            assignment ? { id: assignment.quizId, title: assignment.quizTitle, grade: assignment.grade } : null,
+      token: issued
+        ? {
+            token:     issued.token,
+            startUrl:  issued.startUrl,
+            quizTitle: issued.quizTitle,
+            expiresAt: issued.expiresAt?.toISOString() ?? null,
+          }
+        : null,
+      event: {
+        id:        ec.event.id,
+        name:      ec.event.name,
+        slug:      ec.event.slug,
+        startDate: ec.event.startDate?.toISOString() ?? null,
+        endDate:   ec.event.endDate?.toISOString()   ?? null,
+      },
+      competition: ec.competition,
+    }];
+  });
+
   // Existing walk-in registrations for this participant
   const existingRegs = await db.walkInRegistration.findMany({
     where: { participantId: session.participantId },
@@ -177,6 +257,9 @@ export default async function DashboardPage() {
       totalCompetitions={totalCompetitions}
       walkInCompetitions={walkInData}
       existingRegistrations={existingRegistrations}
+      quizzlyCompetitions={quizzlyData}
+      quizzlyRegistered={!!participant.quizzlyAccess}
+      quizzlyCanRegister={!!participant.ic?.replace(/\D/g, "")}
     />
   );
 }
