@@ -625,14 +625,17 @@ function LinkedEventsSection({ competition }: { competition: CompetitionDetail }
 
 // ── Third-party integrations section ─────────────────────────────────────────
 
-type AvailableIntegrations = { drone: boolean; fc1: boolean; webcraft: boolean; csi: boolean };
+type AvailableIntegrations = { drone: boolean; fc1: boolean; webcraft: boolean; csi: boolean; quizzly: boolean };
 
+// `env` is carried here so the "not set" hint names the right variable without a
+// ternary chain that has to be extended for every new platform.
 const INTEGRATIONS = [
-  { value: "none",           label: "None",          desc: "No third-party integration",              key: null        },
-  { value: "eptim-drone",    label: "Eptim Drone",   desc: "Integrate with Eptim Drone platform",     key: "drone"     },
-  { value: "eptim-fc1",      label: "Eptim FC-1",    desc: "Integrate with Eptim FC-1 platform",      key: "fc1"       },
-  { value: "eptim-webcraft", label: "Eptim Webcraft", desc: "Integrate with Eptim Webcraft platform", key: "webcraft" },
-  { value: "eptim-csi",      label: "Eptim CSI",      desc: "Integrate with Eptim CSI platform",      key: "csi"       },
+  { value: "none",              label: "None",               desc: "No third-party integration",                 key: null,       env: null },
+  { value: "eptim-drone",       label: "Eptim Drone",        desc: "Integrate with Eptim Drone platform",        key: "drone",    env: "EPTIMDRONE_API_KEY" },
+  { value: "eptim-fc1",         label: "Eptim FC-1",         desc: "Integrate with Eptim FC-1 platform",         key: "fc1",      env: "EPTIMFC1_API_KEY" },
+  { value: "eptim-webcraft",    label: "Eptim Webcraft",     desc: "Integrate with Eptim Webcraft platform",     key: "webcraft", env: "EPTIM_WEBCRAFT_API_KEY" },
+  { value: "eptim-csi",         label: "Eptim CSI",          desc: "Integrate with Eptim CSI platform",          key: "csi",      env: "EPTIMCSI_API_KEY" },
+  { value: "asiaspark-quizzly", label: "Asia Spark Quizzly", desc: "Integrate with Asia Spark Quizzly platform", key: "quizzly",  env: "ASIASPARK_QUIZZLY_API_KEY" },
 ] as const;
 
 function ThirdPartySection({
@@ -692,7 +695,7 @@ function ThirdPartySection({
                   <span className="text-sm font-medium text-zinc-800">{opt.label}</span>
                   {opt.key && !available && (
                     <span className="inline-flex items-center rounded-full bg-zinc-100 border border-zinc-200 px-2 py-0 text-[10px] text-zinc-500 font-mono">
-                      {opt.key === "drone" ? "EPTIMDRONE_API_KEY" : opt.key === "fc1" ? "EPTIMFC1_API_KEY" : opt.key === "webcraft" ? "EPTIM_WEBCRAFT_API_KEY" : "EPTIMCSI_API_KEY"} not set
+                      {opt.env} not set
                     </span>
                   )}
                   {opt.key && available && (

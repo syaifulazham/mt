@@ -17,6 +17,7 @@ export default async function CompetitionsPage() {
     fc1:      !!process.env.EPTIMFC1_API_KEY,
     webcraft: !!process.env.EPTIM_WEBCRAFT_API_KEY,
     csi:      !!process.env.EPTIMCSI_API_KEY,
+    quizzly:  !!process.env.ASIASPARK_QUIZZLY_API_KEY,
   };
 
   return (
