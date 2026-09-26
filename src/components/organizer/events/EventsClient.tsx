@@ -44,6 +44,7 @@ type EventDetail = EventListItem & {
   prerequisites: { prerequisite: PrerequisiteEvent }[];
   needManagerAcceptance: boolean;
   walkInUniqueParticipation: boolean;
+  allowMultipleParticipation: boolean;
   participationPolicy: "ALL" | "PREREQUISITE_SELECTED" | "ALL_EXCEPT_ZONE_WINNERS";
   winnerExclusionRank: number | null;
 };
@@ -1212,6 +1213,72 @@ function ManagerAcceptanceSection({ event, canWrite, onSaved }: {
           {saving ? "Menyimpan…" : value ? "Ya — Pengesahan diperlukan" : "Tidak — Tiada pengesahan diperlukan"}
         </span>
       </div>
+      {err && <p className="text-xs text-red-500">{err}</p>}
+    </SectionCard>
+  );
+}
+
+/**
+ * "Penyertaan" — whether one participant may enter several competitions of this
+ * event. Applies to the pre-registered path (manager join-event / add-member and
+ * individual entries created from Asia Spark tokens); walk-in has its own
+ * "Penyertaan Unik" switch.
+ */
+function ParticipationModeSection({ event, canWrite, onSaved }: {
+  event: EventDetail; canWrite: boolean;
+  onSaved: (u: Partial<EventDetail>) => void;
+}) {
+  const [multiple, setMultiple] = useState(event.allowMultipleParticipation);
+  const [saving,   setSaving]   = useState(false);
+  const [err,      setErr]      = useState("");
+
+  async function choose(next: boolean) {
+    if (!canWrite || next === multiple) return;
+    const prev = multiple;
+    setMultiple(next);
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowMultipleParticipation: next }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved({ allowMultipleParticipation: next });
+    } catch (e) {
+      setMultiple(prev); // revert
+      setErr(e instanceof Error ? e.message : "Gagal");
+    } finally { setSaving(false); }
+  }
+
+  const OPTIONS = [
+    { value: false, label: "Penyertaan Tunggal Sahaja" },
+    { value: true,  label: "Benarkan Penyertaan Berganda" },
+  ] as const;
+
+  return (
+    <SectionCard title="Penyertaan">
+      <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
+        {OPTIONS.map((opt) => (
+          <button
+            key={String(opt.value)}
+            type="button"
+            disabled={!canWrite || saving}
+            onClick={() => choose(opt.value)}
+            aria-pressed={multiple === opt.value}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+              multiple === opt.value ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-700"
+            } ${!canWrite ? "opacity-60" : ""}`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-zinc-500">
+        {multiple
+          ? "Seorang peserta boleh didaftarkan dalam lebih daripada satu pertandingan dalam acara ini — contohnya Asia Spark, di mana murid yang sama menduduki kuiz Sains, Matematik dan Teknologi."
+          : "Seorang peserta hanya boleh didaftarkan dalam satu pertandingan dalam acara ini. Pengurus kontinjen tidak boleh menambah peserta yang sudah berdaftar dalam pasukan lain bagi acara yang sama."}
+      </p>
+      {saving && <p className="text-xs text-zinc-400">Menyimpan…</p>}
       {err && <p className="text-xs text-red-500">{err}</p>}
     </SectionCard>
   );
@@ -2762,6 +2829,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
             <VenueSection        event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <ManagerAcceptanceSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <ParticipationPolicySection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
+            <ParticipationModeSection   event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
             <WalkInCompetitionsSection event={selected} canWrite={canWrite} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} onSaved={handleSectionSaved} />

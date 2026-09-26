@@ -97,7 +97,10 @@ type QuizzlyEntry = {
   targetGroupName: string | null;
   quiz: { id: string; title: string; grade: string | null } | null;
   token: QuizzlyToken | null;
-  event: { id: string; name: string; slug: string; startDate: string | null; endDate: string | null };
+  event: {
+    id: string; name: string; slug: string; startDate: string | null; endDate: string | null;
+    allowMultipleParticipation: boolean;
+  };
   competition: { id: string; code: string; name: string; theme: { name: string; color: string | null } | null };
 };
 
@@ -110,6 +113,8 @@ type Props = {
   walkInCompetitions: WalkInEntry[];
   existingRegistrations: Record<string, WalkInReg>;
   quizzlyCompetitions: QuizzlyEntry[];
+  /** Competitions the participant is already entered in, keyed by event id. */
+  quizzlyEventEntries: Record<string, { competitionId: string; label: string }[]>;
   quizzlyRegistered: boolean;
   quizzlyCanRegister: boolean;
 };
@@ -551,6 +556,7 @@ export function DashboardClient({
   walkInCompetitions,
   existingRegistrations,
   quizzlyCompetitions,
+  quizzlyEventEntries,
   quizzlyRegistered,
   quizzlyCanRegister,
 }: Props) {
@@ -589,6 +595,23 @@ export function DashboardClient({
     } catch (e) {
       setQuizzlyErr(e instanceof Error ? e.message : "Gagal memohon token");
     } finally { setQuizzlyBusy(null); }
+  }
+
+  /**
+   * "Penyertaan Tunggal Sahaja": in an event that allows only one competition
+   * per participant, the first token taken (or an existing entry, e.g. one a
+   * manager made) claims the event and every other competition in it locks.
+   * Derived from live `tokens` state, so the siblings lock the moment a token is
+   * issued. Returns the label of the claiming competition, or null.
+   */
+  function lockedBy(q: QuizzlyEntry): string | null {
+    if (q.event.allowMultipleParticipation || tokens[q.id]) return null;
+    const viaToken = quizzlyCompetitions.find(
+      (o) => o.event.id === q.event.id && o.id !== q.id && tokens[o.id],
+    );
+    if (viaToken) return `${viaToken.competition.code} ${viaToken.competition.name}`;
+    const viaEntry = (quizzlyEventEntries[q.event.id] ?? []).find((e) => e.competitionId !== q.competition.id);
+    return viaEntry?.label ?? null;
   }
 
   async function copyToken(id: string, token: string) {
@@ -835,8 +858,11 @@ export function DashboardClient({
           )}
 
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden">
-            {quizzlyCompetitions.map((q) => (
-              <div key={q.id} className="px-4 py-3 flex items-start gap-3 flex-wrap sm:flex-nowrap">
+            {quizzlyCompetitions.map((q) => { const locked = lockedBy(q); return (
+              <div
+                key={q.id}
+                className={`px-4 py-3 flex items-start gap-3 flex-wrap sm:flex-nowrap transition-opacity ${locked ? "opacity-50" : ""}`}
+              >
                 <span className="mt-0.5 shrink-0 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 p-1.5">
                   <Gamepad2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 </span>
@@ -884,6 +910,20 @@ export function DashboardClient({
                 <div className="shrink-0 self-center">
                   {!q.quiz ? null : !quizzlyReg ? (
                     <span className="text-[11px] text-zinc-400">Daftar dahulu</span>
+                  ) : locked ? (
+                    <div className="flex flex-col items-end gap-1 max-w-[14rem] text-right">
+                      <button
+                        type="button"
+                        disabled
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-400 px-2.5 py-1.5 text-xs font-medium cursor-not-allowed"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                        Mohon token
+                      </button>
+                      <span className="text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                        Satu penyertaan sahaja bagi acara ini — anda telah memilih {locked}.
+                      </span>
+                    </div>
                   ) : !tokens[q.id] ? (
                     <button
                       type="button"
@@ -940,7 +980,7 @@ export function DashboardClient({
                   )}
                 </div>
               </div>
-            ))}
+            ); })}
           </div>
 
           <p className="text-xs text-zinc-400 dark:text-zinc-500">

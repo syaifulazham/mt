@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: {
       competition: { select: { maxTeamSize: true } },
       members: true,
-      teamEvents: { select: { eventId: true, selected: true } },
+      teamEvents: { select: { eventId: true, selected: true, event: { select: { allowMultipleParticipation: true } } } },
     },
   });
   if (!team) return NextResponse.json({ error: "TEAM_NOT_FOUND" }, { status: 404 });
@@ -45,9 +45,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   // Reject if the participant is already in another team registered for any
-  // event this team has joined (a participant may not compete in multiple
-  // competitions within the same event)
-  const eventIds = team.teamEvents.map((te) => te.eventId);
+  // "Penyertaan Tunggal Sahaja" event this team has joined. Events set to
+  // "Benarkan Penyertaan Berganda" don't take part in the check.
+  const eventIds = team.teamEvents
+    .filter((te) => !te.event.allowMultipleParticipation)
+    .map((te) => te.eventId);
   if (eventIds.length > 0) {
     const conflict = await db.teamMember.findFirst({
       where: {

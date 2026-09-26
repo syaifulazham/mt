@@ -134,7 +134,7 @@ export default async function DashboardPage() {
       quizzlySessionTitle: true,
       quizzlyAssignBy: true,
       quizzlyQuizMap: true,
-      event: { select: { id: true, name: true, slug: true, startDate: true, endDate: true } },
+      event: { select: { id: true, name: true, slug: true, startDate: true, endDate: true, allowMultipleParticipation: true } },
       competition: {
         select: {
           id: true, code: true, name: true,
@@ -157,6 +157,35 @@ export default async function DashboardPage() {
     select: { eventCompetitionId: true, token: true, startUrl: true, quizTitle: true, expiresAt: true },
   });
   const tokenByEc = new Map(quizzlyTokens.map((t) => [t.eventCompetitionId, t]));
+
+  // Competitions the participant is already entered in, per Quizzly event —
+  // including entries made by a manager, not just ones created from tokens —
+  // so the "Penyertaan Tunggal Sahaja" lock reflects the same facts the server
+  // enforces.
+  const quizzlyEventIds = [...new Set(quizzlyLinks.map((ec) => ec.event.id))];
+  const entries = quizzlyEventIds.length === 0 ? [] : await db.teamMember.findMany({
+    where: {
+      participantId: session.participantId,
+      team: { teamEvents: { some: { eventId: { in: quizzlyEventIds } } } },
+    },
+    select: {
+      team: {
+        select: {
+          competition: { select: { id: true, code: true, name: true } },
+          teamEvents:  { where: { eventId: { in: quizzlyEventIds } }, select: { eventId: true } },
+        },
+      },
+    },
+  });
+  const quizzlyEventEntries: Record<string, { competitionId: string; label: string }[]> = {};
+  for (const e of entries) {
+    for (const te of e.team.teamEvents) {
+      (quizzlyEventEntries[te.eventId] ??= []).push({
+        competitionId: e.team.competition.id,
+        label:         `${e.team.competition.code} ${e.team.competition.name}`,
+      });
+    }
+  }
 
   const quizzlyData = quizzlyLinks.flatMap((ec) => {
     const groups  = ec.competition.targetGroups.map((tg) => tg.targetGroup);
@@ -188,8 +217,9 @@ export default async function DashboardPage() {
         slug:      ec.event.slug,
         startDate: ec.event.startDate?.toISOString() ?? null,
         endDate:   ec.event.endDate?.toISOString()   ?? null,
+        allowMultipleParticipation: ec.event.allowMultipleParticipation,
       },
-      competition: ec.competition,
+      competition: { id: ec.competition.id, code: ec.competition.code, name: ec.competition.name, theme: ec.competition.theme },
     }];
   });
 
@@ -258,6 +288,7 @@ export default async function DashboardPage() {
       walkInCompetitions={walkInData}
       existingRegistrations={existingRegistrations}
       quizzlyCompetitions={quizzlyData}
+      quizzlyEventEntries={quizzlyEventEntries}
       quizzlyRegistered={!!participant.quizzlyAccess}
       quizzlyCanRegister={!!participant.ic?.replace(/\D/g, "")}
     />

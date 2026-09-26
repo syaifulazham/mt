@@ -50,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     venue, address, city, latitude, longitude,
     startDate, endDate, registrationStart, registrationEnd, status,
     prerequisiteEventIds, needManagerAcceptance, walkInUniqueParticipation,
-    participationPolicy, winnerExclusionRank,
+    participationPolicy, winnerExclusionRank, allowMultipleParticipation,
   } = await req.json();
 
   const VALID_POLICIES = ["ALL", "PREREQUISITE_SELECTED", "ALL_EXCEPT_ZONE_WINNERS"];
@@ -92,6 +92,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }),
         ...(needManagerAcceptance !== undefined && { needManagerAcceptance: Boolean(needManagerAcceptance) }),
         ...(walkInUniqueParticipation !== undefined && { walkInUniqueParticipation: Boolean(walkInUniqueParticipation) }),
+        ...(allowMultipleParticipation !== undefined && { allowMultipleParticipation: Boolean(allowMultipleParticipation) }),
         ...(participationPolicy !== undefined && { participationPolicy }),
         ...(autoPolicy !== undefined && { participationPolicy: autoPolicy as "PREREQUISITE_SELECTED" }),
         ...(winnerExclusionRank !== undefined && { winnerExclusionRank: winnerExclusionRank != null ? Number(winnerExclusionRank) : null }),

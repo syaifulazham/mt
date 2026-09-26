@@ -550,6 +550,9 @@ model Event {
   status                    EventStatus         @default(DRAFT)
   needManagerAcceptance     Boolean             @default(false)
   walkInUniqueParticipation Boolean             @default(false)
+  // Pre-registered path: may one participant enter several competitions of this
+  // event? false = "Penyertaan Tunggal Sahaja" (the long-standing rule).
+  allowMultipleParticipation Boolean            @default(false)
   participationPolicy       ParticipationPolicy @default(ALL)
   winnerExclusionRank       Int?
   createdAt                 DateTime            @default(now())

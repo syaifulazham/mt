@@ -182,7 +182,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify location eligibility
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, venue: true, description: true, stateId: true, zoneId: true, participationPolicy: true, winnerExclusionRank: true, _count: { select: { prerequisites: true } } },
+    select: { id: true, name: true, slug: true, status: true, startDate: true, endDate: true, scope: true, venue: true, description: true, stateId: true, zoneId: true, participationPolicy: true, winnerExclusionRank: true, allowMultipleParticipation: true, _count: { select: { prerequisites: true } } },
   });
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
 
@@ -200,17 +200,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const allowed = await filterByLocation([event], team.effectiveStateId);
   if (allowed.length === 0) return NextResponse.json({ error: "EVENT_LOCATION_MISMATCH" }, { status: 403 });
 
-  // Reject if any member is already registered in another team for this event
-  // (a participant may not compete in multiple competitions within the same event)
-  const memberConflict = await db.teamMember.findFirst({
-    where: {
-      team: { id: { not: id }, teamEvents: { some: { eventId } } },
-      participant: { teamMembers: { some: { teamId: id } } },
-    },
-    select: { participant: { select: { name: true } } },
-  });
-  if (memberConflict)
-    return NextResponse.json({ error: "PARTICIPANT_IN_SAME_EVENT", participant: memberConflict.participant.name }, { status: 400 });
+  // "Penyertaan Tunggal Sahaja": reject if any member is already registered in
+  // another team for this event. Events set to "Benarkan Penyertaan Berganda"
+  // skip the check.
+  if (!event.allowMultipleParticipation) {
+    const memberConflict = await db.teamMember.findFirst({
+      where: {
+        team: { id: { not: id }, teamEvents: { some: { eventId } } },
+        participant: { teamMembers: { some: { teamId: id } } },
+      },
+      select: { participant: { select: { name: true } } },
+    });
+    if (memberConflict)
+      return NextResponse.json({ error: "PARTICIPANT_IN_SAME_EVENT", participant: memberConflict.participant.name }, { status: 400 });
+  }
 
   const teamEvent = await db.teamEvent.upsert({
     where: { teamId_eventId: { teamId: id, eventId } },
