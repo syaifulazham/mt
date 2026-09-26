@@ -1231,7 +1231,7 @@ export function TeamsClient({ contingents }: { contingents: Contingent[] }) {
     setLoading(true);
     try {
       const [teamsRes, compsRes] = await Promise.all([
-        fetch("/api/v2/manager/teams"),
+        fetch("/api/v2/manager/teams?participationType=TEAM"),
         fetch("/api/v2/manager/competitions"),
       ]);
       const [teamsJ, compsJ] = await Promise.all([teamsRes.json(), compsRes.json()]);

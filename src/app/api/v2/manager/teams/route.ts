@@ -9,6 +9,13 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl;
   const competitionId = searchParams.get("competitionId") ?? undefined;
+  // Opt-in, because this endpoint also feeds the Bengkel and Trainers screens.
+  // The Teams page passes TEAM so the single-person entries behind individual
+  // competitions (e.g. Asia Spark, created from quiz tokens) don't show up as
+  // "teams" a manager can't meaningfully manage.
+  const participationType = searchParams.get("participationType");
+  if (participationType && participationType !== "TEAM" && participationType !== "INDIVIDUAL")
+    return NextResponse.json({ error: "INVALID_PARTICIPATION_TYPE" }, { status: 400 });
 
   const manager = await db.managerProfile.findUnique({
     where: { clerkUserId: userId },
@@ -24,6 +31,7 @@ export async function GET(req: NextRequest) {
     where: {
       contingentId: { in: contingentIds },
       ...(competitionId && { competitionId }),
+      ...(participationType && { competition: { participationType: participationType as "TEAM" | "INDIVIDUAL" } }),
     },
     include: {
       competition: { select: { id: true, name: true, code: true, maxTeamSize: true, minTeamSize: true, eptimEduCourseId: true, eptimEduCourseTitle: true } },
