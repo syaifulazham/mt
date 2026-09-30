@@ -92,6 +92,30 @@ export type QuizzlyParticipant = {
   grade: string | null; school: string | null; nationality: string | null;
 };
 
+/**
+ * Fold an email to ASCII and drop it if it still is not a plausible address.
+ *
+ * Profiles collected on phone keyboards arrive with fullwidth punctuation
+ * (`＠` U+FF20, `．` U+FF0E) and stray spaces, and some hold a phone number or
+ * a placeholder instead of an address. Quizzly validates `email` and rejects
+ * the *whole* request when it is malformed, so an optional field would
+ * otherwise block registration outright — better to send no email than to fail.
+ *
+ * NFKC does the folding; anything still invalid returns null and is omitted.
+ *
+ * Internal whitespace is a rejection, not something to strip: which space was
+ * the accident is a guess, and collapsing them all turns a pasted form row
+ * ("NAME  120401070533  a@b.com  011 37474011") into a plausible-looking
+ * address. Refusing costs nothing — the field is optional upstream.
+ */
+export function normaliseEmail(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const folded = raw.normalize("NFKC").trim();
+  if (folded === "" || /\s/.test(folded) || folded.length > 254) return null;
+  const m = /^([^@\s]+)@([^@\s]+\.[^@\s]+)$/.exec(folded);
+  return m && m[1].length <= 64 ? folded : null;
+}
+
 export type QuizzlyIssuedToken = {
   token: string; token_id: string;
   participant: { id: string; personal_id: string; full_name: string };
@@ -111,17 +135,18 @@ export function quizzlyUpsertParticipant(input: {
   grade?: string | null; school?: string | null; nationality?: string | null;
   email?: string | null; age?: number | null; gender?: "male" | "female" | null;
 }) {
+  const email = normaliseEmail(input.email);
   return req<QuizzlyParticipant>("/api/v1/participants?upsert=true", {
     method: "POST",
     body: JSON.stringify({
       personal_id: input.personalId,
       full_name:   input.fullName,
-      ...(input.grade       ? { grade:       input.grade.slice(0, 50) }   : {}),
-      ...(input.school      ? { school:      input.school.slice(0, 200) } : {}),
-      ...(input.nationality ? { nationality: input.nationality }          : {}),
-      ...(input.email       ? { email:       input.email }                : {}),
-      ...(input.age != null ? { age:         input.age }                  : {}),
-      ...(input.gender      ? { gender:      input.gender }               : {}),
+      ...(input.grade       ? { grade:       input.grade.trim().slice(0, 50) }   : {}),
+      ...(input.school      ? { school:      input.school.trim().slice(0, 200) } : {}),
+      ...(input.nationality ? { nationality: input.nationality }                 : {}),
+      ...(email             ? { email }                                          : {}),
+      ...(input.age != null ? { age:         input.age }                         : {}),
+      ...(input.gender      ? { gender:      input.gender }                      : {}),
     }),
   });
 }
@@ -201,5 +226,9 @@ export function resolveQuizzlyAssignment(
 export function quizzlyErrorMessage(err: { status?: number; message?: string }): string {
   if (err.status === 401) return "Kunci API Asia Spark Quizzly ditolak (ASIASPARK_QUIZZLY_API_KEY). Hubungi pentadbir.";
   if (err.status === 403) return "Kunci API tiada skop `sessions:read` untuk Asia Spark Quizzly.";
+  // A 400 is upstream schema validation on the profile we sent; name the field
+  // so the participant knows what to correct instead of seeing raw English.
+  if (err.status === 400)
+    return `Maklumat profil ditolak oleh Asia Spark Quizzly — sila betulkan di Profil. (${err.message ?? "tidak sah"})`;
   return err.message ?? "Ralat API Asia Spark Quizzly";
 }
