@@ -88,6 +88,8 @@ type QuizzlyToken = {
   startUrl: string | null;
   quizTitle: string | null;
   expiresAt: string | null;
+  /** Quizzly confirmed it lapsed without being redeemed — safe to replace. */
+  expiredUnused?: boolean;
 };
 
 type QuizzlyEntry = {
@@ -936,6 +938,23 @@ export function DashboardClient({
                         : <KeyRound className="h-3.5 w-3.5" />}
                       Mohon token
                     </button>
+                  ) : tokens[q.id].expiredUnused ? (
+                    <div className="flex flex-col items-end gap-1 max-w-[14rem] text-right">
+                      <span className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                        Token tamat tempoh{tokens[q.id].expiresAt ? ` pada ${fmt(tokens[q.id].expiresAt)}` : ""} dan belum digunakan.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => requestToken(q.id)}
+                        disabled={quizzlyBusy !== null}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:opacity-50 text-amber-700 dark:text-amber-300 px-2.5 py-1.5 text-xs font-medium transition-colors"
+                      >
+                        {quizzlyBusy === q.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <RefreshCw className="h-3.5 w-3.5" />}
+                        Mohon token baharu
+                      </button>
+                    </div>
                   ) : (
                     <div className="flex flex-col items-end gap-1">
                       <div className="flex items-center gap-1">

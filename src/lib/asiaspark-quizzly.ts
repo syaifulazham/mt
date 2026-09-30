@@ -150,15 +150,65 @@ export function quizzlyIssueToken(input: {
   });
 }
 
+export type QuizzlyTokenState = "active" | "not_yet_valid" | "redeemed" | "expired" | "revoked";
+
 export type QuizzlyTokenStatus = {
   token_id: string;
-  status: "active" | "not_yet_valid" | "redeemed" | "expired" | "revoked";
-  expires_at: string | null; redeemed_at: string | null;
+  status: QuizzlyTokenState;
+  expires_at: string | null; redeemed_at: string | null; revoked_at?: string | null;
+  expired_unused?: boolean;
   session: { state: string; percentage: number | null; raw_score: number | null; max_score: number | null } | null;
 };
 
 export function quizzlyTokenStatus(tokenId: string) {
   return req<QuizzlyTokenStatus>(`/api/v1/sessions/tokens/${encodeURIComponent(tokenId)}`);
+}
+
+export type QuizzlyTokenLifecycle = {
+  token_id: string; status: QuizzlyTokenState;
+  /**
+   * Lapsed without ever being redeemed — the one case where a replacement is
+   * safe. Quizzly resolves revoked → redeemed → expired in that order, so a
+   * token that was used never reports `expired`.
+   */
+  expired_unused: boolean;
+  expires_at: string | null; redeemed_at: string | null; revoked_at: string | null;
+};
+
+/**
+ * Lifecycle state for many tokens, keyed by token id; unknown ids are absent.
+ *
+ * Uses POST /sessions/tokens/status, and falls back to one GET per token when
+ * that endpoint answers 404/405 — so mt keeps working whichever of the two apps
+ * is deployed first. Tokens per participant are few, so the fallback is cheap.
+ */
+export async function quizzlyTokenStatuses(tokenIds: string[]): Promise<Map<string, QuizzlyTokenLifecycle>> {
+  const out = new Map<string, QuizzlyTokenLifecycle>();
+  const ids = [...new Set(tokenIds)];
+  if (ids.length === 0) return out;
+
+  try {
+    const json = await req<{ data: QuizzlyTokenLifecycle[] }>("/api/v1/sessions/tokens/status", {
+      method: "POST",
+      body: JSON.stringify({ token_ids: ids }),
+    });
+    for (const t of json.data ?? []) out.set(t.token_id, t);
+    return out;
+  } catch (e: unknown) {
+    const status = (e as { status?: number }).status;
+    if (status !== 404 && status !== 405) throw e;
+  }
+
+  await Promise.all(ids.map(async (id) => {
+    const t = await quizzlyTokenStatus(id).catch(() => null);
+    if (!t) return;
+    out.set(id, {
+      token_id: t.token_id, status: t.status,
+      expired_unused: t.expired_unused ?? t.status === "expired",
+      expires_at: t.expires_at, redeemed_at: t.redeemed_at, revoked_at: t.revoked_at ?? null,
+    });
+  }));
+  return out;
 }
 
 /** Confirms the key and reports its effective scopes — useful for diagnosis. */

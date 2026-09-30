@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import { DashboardClient } from "@/components/participant/DashboardClient";
 import type { SlotScheduleConfig } from "@/lib/walkin-slots";
 import { matchingTargetGroups } from "@/lib/targetGroupMatch";
-import { resolveQuizzlyAssignment, type QuizzlyQuizAssignment } from "@/lib/asiaspark-quizzly";
+import {
+  quizzlyConfigured, quizzlyTokenStatuses, resolveQuizzlyAssignment, type QuizzlyQuizAssignment,
+} from "@/lib/asiaspark-quizzly";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -154,9 +156,24 @@ export default async function DashboardPage() {
 
   const quizzlyTokens = await db.participantQuizzlyToken.findMany({
     where:  { participantId: session.participantId },
-    select: { eventCompetitionId: true, token: true, startUrl: true, quizTitle: true, expiresAt: true },
+    select: { eventCompetitionId: true, tokenId: true, token: true, startUrl: true, quizTitle: true, expiresAt: true },
   });
   const tokenByEc = new Map(quizzlyTokens.map((t) => [t.eventCompetitionId, t]));
+
+  // Only a token already past its local expiry can have lapsed unused, so only
+  // those are checked upstream — most dashboard loads make no Quizzly call at
+  // all. A failed check leaves the token shown as-is rather than offering a
+  // replacement we could not verify.
+  const now = new Date();
+  const lapsedIds = quizzlyTokens
+    .filter((t) => t.expiresAt && t.expiresAt <= now)
+    .map((t) => t.tokenId);
+  const lifecycle = lapsedIds.length > 0 && quizzlyConfigured()
+    ? await quizzlyTokenStatuses(lapsedIds).catch((e: unknown) => {
+        console.error("[quizzly] token status check failed on dashboard:", (e as Error).message);
+        return new Map();
+      })
+    : new Map();
 
   // Competitions the participant is already entered in, per Quizzly event —
   // including entries made by a manager, not just ones created from tokens —
@@ -209,6 +226,7 @@ export default async function DashboardPage() {
             startUrl:  issued.startUrl,
             quizTitle: issued.quizTitle,
             expiresAt: issued.expiresAt?.toISOString() ?? null,
+            expiredUnused: lifecycle.get(issued.tokenId)?.expired_unused === true,
           }
         : null,
       event: {
