@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { foldEmail } from "@/lib/email";
 import { Gender, EduLevel, Ethnicity } from "@prisma/client";
 
 type BulkRow = {
@@ -33,7 +34,9 @@ export async function POST(
       contingentId: id,
       name:        r.name,
       ic:          r.ic          || null,
-      email:       r.email       || null,
+      // Folded, not rejected: an import must not lose rows over an optional
+      // field, and the Quizzly path now omits an address it cannot use.
+      email:       foldEmail(r.email),
       phoneNumber: r.phoneNumber || null,
       gender:      r.gender,
       age:         r.age         ?? null,

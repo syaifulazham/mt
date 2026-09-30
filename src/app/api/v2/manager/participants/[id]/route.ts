@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { foldEmail, isValidEmail } from "@/lib/email";
 import { Gender, EduLevel } from "@prisma/client";
 
 async function getAuthorizedParticipant(userId: string, id: string) {
@@ -34,12 +35,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!name || !gender || !eduLevel)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
 
+  const cleanEmail = foldEmail(email);
+  if (cleanEmail && !isValidEmail(cleanEmail))
+    return NextResponse.json({ error: "INVALID_EMAIL" }, { status: 400 });
+
   const updated = await db.participant.update({
     where: { id },
     data: {
       name,
       ic:          ic          ?? null,
-      email:       email       ?? null,
+      email:       cleanEmail,
       phoneNumber: phoneNumber ?? null,
       gender:      gender      as Gender,
       age:         age ? Number(age) : null,

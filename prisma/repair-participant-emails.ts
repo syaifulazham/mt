@@ -19,11 +19,11 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { normaliseEmail } from "../src/lib/asiaspark-quizzly";
+import { isValidEmail, normaliseEmail } from "../src/lib/email";
 
 const db = new PrismaClient();
 
-const isValid = (e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
+const isValid = isValidEmail;
 
 async function main() {
   const apply = process.argv.includes("--apply");

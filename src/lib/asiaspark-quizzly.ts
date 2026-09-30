@@ -1,3 +1,5 @@
+import { normaliseEmail } from "@/lib/email";
+
 // Asia Spark Quizzly API — see aspark-quiz/QUIZZLY-API_GUIDE.md.
 // Read paths used here need the `sessions:read` scope on the key.
 const BASE_URL = (process.env.ASIASPARK_QUIZZLY_URL ?? "").replace(/\/$/, "");
@@ -92,29 +94,7 @@ export type QuizzlyParticipant = {
   grade: string | null; school: string | null; nationality: string | null;
 };
 
-/**
- * Fold an email to ASCII and drop it if it still is not a plausible address.
- *
- * Profiles collected on phone keyboards arrive with fullwidth punctuation
- * (`＠` U+FF20, `．` U+FF0E) and stray spaces, and some hold a phone number or
- * a placeholder instead of an address. Quizzly validates `email` and rejects
- * the *whole* request when it is malformed, so an optional field would
- * otherwise block registration outright — better to send no email than to fail.
- *
- * NFKC does the folding; anything still invalid returns null and is omitted.
- *
- * Internal whitespace is a rejection, not something to strip: which space was
- * the accident is a guess, and collapsing them all turns a pasted form row
- * ("NAME  120401070533  a@b.com  011 37474011") into a plausible-looking
- * address. Refusing costs nothing — the field is optional upstream.
- */
-export function normaliseEmail(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const folded = raw.normalize("NFKC").trim();
-  if (folded === "" || /\s/.test(folded) || folded.length > 254) return null;
-  const m = /^([^@\s]+)@([^@\s]+\.[^@\s]+)$/.exec(folded);
-  return m && m[1].length <= 64 ? folded : null;
-}
+
 
 export type QuizzlyIssuedToken = {
   token: string; token_id: string;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { foldEmail, isValidEmail } from "@/lib/email";
 import { Gender, EduLevel } from "@prisma/client";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,12 +19,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!name?.trim() || !gender || !eduLevel)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
 
+  const cleanEmail = foldEmail(email);
+  if (cleanEmail && !isValidEmail(cleanEmail))
+    return NextResponse.json({ error: "INVALID_EMAIL" }, { status: 400 });
+
   const created = await db.participant.create({
     data: {
       contingentId: id,
       name:        name.trim(),
       ic:          ic          || null,
-      email:       email       || null,
+      email:       cleanEmail,
       phoneNumber: phoneNumber || null,
       gender:      gender      as Gender,
       age:         age ? Number(age) : null,

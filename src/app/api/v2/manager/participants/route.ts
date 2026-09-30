@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { foldEmail, isValidEmail } from "@/lib/email";
 import { Gender, EduLevel } from "@prisma/client";
 
 const PAGE_SIZE_DEFAULT = 20;
@@ -105,11 +106,17 @@ export async function POST(req: NextRequest) {
   if (!contingentIds.includes(contingentId))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
+  // Folded so a fullwidth `＠` never lands in the column, and refused outright
+  // when unusable — a bad address here silently breaks third-party sign-up.
+  const cleanEmail = foldEmail(email);
+  if (cleanEmail && !isValidEmail(cleanEmail))
+    return NextResponse.json({ error: "INVALID_EMAIL" }, { status: 400 });
+
   const participant = await db.participant.create({
     data: {
       name,
       ic:          ic          ?? null,
-      email:       email       ?? null,
+      email:       cleanEmail,
       phoneNumber: phoneNumber ?? null,
       gender:      gender      as Gender,
       age:         age ? Number(age) : null,

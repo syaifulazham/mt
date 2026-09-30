@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { foldEmail } from "@/lib/email";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Gender, EduLevel, Ethnicity } from "@prisma/client";
 
@@ -113,7 +114,7 @@ ${csvText}`;
     cleaned.push({
       name,
       ic:          row.ic          ? sanitize(row.ic)                   : null,
-      email:       row.email       ? sanitize(row.email).toLowerCase()  : null,
+      email:       foldEmail(row.email)?.toLowerCase() ?? null,
       phoneNumber: row.phoneNumber ? sanitize(row.phoneNumber)          : null,
       gender, age: row.age ? Number(row.age) : null, eduLevel,
       classGrade:  row.classGrade  ? sanitize(row.classGrade)           : null,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { foldEmail } from "@/lib/email";
 import { Gender, EduLevel, Ethnicity } from "@prisma/client";
 
 // ── POST /api/v2/manager/participants/bulk-confirm ───────────────────────────
@@ -26,7 +27,9 @@ export async function POST(req: NextRequest) {
     data: rows.map((r: ParsedRow) => ({
       name:        r.name,
       ic:          r.ic          ?? null,
-      email:       r.email       ?? null,
+      // Folded, not rejected: an import must not lose rows over an optional
+      // field, and the Quizzly path now omits an address it cannot use.
+      email:       foldEmail(r.email),
       phoneNumber: r.phoneNumber ?? null,
       gender:      r.gender      as Gender,
       age:         r.age ? Number(r.age) : null,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { foldEmail, isValidEmail } from "@/lib/email";
 import { Gender, EduLevel } from "@prisma/client";
 
 type Params = { params: Promise<{ id: string; participantId: string }> };
@@ -21,12 +22,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!name?.trim() || !gender || !eduLevel)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
 
+  const cleanEmail = foldEmail(email);
+  if (cleanEmail && !isValidEmail(cleanEmail))
+    return NextResponse.json({ error: "INVALID_EMAIL" }, { status: 400 });
+
   const updated = await db.participant.update({
     where: { id: participantId },
     data: {
       name:        name.trim(),
       ic:          ic          || null,
-      email:       email       || null,
+      email:       cleanEmail,
       phoneNumber: phoneNumber || null,
       gender:      gender      as Gender,
       age:         age ? Number(age) : null,
