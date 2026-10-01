@@ -33,9 +33,11 @@ export default async function DashboardPage() {
   });
   if (!participant) redirect("/participant/sign-in");
 
-  // Teams: take 4 to detect if there are more than 3
+  // Teams: take 4 to detect if there are more than 3. TEAM competitions only —
+  // individual entries (Asia Spark, FC-1) are one-person teams in the data
+  // model and already have their own sections below.
   const teamMemberships = await db.teamMember.findMany({
-    where: { participantId: session.participantId },
+    where: { participantId: session.participantId, team: { competition: { participationType: "TEAM" } } },
     take: 4,
     orderBy: { createdAt: "desc" },
     select: {
@@ -52,7 +54,7 @@ export default async function DashboardPage() {
   });
 
   const totalTeams = await db.teamMember.count({
-    where: { participantId: session.participantId },
+    where: { participantId: session.participantId, team: { competition: { participationType: "TEAM" } } },
   });
 
   const targetGroupFilter = {

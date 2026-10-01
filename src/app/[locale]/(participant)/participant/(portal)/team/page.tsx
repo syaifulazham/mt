@@ -28,8 +28,10 @@ export default async function TeamPage() {
   const session = await getParticipantSession();
   if (!session) redirect("/participant/sign-in");
 
+  // TEAM competitions only — individual entries (Asia Spark, FC-1) are
+  // one-person teams in the data model and live in their dashboard sections.
   const memberships = await db.teamMember.findMany({
-    where: { participantId: session.participantId },
+    where: { participantId: session.participantId, team: { competition: { participationType: "TEAM" } } },
     include: {
       team: {
         include: {
