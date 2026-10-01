@@ -19,6 +19,7 @@ import {
   Grid3X3,
   LogOut,
   Lock,
+  UserCheck,
 } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -157,6 +158,7 @@ export function MobileManagerNav({ hasContingent }: { hasContingent: boolean }) 
 
   const secondary = [
     { href: "/manager/profile",      icon: User,          label: t("profile"),      color: "bg-violet-500", gated: false },
+    { href: "/manager/individuals",  icon: UserCheck,     label: t("individuals"),  color: "bg-indigo-500", gated: true  },
     { href: "/manager/trainers",     icon: GraduationCap, label: t("trainers"),     color: "bg-teal-500",   gated: true  },
     { href: "/manager/events",       icon: CalendarDays,  label: t("events"),       color: "bg-sky-500",    gated: true  },
     { href: "/manager/lms",          icon: BookOpen,      label: t("lms"),          color: "bg-amber-500",  gated: true  },

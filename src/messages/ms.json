@@ -7,11 +7,39 @@
     "participants": "Peserta",
     "trainers": "Jurulatih",
     "teams": "Pasukan",
+    "individuals": "Individu",
     "events": "Acara",
     "lms": "Bengkel MT",
     "certificates": "Sijil",
     "more": "Lagi",
     "signOut": "Log Keluar"
+  },
+  "individuals": {
+    "title": "Individu",
+    "subtitle": "Acara yang menawarkan pertandingan individu, dan peserta kontinjen anda yang berdaftar dalam setiap pertandingan.",
+    "noEvents": "Tiada acara yang menawarkan pertandingan individu buat masa ini.",
+    "noEntries": "Belum ada peserta berdaftar.",
+    "showAll": "Papar pertandingan tanpa peserta",
+    "hiddenCount": "{count, plural, other {# pertandingan tanpa peserta disembunyikan}}",
+    "registered": "{count, plural, =0 {Tiada peserta} other {# peserta}}",
+    "competitions": "{count, plural, other {# pertandingan}}",
+    "colName": "Nama",
+    "colClass": "Kelas",
+    "colContingent": "Kontinjen",
+    "colRegistered": "Didaftarkan",
+    "colStatus": "Status",
+    "acceptance": {
+      "PENDING": "Menunggu",
+      "ACCEPT": "Diterima",
+      "HOLD": "Ditangguhkan",
+      "REJECT": "Ditolak"
+    },
+    "status": {
+      "PUBLISHED": "Dibuka",
+      "ACTIVE": "Sedang berlangsung",
+      "COMPLETED": "Selesai",
+      "CANCELLED": "Dibatalkan"
+    }
   },
   "landing": {
     "badge": "Pendaftaran Dibuka",

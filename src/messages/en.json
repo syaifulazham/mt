@@ -7,11 +7,39 @@
     "participants": "Participants",
     "trainers": "Trainers",
     "teams": "Teams",
+    "individuals": "Individual",
     "events": "Events",
     "lms": "Bengkel MT",
     "certificates": "Certificates",
     "more": "More",
     "signOut": "Sign Out"
+  },
+  "individuals": {
+    "title": "Individual",
+    "subtitle": "Events offering individual competitions, and the participants from your contingent registered in each.",
+    "noEvents": "No events are offering individual competitions right now.",
+    "noEntries": "No participants registered yet.",
+    "showAll": "Show competitions without participants",
+    "hiddenCount": "{count, plural, one {# competition without participants hidden} other {# competitions without participants hidden}}",
+    "registered": "{count, plural, =0 {No participants} one {# participant} other {# participants}}",
+    "competitions": "{count, plural, one {# competition} other {# competitions}}",
+    "colName": "Name",
+    "colClass": "Class",
+    "colContingent": "Contingent",
+    "colRegistered": "Registered",
+    "colStatus": "Status",
+    "acceptance": {
+      "PENDING": "Pending",
+      "ACCEPT": "Accepted",
+      "HOLD": "On hold",
+      "REJECT": "Rejected"
+    },
+    "status": {
+      "PUBLISHED": "Open",
+      "ACTIVE": "Ongoing",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
+    }
   },
   "landing": {
     "badge": "Open for Registration",
