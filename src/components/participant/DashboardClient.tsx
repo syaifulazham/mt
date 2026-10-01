@@ -92,6 +92,17 @@ type QuizzlyToken = {
   expiredUnused?: boolean;
 };
 
+type Fc1Entry = {
+  id: string;                 // eventCompetitionId
+  targetGroupName: string;
+  event: {
+    id: string; name: string; slug: string; startDate: string | null; endDate: string | null;
+    allowMultipleParticipation: boolean;
+  };
+  competition: { id: string; code: string; name: string };
+  challenges: { id: string; name: string; status: string; challengeMode: string; registered: boolean }[];
+};
+
 type QuizzlyEntry = {
   id: string;
   sessionTitle: string | null;
@@ -116,9 +127,11 @@ type Props = {
   existingRegistrations: Record<string, WalkInReg>;
   quizzlyCompetitions: QuizzlyEntry[];
   /** Competitions the participant is already entered in, keyed by event id. */
-  quizzlyEventEntries: Record<string, { competitionId: string; label: string }[]>;
+  eventEntries: Record<string, { competitionId: string; label: string }[]>;
+  fc1Competitions: Fc1Entry[];
+  fc1Registered: boolean;
   quizzlyRegistered: boolean;
-  quizzlyCanRegister: boolean;
+  hasIc: boolean;
 };
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -558,10 +571,46 @@ export function DashboardClient({
   walkInCompetitions,
   existingRegistrations,
   quizzlyCompetitions,
-  quizzlyEventEntries,
+  eventEntries,
+  fc1Competitions,
+  fc1Registered,
   quizzlyRegistered,
-  quizzlyCanRegister,
+  hasIc,
 }: Props) {
+  const [fc1Reg, setFc1Reg]   = useState(fc1Registered);
+  const [fc1Busy, setFc1Busy] = useState<string | null>(null); // "register" | `${ecId}:${challengeId}`
+  const [fc1Err, setFc1Err]   = useState("");
+  // challenge ids registered, per event-competition — drives buttons and the lock
+  const [fc1Regs, setFc1Regs] = useState<Record<string, string[]>>(
+    Object.fromEntries(fc1Competitions.map((f) => [f.id, f.challenges.filter((c) => c.registered).map((c) => c.id)])),
+  );
+
+  async function registerFc1() {
+    setFc1Busy("register"); setFc1Err("");
+    try {
+      const res  = await fetch("/api/v2/participant/fc1/register", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Pendaftaran gagal");
+      setFc1Reg(true);
+    } catch (e) {
+      setFc1Err(e instanceof Error ? e.message : "Pendaftaran gagal");
+    } finally { setFc1Busy(null); }
+  }
+
+  async function registerFc1Challenge(eventCompetitionId: string, challengeId: string) {
+    setFc1Busy(`${eventCompetitionId}:${challengeId}`); setFc1Err("");
+    try {
+      const res = await fetch("/api/v2/participant/fc1/challenges", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventCompetitionId, challengeId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Pendaftaran cabaran gagal");
+      setFc1Regs((prev) => ({ ...prev, [eventCompetitionId]: [...(prev[eventCompetitionId] ?? []), challengeId] }));
+    } catch (e) {
+      setFc1Err(e instanceof Error ? e.message : "Pendaftaran cabaran gagal");
+    } finally { setFc1Busy(null); }
+  }
   const [quizzlyReg, setQuizzlyReg]       = useState(quizzlyRegistered);
   const [quizzlyBusy, setQuizzlyBusy]     = useState<string | null>(null); // "register" | eventCompetitionId
   const [quizzlyErr, setQuizzlyErr]       = useState("");
@@ -606,14 +655,24 @@ export function DashboardClient({
    * Derived from live `tokens` state, so the siblings lock the moment a token is
    * issued. Returns the label of the claiming competition, or null.
    */
-  function lockedBy(q: QuizzlyEntry): string | null {
-    if (q.event.allowMultipleParticipation || tokens[q.id]) return null;
+  function claimedBy(event: { id: string; allowMultipleParticipation: boolean }, competitionId: string): string | null {
+    if (event.allowMultipleParticipation) return null;
+    const label = (c: { code: string; name: string }) => `${c.code} ${c.name}`;
+    // Live state first, so the lock appears the moment something is taken…
     const viaToken = quizzlyCompetitions.find(
-      (o) => o.event.id === q.event.id && o.id !== q.id && tokens[o.id],
+      (o) => o.event.id === event.id && o.competition.id !== competitionId && tokens[o.id],
     );
-    if (viaToken) return `${viaToken.competition.code} ${viaToken.competition.name}`;
-    const viaEntry = (quizzlyEventEntries[q.event.id] ?? []).find((e) => e.competitionId !== q.competition.id);
-    return viaEntry?.label ?? null;
+    if (viaToken) return label(viaToken.competition);
+    const viaFc1 = fc1Competitions.find(
+      (o) => o.event.id === event.id && o.competition.id !== competitionId && (fc1Regs[o.id]?.length ?? 0) > 0,
+    );
+    if (viaFc1) return label(viaFc1.competition);
+    // …then what the server already knew, including manager-made entries.
+    return (eventEntries[event.id] ?? []).find((e) => e.competitionId !== competitionId)?.label ?? null;
+  }
+
+  function lockedBy(q: QuizzlyEntry): string | null {
+    return tokens[q.id] ? null : claimedBy(q.event, q.competition.id);
   }
 
   async function copyToken(id: string, token: string) {
@@ -839,7 +898,7 @@ export function DashboardClient({
               <button
                 type="button"
                 onClick={registerQuizzly}
-                disabled={quizzlyBusy !== null || !quizzlyCanRegister}
+                disabled={quizzlyBusy !== null || !hasIc}
                 className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 text-xs font-medium transition-colors"
               >
                 {quizzlyBusy === "register"
@@ -850,7 +909,7 @@ export function DashboardClient({
             )}
           </div>
 
-          {!quizzlyCanRegister && !quizzlyReg && (
+          {!hasIc && !quizzlyReg && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
               Nombor kad pengenalan diperlukan untuk mendaftar. Kemas kini di Profil dahulu.
             </p>
@@ -1006,6 +1065,115 @@ export function DashboardClient({
             Token hanya boleh digunakan sekali. Jangan kongsi dengan orang lain — sesiapa yang
             memilikinya boleh menduduki kuiz sebagai anda.
           </p>
+        </div>
+      )}
+
+      {/* ── FC-1 Individu ───────────────────────────────────────────── */}
+      {fc1Competitions.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold dark:text-zinc-100">FC-1 Individu</h2>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Cabaran Eptim FC-1 yang layak untuk anda. Daftar akaun sekali, kemudian pilih cabaran.
+              </p>
+            </div>
+            {fc1Reg ? (
+              <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 px-2.5 py-1 text-xs font-medium">
+                <CheckCircle className="h-3.5 w-3.5" /> Akaun berdaftar
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={registerFc1}
+                disabled={fc1Busy !== null || !hasIc}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1.5 text-xs font-medium transition-colors"
+              >
+                {fc1Busy === "register" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+                Daftar FC-1
+              </button>
+            )}
+          </div>
+
+          {!hasIc && !fc1Reg && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Nombor kad pengenalan diperlukan untuk mendaftar. Kemas kini di Profil dahulu.
+            </p>
+          )}
+          {fc1Err && <p className="text-xs text-red-500 dark:text-red-400">{fc1Err}</p>}
+
+          <div className="space-y-3">
+            {fc1Competitions.map((f) => {
+              const locked = (fc1Regs[f.id]?.length ?? 0) > 0 ? null : claimedBy(f.event, f.competition.id);
+              return (
+                <div
+                  key={f.id}
+                  className={`rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden transition-opacity ${locked ? "opacity-50" : ""}`}
+                >
+                  <div className="px-4 py-3 bg-emerald-50 dark:bg-emerald-950/30 border-b border-emerald-100 dark:border-emerald-900 flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200 truncate">
+                        <span className="font-mono text-xs text-emerald-700/60 mr-1.5">{f.competition.code}</span>
+                        {f.competition.name}
+                      </p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-emerald-700/70 dark:text-emerald-400/70">
+                        <span className="truncate">{f.event.name}</span>
+                        {(f.event.startDate || f.event.endDate) && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 shrink-0" />
+                            {f.event.startDate === f.event.endDate
+                              ? fmt(f.event.startDate)
+                              : `${fmt(f.event.startDate) ?? "?"} – ${fmt(f.event.endDate) ?? "?"}`}
+                          </span>
+                        )}
+                        <span>untuk {f.targetGroupName}</span>
+                      </div>
+                    </div>
+                    {locked && (
+                      <span className="text-[10px] leading-snug text-zinc-500 dark:text-zinc-400 max-w-[16rem] text-right">
+                        Satu penyertaan sahaja bagi acara ini — anda telah memilih {locked}.
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {f.challenges.map((c) => {
+                      const registered = fc1Regs[f.id]?.includes(c.id) ?? false;
+                      const busyKey    = `${f.id}:${c.id}`;
+                      return (
+                        <div key={c.id} className="px-4 py-2.5 flex items-center gap-3">
+                          <Gamepad2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-zinc-800 dark:text-zinc-100 truncate">{c.name}</p>
+                            {c.status !== "published" && (
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400">Belum dibuka di FC-1</p>
+                            )}
+                          </div>
+                          {registered ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+                              <CheckCircle className="h-3.5 w-3.5" /> Berdaftar
+                            </span>
+                          ) : !fc1Reg ? (
+                            <span className="text-[11px] text-zinc-400">Daftar akaun dahulu</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => registerFc1Challenge(f.id, c.id)}
+                              disabled={fc1Busy !== null || !!locked}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-700 dark:text-emerald-300 px-2.5 py-1.5 text-xs font-medium transition-colors"
+                            >
+                              {fc1Busy === busyKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                              Daftar cabaran
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

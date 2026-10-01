@@ -28,6 +28,7 @@ export default async function DashboardPage() {
       ic: true,
       contingent: { select: { name: true, shortName: true } },
       quizzlyAccess: { select: { personalId: true } },
+      fc1Access:     { select: { fc1UserId: true } },
     },
   });
   if (!participant) redirect("/participant/sign-in");
@@ -175,29 +176,88 @@ export default async function DashboardPage() {
       })
     : new Map();
 
-  // Competitions the participant is already entered in, per Quizzly event —
-  // including entries made by a manager, not just ones created from tokens —
-  // so the "Penyertaan Tunggal Sahaja" lock reflects the same facts the server
-  // enforces.
-  const quizzlyEventIds = [...new Set(quizzlyLinks.map((ec) => ec.event.id))];
-  const entries = quizzlyEventIds.length === 0 ? [] : await db.teamMember.findMany({
+  // ── Eptim FC-1 (individual) ──────────────────────────────────────────────
+  // Individual FC-1 competitions on open events that have challenges
+  // configured, filtered by the same precise target-group rule as above.
+  const fc1Links = await db.eventCompetition.findMany({
+    where: {
+      competition: { thirdPartyIntegration: "eptim-fc1", participationType: "INDIVIDUAL" },
+      event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
+    },
+    select: {
+      id: true,
+      fc1Challenges: true,
+      event: { select: { id: true, name: true, slug: true, startDate: true, endDate: true, allowMultipleParticipation: true } },
+      competition: {
+        select: {
+          id: true, code: true, name: true,
+          targetGroups: {
+            select: {
+              targetGroup: {
+                select: { id: true, name: true, schoolLevel: true, ppki: true, classGrades: true, minAge: true, maxAge: true },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ event: { startDate: "asc" } }, { competition: { code: "asc" } }],
+  });
+
+  const fc1Registrations = await db.participantFc1Challenge.findMany({
+    where:  { participantId: session.participantId },
+    select: { eventCompetitionId: true, challengeId: true },
+  });
+  const fc1Registered = new Set(fc1Registrations.map((r) => `${r.eventCompetitionId}:${r.challengeId}`));
+
+  type Fc1ChallengeRef = { id: string; name: string; challenge_mode: string; status: string };
+  const fc1Data = fc1Links.flatMap((ec) => {
+    const challenges = (ec.fc1Challenges as Fc1ChallengeRef[] | null) ?? [];
+    if (challenges.length === 0) return [];
+    const matched = matchingTargetGroups(participant, ec.competition.targetGroups.map((t) => t.targetGroup));
+    if (matched.length === 0) return [];
+    return [{
+      id:              ec.id,
+      targetGroupName: matched[0].name,
+      event: {
+        id:        ec.event.id,
+        name:      ec.event.name,
+        slug:      ec.event.slug,
+        startDate: ec.event.startDate?.toISOString() ?? null,
+        endDate:   ec.event.endDate?.toISOString()   ?? null,
+        allowMultipleParticipation: ec.event.allowMultipleParticipation,
+      },
+      competition: { id: ec.competition.id, code: ec.competition.code, name: ec.competition.name },
+      challenges: challenges.map((c) => ({
+        id: c.id, name: c.name, status: c.status, challengeMode: c.challenge_mode,
+        registered: fc1Registered.has(`${ec.id}:${c.id}`),
+      })),
+    }];
+  });
+
+  // Competitions the participant is already entered in, per event shown in the
+  // Quizzly or FC-1 sections — including entries made by a manager, not just
+  // ones created here — so the "Penyertaan Tunggal Sahaja" lock reflects the
+  // same facts the server enforces, across both integrations.
+  const entryEventIds = [...new Set([...quizzlyLinks, ...fc1Links].map((ec) => ec.event.id))];
+  const entries = entryEventIds.length === 0 ? [] : await db.teamMember.findMany({
     where: {
       participantId: session.participantId,
-      team: { teamEvents: { some: { eventId: { in: quizzlyEventIds } } } },
+      team: { teamEvents: { some: { eventId: { in: entryEventIds } } } },
     },
     select: {
       team: {
         select: {
           competition: { select: { id: true, code: true, name: true } },
-          teamEvents:  { where: { eventId: { in: quizzlyEventIds } }, select: { eventId: true } },
+          teamEvents:  { where: { eventId: { in: entryEventIds } }, select: { eventId: true } },
         },
       },
     },
   });
-  const quizzlyEventEntries: Record<string, { competitionId: string; label: string }[]> = {};
+  const eventEntries: Record<string, { competitionId: string; label: string }[]> = {};
   for (const e of entries) {
     for (const te of e.team.teamEvents) {
-      (quizzlyEventEntries[te.eventId] ??= []).push({
+      (eventEntries[te.eventId] ??= []).push({
         competitionId: e.team.competition.id,
         label:         `${e.team.competition.code} ${e.team.competition.name}`,
       });
@@ -306,9 +366,11 @@ export default async function DashboardPage() {
       walkInCompetitions={walkInData}
       existingRegistrations={existingRegistrations}
       quizzlyCompetitions={quizzlyData}
-      quizzlyEventEntries={quizzlyEventEntries}
+      eventEntries={eventEntries}
+      fc1Competitions={fc1Data}
+      fc1Registered={!!participant.fc1Access}
       quizzlyRegistered={!!participant.quizzlyAccess}
-      quizzlyCanRegister={!!participant.ic?.replace(/\D/g, "")}
+      hasIc={!!participant.ic?.replace(/\D/g, "")}
     />
   );
 }

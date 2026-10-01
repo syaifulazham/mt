@@ -317,6 +317,114 @@ Calls the `get_event_results` RPC scoped to this event and challenge.
 
 ---
 
+### 4.5 Challenge registrations
+
+Register an existing player for a specific challenge of the event. Writes happen only through this API (service role); authenticated players can read their own registrations directly via Supabase. Registrations are **unique per (challenge, player)** and are scoped to the API key's event — a challenge id from another event behaves exactly like an unknown id (`404`).
+
+Before a player can be registered they must already exist (`POST /users`) and belong to a sector in this event (`POST /sectors/:custom_id/members`). The player is identified in request bodies by exactly one of `user_id`, `userid` (synthetic → `<userid>@api.viblock.arena`) or `email`, matching `POST /sectors/:custom_id/members`.
+
+#### POST `/challenges/:challenge_id/registrations` — register a player
+
+**Body**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `user_id` | uuid | one of the three | Supabase user id |
+| `userid` | string | one of the three | Synthetic userid |
+| `email` | string | one of the three | Real email |
+| `external_ref` | string | no | Stored verbatim (e.g. Techlympics registration id) |
+
+**Rules**
+
+- `404` if the challenge is not in this event, or the player does not exist.
+- `403` if the player is not in any sector of this event.
+- `409` if already registered; the body includes the existing registration so callers can treat it as success:
+
+```json
+{ "error": "Already registered", "registration": { /* same shape as 201 */ } }
+```
+
+**Response (`201`)**
+
+```json
+{
+  "registration_id": "...",
+  "challenge_id": "...",
+  "user_id": "...",
+  "userid": "110101105513",
+  "full_name": "Ali Bin Abu",
+  "external_ref": "mt-123",
+  "registered_at": "2026-09-30T10:00:00.000Z"
+}
+```
+
+`userid` is `null` if the player was created with a real email instead of a synthetic userid.
+
+#### GET `/challenges/:challenge_id/registrations` — list registrations
+
+**Query params**
+
+| Param | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `limit` | int | `500` | Capped at `1000` |
+| `offset` | int | `0` | Pagination offset |
+
+Ordered by `registered_at` ascending. `404` if the challenge is not in this event.
+
+**Response (`200`)**
+
+```json
+{
+  "challenge_id": "...",
+  "challenge_name": "Delivery Boybot",
+  "total": 42,
+  "limit": 500,
+  "offset": 0,
+  "registrations": [
+    {
+      "registration_id": "...",
+      "user_id": "...",
+      "userid": "110101105513",
+      "full_name": "Ali Bin Abu",
+      "email": "110101105513@api.viblock.arena",
+      "sector_custom_id": "smk-test-01",
+      "external_ref": "mt-123",
+      "registered_at": "2026-09-30T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+`sector_custom_id` is the player's first sector in this event (or `null` if they have none at list time).
+
+#### GET `/users/:userid/registrations` — one player's registrations
+
+`:userid` is the synthetic userid (URL-encoded). Only returns registrations in this event. `404` if the player does not exist. A player with no registrations returns `200` with an empty array.
+
+**Response (`200`)**
+
+```json
+{
+  "userid": "110101105513",
+  "user_id": "...",
+  "registrations": [
+    {
+      "registration_id": "...",
+      "challenge_id": "...",
+      "challenge_name": "Delivery Boybot",
+      "external_ref": "mt-123",
+      "registered_at": "2026-09-30T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+#### DELETE `/challenges/:challenge_id/registrations/:userid` — withdraw
+
+`:userid` is the synthetic userid (URL-encoded). `204` on success; `404` if the challenge, player, or registration does not exist in this event. Attempts and results already recorded are **not** deleted.
+
+---
+
 ## 5. Rate limiting & safety
 
 - The function does not currently implement rate limiting. Callers should self-throttle and avoid hammering `/auth/token`.
@@ -591,9 +699,9 @@ and the player needs another attempt.
 
 **Body**
 
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `event_id` | uuid | no | Optional scope check (token is globally unique) |
+| Field      | Type | Required | Notes                                           |
+| ------------| ------| ----------| -------------------------------------------------|
+| `event_id` | uuid | no       | Optional scope check (token is globally unique) |
 
 **Response (`200`)**
 
@@ -659,7 +767,30 @@ curl -s -X POST "$BASE/competition/tokens/K7Q2M/renew" \
 
 ---
 
-### 8.5 Security notes
+### 8.5 Client session lifecycle (browser cookies)
+
+The CompetitionGate UI persists the organizer passcode in a browser
+cookie (`vb_comp_passcode`, 7-day expiry) together with the resolved
+endpoint info (`vb_comp_endpoint`). This means:
+
+- **Passcode is entered once.** On subsequent visits (or after a player's
+  session ends), the gate restores the passcode from the cookie and skips
+  straight to the token step. The competitor never re-enters the passcode.
+- **Token is entered per player.** Each player still types their own
+  5-char token to mint a session via `/competition/session`. When that
+  player finishes, an **End session** button in the arena header signs
+  out the supabase session and returns to the token screen — the
+  passcode cookie is retained, so the next player only enters their token.
+- **Full logout** clears both cookies and the supabase session,
+  returning to the passcode screen. Use this when switching kiosks or
+  events.
+
+If a valid supabase session is still alive when the gate boots, it
+resumes straight into the arena without prompting again.
+
+---
+
+### 8.6 Security notes
 
 - Competition registration endpoints are public by design — they are the
   public-facing sign-up for a competition. Do not expose them to
@@ -667,6 +798,8 @@ curl -s -X POST "$BASE/competition/tokens/K7Q2M/renew" \
 - The raw passcode for a Competition Endpoint is shown once at creation
   in the Organizer Dashboard. The stored `passcode_hash` is SHA-256 and
   cannot be reversed.
+- The passcode cookie is stored in plaintext in the browser. For shared
+  kiosks, use the **Full logout** button between events to clear it.
 - The synthetic user's random password is stored in
   `auth.users.raw_user_meta_data.competition_password` so the
   `/competition/session` endpoint can sign in without the competitor

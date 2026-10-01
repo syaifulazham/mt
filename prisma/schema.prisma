@@ -400,6 +400,8 @@ model Participant {
   walkInFormSubmissions WalkInFormSubmission[]
   quizzlyAccess         ParticipantQuizzlyAccess?
   quizzlyTokens         ParticipantQuizzlyToken[]
+  fc1Access             ParticipantFc1Access?
+  fc1Challenges         ParticipantFc1Challenge[]
 
   @@index([contingentId])
   @@map("contestants")
@@ -651,6 +653,8 @@ model EventCompetition {
   quizzlySessionTitle String?
   quizzlyAssignBy     String? // "target_group" | "grade" — how quizzes are matched to participants
   quizzlyQuizMap      Json? // [{ targetGroupId, targetGroupName, grade, quizId, quizTitle }] — grade is null in target_group mode
+  fc1EventId          String? // Viblock event the picks came from — EPTIMFC1_API_KEY decides it, so a rotated key is detectable
+  fc1Challenges       Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim FC-1 event
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -1264,6 +1268,47 @@ model Announcement {
 // ─────────────────────────────────────────────────────────────────────────────
 // THIRD-PARTY INTEGRATIONS
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A participant's Eptim FC-1 (Viblock Arena) player account, created the same
+ * way DroneAccess is: userid = IC digits, member of the contingent's sector.
+ * The password is kept because /auth/token needs it; "__existing__" means the
+ * account already existed upstream and its password is unknown here.
+ */
+model ParticipantFc1Access {
+  id            String   @id @default(cuid())
+  participantId String   @unique
+  fc1UserId     String   // the `userid` sent to FC-1 (IC digits)
+  fc1Password   String
+  createdAt     DateTime @default(now())
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@map("participant_fc1_access")
+}
+
+/**
+ * A participant's registration for one FC-1 challenge of one event-competition,
+ * mirrored from FC-1's `challenge_registrations` (guide §4.5). Written only
+ * after FC-1 accepted the registration; `fc1SyncedAt` records when it last
+ * confirmed it. A null `fc1SyncedAt` means FC-1 was never told.
+ */
+model ParticipantFc1Challenge {
+  id                 String    @id @default(cuid())
+  participantId      String
+  eventCompetitionId String
+  challengeId        String
+  challengeName      String
+  fc1SyncedAt        DateTime?
+  createdAt          DateTime  @default(now())
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, eventCompetitionId, challengeId])
+  @@index([participantId])
+  @@index([challengeId])
+  @@map("participant_fc1_challenges")
+}
 
 model DroneAccess {
   id            String   @id @default(cuid())

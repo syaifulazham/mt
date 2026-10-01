@@ -36,6 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     eptimEduCourseId, eptimEduCourseTitle,
     eptimCsiCompetitionId, eptimCsiCompetitionName, eptimCsiCases,
     quizzlySessionId, quizzlySessionTitle, quizzlyAssignBy, quizzlyQuizMap,
+    fc1EventId, fc1Challenges,
   } = await req.json();
 
   if (quizzlyAssignBy !== undefined && quizzlyAssignBy !== null
@@ -63,6 +64,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(quizzlyAssignBy     !== undefined && { quizzlyAssignBy:     quizzlyAssignBy     || null }),
       ...(quizzlyQuizMap !== undefined && {
         quizzlyQuizMap: Array.isArray(quizzlyQuizMap) && quizzlyQuizMap.length > 0 ? quizzlyQuizMap : Prisma.DbNull,
+      }),
+      ...(fc1EventId !== undefined && { fc1EventId: fc1EventId || null }),
+      ...(fc1Challenges !== undefined && {
+        fc1Challenges: Array.isArray(fc1Challenges) && fc1Challenges.length > 0 ? fc1Challenges : Prisma.DbNull,
       }),
     },
     include: makeEcInclude(eventId),
