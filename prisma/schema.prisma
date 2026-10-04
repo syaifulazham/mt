@@ -1300,6 +1300,11 @@ model ParticipantFc1Challenge {
   challengeId        String
   challengeName      String
   fc1SyncedAt        DateTime?
+  // Latest one-click launch link (POST /auth/launch): single-use, 5 minutes.
+  // Kept so the dashboard can show it and ask FC-1 whether it is still valid.
+  launchCode         String?
+  launchUrl          String?
+  launchExpiresAt    DateTime?
   createdAt          DateTime  @default(now())
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)

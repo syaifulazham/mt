@@ -65,6 +65,7 @@ export async function fc1ListChallenges(): Promise<{ eventId: string; challenges
   return { eventId: json.event_id, challenges: json.challenges ?? [] };
 }
 
+
 // ── Player accounts ──────────────────────────────────────────────────────────
 // Same shape as the Drone integration (eptim-drone.ts): one sector per
 // contingent, one player per participant keyed by IC digits. /auth/token
@@ -93,6 +94,67 @@ export function fc1CreateSector(input: {
 
 export function fc1AssignMember(sectorCustomId: string, userid: string) {
   return req(`/sectors/${encodeURIComponent(sectorCustomId)}/members`, { method: "POST", body: { userid } });
+}
+
+// ── One-click launch (POST /auth/launch) ─────────────────────────────────────
+
+const APP_URL = (process.env.EPTIMFC1_APP_URL ?? "").replace(/\/$/, "");
+
+/**
+ * Single-use, 5-minute launch code that signs the player into the Arena
+ * website without a password. Server-only: it needs the API key. The player
+ * must be in a sector of the event (403 otherwise). Mint a fresh one per click.
+ */
+export async function fc1LaunchUrl(userid: string): Promise<{ code: string; url: string; expiresAt: string }> {
+  if (!APP_URL) throw Object.assign(new Error("EPTIMFC1_APP_URL not configured"), { status: 503 });
+  const json = await req<{ user_id: string; launch_code: string; launch_path: string; expires_at: string }>(
+    "/auth/launch", { method: "POST", body: { userid } },
+  );
+  const path = json.launch_path || `/?launch=${encodeURIComponent(json.launch_code)}`;
+  return {
+    code: json.launch_code,
+    url: `${APP_URL}${path.startsWith("/") ? "" : "/"}${path}`,
+    expiresAt: json.expires_at,
+  };
+}
+
+/**
+ * A stored launch link re-pointed at the current EPTIMFC1_APP_URL. Only the
+ * path + query (`/?launch=<code>`) identifies the launch; the host is config,
+ * so a link stored before the app URL changed must not keep the old host.
+ */
+export function fc1RehostLaunchUrl(stored: string): string {
+  if (!APP_URL) return stored;
+  try {
+    const u = new URL(stored);
+    return `${APP_URL}${u.pathname}${u.search}`;
+  } catch {
+    return stored;
+  }
+}
+
+export type Fc1LaunchStatus = {
+  status: "valid" | "used" | "expired";
+  expires_at: string; used_at: string | null; seconds_remaining: number;
+};
+
+/** State of a launch code from this event; 404 when FC-1 doesn't know it. */
+export function fc1LaunchStatus(code: string) {
+  return req<Fc1LaunchStatus>(`/auth/launch/${encodeURIComponent(code)}`);
+}
+
+export type Fc1Attempts = {
+  attempted: boolean;
+  completed: boolean;
+  attempt_count: number;
+  max_attempts: number | null;
+  attempts_remaining: number | null;
+  best_attempt: { score: number; max_score: number; elapsed_seconds: number; completed_at: string } | null;
+};
+
+/** Has the player taken / completed the challenge? 404 if challenge or player unknown. */
+export function fc1Attempts(challengeId: string, userid: string) {
+  return req<Fc1Attempts>(`/challenges/${encodeURIComponent(challengeId)}/attempts/${encodeURIComponent(userid)}`);
 }
 
 // ── Challenge registrations (guide §4.5) ─────────────────────────────────────

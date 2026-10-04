@@ -123,6 +123,79 @@ Authenticates a user and returns a Supabase session. The user **must** be a memb
 
 ---
 
+#### POST `/auth/launch` — One-click launch into the Arena website
+
+Creates a **single-use** launch code. The code expires **5 minutes** after it's created. Send the player to the Arena website with this code and they arrive signed in, without being asked for a password. Typically your server calls this when the player clicks "Open Viblock Arena" in your app, then redirects their browser.
+
+Rules:
+
+- The player must have role `player`. You can't create launch codes for organizer, team manager, or admin accounts (`403`).
+- The player must be assigned to a sector in this API key's event (`403`).
+- Only call this from your **server**. The `X-API-Key` must never reach a browser.
+
+**Body** (exactly one identifier)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `userid` | string | Synthetic userid |
+| `email` | string | Real email |
+| `user_id` | uuid | Internal user id |
+
+**Response (`201`)**
+
+```json
+{
+  "user_id": "...",
+  "launch_code": "Xk3...q9A",
+  "launch_path": "/?launch=Xk3...q9A",
+  "expires_at": "2026-10-04T10:05:00.000Z"
+}
+```
+
+Open `https://<arena-web-address>` + `launch_path` in the player's browser. The website exchanges the code for a session and then removes it from the address bar. If the code was already used or has expired, the website shows a "Couldn't sign you in" message. Create a fresh code each time the player launches.
+
+- `400` — No identifier supplied
+- `403` — Not a player, or not assigned to a sector in this event
+- `404` — Player not found
+
+> The Arena website exchanges the code itself through `POST /auth/launch/redeem` (no API key needed). Partner apps don't need to call it.
+
+#### GET `/auth/launch/:launch_code` — Check a launch code
+
+Returns the status of a launch code issued with **this** API key's event. Codes from other events return `404`. Use this to decide whether to reuse a code or create a fresh one.
+
+**Response (`200`)**
+
+```json
+{
+  "user_id": "...",
+  "status": "valid",
+  "created_at": "2026-10-04T10:00:00.000Z",
+  "expires_at": "2026-10-04T10:05:00.000Z",
+  "used_at": null,
+  "seconds_remaining": 212
+}
+```
+
+| `status` | Meaning |
+| --- | --- |
+| `valid` | Not used yet and not expired. Can still be opened. |
+| `used` | Already redeemed. The player signed in with it. |
+| `expired` | Not used within 5 minutes. Create a new one. |
+
+- `404` — Code not found for this event
+
+**Example**
+
+```bash
+curl -s -X POST "$BASE/auth/launch" \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"userid":"pilot-42"}'
+# then redirect the player to https://<arena-web-address>/?launch=<launch_code>
+```
+
+---
+
 #### GET `/users/check/:userid` — Check userid availability
 
 Returns whether a synthetic userid is available for registration.
@@ -419,6 +492,70 @@ Ordered by `registered_at` ascending. `404` if the challenge is not in this even
 }
 ```
 
+#### GET `/challenges/:challenge_id/registrations/:userid` — check one registration
+
+`:userid` is the synthetic userid (URL-encoded). Returns `200` whether or not the player is registered; check the `registered` flag. `404` only if the challenge is not in this event or the player does not exist.
+
+**Response (`200`) — registered**
+
+```json
+{
+  "challenge_id": "...",
+  "challenge_name": "Delivery Boybot",
+  "userid": "110101105513",
+  "user_id": "...",
+  "registered": true,
+  "registration": {
+    "registration_id": "...",
+    "external_ref": "mt-123",
+    "registered_at": "2026-09-30T10:00:00.000Z"
+  }
+}
+```
+
+**Response (`200`) — not registered**
+
+```json
+{
+  "challenge_id": "...",
+  "challenge_name": "Delivery Boybot",
+  "userid": "110101105513",
+  "user_id": "...",
+  "registered": false,
+  "registration": null
+}
+```
+
+#### GET `/challenges/:challenge_id/attempts/:userid` — Has the player taken the challenge?
+
+`:userid` is the synthetic userid (URL-encoded). Summarises every run the player has made on this challenge, whatever the outcome (`completed`, `failed`, `aborted`, `surrender`, `time-ended`).
+
+**Response (`200`)**
+
+```json
+{
+  "challenge_id": "...",
+  "challenge_name": "Delivery Boybot",
+  "userid": "110101105513",
+  "user_id": "...",
+  "attempted": true,
+  "completed": true,
+  "attempt_count": 3,
+  "completed_count": 1,
+  "max_attempts": 5,
+  "attempts_remaining": 2,
+  "best_attempt": { "score": 80, "max_score": 100, "elapsed_seconds": 41.2, "completed_at": "..." },
+  "last_attempt": { "outcome": "failed", "score": 20, "max_score": 100, "elapsed_seconds": 60, "attempted_at": "..." }
+}
+```
+
+- `attempted` — `true` if the player has started at least one run
+- `completed` — `true` if at least one run finished successfully
+- `max_attempts` / `attempts_remaining` — `null` when the challenge has no attempt limit
+- `best_attempt` — best completed run (highest score, then fastest), or `null`
+- `last_attempt` — most recent run of any outcome, or `null`
+- `404` — Challenge (in this event) or player not found
+
 #### DELETE `/challenges/:challenge_id/registrations/:userid` — withdraw
 
 `:userid` is the synthetic userid (URL-encoded). `204` on success; `404` if the challenge, player, or registration does not exist in this event. Attempts and results already recorded are **not** deleted.
@@ -699,9 +836,9 @@ and the player needs another attempt.
 
 **Body**
 
-| Field      | Type | Required | Notes                                           |
-| ------------| ------| ----------| -------------------------------------------------|
-| `event_id` | uuid | no       | Optional scope check (token is globally unique) |
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `event_id` | uuid | no | Optional scope check (token is globally unique) |
 
 **Response (`200`)**
 

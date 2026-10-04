@@ -9,6 +9,7 @@ import {
   quizzlyConfigured, quizzlyTokenStatuses, resolveQuizzlyAssignment,
   type QuizzlyQuizAssignment, type QuizzlyTokenLifecycle,
 } from "@/lib/asiaspark-quizzly";
+import { fc1Attempts, fc1Configured, fc1LaunchStatus, fc1RehostLaunchUrl, type Fc1Attempts } from "@/lib/eptim-fc1";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -206,17 +207,45 @@ export default async function DashboardPage() {
 
   const fc1Registrations = await db.participantFc1Challenge.findMany({
     where:  { participantId: session.participantId },
-    select: { eventCompetitionId: true, challengeId: true },
+    select: { eventCompetitionId: true, challengeId: true, launchCode: true, launchUrl: true },
   });
-  const fc1Registered = new Set(fc1Registrations.map((r) => `${r.eventCompetitionId}:${r.challengeId}`));
+  const fc1RegByKey = new Map(fc1Registrations.map((r) => [`${r.eventCompetitionId}:${r.challengeId}`, r]));
 
+  // The challenges on offer are exactly the ones the organizer picked for the
+  // event-competition (Events → Pertandingan); the participant may register any
+  // or all of them.
   type Fc1ChallengeRef = { id: string; name: string; challenge_mode: string; status: string };
-  const fc1Data = fc1Links.flatMap((ec) => {
+  const fc1Eligible = fc1Links.flatMap((ec) => {
     const challenges = (ec.fc1Challenges as Fc1ChallengeRef[] | null) ?? [];
     if (challenges.length === 0) return [];
     const matched = matchingTargetGroups(participant, ec.competition.targetGroups.map((t) => t.targetGroup));
-    if (matched.length === 0) return [];
-    return [{
+    return matched.length > 0 ? [{ ec, challenges, matched }] : [];
+  });
+
+  // Per-challenge state comes from FC-1: whether it is completed (attempts) and
+  // whether the stored launch link is still usable. Only possible once the
+  // participant has an FC-1 player; every call degrades to "unknown" on failure
+  // so the section still renders.
+  const fc1UserId = participant.fc1Access?.fc1UserId ?? null;
+  const fc1State = new Map<string, { attempts: Fc1Attempts | null; link: { url: string; expiresAt: string } | null }>();
+  if (fc1UserId && fc1Configured()) {
+    const pairs = fc1Eligible.flatMap(({ ec, challenges }) => challenges.map((c) => ({ ecId: ec.id, challengeId: c.id })));
+    const attemptsByChallenge = new Map<string, Fc1Attempts | null>();
+    await Promise.all([...new Set(pairs.map((p) => p.challengeId))].map(async (id) => {
+      attemptsByChallenge.set(id, await fc1Attempts(id, fc1UserId).catch(() => null));
+    }));
+    await Promise.all(pairs.map(async ({ ecId, challengeId }) => {
+      const reg = fc1RegByKey.get(`${ecId}:${challengeId}`);
+      const st = reg?.launchCode && reg.launchUrl ? await fc1LaunchStatus(reg.launchCode).catch(() => null) : null;
+      fc1State.set(`${ecId}:${challengeId}`, {
+        attempts: attemptsByChallenge.get(challengeId) ?? null,
+        link: st?.status === "valid" && reg?.launchUrl ? { url: fc1RehostLaunchUrl(reg.launchUrl), expiresAt: st.expires_at } : null,
+      });
+    }));
+  }
+
+  const fc1Data = fc1Eligible.map(({ ec, challenges, matched }) => {
+    return {
       id:              ec.id,
       targetGroupName: matched[0].name,
       event: {
@@ -228,11 +257,20 @@ export default async function DashboardPage() {
         allowMultipleParticipation: ec.event.allowMultipleParticipation,
       },
       competition: { id: ec.competition.id, code: ec.competition.code, name: ec.competition.name },
-      challenges: challenges.map((c) => ({
-        id: c.id, name: c.name, status: c.status, challengeMode: c.challenge_mode,
-        registered: fc1Registered.has(`${ec.id}:${c.id}`),
-      })),
-    }];
+      challenges: challenges.map((c) => {
+        const s = fc1State.get(`${ec.id}:${c.id}`);
+        return {
+          id: c.id, name: c.name, status: c.status, challengeMode: c.challenge_mode,
+          registered:        fc1RegByKey.has(`${ec.id}:${c.id}`),
+          completed:         s?.attempts?.completed ?? false,
+          attemptsRemaining: s?.attempts?.attempts_remaining ?? null,
+          best:              s?.attempts?.best_attempt
+            ? { score: s.attempts.best_attempt.score, maxScore: s.attempts.best_attempt.max_score }
+            : null,
+          link: s?.link ?? null,
+        };
+      }),
+    };
   });
 
   // Competitions the participant is already entered in, per event shown in the
@@ -372,7 +410,6 @@ export default async function DashboardPage() {
       quizzlyCompetitions={quizzlyData}
       eventEntries={eventEntries}
       fc1Competitions={fc1Data}
-      fc1Registered={!!participant.fc1Access}
       quizzlyRegistered={!!participant.quizzlyAccess}
       hasIc={!!participant.ic?.replace(/\D/g, "")}
     />

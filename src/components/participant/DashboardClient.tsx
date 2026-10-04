@@ -102,7 +102,17 @@ type Fc1Entry = {
     allowMultipleParticipation: boolean;
   };
   competition: { id: string; code: string; name: string };
-  challenges: { id: string; name: string; status: string; challengeMode: string; registered: boolean }[];
+  challenges: {
+    id: string; name: string; status: string; challengeMode: string;
+    registered: boolean;
+    /** From FC-1's attempts summary; false when unknown. */
+    completed: boolean;
+    /** null = no attempt limit (or unknown). */
+    attemptsRemaining: number | null;
+    best: { score: number; maxScore: number } | null;
+    /** The stored launch link while FC-1 reports it still valid. */
+    link: { url: string; expiresAt: string } | null;
+  }[];
 };
 
 type QuizzlyEntry = {
@@ -131,7 +141,6 @@ type Props = {
   /** Competitions the participant is already entered in, keyed by event id. */
   eventEntries: Record<string, { competitionId: string; label: string }[]>;
   fc1Competitions: Fc1Entry[];
-  fc1Registered: boolean;
   quizzlyRegistered: boolean;
   hasIc: boolean;
 };
@@ -575,43 +584,55 @@ export function DashboardClient({
   quizzlyCompetitions,
   eventEntries,
   fc1Competitions,
-  fc1Registered,
   quizzlyRegistered,
   hasIc,
 }: Props) {
-  const [fc1Reg, setFc1Reg]   = useState(fc1Registered);
-  const [fc1Busy, setFc1Busy] = useState<string | null>(null); // "register" | `${ecId}:${challengeId}`
-  const [fc1Err, setFc1Err]   = useState("");
-  // challenge ids registered, per event-competition — drives buttons and the lock
-  const [fc1Regs, setFc1Regs] = useState<Record<string, string[]>>(
-    Object.fromEntries(fc1Competitions.map((f) => [f.id, f.challenges.filter((c) => c.registered).map((c) => c.id)])),
+  // ── FC-1 ── keyed `${eventCompetitionId}:${challengeId}`
+  type Fc1Link = { url: string; expiresAt: string };
+  const [fc1Busy, setFc1Busy] = useState<string | null>(null);
+  const [fc1Err, setFc1Err]   = useState<{ key: string; message: string } | null>(null);
+  const [fc1Live, setFc1Live] = useState<Record<string, { registered: boolean; link: Fc1Link | null }>>(
+    Object.fromEntries(fc1Competitions.flatMap((f) =>
+      f.challenges.map((c) => [`${f.id}:${c.id}`, { registered: c.registered, link: c.link }]))),
   );
+  // Launch links live 5 minutes; re-render now and then so an open page flips
+  // an expired "Mula cabaran" over to "Mohon pautan baharu" by itself.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+  const fc1HasReg = (ecId: string) =>
+    Object.entries(fc1Live).some(([k, v]) => v.registered && k.startsWith(`${ecId}:`));
 
-  async function registerFc1() {
-    setFc1Busy("register"); setFc1Err("");
+  async function fc1Post(key: string, url: string, body: object, fallback: string) {
+    setFc1Busy(key); setFc1Err(null);
     try {
-      const res  = await fetch("/api/v2/participant/fc1/register", { method: "POST" });
+      const res  = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Pendaftaran gagal");
-      setFc1Reg(true);
+      if (!res.ok) throw new Error(json.error ?? fallback);
+      setFc1Live((p) => ({ ...p, [key]: { registered: true, link: (json as { link: Fc1Link | null }).link ?? null } }));
     } catch (e) {
-      setFc1Err(e instanceof Error ? e.message : "Pendaftaran gagal");
+      setFc1Err({ key, message: e instanceof Error ? e.message : fallback });
     } finally { setFc1Busy(null); }
   }
 
-  async function registerFc1Challenge(eventCompetitionId: string, challengeId: string) {
-    setFc1Busy(`${eventCompetitionId}:${challengeId}`); setFc1Err("");
-    try {
-      const res = await fetch("/api/v2/participant/fc1/challenges", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventCompetitionId, challengeId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Pendaftaran cabaran gagal");
-      setFc1Regs((prev) => ({ ...prev, [eventCompetitionId]: [...(prev[eventCompetitionId] ?? []), challengeId] }));
-    } catch (e) {
-      setFc1Err(e instanceof Error ? e.message : "Pendaftaran cabaran gagal");
-    } finally { setFc1Busy(null); }
+  // Register (creating the FC-1 account on first use) and get a link in one go.
+  const registerFc1Challenge = (eventCompetitionId: string, challengeId: string) =>
+    fc1Post(`${eventCompetitionId}:${challengeId}`, "/api/v2/participant/fc1/challenges",
+      { eventCompetitionId, challengeId }, "Pendaftaran cabaran gagal");
+
+  // Reuses the current link if FC-1 still reports it valid, otherwise a new one.
+  const renewFc1Link = (eventCompetitionId: string, challengeId: string) =>
+    fc1Post(`${eventCompetitionId}:${challengeId}`, "/api/v2/participant/fc1/challenges/link",
+      { eventCompetitionId, challengeId }, "Gagal mendapatkan pautan");
+
+  // Links are single-use: once opened it's spent, so the row moves to "Mohon
+  // pautan baharu". New tab only — see EptimCsiTeamButton for why there is no
+  // "popup blocked" fallback on the window.open() return value.
+  function openFc1Link(key: string, url: string) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    setFc1Live((p) => ({ ...p, [key]: { ...p[key], link: null } }));
   }
   const [quizzlyReg, setQuizzlyReg]       = useState(quizzlyRegistered);
   const [quizzlyBusy, setQuizzlyBusy]     = useState<string | null>(null); // "register" | eventCompetitionId
@@ -666,7 +687,7 @@ export function DashboardClient({
     );
     if (viaToken) return label(viaToken.competition);
     const viaFc1 = fc1Competitions.find(
-      (o) => o.event.id === event.id && o.competition.id !== competitionId && (fc1Regs[o.id]?.length ?? 0) > 0,
+      (o) => o.event.id === event.id && o.competition.id !== competitionId && fc1HasReg(o.id),
     );
     if (viaFc1) return label(viaFc1.competition);
     // …then what the server already knew, including manager-made entries.
@@ -1086,40 +1107,22 @@ export function DashboardClient({
       {/* ── FC-1 Individu ───────────────────────────────────────────── */}
       {fc1Competitions.length > 0 && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold dark:text-zinc-100">FC-1 Individu</h2>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Cabaran Eptim FC-1 yang layak untuk anda. Daftar akaun sekali, kemudian pilih cabaran.
+          <div>
+            <h2 className="text-lg font-bold dark:text-zinc-100">FC-1 Individu</h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Daftar cabaran di sini untuk bermain di FC-1. Pautan masuk sah 5 minit dan sekali guna —
+              mohon pautan baharu jika tamat tempoh.
+            </p>
+            {!hasIc && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                Nombor kad pengenalan diperlukan untuk mendaftar. Kemas kini di Profil dahulu.
               </p>
-            </div>
-            {fc1Reg ? (
-              <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 px-2.5 py-1 text-xs font-medium">
-                <CheckCircle className="h-3.5 w-3.5" /> Akaun berdaftar
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={registerFc1}
-                disabled={fc1Busy !== null || !hasIc}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1.5 text-xs font-medium transition-colors"
-              >
-                {fc1Busy === "register" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
-                Daftar FC-1
-              </button>
             )}
           </div>
 
-          {!hasIc && !fc1Reg && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              Nombor kad pengenalan diperlukan untuk mendaftar. Kemas kini di Profil dahulu.
-            </p>
-          )}
-          {fc1Err && <p className="text-xs text-red-500 dark:text-red-400">{fc1Err}</p>}
-
           <div className="space-y-3">
             {fc1Competitions.map((f) => {
-              const locked = (fc1Regs[f.id]?.length ?? 0) > 0 ? null : claimedBy(f.event, f.competition.id);
+              const locked = fc1HasReg(f.id) ? null : claimedBy(f.event, f.competition.id);
               return (
                 <div
                   key={f.id}
@@ -1153,34 +1156,71 @@ export function DashboardClient({
 
                   <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {f.challenges.map((c) => {
-                      const registered = fc1Regs[f.id]?.includes(c.id) ?? false;
-                      const busyKey    = `${f.id}:${c.id}`;
+                      const key  = `${f.id}:${c.id}`;
+                      const live = fc1Live[key] ?? { registered: c.registered, link: c.link };
+                      const link = live.link && new Date(live.link.expiresAt).getTime() > nowMs ? live.link : null;
+                      const busy = fc1Busy === key;
+                      const btn  = "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
                       return (
-                        <div key={c.id} className="px-4 py-2.5 flex items-center gap-3">
-                          <Gamepad2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-zinc-800 dark:text-zinc-100 truncate">{c.name}</p>
-                            {c.status !== "published" && (
-                              <p className="text-[10px] text-amber-600 dark:text-amber-400">Belum dibuka di FC-1</p>
+                        <div key={c.id} className="px-4 py-2.5 space-y-1">
+                          <div className="flex items-center gap-3">
+                            <Gamepad2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            <p className="flex-1 min-w-0 text-sm text-zinc-800 dark:text-zinc-100 truncate">{c.name}</p>
+
+                            {/* One action per row, by state. */}
+                            {c.completed ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+                                <CheckCircle className="h-3.5 w-3.5" /> Selesai
+                                {c.best && <span className="font-normal text-zinc-500">· {c.best.score}/{c.best.maxScore}</span>}
+                              </span>
+                            ) : !live.registered ? (
+                              locked ? null : (
+                                <button
+                                  type="button"
+                                  onClick={() => registerFc1Challenge(f.id, c.id)}
+                                  disabled={fc1Busy !== null || !hasIc}
+                                  className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}
+                                >
+                                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                                  Daftar
+                                </button>
+                              )
+                            ) : c.attemptsRemaining === 0 ? (
+                              <span className="text-[11px] text-zinc-400">Cubaan telah habis</span>
+                            ) : link ? (
+                              <button
+                                type="button"
+                                onClick={() => openFc1Link(key, link.url)}
+                                className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}
+                              >
+                                <ArrowUpRight className="h-3.5 w-3.5" /> Mula cabaran
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => renewFc1Link(f.id, c.id)}
+                                disabled={fc1Busy !== null}
+                                className={`${btn} border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300`}
+                              >
+                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                Mohon pautan baharu
+                              </button>
                             )}
                           </div>
-                          {registered ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
-                              <CheckCircle className="h-3.5 w-3.5" /> Berdaftar
-                            </span>
-                          ) : !fc1Reg ? (
-                            <span className="text-[11px] text-zinc-400">Daftar akaun dahulu</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => registerFc1Challenge(f.id, c.id)}
-                              disabled={fc1Busy !== null || !!locked}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-700 dark:text-emerald-300 px-2.5 py-1.5 text-xs font-medium transition-colors"
-                            >
-                              {fc1Busy === busyKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
-                              Daftar cabaran
-                            </button>
-                          )}
+
+                          {/* One line of context under the action, when there is any. */}
+                          {fc1Err?.key === key ? (
+                            <p className="pl-7 text-[11px] text-red-500 dark:text-red-400">{fc1Err.message}</p>
+                          ) : link && !c.completed ? (
+                            <p className="pl-7 text-[10px] text-zinc-400">
+                              Berdaftar · pautan sah hingga{" "}
+                              {new Date(link.expiresAt).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          ) : live.registered && !c.completed ? (
+                            <p className="pl-7 text-[10px] text-zinc-400">
+                              Berdaftar{c.attemptsRemaining != null && c.attemptsRemaining > 0 ? ` · ${c.attemptsRemaining} cubaan lagi` : ""}
+                            </p>
+                          ) : null}
                         </div>
                       );
                     })}
