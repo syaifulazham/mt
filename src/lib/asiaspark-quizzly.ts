@@ -78,6 +78,11 @@ export async function quizzlyListSessions(): Promise<QuizzlySession[]> {
   return json.data ?? [];
 }
 
+/** One session by id, from the org's session list; null when it is not there. */
+export async function quizzlyGetSession(sessionId: string): Promise<QuizzlySession | null> {
+  return (await quizzlyListSessions()).find((s) => s.id === sessionId) ?? null;
+}
+
 /** Quizzes attached to one session, in display order. */
 export async function quizzlySessionQuizzes(sessionId: string): Promise<{
   session: { id: string; title: string; slug: string } | null;
@@ -101,9 +106,13 @@ export type QuizzlyIssuedToken = {
   participant: { id: string; personal_id: string; full_name: string };
   quiz: { id: string; title: string; version: number; question_count?: number; time_limit_seconds?: number | null };
   competition_session_id: string | null;
+  session_quiz_set_id?: string | null;
   start_url: string;
   expires_at: string;
+  not_before?: string | null;
   single_use: boolean;
+  /** e.g. `no_competition_session` — Quizzly's signal that the request was malformed. */
+  warnings?: { code: string; detail?: string }[];
 };
 
 /**
@@ -132,22 +141,84 @@ export function quizzlyUpsertParticipant(input: {
 }
 
 /**
- * Mint a single-use login token. `competition_session_id` is passed on purpose:
- * without it the attempt does not show under that session in Quizzly's results,
- * and the quiz-in-session check (422) never runs.
+ * Mint a single-use login token, bound to exactly one session.
+ *
+ * `session_quiz_set_id` is Quizzly's identifier for "this quiz in this session"
+ * and the recommended form: a quiz version can be shared by several sessions,
+ * and the code must land in the student's own one. It implies the quiz, the
+ * session and the version, so nothing else is sent alongside it — sending them
+ * too would only add ways to get a 422 mismatch. `quiz_id` +
+ * `competition_session_id` is the equivalent older form, kept as a fallback.
  */
 export function quizzlyIssueToken(input: {
-  personalId: string; quizId: string; competitionSessionId?: string | null; expiresInSeconds?: number;
+  personalId: string;
+  sessionQuizSetId?: string | null;
+  quizId?: string; competitionSessionId?: string | null;
+  expiresInSeconds?: number;
+  notBefore?: string | null;
 }) {
+  const target = input.sessionQuizSetId
+    ? { session_quiz_set_id: input.sessionQuizSetId }
+    : {
+        quiz_id: input.quizId,
+        ...(input.competitionSessionId ? { competition_session_id: input.competitionSessionId } : {}),
+      };
   return req<QuizzlyIssuedToken>("/api/v1/sessions/tokens", {
     method: "POST",
     body: JSON.stringify({
       personal_id: input.personalId,
-      quiz_id:     input.quizId,
-      ...(input.competitionSessionId ? { competition_session_id: input.competitionSessionId } : {}),
-      expires_in:  input.expiresInSeconds ?? 172_800, // 48 h
+      ...target,
+      expires_in:  input.expiresInSeconds ?? DEFAULT_TOKEN_LIFETIME_S,
+      ...(input.notBefore ? { not_before: input.notBefore } : {}),
     }),
   });
+}
+
+/**
+ * `session_quiz_set_id` of a quiz inside a session. For quiz maps saved before
+ * the organizer screen started storing it. Throws a 409 when the quiz is no
+ * longer in the session, which is an organizer configuration problem.
+ */
+export async function quizzlyResolveSessionQuizSetId(sessionId: string, quizId: string): Promise<string> {
+  const { data } = await quizzlySessionQuizzes(sessionId);
+  const hit = data.find((q) => q.quiz.id === quizId);
+  if (!hit)
+    throw Object.assign(new Error("Kuiz yang ditetapkan tiada lagi dalam sesi Asia Spark ini. Hubungi penganjur."), {
+      status: 409, detail: `quiz ${quizId} not in session ${sessionId}`,
+    });
+  return hit.session_quiz_set_id;
+}
+
+const DEFAULT_TOKEN_LIFETIME_S = 172_800; // 48 h, when the session has no closing time
+const MIN_TOKEN_LIFETIME_S     = 60;
+const MAX_TOKEN_LIFETIME_S     = 2_592_000; // 30 days — Quizzly's cap
+
+/**
+ * How long a new code should live, from the session's window: valid until the
+ * round closes (capped at 30 days), and not usable before it opens. A fixed
+ * lifetime is what made codes issued days ahead expire before the round began.
+ *
+ * `closed` means the round is over — issuing would only hand out a dead code.
+ */
+export function quizzlyTokenWindow(
+  session: { opens_at: string | null; closes_at: string | null },
+  now: Date = new Date(),
+): { closed: true } | { closed: false; expiresInSeconds: number; notBefore: string | null } {
+  const opens  = session.opens_at  ? new Date(session.opens_at)  : null;
+  const closes = session.closes_at ? new Date(session.closes_at) : null;
+  if (closes && closes <= now) return { closed: true };
+
+  const notBefore = opens && opens > now ? opens.toISOString() : null;
+  const seconds = closes
+    ? (closes.getTime() - now.getTime()) / 1000
+    // No closing time: the default lifetime, counted from when the code becomes usable.
+    : ((opens && opens > now ? opens.getTime() : now.getTime()) - now.getTime()) / 1000 + DEFAULT_TOKEN_LIFETIME_S;
+
+  return {
+    closed: false,
+    expiresInSeconds: Math.min(MAX_TOKEN_LIFETIME_S, Math.max(MIN_TOKEN_LIFETIME_S, Math.floor(seconds))),
+    notBefore,
+  };
 }
 
 export type QuizzlyTokenState = "active" | "not_yet_valid" | "redeemed" | "expired" | "revoked";
@@ -155,6 +226,7 @@ export type QuizzlyTokenState = "active" | "not_yet_valid" | "redeemed" | "expir
 export type QuizzlyTokenStatus = {
   token_id: string;
   status: QuizzlyTokenState;
+  not_before?: string | null;
   expires_at: string | null; redeemed_at: string | null; revoked_at?: string | null;
   expired_unused?: boolean;
   session: { state: string; percentage: number | null; raw_score: number | null; max_score: number | null } | null;
@@ -223,6 +295,8 @@ export type QuizzlyQuizAssignment = {
   grade: string | null;
   quizId: string;
   quizTitle: string;
+  /** This quiz in the configured session; absent on maps saved before it was stored. */
+  sessionQuizSetId?: string;
 };
 
 /**

@@ -24,7 +24,10 @@ export async function POST() {
   });
   if (!participant) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
-  const personalId = toPersonalId(participant.ic ?? "");
+  // One stable personal_id per student. Once registered, keep the one Quizzly
+  // already has even if the IC is later corrected: upsert keys on personal_id,
+  // so sending a new one would create a second record and split their results.
+  const personalId = participant.quizzlyAccess?.personalId ?? toPersonalId(participant.ic ?? "");
   if (!personalId)
     return NextResponse.json(
       { error: "Nombor kad pengenalan diperlukan sebelum mendaftar Asia Spark Quiz. Kemas kini profil anda." },

@@ -88,6 +88,8 @@ type QuizzlyToken = {
   startUrl: string | null;
   quizTitle: string | null;
   expiresAt: string | null;
+  /** Quizzly's state; null/absent when it could not be checked (shown as stored). */
+  state?: "active" | "not_yet_valid" | "redeemed" | "expired" | "revoked" | null;
   /** Quizzly confirmed it lapsed without being redeemed — safe to replace. */
   expiredUnused?: boolean;
 };
@@ -1014,6 +1016,14 @@ export function DashboardClient({
                         Mohon token baharu
                       </button>
                     </div>
+                  ) : tokens[q.id].state === "redeemed" ? (
+                    <span className="inline-flex items-center gap-1 max-w-[14rem] text-right text-[11px] leading-snug text-green-600 dark:text-green-400">
+                      <CheckCircle className="h-3.5 w-3.5 shrink-0" /> Token telah digunakan — kuiz telah dimulakan.
+                    </span>
+                  ) : tokens[q.id].state === "revoked" ? (
+                    <span className="max-w-[14rem] text-right text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                      Token ini telah dibatalkan oleh penganjur. Hubungi penganjur.
+                    </span>
                   ) : (
                     <div className="flex flex-col items-end gap-1">
                       <div className="flex items-center gap-1">
@@ -1048,6 +1058,11 @@ export function DashboardClient({
                         >
                           Mula kuiz <ArrowUpRight className="h-3 w-3" />
                         </a>
+                      )}
+                      {tokens[q.id].state === "not_yet_valid" && (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                          Boleh digunakan apabila pusingan dibuka
+                        </span>
                       )}
                       {tokens[q.id].expiresAt && (
                         <span className="text-[10px] text-zinc-400">

@@ -6,7 +6,8 @@ import { DashboardClient } from "@/components/participant/DashboardClient";
 import type { SlotScheduleConfig } from "@/lib/walkin-slots";
 import { matchingTargetGroups } from "@/lib/targetGroupMatch";
 import {
-  quizzlyConfigured, quizzlyTokenStatuses, resolveQuizzlyAssignment, type QuizzlyQuizAssignment,
+  quizzlyConfigured, quizzlyTokenStatuses, resolveQuizzlyAssignment,
+  type QuizzlyQuizAssignment, type QuizzlyTokenLifecycle,
 } from "@/lib/asiaspark-quizzly";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -163,16 +164,13 @@ export default async function DashboardPage() {
   });
   const tokenByEc = new Map(quizzlyTokens.map((t) => [t.eventCompetitionId, t]));
 
-  // Only a token already past its local expiry can have lapsed unused, so only
-  // those are checked upstream — most dashboard loads make no Quizzly call at
-  // all. A failed check leaves the token shown as-is rather than offering a
-  // replacement we could not verify.
-  const now = new Date();
-  const lapsedIds = quizzlyTokens
-    .filter((t) => t.expiresAt && t.expiresAt <= now)
-    .map((t) => t.tokenId);
-  const lifecycle = lapsedIds.length > 0 && quizzlyConfigured()
-    ? await quizzlyTokenStatuses(lapsedIds).catch((e: unknown) => {
+  // Token state comes from Quizzly, not from the expiry stored at issue time:
+  // admins extend, revoke and regenerate codes, so the stored value goes stale
+  // in both directions. One batch call covers all of this participant's tokens.
+  // A failed check leaves tokens shown as stored (state null) rather than
+  // offering a replacement we could not verify.
+  const lifecycle: Map<string, QuizzlyTokenLifecycle> = quizzlyTokens.length > 0 && quizzlyConfigured()
+    ? await quizzlyTokenStatuses(quizzlyTokens.map((t) => t.tokenId)).catch((e: unknown) => {
         console.error("[quizzly] token status check failed on dashboard:", (e as Error).message);
         return new Map();
       })
@@ -283,13 +281,17 @@ export default async function DashboardPage() {
       targetGroupName: matched[0].name,
       quiz:            assignment ? { id: assignment.quizId, title: assignment.quizTitle, grade: assignment.grade } : null,
       token: issued
-        ? {
-            token:     issued.token,
-            startUrl:  issued.startUrl,
-            quizTitle: issued.quizTitle,
-            expiresAt: issued.expiresAt?.toISOString() ?? null,
-            expiredUnused: lifecycle.get(issued.tokenId)?.expired_unused === true,
-          }
+        ? (() => {
+            const live = lifecycle.get(issued.tokenId);
+            return {
+              token:     issued.token,
+              startUrl:  issued.startUrl,
+              quizTitle: issued.quizTitle,
+              expiresAt: live?.expires_at ?? issued.expiresAt?.toISOString() ?? null,
+              state:     live?.status ?? null,
+              expiredUnused: live?.expired_unused === true,
+            };
+          })()
         : null,
       event: {
         id:        ec.event.id,

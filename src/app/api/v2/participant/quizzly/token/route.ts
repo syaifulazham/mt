@@ -4,8 +4,9 @@ import { db } from "@/lib/db";
 import { matchingTargetGroups } from "@/lib/targetGroupMatch";
 import { ensureIndividualEntry, singleParticipationConflict } from "@/lib/individualEntry";
 import {
-  quizzlyConfigured, quizzlyErrorMessage, quizzlyIssueToken, quizzlyTokenStatus,
-  resolveQuizzlyAssignment, type QuizzlyQuizAssignment,
+  quizzlyConfigured, quizzlyErrorMessage, quizzlyGetSession, quizzlyIssueToken, quizzlyResolveSessionQuizSetId,
+  quizzlyTokenStatus, quizzlyTokenWindow, resolveQuizzlyAssignment,
+  type QuizzlyQuizAssignment, type QuizzlyTokenStatus,
 } from "@/lib/asiaspark-quizzly";
 
 const VISIBLE_EVENT_STATUSES = ["PUBLISHED", "ACTIVE"] as const;
@@ -90,57 +91,92 @@ export async function POST(req: NextRequest) {
       );
   }
 
-  // A token already exists for this quiz: hand it back while it is still valid,
-  // and replace it only once Quizzly confirms it lapsed without ever being
-  // redeemed. Without this check, calling the route directly after sitting the
-  // quiz would mint a second, fresh attempt.
+  // A token already exists for this quiz. Quizzly decides what happens next, not
+  // the expiry stored here: admins can extend, revoke or regenerate codes, so a
+  // stored expires_at goes stale in both directions.
+  //   active / not yet valid → hand back the same code (no second code per quiz)
+  //   redeemed               → refuse; the attempt was started or finished
+  //   revoked                → refuse; re-issuing would undo an admin's decision
+  //   expired                → lapsed unused, the only case that gets a new code
   const existing = await db.participantQuizzlyToken.findUnique({
     where: { participantId_eventCompetitionId: { participantId: participant.id, eventCompetitionId: ec.id } },
   });
   if (existing) {
-    const current = NextResponse.json({
+    const current = (expiresAt: Date | null) => NextResponse.json({
       token:     existing.token,
       startUrl:  existing.startUrl,
       quizTitle: existing.quizTitle,
-      expiresAt: existing.expiresAt?.toISOString() ?? null,
+      expiresAt: expiresAt?.toISOString() ?? null,
     });
-    if (existing.expiresAt && existing.expiresAt > new Date()) return current;
 
-    let state: string;
+    let st: QuizzlyTokenStatus | null = null;
     try {
-      state = (await quizzlyTokenStatus(existing.tokenId)).status;
+      st = await quizzlyTokenStatus(existing.tokenId);
     } catch (e: unknown) {
       const err = e as { message?: string; status?: number; detail?: string };
       console.error(
         `[quizzly] token status check failed for participant ${participant.id} token ${existing.tokenId}:`,
         err.message, "| upstream:", err.detail ?? "—",
       );
-      // Fail closed: an unverified replacement could be a second attempt.
+    }
+    if (!st) {
+      // Re-showing a code we already gave out is safe without Quizzly; issuing a
+      // replacement is not — an unverified one could be a second attempt.
+      if (existing.expiresAt && existing.expiresAt > new Date()) return current(existing.expiresAt);
       return NextResponse.json(
         { error: "Status token tidak dapat disemak sekarang. Cuba lagi sebentar." },
         { status: 502 },
       );
     }
-    if (state === "redeemed")
+    if (st.status === "redeemed")
       return NextResponse.json(
         { error: "Token ini telah digunakan. Hubungi penganjur jika anda perlu menduduki semula kuiz." },
         { status: 409 },
       );
-    if (state === "revoked")
+    if (st.status === "revoked")
       return NextResponse.json(
         { error: "Token ini telah dibatalkan oleh penganjur. Hubungi penganjur." },
         { status: 409 },
       );
-    // Clock skew between us and Quizzly: it still considers the token live.
-    if (state !== "expired") return current;
+    if (st.status !== "expired") {
+      // Still usable. Keep the stored expiry in step with Quizzly's, which an
+      // admin may have extended.
+      const upstream = st.expires_at ? new Date(st.expires_at) : null;
+      if (upstream && upstream.getTime() !== existing.expiresAt?.getTime())
+        await db.participantQuizzlyToken.update({ where: { id: existing.id }, data: { expiresAt: upstream } });
+      return current(upstream ?? existing.expiresAt);
+    }
   }
 
   try {
+    // The code is issued in this event-competition's own session only, valid
+    // until that round closes and not usable before it opens.
+    const [qSession, sessionQuizSetId] = await Promise.all([
+      quizzlyGetSession(ec.quizzlySessionId),
+      assignment.sessionQuizSetId ?? quizzlyResolveSessionQuizSetId(ec.quizzlySessionId, assignment.quizId),
+    ]);
+    if (!qSession)
+      return NextResponse.json(
+        { error: "Sesi Asia Spark untuk pertandingan ini tidak ditemui. Hubungi penganjur." },
+        { status: 409 },
+      );
+    const window = quizzlyTokenWindow(qSession);
+    if (window.closed)
+      return NextResponse.json({ error: "Pusingan kuiz ini telah ditutup." }, { status: 409 });
+
     const issued = await quizzlyIssueToken({
-      personalId:           participant.quizzlyAccess.personalId,
-      quizId:               assignment.quizId,
-      competitionSessionId: ec.quizzlySessionId,
+      personalId:       participant.quizzlyAccess.personalId,
+      sessionQuizSetId,
+      expiresInSeconds: window.expiresInSeconds,
+      notBefore:        window.notBefore,
     });
+    // Quizzly flags requests it considers malformed (e.g. no session bound).
+    // The code is still issued, so log loudly rather than failing the student.
+    if (issued.warnings?.length)
+      console.warn(
+        `[quizzly] issueToken warnings for participant ${participant.id} token ${issued.token_id}:`,
+        issued.warnings.map((w) => w.code).join(", "),
+      );
 
     const tokenData = {
       quizId: assignment.quizId, quizTitle: issued.quiz?.title ?? assignment.quizTitle,

@@ -66,6 +66,8 @@ type QuizzlyQuizAssignment = {
   grade: string | null;
   quizId: string;
   quizTitle: string;
+  /** This quiz in the chosen session — what tokens are issued against. */
+  sessionQuizSetId?: string;
 };
 
 type EventCompLink = {
@@ -103,6 +105,7 @@ type QuizzlySessionOption = {
 };
 
 type QuizzlyQuizOption = {
+  session_quiz_set_id: string;
   quiz: { id: string; slug: string; title: string };
   version: number; status: string; label: string | null;
   time_limit_seconds: number | null;
@@ -1049,6 +1052,7 @@ function QuizzlyLinkModal({
         grade:           r.grade,
         quizId,
         quizTitle:       quiz?.quiz.title ?? "",
+        ...(quiz?.session_quiz_set_id ? { sessionQuizSetId: quiz.session_quiz_set_id } : {}),
       }];
     });
   }
