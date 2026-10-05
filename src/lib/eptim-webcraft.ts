@@ -89,6 +89,73 @@ export async function webcraftUserExists(userId: string): Promise<boolean | null
   }
 }
 
+export type WebcraftPublishedProject = {
+  id: string; name: string; description: string | null;
+  published_url: string; published_at: string | null; updated_at: string | null;
+};
+export type WebcraftPublishedUser = { userId: string; exists: boolean; projects: WebcraftPublishedProject[] };
+
+const PUBLISHED_BATCH = 500;   // WebCraft's per-request cap
+const FALLBACK_CONCURRENCY = 8;
+
+/**
+ * Publicly viewable projects for many WebCraft accounts, keyed by userId.
+ *
+ * One `POST /api/v1/projects/published` per 500 accounts, in parallel — a
+ * judging page for a whole competition is a single request. "Viewable" is
+ * WebCraft's own rule (published *and* approved by moderation), so every URL
+ * opens.
+ *
+ * Falls back to one `GET /api/v1/projects` per account when the batch endpoint
+ * answers 404/405, so mt keeps working whichever app deploys first. That
+ * older endpoint cannot see moderation, so until WebCraft is updated a project
+ * held by moderation may be listed.
+ */
+export async function webcraftPublishedProjects(userIds: string[]): Promise<Map<string, WebcraftPublishedUser>> {
+  const ids = [...new Set(userIds.filter(Boolean))];
+  const out = new Map<string, WebcraftPublishedUser>();
+  if (ids.length === 0) return out;
+
+  try {
+    const batches: string[][] = [];
+    for (let i = 0; i < ids.length; i += PUBLISHED_BATCH) batches.push(ids.slice(i, i + PUBLISHED_BATCH));
+    const results = await Promise.all(batches.map((part) =>
+      req<{ users: WebcraftPublishedUser[] }>("/api/v1/projects/published", {
+        method: "POST",
+        body: JSON.stringify({ userIds: part }),
+      }),
+    ));
+    for (const r of results) for (const u of r.users ?? []) out.set(u.userId, u);
+    return out;
+  } catch (e: unknown) {
+    const status = (e as { status?: number }).status;
+    if (status !== 404 && status !== 405) throw e;
+  }
+
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(FALLBACK_CONCURRENCY, ids.length) }, async () => {
+    while (next < ids.length) {
+      const userId = ids[next++];
+      try {
+        const r = await req<{ projects: WebcraftProject[] }>(`/api/v1/projects?userId=${encodeURIComponent(userId)}`);
+        out.set(userId, {
+          userId, exists: true,
+          projects: (r.projects ?? [])
+            .filter((p) => p.status === "published" && p.published_url)
+            .map((p) => ({
+              id: p.id, name: p.name, description: null,
+              published_url: p.published_url!, published_at: p.published_at, updated_at: null,
+            })),
+        });
+      } catch (err: unknown) {
+        if ((err as { status?: number }).status === 404) out.set(userId, { userId, exists: false, projects: [] });
+        // anything else: leave absent — the caller shows it as unknown, not as "no projects"
+      }
+    }
+  }));
+  return out;
+}
+
 export function webcraftLogin(userId: string, password: string) {
   return req<WebcraftLoginResponse>("/api/v1/login", {
     method: "POST",

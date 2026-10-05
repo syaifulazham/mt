@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
-  LayoutDashboard, Scale, Award,
+  LayoutDashboard, Scale, Award, Globe,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -99,6 +99,20 @@ const MAIN_MODULES: Module[] = [
   },
 ];
 
+// Shown only when the event has a competition integrated with Eptim Webcraft.
+// Sits in the free slot left-below Penghakiman, joined to it by a dashed
+// (indirect) edge: it is a view onto judging, not a step in the flow.
+const WEBCRAFT_JUDGING_MODULE: Module = {
+  icon: Globe,
+  title: "Penghakiman Webcraft",
+  description: "Senarai peserta dan projek Webcraft yang diterbitkan, untuk dinilai.",
+  color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-100",
+  href: "judging/webcraft",
+  pos: { x: COL[1], y: ROW[2] },
+};
+
+const WEBCRAFT_COLOR = "#7c3aed";
+
 const MAIN_CONNECTIONS: EdgeDef[] = [
   // Row-0 horizontal chain
   { from: "preregistration",      to: "attendance/confirmed", color: "#3b82f6" },
@@ -110,6 +124,9 @@ const MAIN_CONNECTIONS: EdgeDef[] = [
   { from: "attendance",           to: "attendance/dashboard", color: "#0d9488" },
   // Feedback: Laporan → Pre-reg (dashed, same col up)
   { from: "reports",              to: "preregistration",      color: "#8b5cf6", dashed: true },
+  // Indirect: Penghakiman → Penghakiman Webcraft. Skipped by `useArrows` when
+  // the card isn't rendered, so it is safe to list unconditionally.
+  { from: "judging",              to: "judging/webcraft",     color: WEBCRAFT_COLOR, dashed: true },
 ];
 
 // ─── Walk-in section ─────────────────────────────────────────────────────────
@@ -358,21 +375,30 @@ function useArrows(connections: EdgeDef[]) {
 
 export function EventManageClient({
   event,
+  hasWebcraft = false,
 }: {
   event: EventSummary;
   role: OrganizerRole;
+  /** The event has a competition integrated with Eptim Webcraft. */
+  hasWebcraft?: boolean;
 }) {
   const start = fmtDate(event.startDate);
   const end   = fmtDate(event.endDate);
   const isOnline = ONLINE_SCOPES.includes(event.scope);
 
-  const mainModules = MAIN_MODULES.filter(m =>
-    !(isOnline && (
-      m.href === "attendance" ||
-      m.href === "attendance/confirmed" ||
-      m.href === "attendance/dashboard"
-    )),
-  );
+  const mainModules = [
+    ...MAIN_MODULES.filter(m =>
+      !(isOnline && (
+        m.href === "attendance" ||
+        m.href === "attendance/confirmed" ||
+        m.href === "attendance/dashboard"
+      )),
+    ),
+    ...(hasWebcraft ? [WEBCRAFT_JUDGING_MODULE] : []),
+  ];
+  const legend = hasWebcraft
+    ? [...LEGEND, { color: WEBCRAFT_COLOR, label: "Penghakiman Webcraft", dashed: true }]
+    : LEGEND;
 
   const mainColors   = [...new Set(MAIN_CONNECTIONS.map(c => c.color))];
   const walkinColors = [...new Set(WALKIN_CONNECTIONS.map(c => c.color))];
@@ -445,7 +471,7 @@ export function EventManageClient({
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1">
-        {LEGEND.map(l => (
+        {legend.map(l => (
           <div key={l.label} className="flex items-center gap-2 text-xs text-zinc-500">
             <svg width="28" height="10" aria-hidden>
               <line x1="0" y1="5" x2="21" y2="5"
