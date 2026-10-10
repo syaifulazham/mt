@@ -39,6 +39,30 @@
       "ACTIVE": "Sedang berlangsung",
       "COMPLETED": "Selesai",
       "CANCELLED": "Dibatalkan"
+    },
+    "quizzly": {
+      "colToken": "Token",
+      "colProgress": "Jawapan",
+      "noAccount": "Belum daftar",
+      "noToken": "Tiada token",
+      "loading": "Memuatkan…",
+      "unavailable": "Status Asia Spark tidak dapat dimuatkan buat masa ini.",
+      "tokensIssued": "{count, plural, other {# token}}",
+      "summary": "{tokened}/{total} diberi token · {submitted}/{total} selesai menjawab",
+      "token": {
+        "active": "Aktif",
+        "not_yet_valid": "Belum sah",
+        "redeemed": "Digunakan",
+        "expired": "Tamat tempoh",
+        "revoked": "Dibatalkan"
+      },
+      "progress": {
+        "not_started": "Belum mula",
+        "logged_in": "Log masuk",
+        "in_progress": "Sedang menjawab",
+        "submitted": "Selesai",
+        "voided": "Dibatalkan"
+      }
     }
   },
   "landing": {

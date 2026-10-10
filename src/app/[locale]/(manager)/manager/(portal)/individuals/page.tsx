@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { CalendarDays, UserCheck } from "lucide-react";
 import { db } from "@/lib/db";
 import { ShowAllCompetitionsToggle } from "@/components/manager/ShowAllCompetitionsToggle";
+import {
+  QuizzlyProgressProvider, QuizzlyProgressCell, QuizzlySummary, QuizzlyTokenCell,
+} from "@/components/manager/IndividualsQuizzlyProgress";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Individual" };
@@ -76,7 +79,10 @@ export default async function ManagerIndividualsPage({
       startDate: true, endDate: true,
       eventCompetitions: {
         where:   { competition: { participationType: "INDIVIDUAL" } },
-        select:  { competition: { select: { id: true, code: true, name: true } } },
+        select:  {
+          id: true, quizzlySessionId: true,
+          competition: { select: { id: true, code: true, name: true, thirdPartyIntegration: true } },
+        },
         orderBy: { competition: { code: "asc" } },
       },
       teamEvents: {
@@ -119,8 +125,12 @@ export default async function ManagerIndividualsPage({
     .filter((e) => e.teamEvents.length > 0 || inScope(e))
     .map((e) => ({
       ...e,
-      competitions: e.eventCompetitions.map(({ competition }) => ({
+      competitions: e.eventCompetitions.map(({ id: ecId, quizzlySessionId, competition }) => ({
         ...competition,
+        ecId,
+        // Asia Spark columns only where a session is configured — without one
+        // no code can have been issued, so there is nothing to show.
+        quizzly: competition.thirdPartyIntegration === "asiaspark-quizzly" && !!quizzlySessionId,
         entries: e.teamEvents
           .filter((te) => te.team.competitionId === competition.id)
           .flatMap((te) => te.team.members.map((m) => ({
@@ -134,11 +144,14 @@ export default async function ManagerIndividualsPage({
     }));
 
   const showContingent = contingents.length > 1;
+  // Only ask Quizzly when something on the page will show its answer.
+  const anyQuizzly = sections.some((s) => s.competitions.some((c) => c.quizzly && c.entries.length > 0));
   const dateFmt = new Intl.DateTimeFormat(locale === "ms" ? "ms-MY" : "en-MY", { day: "numeric", month: "short", year: "numeric" });
   const fmt = (d: Date | null) => (d ? dateFmt.format(d) : null);
   const label = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
 
   return (
+    <QuizzlyProgressProvider enabled={anyQuizzly}>
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -200,35 +213,64 @@ export default async function ManagerIndividualsPage({
                       {t("registered", { count: comp.entries.length })}
                     </span>
                   </div>
+                  {comp.quizzly && comp.entries.length > 0 && (
+                    <div className="-mt-1 mb-2">
+                      <QuizzlySummary ecId={comp.ecId} participantIds={comp.entries.map((e) => e.participant.id)} />
+                    </div>
+                  )}
 
                   {comp.entries.length === 0 ? (
                     <p className="text-xs text-zinc-400 italic">{t("noEntries")}</p>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      {/* Fixed layout + identical column widths, so every table on the page
+                          lines up regardless of its own contents. Name takes the rest. */}
+                      <table className={`w-full ${comp.quizzly ? "min-w-[56rem]" : "min-w-[40rem]"} table-fixed text-sm`}>
+                        <colgroup>
+                          <col className="w-10" />
+                          <col />
+                          <col className="w-36" />
+                          {showContingent && <col className="w-56" />}
+                          <col className="w-36" />
+                          <col className="w-28" />
+                          {comp.quizzly && <col className="w-36" />}
+                          {comp.quizzly && <col className="w-40" />}
+                        </colgroup>
                         <thead>
                           <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-400">
-                            <th className="py-1.5 pr-3 font-medium w-8">#</th>
+                            <th className="py-1.5 pr-3 font-medium">#</th>
                             <th className="py-1.5 pr-3 font-medium">{t("colName")}</th>
                             <th className="py-1.5 pr-3 font-medium">{t("colClass")}</th>
                             {showContingent && <th className="py-1.5 pr-3 font-medium">{t("colContingent")}</th>}
                             <th className="py-1.5 pr-3 font-medium">{t("colRegistered")}</th>
-                            <th className="py-1.5 font-medium">{t("colStatus")}</th>
+                            <th className={`py-1.5 font-medium ${comp.quizzly ? "pr-3" : ""}`}>{t("colStatus")}</th>
+                            {comp.quizzly && <th className="py-1.5 pr-3 font-medium">{t("quizzly.colToken")}</th>}
+                            {comp.quizzly && <th className="py-1.5 font-medium">{t("quizzly.colProgress")}</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/60">
                           {comp.entries.map((entry, i) => (
                             <tr key={entry.participant.id} className="text-zinc-700 dark:text-zinc-300">
                               <td className="py-1.5 pr-3 text-xs text-zinc-400">{i + 1}</td>
-                              <td className="py-1.5 pr-3 font-medium">{entry.participant.name}</td>
-                              <td className="py-1.5 pr-3 text-xs">{entry.participant.classGrade ?? "—"}</td>
-                              {showContingent && <td className="py-1.5 pr-3 text-xs">{entry.contingent}</td>}
+                              <td className="py-1.5 pr-3 font-medium truncate" title={entry.participant.name}>{entry.participant.name}</td>
+                              <td className="py-1.5 pr-3 text-xs truncate">{entry.participant.classGrade ?? "—"}</td>
+                              {showContingent && <td className="py-1.5 pr-3 text-xs truncate" title={entry.contingent}>{entry.contingent}</td>}
                               <td className="py-1.5 pr-3 text-xs text-zinc-500">{fmt(entry.createdAt)}</td>
-                              <td className="py-1.5">
+                              <td className={`py-1.5 ${comp.quizzly ? "pr-3" : ""}`}>
                                 <span className={`inline-block rounded-full border px-2 py-px text-[11px] ${ACCEPTANCE_STYLE[entry.acceptance] ?? ACCEPTANCE_STYLE.HOLD}`}>
                                   {label(`acceptance.${entry.acceptance}`, entry.acceptance)}
                                 </span>
                               </td>
+                              {comp.quizzly && (
+                                <td className="py-1.5 pr-3">
+                                  <QuizzlyTokenCell ecId={comp.ecId} participantId={entry.participant.id} />
+                                </td>
+                              )}
+                              {comp.quizzly && (
+                                <td className="py-1.5">
+                                  <QuizzlyProgressCell ecId={comp.ecId} participantId={entry.participant.id} />
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
@@ -248,5 +290,6 @@ export default async function ManagerIndividualsPage({
         );
       })}
     </div>
+    </QuizzlyProgressProvider>
   );
 }

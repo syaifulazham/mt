@@ -39,6 +39,30 @@
       "ACTIVE": "Ongoing",
       "COMPLETED": "Completed",
       "CANCELLED": "Cancelled"
+    },
+    "quizzly": {
+      "colToken": "Token",
+      "colProgress": "Answers",
+      "noAccount": "Not registered",
+      "noToken": "No token",
+      "loading": "Loading…",
+      "unavailable": "Asia Spark status could not be loaded right now.",
+      "tokensIssued": "{count, plural, one {# token} other {# tokens}}",
+      "summary": "{tokened}/{total} given a token · {submitted}/{total} finished answering",
+      "token": {
+        "active": "Active",
+        "not_yet_valid": "Not yet valid",
+        "redeemed": "Used",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "progress": {
+        "not_started": "Not started",
+        "logged_in": "Logged in",
+        "in_progress": "Answering",
+        "submitted": "Finished",
+        "voided": "Voided"
+      }
     }
   },
   "landing": {

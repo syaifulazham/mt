@@ -283,6 +283,42 @@ export async function quizzlyTokenStatuses(tokenIds: string[]): Promise<Map<stri
   return out;
 }
 
+export type QuizzlyAttemptProgress = "not_started" | "logged_in" | "in_progress" | "submitted" | "voided";
+
+export type QuizzlyProgressRow = {
+  participant: { id: string; personal_id: string | null; full_name: string | null };
+  quiz: { id: string; title: string; version: number | null; session_quiz_set_id: string };
+  tokens: { issued: number; active: number; not_yet_valid: number; redeemed: number; expired: number; revoked: number };
+  current_token: { token_id: string; status: QuizzlyTokenState; expires_at: string | null };
+  attempt: {
+    session_id: string | null; progress: QuizzlyAttemptProgress;
+    started_at: string | null; submitted_at: string | null; deadline_at: string | null;
+    answered: number; total_questions: number;
+  };
+};
+
+const PROGRESS_BATCH = 500; // Quizzly's per-request cap
+
+/**
+ * Codes issued and attempt progress for these Quizzly participants in one
+ * competition session, across every quiz in it — one row per (participant,
+ * quiz). Uses POST /competition-sessions/{id}/progress, which applies the same
+ * rules as Quizzly's own Live page and never returns a login code or a score.
+ */
+export async function quizzlySessionProgress(sessionId: string, quizzlyParticipantIds: string[]): Promise<QuizzlyProgressRow[]> {
+  const ids = [...new Set(quizzlyParticipantIds.filter(Boolean))];
+  if (ids.length === 0) return [];
+  const parts: string[][] = [];
+  for (let i = 0; i < ids.length; i += PROGRESS_BATCH) parts.push(ids.slice(i, i + PROGRESS_BATCH));
+  const results = await Promise.all(parts.map((participant_ids) =>
+    req<{ data: QuizzlyProgressRow[] }>(`/api/v1/competition-sessions/${encodeURIComponent(sessionId)}/progress`, {
+      method: "POST",
+      body: JSON.stringify({ participant_ids }),
+    }),
+  ));
+  return results.flatMap((r) => r.data ?? []);
+}
+
 /** Confirms the key and reports its effective scopes — useful for diagnosis. */
 export function quizzlyPing() {
   return req<{ status: string; org_id: string; scopes: string[]; quiz_ids: string[] | null }>("/api/v1/ping");
