@@ -37,6 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     eptimCsiCompetitionId, eptimCsiCompetitionName, eptimCsiCases,
     quizzlySessionId, quizzlySessionTitle, quizzlyAssignBy, quizzlyQuizMap,
     fc1EventId, fc1Challenges,
+    droneEventId, droneChallenges,
   } = await req.json();
 
   if (quizzlyAssignBy !== undefined && quizzlyAssignBy !== null
@@ -64,6 +65,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(quizzlyAssignBy     !== undefined && { quizzlyAssignBy:     quizzlyAssignBy     || null }),
       ...(quizzlyQuizMap !== undefined && {
         quizzlyQuizMap: Array.isArray(quizzlyQuizMap) && quizzlyQuizMap.length > 0 ? quizzlyQuizMap : Prisma.DbNull,
+      }),
+      ...(droneEventId !== undefined && { droneEventId: droneEventId || null }),
+      ...(droneChallenges !== undefined && {
+        droneChallenges: Array.isArray(droneChallenges) && droneChallenges.length > 0 ? droneChallenges : Prisma.DbNull,
       }),
       ...(fc1EventId !== undefined && { fc1EventId: fc1EventId || null }),
       ...(fc1Challenges !== undefined && {

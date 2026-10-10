@@ -556,16 +556,11 @@ GET /endpoints
       "name": "Hall A Terminals",
       "passcode_prefix": "AB12...",
       "is_active": true,
-      "challenge_id": "uuid-of-challenge",
       "created_at": "2026-08-17T08:00:00.000Z"
     }
   ]
 }
 ```
-
-| Field | Description |
-|-------|-------------|
-| `challenge_id` | UUID of the challenge this endpoint is scoped to. **Required** — Techlympics uses this to select the correct endpoint when generating participant tokens for a specific competition. Without it, token generation falls back to the first active endpoint, which may belong to a different challenge. |
 
 ---
 
@@ -702,10 +697,8 @@ GET /endpoints/{endpoint_id}/tokens
 
 Called by the competition terminal to validate a participant's token. If valid, the token is **consumed** (marked as used) and the participant's identity is returned.
 
-This is a **public endpoint** — no `X-API-Key` header is required. The endpoint is identified via the `passcode` field in the request body.
-
 ```
-POST /public/terminal/validate
+POST /endpoints/{endpoint_id}/validate
 ```
 
 **Request Body:**
@@ -719,8 +712,8 @@ POST /public/terminal/validate
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `passcode` | Yes | The endpoint passcode. Uniquely identifies the competition endpoint — the terminal operator enters this once when setting up the terminal. |
-| `token` | Yes | The 6-character participant token entered by the participant. |
+| `passcode` | Yes | The endpoint passcode entered on the terminal |
+| `token` | Yes | The 6-character participant token |
 
 **Response (200) -- Token valid and consumed:**
 
@@ -741,6 +734,203 @@ POST /public/terminal/validate
 - `404` - Endpoint not found or invalid token
 - `400` - Endpoint is disabled
 - `410` - Token has already been used
+
+---
+
+## Challenge Registrations, Attempts & One-Click Launch
+
+These endpoints match the Eptim FC-1 (Viblock Arena) contract. Players are identified by exactly one of `user_id`, `userid` (synthetic, resolves to `<userid>@api.eptim.ai`) or `email`. Everything is scoped to the API key's event: a challenge id from another event behaves exactly like an unknown id (`404`). For Techlympics, each Drone player is a **team account** whose `userid` is the lower-cased Techlympics team id.
+
+A player must exist (`POST /users`) and belong to a sector in this event (`POST /sectors/:custom_id/members`) before they can be registered, launched, or have their attempts read.
+
+### 18. Register a Player for a Challenge
+
+```
+POST /challenges/:challenge_id/registrations
+```
+
+**Body:** one of `user_id` / `userid` / `email`, plus optional `external_ref` (stored verbatim).
+
+**Response (201):**
+```json
+{
+  "registration_id": "...",
+  "challenge_id": "...",
+  "user_id": "...",
+  "userid": "mt-team-42",
+  "full_name": "Team Rajawali",
+  "external_ref": "mt-123",
+  "registered_at": "2026-09-30T10:00:00.000Z"
+}
+```
+
+`userid` is `null` for players created with a real email.
+
+**Errors:** `404` challenge not in this event / player not found, `403` player not in any sector of this event, `409` already registered:
+```json
+{ "error": "Already registered", "registration": { "...same shape as 201..." } }
+```
+
+### 19. List Registrations for a Challenge
+
+```
+GET /challenges/:challenge_id/registrations?limit=500&offset=0
+```
+
+`limit` defaults to 500, capped at 1000. Ordered by `registered_at` ascending.
+
+**Response (200):**
+```json
+{
+  "challenge_id": "...",
+  "challenge_name": "Delivery Boybot",
+  "total": 42,
+  "limit": 500,
+  "offset": 0,
+  "registrations": [
+    {
+      "registration_id": "...",
+      "user_id": "...",
+      "userid": "mt-team-42",
+      "full_name": "Team Rajawali",
+      "email": "mt-team-42@api.eptim.ai",
+      "sector_custom_id": "smk-test-01",
+      "external_ref": "mt-123",
+      "registered_at": "2026-09-30T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+`sector_custom_id` is the player's first sector in this event, or `null`.
+
+### 20. One Player's Registrations
+
+```
+GET /users/:userid/registrations
+```
+
+Returns only registrations in this event. `404` if the player does not exist; no registrations returns an empty array.
+
+```json
+{
+  "userid": "mt-team-42",
+  "user_id": "...",
+  "registrations": [
+    { "registration_id": "...", "challenge_id": "...", "challenge_name": "Delivery Boybot", "external_ref": "mt-123", "registered_at": "..." }
+  ]
+}
+```
+
+### 21. Check One Registration
+
+```
+GET /challenges/:challenge_id/registrations/:userid
+```
+
+Always `200` (check `registered`); `404` only if the challenge or player is unknown.
+
+```json
+{
+  "challenge_id": "...",
+  "challenge_name": "Delivery Boybot",
+  "userid": "mt-team-42",
+  "user_id": "...",
+  "registered": true,
+  "registration": { "registration_id": "...", "external_ref": "mt-123", "registered_at": "..." }
+}
+```
+
+When not registered, `registered` is `false` and `registration` is `null`.
+
+### 22. Withdraw a Registration
+
+```
+DELETE /challenges/:challenge_id/registrations/:userid
+```
+
+`204` on success; `404` if the challenge, player, or registration does not exist. Recorded attempts and results are **not** deleted.
+
+### 23. Player Attempt Summary
+
+```
+GET /challenges/:challenge_id/attempts/:userid
+```
+
+Summarises every run the player has made on this challenge.
+
+```json
+{
+  "challenge_id": "...",
+  "challenge_name": "Delivery Boybot",
+  "userid": "mt-team-42",
+  "user_id": "...",
+  "attempted": true,
+  "completed": true,
+  "attempt_count": 3,
+  "completed_count": 1,
+  "max_attempts": 5,
+  "attempts_remaining": 2,
+  "best_attempt": { "score": 80, "max_score": 100, "elapsed_seconds": 41.2, "completed_at": "..." },
+  "last_attempt": { "outcome": "failed", "score": 20, "max_score": 100, "elapsed_seconds": 60, "attempted_at": "..." }
+}
+```
+
+- `best_attempt` - highest-scoring completed run (ties: fastest), or `null`
+- `last_attempt.outcome` - `completed`, `failed` (crashed) or `aborted`
+- `max_attempts` / `attempts_remaining` - `null` when the challenge has no limit
+- `403` player not in any sector of this event, `404` challenge or player not found
+
+### 24. Create a One-Click Launch Code
+
+```
+POST /auth/launch
+```
+
+Creates a **single-use** code that expires **5 minutes** after creation. Call this from your **server only**; the API key must never reach a browser.
+
+**Body:** exactly one of `user_id` / `userid` / `email`.
+
+**Response (201):**
+```json
+{
+  "user_id": "...",
+  "launch_code": "Xk3...q9A",
+  "launch_path": "/?launch=Xk3...q9A",
+  "expires_at": "2026-10-04T10:05:00.000Z"
+}
+```
+
+Open `https://drone.eptim.ai` + `launch_path` in the player's browser. The website signs the player in, removes the code from the address bar, and shows a "Couldn't sign you in" page for used or expired codes. Create a fresh code for every launch.
+
+**Errors:** `400` no identifier (or more than one), `403` not a `player` account or not in a sector of this event, `404` player not found.
+
+### 25. Check a Launch Code
+
+```
+GET /auth/launch/:launch_code
+```
+
+```json
+{
+  "user_id": "...",
+  "status": "valid",
+  "created_at": "2026-10-04T10:00:00.000Z",
+  "expires_at": "2026-10-04T10:05:00.000Z",
+  "used_at": null,
+  "seconds_remaining": 212
+}
+```
+
+| `status` | Meaning |
+|----------|---------|
+| `valid` | Not used and not expired |
+| `used` | Already redeemed - the player signed in with it |
+| `expired` | Not used within 5 minutes - create a new one |
+
+`404` if the code was not issued for this API key's event.
+
+> The Drone website exchanges the code itself through `POST /auth/launch/redeem` (no API key). Partner apps don't need to call it.
 
 ---
 
@@ -765,7 +955,7 @@ All errors follow this format:
 | 403 | Forbidden (user not in event sector) |
 | 404 | Resource not found |
 | 409 | Conflict (duplicate) |
-| 410 | Gone (token already used) |
+| 410 | Gone (token already used / launch code used or expired) |
 | 500 | Internal server error |
 
 ---
@@ -864,9 +1054,8 @@ curl -X PUT "$BASE/endpoints/ENDPOINT_UUID/tokens/STU-001" \
 
 # 5. Terminal validates a participant's token
 #    (called by the terminal software when participant enters their code)
-#    NOTE: this is a public endpoint — no X-API-Key header required.
-#    The passcode identifies the endpoint; the terminal operator configures it once.
-curl -X POST "$BASE/public/terminal/validate" \
+curl -X POST "$BASE/endpoints/ENDPOINT_UUID/validate" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "passcode": "AB12CD34",

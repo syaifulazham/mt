@@ -1,5 +1,21 @@
+import { createArenaClient } from "@/lib/arena-client";
+
 const BASE_URL = (process.env.EPTIMDRONE_BASE_URL ?? "").replace(/\/$/, "");
 const API_KEY  = process.env.EPTIMDRONE_API_KEY  ?? "";
+
+/**
+ * Challenge registrations, attempt summaries and one-click launch for Eptim
+ * Drone — the same contract as Eptim FC-1 (EPTIM-DRONE-API-GUIDE.md §18–25),
+ * so the shared arena client serves both. `eptimdrone` below remains the
+ * account/sign-in client used by the Pasukan page's Drone panel.
+ */
+export const droneArena = createArenaClient({
+  label:   "Eptim Drone",
+  baseUrl: process.env.EPTIMDRONE_BASE_URL ?? "",
+  apiKey:  process.env.EPTIMDRONE_API_KEY ?? "",
+  appUrl:  process.env.EPTIMDRONE_APP_URL ?? "",
+  env:     { baseUrl: "EPTIMDRONE_BASE_URL", apiKey: "EPTIMDRONE_API_KEY", appUrl: "EPTIMDRONE_APP_URL" },
+});
 
 function headers(withBody = false) {
   return {
@@ -59,6 +75,16 @@ export const eptimdrone = {
 
   assignMember: (sectorCustomId: string, userid: string) =>
     req<{ sector_id: string; user_id: string }>("POST", `/sectors/${encodeURIComponent(sectorCustomId)}/members`, { userid }),
+
+  /** Challenges of the event EPTIMDRONE_API_KEY belongs to, in `order_index` order. */
+  listChallenges: () =>
+    req<{
+      event_id: string;
+      challenges: {
+        id: string; name: string; description: string | null; challenge_mode: string;
+        status: string; order_index: number; max_attempts?: number | null; created_at: string;
+      }[];
+    }>("GET", "/challenges"),
 
   getToken: (userid: string, password: string) =>
     req<{ access_token: string; refresh_token: string; expires_at: number; user: { id: string; email: string; full_name: string } }>(

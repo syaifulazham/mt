@@ -25,6 +25,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import { buildSlotSchedule, fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import type { ArenaChallengeView } from "@/lib/arena-client";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -102,18 +103,97 @@ type Fc1Entry = {
     allowMultipleParticipation: boolean;
   };
   competition: { id: string; code: string; name: string };
-  challenges: {
-    id: string; name: string; status: string; challengeMode: string;
-    registered: boolean;
-    /** From FC-1's attempts summary; false when unknown. */
-    completed: boolean;
-    /** null = no attempt limit (or unknown). */
-    attemptsRemaining: number | null;
-    best: { score: number; maxScore: number } | null;
-    /** The stored launch link while FC-1 reports it still valid. */
-    link: { url: string; expiresAt: string } | null;
-  }[];
+  challenges: ArenaChallengeView[];
 };
+
+/** One Eptim Drone card: a team of the participant × the event-competition it is entered in. */
+type DroneEntry = {
+  id: string;                 // `${teamId}:${eventCompetitionId}`
+  teamId: string;
+  teamName: string;
+  eventCompetitionId: string;
+  event: { id: string; name: string; startDate: string | null; endDate: string | null };
+  competition: { id: string; code: string; name: string };
+  challenges: ArenaChallengeView[];
+};
+
+type ArenaLink = { url: string; expiresAt: string };
+
+/**
+ * One challenge with the single action its state calls for — shared by the
+ * FC-1 (individual) and Eptim Drone (team) sections:
+ *   completed → Selesai · best score; not registered → Daftar;
+ *   no attempts left → Cubaan telah habis; valid link → Mula cabaran;
+ *   otherwise → Mohon pautan baharu.
+ */
+function ArenaChallengeRow({
+  c, live, nowMs, busy, anyBusy, error, hideRegister, registerDisabled, onRegister, onRenew, onOpen,
+}: {
+  c: ArenaChallengeView;
+  live: { registered: boolean; link: ArenaLink | null };
+  nowMs: number;
+  busy: boolean;
+  anyBusy: boolean;
+  error: string | null;
+  hideRegister: boolean;
+  registerDisabled: boolean;
+  onRegister: () => void;
+  onRenew: () => void;
+  onOpen: (url: string) => void;
+}) {
+  const link = live.link && new Date(live.link.expiresAt).getTime() > nowMs ? live.link : null;
+  const btn  = "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+  return (
+    <div className="px-4 py-2.5 space-y-1">
+      <div className="flex items-center gap-3">
+        <Gamepad2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <p className="flex-1 min-w-0 text-sm text-zinc-800 dark:text-zinc-100 truncate">{c.name}</p>
+
+        {c.completed ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+            <CheckCircle className="h-3.5 w-3.5" /> Selesai
+            {c.best && <span className="font-normal text-zinc-500">· {c.best.score}/{c.best.maxScore}</span>}
+          </span>
+        ) : !live.registered ? (
+          hideRegister ? null : (
+            <button type="button" onClick={onRegister} disabled={anyBusy || registerDisabled}
+              className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}>
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+              Daftar
+            </button>
+          )
+        ) : c.attemptsRemaining === 0 ? (
+          <span className="text-[11px] text-zinc-400">Cubaan telah habis</span>
+        ) : link ? (
+          <button type="button" onClick={() => onOpen(link.url)}
+            className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}>
+            <ArrowUpRight className="h-3.5 w-3.5" /> Mula cabaran
+          </button>
+        ) : (
+          <button type="button" onClick={onRenew} disabled={anyBusy}
+            className={`${btn} border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300`}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Mohon pautan baharu
+          </button>
+        )}
+      </div>
+
+      {/* One line of context under the action, when there is any. */}
+      {error ? (
+        <p className="pl-7 text-[11px] text-red-500 dark:text-red-400">{error}</p>
+      ) : link && !c.completed ? (
+        <p className="pl-7 text-[10px] text-zinc-400">
+          Berdaftar · pautan sah hingga{" "}
+          {new Date(link.expiresAt).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit" })}
+        </p>
+      ) : live.registered && !c.completed ? (
+        <p className="pl-7 text-[10px] text-zinc-400">
+          Berdaftar{c.attemptsRemaining != null && c.attemptsRemaining > 0 ? ` · ${c.attemptsRemaining} cubaan lagi` : ""}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 type QuizzlyEntry = {
   id: string;
@@ -141,6 +221,9 @@ type Props = {
   /** Competitions the participant is already entered in, keyed by event id. */
   eventEntries: Record<string, { competitionId: string; label: string }[]>;
   fc1Competitions: Fc1Entry[];
+  /** Individual Eptim Drone competitions — same card and flow as FC-1. */
+  droneIndividual: Fc1Entry[];
+  droneTeams: DroneEntry[];
   quizzlyRegistered: boolean;
   hasIc: boolean;
 };
@@ -584,17 +667,32 @@ export function DashboardClient({
   quizzlyCompetitions,
   eventEntries,
   fc1Competitions,
+  droneIndividual,
+  droneTeams,
   quizzlyRegistered,
   hasIc,
 }: Props) {
-  // ── FC-1 ── keyed `${eventCompetitionId}:${challengeId}`
-  type Fc1Link = { url: string; expiresAt: string };
-  const [fc1Busy, setFc1Busy] = useState<string | null>(null);
-  const [fc1Err, setFc1Err]   = useState<{ key: string; message: string } | null>(null);
-  const [fc1Live, setFc1Live] = useState<Record<string, { registered: boolean; link: Fc1Link | null }>>(
-    Object.fromEntries(fc1Competitions.flatMap((f) =>
-      f.challenges.map((c) => [`${f.id}:${c.id}`, { registered: c.registered, link: c.link }]))),
-  );
+  // ── Arena challenges ── keyed `fc1:${ecId}:${challengeId}` (FC-1),
+  // `droneInd:${ecId}:${challengeId}` (individual Drone) and
+  // `drone:${teamId}:${ecId}:${challengeId}` (team Drone)
+  const individualArenas = [
+    {
+      kind: "fc1", title: "FC-1 Individu", partner: "FC-1",
+      items: fc1Competitions, base: "/api/v2/participant/fc1/challenges",
+    },
+    {
+      kind: "droneInd", title: "Eptim Drone Individu", partner: "Eptim Drone",
+      items: droneIndividual, base: "/api/v2/participant/drone/individual/challenges",
+    },
+  ] as const;
+  const [arenaBusy, setArenaBusy] = useState<string | null>(null);
+  const [arenaErr, setArenaErr]   = useState<{ key: string; message: string } | null>(null);
+  const [arenaLive, setArenaLive] = useState<Record<string, { registered: boolean; link: ArenaLink | null }>>(() => ({
+    ...Object.fromEntries(individualArenas.flatMap((a) => a.items.flatMap((f) =>
+      f.challenges.map((c) => [`${a.kind}:${f.id}:${c.id}`, { registered: c.registered, link: c.link }])))),
+    ...Object.fromEntries(droneTeams.flatMap((d) =>
+      d.challenges.map((c) => [`drone:${d.id}:${c.id}`, { registered: c.registered, link: c.link }]))),
+  }));
   // Launch links live 5 minutes; re-render now and then so an open page flips
   // an expired "Mula cabaran" over to "Mohon pautan baharu" by itself.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -602,37 +700,45 @@ export function DashboardClient({
     const t = setInterval(() => setNowMs(Date.now()), 15_000);
     return () => clearInterval(t);
   }, []);
-  const fc1HasReg = (ecId: string) =>
-    Object.entries(fc1Live).some(([k, v]) => v.registered && k.startsWith(`${ecId}:`));
+  /** Has the participant registered any challenge of this individual event-competition? */
+  const arenaHasReg = (kind: string, ecId: string) =>
+    Object.entries(arenaLive).some(([k, v]) => v.registered && k.startsWith(`${kind}:${ecId}:`));
 
-  async function fc1Post(key: string, url: string, body: object, fallback: string) {
-    setFc1Busy(key); setFc1Err(null);
+  // Register (creating the partner player on first use) and get a link in one
+  // go, or — with the /link endpoint — reuse a still-valid link / get a new one.
+  async function arenaPost(key: string, url: string, body: object, fallback: string) {
+    setArenaBusy(key); setArenaErr(null);
     try {
       const res  = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? fallback);
-      setFc1Live((p) => ({ ...p, [key]: { registered: true, link: (json as { link: Fc1Link | null }).link ?? null } }));
+      setArenaLive((p) => ({ ...p, [key]: { registered: true, link: (json as { link: ArenaLink | null }).link ?? null } }));
     } catch (e) {
-      setFc1Err({ key, message: e instanceof Error ? e.message : fallback });
-    } finally { setFc1Busy(null); }
+      setArenaErr({ key, message: e instanceof Error ? e.message : fallback });
+    } finally { setArenaBusy(null); }
   }
-
-  // Register (creating the FC-1 account on first use) and get a link in one go.
-  const registerFc1Challenge = (eventCompetitionId: string, challengeId: string) =>
-    fc1Post(`${eventCompetitionId}:${challengeId}`, "/api/v2/participant/fc1/challenges",
-      { eventCompetitionId, challengeId }, "Pendaftaran cabaran gagal");
-
-  // Reuses the current link if FC-1 still reports it valid, otherwise a new one.
-  const renewFc1Link = (eventCompetitionId: string, challengeId: string) =>
-    fc1Post(`${eventCompetitionId}:${challengeId}`, "/api/v2/participant/fc1/challenges/link",
-      { eventCompetitionId, challengeId }, "Gagal mendapatkan pautan");
 
   // Links are single-use: once opened it's spent, so the row moves to "Mohon
   // pautan baharu". New tab only — see EptimCsiTeamButton for why there is no
   // "popup blocked" fallback on the window.open() return value.
-  function openFc1Link(key: string, url: string) {
+  function openArenaLink(key: string, url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
-    setFc1Live((p) => ({ ...p, [key]: { ...p[key], link: null } }));
+    setArenaLive((p) => ({ ...p, [key]: { ...p[key], link: null } }));
+  }
+
+  /** Props wiring one ArenaChallengeRow to its key, endpoints and request body. */
+  function arenaRowProps(key: string, base: string, body: object, c: ArenaChallengeView) {
+    return {
+      c,
+      live:     arenaLive[key] ?? { registered: c.registered, link: c.link },
+      nowMs,
+      busy:     arenaBusy === key,
+      anyBusy:  arenaBusy !== null,
+      error:    arenaErr?.key === key ? arenaErr.message : null,
+      onRegister: () => arenaPost(key, base, body, "Pendaftaran cabaran gagal"),
+      onRenew:    () => arenaPost(key, `${base}/link`, body, "Gagal mendapatkan pautan"),
+      onOpen:     (url: string) => openArenaLink(key, url),
+    };
   }
   const [quizzlyReg, setQuizzlyReg]       = useState(quizzlyRegistered);
   const [quizzlyBusy, setQuizzlyBusy]     = useState<string | null>(null); // "register" | eventCompetitionId
@@ -686,10 +792,12 @@ export function DashboardClient({
       (o) => o.event.id === event.id && o.competition.id !== competitionId && tokens[o.id],
     );
     if (viaToken) return label(viaToken.competition);
-    const viaFc1 = fc1Competitions.find(
-      (o) => o.event.id === event.id && o.competition.id !== competitionId && fc1HasReg(o.id),
-    );
-    if (viaFc1) return label(viaFc1.competition);
+    for (const a of individualArenas) {
+      const via = a.items.find(
+        (o) => o.event.id === event.id && o.competition.id !== competitionId && arenaHasReg(a.kind, o.id),
+      );
+      if (via) return label(via.competition);
+    }
     // …then what the server already knew, including manager-made entries.
     return (eventEntries[event.id] ?? []).find((e) => e.competitionId !== competitionId)?.label ?? null;
   }
@@ -1104,13 +1212,13 @@ export function DashboardClient({
         </div>
       )}
 
-      {/* ── FC-1 Individu ───────────────────────────────────────────── */}
-      {fc1Competitions.length > 0 && (
-        <div className="space-y-4">
+      {/* ── Individual arenas: FC-1 Individu, Eptim Drone Individu ──── */}
+      {individualArenas.map((arena) => arena.items.length > 0 && (
+        <div key={arena.kind} className="space-y-4">
           <div>
-            <h2 className="text-lg font-bold dark:text-zinc-100">FC-1 Individu</h2>
+            <h2 className="text-lg font-bold dark:text-zinc-100">{arena.title}</h2>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Daftar cabaran di sini untuk bermain di FC-1. Pautan masuk sah 5 minit dan sekali guna —
+              Daftar cabaran di sini untuk bermain di {arena.partner}. Pautan masuk sah 5 minit dan sekali guna —
               mohon pautan baharu jika tamat tempoh.
             </p>
             {!hasIc && (
@@ -1121,8 +1229,8 @@ export function DashboardClient({
           </div>
 
           <div className="space-y-3">
-            {fc1Competitions.map((f) => {
-              const locked = fc1HasReg(f.id) ? null : claimedBy(f.event, f.competition.id);
+            {arena.items.map((f) => {
+              const locked = arenaHasReg(arena.kind, f.id) ? null : claimedBy(f.event, f.competition.id);
               return (
                 <div
                   key={f.id}
@@ -1155,79 +1263,72 @@ export function DashboardClient({
                   </div>
 
                   <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {f.challenges.map((c) => {
-                      const key  = `${f.id}:${c.id}`;
-                      const live = fc1Live[key] ?? { registered: c.registered, link: c.link };
-                      const link = live.link && new Date(live.link.expiresAt).getTime() > nowMs ? live.link : null;
-                      const busy = fc1Busy === key;
-                      const btn  = "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
-                      return (
-                        <div key={c.id} className="px-4 py-2.5 space-y-1">
-                          <div className="flex items-center gap-3">
-                            <Gamepad2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                            <p className="flex-1 min-w-0 text-sm text-zinc-800 dark:text-zinc-100 truncate">{c.name}</p>
-
-                            {/* One action per row, by state. */}
-                            {c.completed ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
-                                <CheckCircle className="h-3.5 w-3.5" /> Selesai
-                                {c.best && <span className="font-normal text-zinc-500">· {c.best.score}/{c.best.maxScore}</span>}
-                              </span>
-                            ) : !live.registered ? (
-                              locked ? null : (
-                                <button
-                                  type="button"
-                                  onClick={() => registerFc1Challenge(f.id, c.id)}
-                                  disabled={fc1Busy !== null || !hasIc}
-                                  className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}
-                                >
-                                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
-                                  Daftar
-                                </button>
-                              )
-                            ) : c.attemptsRemaining === 0 ? (
-                              <span className="text-[11px] text-zinc-400">Cubaan telah habis</span>
-                            ) : link ? (
-                              <button
-                                type="button"
-                                onClick={() => openFc1Link(key, link.url)}
-                                className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}
-                              >
-                                <ArrowUpRight className="h-3.5 w-3.5" /> Mula cabaran
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => renewFc1Link(f.id, c.id)}
-                                disabled={fc1Busy !== null}
-                                className={`${btn} border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300`}
-                              >
-                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                                Mohon pautan baharu
-                              </button>
-                            )}
-                          </div>
-
-                          {/* One line of context under the action, when there is any. */}
-                          {fc1Err?.key === key ? (
-                            <p className="pl-7 text-[11px] text-red-500 dark:text-red-400">{fc1Err.message}</p>
-                          ) : link && !c.completed ? (
-                            <p className="pl-7 text-[10px] text-zinc-400">
-                              Berdaftar · pautan sah hingga{" "}
-                              {new Date(link.expiresAt).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit" })}
-                            </p>
-                          ) : live.registered && !c.completed ? (
-                            <p className="pl-7 text-[10px] text-zinc-400">
-                              Berdaftar{c.attemptsRemaining != null && c.attemptsRemaining > 0 ? ` · ${c.attemptsRemaining} cubaan lagi` : ""}
-                            </p>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+                    {f.challenges.map((c) => (
+                      <ArenaChallengeRow
+                        key={c.id}
+                        {...arenaRowProps(`${arena.kind}:${f.id}:${c.id}`, arena.base,
+                          { eventCompetitionId: f.id, challengeId: c.id }, c)}
+                        hideRegister={!!locked}
+                        registerDisabled={!hasIc}
+                      />
+                    ))}
                   </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      ))}
+
+      {/* ── Eptim Drone (team) ──────────────────────────────────────── */}
+      {droneTeams.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold dark:text-zinc-100">Eptim Drone</h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Daftar cabaran untuk pasukan anda di sini untuk bermain di Eptim Drone. Pendaftaran dan keputusan
+              dikongsi oleh semua ahli pasukan. Pautan masuk sah 5 minit dan sekali guna — mohon pautan baharu jika
+              tamat tempoh.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {droneTeams.map((d) => (
+              <div key={d.id} className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
+                <div className="px-4 py-3 bg-sky-50 dark:bg-sky-950/30 border-b border-sky-100 dark:border-sky-900">
+                  <p className="text-sm font-semibold text-sky-900 dark:text-sky-200 truncate">
+                    <span className="font-mono text-xs text-sky-700/60 mr-1.5">{d.competition.code}</span>
+                    {d.competition.name}
+                  </p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-sky-700/70 dark:text-sky-400/70">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Users className="h-3 w-3 shrink-0" />{d.teamName}
+                    </span>
+                    <span className="truncate">{d.event.name}</span>
+                    {(d.event.startDate || d.event.endDate) && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3 shrink-0" />
+                        {d.event.startDate === d.event.endDate
+                          ? fmt(d.event.startDate)
+                          : `${fmt(d.event.startDate) ?? "?"} – ${fmt(d.event.endDate) ?? "?"}`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {d.challenges.map((c) => (
+                    <ArenaChallengeRow
+                      key={c.id}
+                      {...arenaRowProps(`drone:${d.id}:${c.id}`, "/api/v2/participant/drone/challenges",
+                        { teamId: d.teamId, eventCompetitionId: d.eventCompetitionId, challengeId: c.id }, c)}
+                      hideRegister={false}
+                      registerDisabled={false}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -402,6 +402,7 @@ model Participant {
   quizzlyTokens         ParticipantQuizzlyToken[]
   fc1Access             ParticipantFc1Access?
   fc1Challenges         ParticipantFc1Challenge[]
+  droneChallenges       ParticipantDroneChallenge[]
 
   @@index([contingentId])
   @@map("contestants")
@@ -655,6 +656,8 @@ model EventCompetition {
   quizzlyQuizMap      Json? // [{ targetGroupId, targetGroupName, grade, quizId, quizTitle }] — grade is null in target_group mode
   fc1EventId          String? // Viblock event the picks came from — EPTIMFC1_API_KEY decides it, so a rotated key is detectable
   fc1Challenges       Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim FC-1 event
+  droneEventId        String? // Eptim Drone event the picks came from — EPTIMDRONE_API_KEY decides it
+  droneChallenges     Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim Drone event
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -953,6 +956,7 @@ model Team {
   trainers      TeamTrainer[]
   teamEvents    TeamEvent[]
   droneAccess   TeamDroneAccess?
+  droneChallenges TeamDroneChallenge[]
   csiAccess     TeamCsiAccess?
   judgingScores JudgingScore[]
 
@@ -1337,6 +1341,60 @@ model TeamDroneAccess {
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@map("team_drone_access")
+}
+
+/**
+ * A team's registration for one Eptim Drone challenge of one event-competition —
+ * the team counterpart of ParticipantFc1Challenge. Drone competitions are team
+ * competitions and each Drone player is the team account (TeamDroneAccess), so
+ * the team's members share this registration, its launch link and its result.
+ * Written only after Drone accepted the registration.
+ */
+model TeamDroneChallenge {
+  id                 String    @id @default(cuid())
+  teamId             String
+  eventCompetitionId String
+  challengeId        String
+  challengeName      String
+  droneSyncedAt      DateTime?
+  // Latest one-click launch link (POST /auth/launch): single-use, 5 minutes.
+  launchCode         String?
+  launchUrl          String?
+  launchExpiresAt    DateTime?
+  createdAt          DateTime  @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, eventCompetitionId, challengeId])
+  @@index([teamId])
+  @@index([challengeId])
+  @@map("team_drone_challenges")
+}
+
+/**
+ * A participant's registration for one Eptim Drone challenge of an INDIVIDUAL
+ * Drone competition — the Drone counterpart of ParticipantFc1Challenge. The
+ * player is the participant's own Drone account (DroneAccess, userid = IC).
+ * Team Drone competitions use TeamDroneChallenge instead.
+ */
+model ParticipantDroneChallenge {
+  id                 String    @id @default(cuid())
+  participantId      String
+  eventCompetitionId String
+  challengeId        String
+  challengeName      String
+  droneSyncedAt      DateTime?
+  launchCode         String?
+  launchUrl          String?
+  launchExpiresAt    DateTime?
+  createdAt          DateTime  @default(now())
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, eventCompetitionId, challengeId])
+  @@index([participantId])
+  @@index([challengeId])
+  @@map("participant_drone_challenges")
 }
 
 model TeamCsiAccess {

@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
 import {
-  fc1AssignMember, fc1CheckSector, fc1CheckUser, fc1CreateSector, fc1CreateUser, fc1LaunchStatus, fc1LaunchUrl,
-  fc1RehostLaunchUrl,
+  fc1AssignMember, fc1CheckSector, fc1CheckUser, fc1CreateSector, fc1CreateUser,
 } from "@/lib/eptim-fc1";
 
-// Participant-side FC-1 operations shared by the participant routes.
+// The participant's FC-1 player account. The challenge flow itself is shared
+// with individual Eptim Drone in individualArena.ts.
 
 function randomPassword(len = 12) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -71,46 +71,4 @@ export async function ensureFc1Account(participantId: string): Promise<{ userid:
     data: { participantId: participant.id, fc1UserId: userid, fc1Password: password },
   });
   return { userid, contingentId };
-}
-
-/**
- * Runs an FC-1 call that requires sector membership. On a 403 (player in no
- * sector of the event) the membership is restored — sector = contingent — and
- * the call retried once.
- */
-export async function withSectorRepair<T>(userid: string, contingentId: string, call: () => Promise<T>): Promise<T> {
-  try {
-    return await call();
-  } catch (e: unknown) {
-    if ((e as { status?: number }).status !== 403) throw e;
-    await fc1AssignMember(contingentId, userid).catch(tolerate409);
-    return call();
-  }
-}
-
-/** A fresh single-use launch link, with the sector repair applied. */
-export function fc1LaunchFor(userid: string, contingentId: string) {
-  return withSectorRepair(userid, contingentId, () => fc1LaunchUrl(userid));
-}
-
-/**
- * The launch link for one challenge registration: the stored one while FC-1
- * still reports it `valid`, otherwise a new one (stored for next time). Codes
- * are single-use, so a `used` or `expired` code is always replaced.
- */
-export async function challengeLaunchLink(
-  row: { id: string; launchCode: string | null; launchUrl: string | null; launchExpiresAt: Date | null },
-  userid: string,
-  contingentId: string,
-): Promise<{ url: string; expiresAt: string }> {
-  if (row.launchCode && row.launchUrl) {
-    const st = await fc1LaunchStatus(row.launchCode).catch(() => null);
-    if (st?.status === "valid") return { url: fc1RehostLaunchUrl(row.launchUrl), expiresAt: st.expires_at };
-  }
-  const fresh = await fc1LaunchFor(userid, contingentId);
-  await db.participantFc1Challenge.update({
-    where: { id: row.id },
-    data:  { launchCode: fresh.code, launchUrl: fresh.url, launchExpiresAt: new Date(fresh.expiresAt) },
-  });
-  return { url: fresh.url, expiresAt: fresh.expiresAt };
 }

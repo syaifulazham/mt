@@ -6,7 +6,8 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane,
+  type LucideIcon,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -54,10 +55,35 @@ type ZoneOption  = { id: string; name: string };
 
 type CsiCaseRef = { id: string; slug: string; title: string };
 
-/** A challenge picked from the Eptim FC-1 (Viblock Arena) event. */
-type Fc1ChallengeRef = { id: string; name: string; challenge_mode: string; status: string };
+/**
+ * A challenge picked from an arena-style partner event — Eptim FC-1 and Eptim
+ * Drone expose the same `GET /challenges` shape.
+ */
+type ArenaChallengeRef = { id: string; name: string; challenge_mode: string; status: string };
 
-type Fc1ChallengeOption = Fc1ChallengeRef & { description: string | null; order_index: number };
+type ArenaChallengeOption = ArenaChallengeRef & { description: string | null; order_index: number };
+
+/** What differs between the arena integrations; the picker itself is shared. */
+type ArenaProvider = {
+  integration: "eptim-fc1" | "eptim-drone";
+  label: string;            // "Eptim FC-1"
+  short: string;            // "FC-1", used in sentences
+  endpoint: string;         // organizer proxy for the partner's GET /challenges
+  eventIdKey: "fc1EventId" | "droneEventId";
+  challengesKey: "fc1Challenges" | "droneChallenges";
+  Icon: LucideIcon;
+};
+
+const ARENA_PROVIDERS: ArenaProvider[] = [
+  {
+    integration: "eptim-fc1", label: "Eptim FC-1", short: "FC-1", endpoint: "/api/v2/organizer/fc1/challenges",
+    eventIdKey: "fc1EventId", challengesKey: "fc1Challenges", Icon: Joystick,
+  },
+  {
+    integration: "eptim-drone", label: "Eptim Drone", short: "Drone", endpoint: "/api/v2/organizer/drone/challenges",
+    eventIdKey: "droneEventId", challengesKey: "droneChallenges", Icon: Plane,
+  },
+];
 
 /** One quiz assignment. `grade` is null when assigning per target group. */
 type QuizzlyQuizAssignment = {
@@ -83,7 +109,9 @@ type EventCompLink = {
   quizzlyAssignBy:     "target_group" | "grade" | null;
   quizzlyQuizMap:      QuizzlyQuizAssignment[] | null;
   fc1EventId:          string | null;
-  fc1Challenges:       Fc1ChallengeRef[] | null;
+  fc1Challenges:       ArenaChallengeRef[] | null;
+  droneEventId:        string | null;
+  droneChallenges:     ArenaChallengeRef[] | null;
   competition: {
     id: string; code: string; name: string;
     participationType: string; minTeamSize: number; maxTeamSize: number;
@@ -757,29 +785,31 @@ function EptimCsiLinkModal({
   );
 }
 
-// ── Eptim FC-1 challenge modal ────────────────────────────────────────────────
+// ── Arena challenge modal (Eptim FC-1, Eptim Drone) ───────────────────────────
 
 /**
- * Picks which challenges of the Eptim FC-1 (Viblock Arena) event this
- * event–competition plays. The FC-1 event itself is fixed by EPTIMFC1_API_KEY,
- * so there is nothing to choose there — only the subset of its challenges.
- * Only offered for competitions whose integration is `eptim-fc1`.
+ * Picks which challenges of the partner's event this event–competition plays.
+ * The partner event itself is fixed by that integration's API key, so there is
+ * nothing to choose there — only the subset of its challenges. Shared by every
+ * arena-style integration; `provider` supplies the endpoint and field names.
  */
-function Fc1ChallengesModal({
-  open, ecId, eventId, competitionName, currentEventId, currentChallenges, onClose, onSaved,
+function ArenaChallengesModal({
+  provider, open, ecId, eventId, competitionName, currentEventId, currentChallenges, onClose, onSaved,
 }: {
+  provider: ArenaProvider;
   open: boolean;
   ecId: string | null;
   eventId: string;
   competitionName: string;
   currentEventId: string | null;
-  currentChallenges: Fc1ChallengeRef[];
+  currentChallenges: ArenaChallengeRef[];
   onClose: () => void;
-  onSaved: (fc1EventId: string | null, challenges: Fc1ChallengeRef[]) => void;
+  onSaved: (partnerEventId: string | null, challenges: ArenaChallengeRef[]) => void;
 }) {
-  const [options,    setOptions]    = useState<Fc1ChallengeOption[]>([]);
-  const [fc1EventId, setFc1EventId] = useState<string | null>(null);
-  const [picked,     setPicked]     = useState<Fc1ChallengeRef[]>([]);
+  const { label, short, Icon } = provider;
+  const [options,    setOptions]    = useState<ArenaChallengeOption[]>([]);
+  const [partnerEventId, setPartnerEventId] = useState<string | null>(null); // the partner event id
+  const [picked,     setPicked]     = useState<ArenaChallengeRef[]>([]);
   const [fetching,   setFetching]   = useState(false);
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState("");
@@ -791,28 +821,28 @@ function Fc1ChallengesModal({
     setError("");
     setFetching(true);
     /* eslint-enable react-hooks/set-state-in-effect */
-    fetch("/api/v2/organizer/fc1/challenges")
+    fetch(provider.endpoint)
       .then(r => r.json())
       .then(j => {
         if (j.error) { setError(j.error); return; }
         setOptions(j.data ?? []);
-        setFc1EventId(j.eventId ?? null);
+        setPartnerEventId(j.eventId ?? null);
       })
-      .catch(() => setError("Gagal memuatkan cabaran Eptim FC-1."))
+      .catch(() => setError(`Gagal memuatkan cabaran ${label}.`))
       .finally(() => setFetching(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const pickedIds = new Set(picked.map(c => c.id));
 
-  // The key decides the FC-1 event. If it now points somewhere else, the saved
+  // The key decides the partner event. If it now points somewhere else, the saved
   // picks belong to an event this app can no longer see.
-  const eventChanged = !!currentEventId && !!fc1EventId && currentEventId !== fc1EventId;
+  const eventChanged = !!currentEventId && !!partnerEventId && currentEventId !== partnerEventId;
   const missing      = picked.filter(p => !options.some(o => o.id === p.id));
   const unpublished  = picked.filter(p => options.find(o => o.id === p.id)?.status !== "published"
                                         && options.some(o => o.id === p.id));
 
-  const toRef = (c: Fc1ChallengeOption): Fc1ChallengeRef =>
+  const toRef = (c: ArenaChallengeOption): ArenaChallengeRef =>
     ({ id: c.id, name: c.name, challenge_mode: c.challenge_mode, status: c.status });
 
   async function handleSave() {
@@ -826,12 +856,12 @@ function Fc1ChallengesModal({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fc1EventId:    cleared ? null : fc1EventId,
-          fc1Challenges: cleared ? null : next,
+          [provider.eventIdKey]:    cleared ? null : partnerEventId,
+          [provider.challengesKey]: cleared ? null : next,
         }),
       });
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error ?? "Gagal menyimpan"); }
-      onSaved(cleared ? null : fc1EventId, next);
+      onSaved(cleared ? null : partnerEventId, next);
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal menyimpan");
@@ -843,7 +873,7 @@ function Fc1ChallengesModal({
       <DialogContent className="max-w-lg p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Joystick className="h-4 w-4 text-emerald-600" />Konfigurasi Eptim FC-1
+            <Icon className="h-4 w-4 text-emerald-600" />Konfigurasi {label}
           </DialogTitle>
           <p className="text-xs text-zinc-400 mt-0.5 truncate">{competitionName}</p>
         </DialogHeader>
@@ -853,16 +883,16 @@ function Fc1ChallengesModal({
             <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>
           ) : (
             <>
-              {fc1EventId && (
+              {partnerEventId && (
                 <p className="text-[11px] text-zinc-500">
-                  Acara FC-1: <span className="font-mono text-zinc-600">{fc1EventId}</span>
+                  Acara {short}: <span className="font-mono text-zinc-600">{partnerEventId}</span>
                 </p>
               )}
 
               {eventChanged && (
                 <p className="flex items-start gap-1 text-[11px] text-amber-600">
                   <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                  Kunci API kini menunjuk ke acara FC-1 lain. Cabaran yang disimpan sebelum ini tidak lagi wujud di sana — pilih semula.
+                  Kunci API kini menunjuk ke acara {short} lain. Cabaran yang disimpan sebelum ini tidak lagi wujud di sana — pilih semula.
                 </p>
               )}
 
@@ -881,7 +911,7 @@ function Fc1ChallengesModal({
                 </div>
 
                 {options.length === 0 && !error ? (
-                  <p className="text-xs text-zinc-400 italic py-1">Acara FC-1 ini belum mempunyai cabaran.</p>
+                  <p className="text-xs text-zinc-400 italic py-1">Acara {short} ini belum mempunyai cabaran.</p>
                 ) : (
                   <div className="space-y-1.5 max-h-72 overflow-y-auto">
                     {options.map(c => (
@@ -921,13 +951,13 @@ function Fc1ChallengesModal({
                 {unpublished.length > 0 && (
                   <p className="mt-2 flex items-start gap-1 text-[11px] text-amber-600">
                     <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                    {unpublished.length} cabaran dipilih masih belum <span className="font-mono">published</span> di FC-1 — peserta belum boleh memainkannya.
+                    {unpublished.length} cabaran dipilih masih belum <span className="font-mono">published</span> di {short} — peserta belum boleh memainkannya.
                   </p>
                 )}
                 {missing.length > 0 && !eventChanged && (
                   <p className="mt-2 flex items-start gap-1 text-[11px] text-amber-600">
                     <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                    {missing.length} cabaran yang disimpan sudah tiada di FC-1 dan akan dibuang apabila disimpan.
+                    {missing.length} cabaran yang disimpan sudah tiada di {short} dan akan dibuang apabila disimpan.
                   </p>
                 )}
               </div>
@@ -1742,7 +1772,7 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
   const [linkCourseFor,  setLinkCourseFor]  = useState<EventCompLink | null>(null);
   const [linkCsiFor,     setLinkCsiFor]     = useState<EventCompLink | null>(null);
   const [linkQuizzlyFor, setLinkQuizzlyFor] = useState<EventCompLink | null>(null);
-  const [linkFc1For,     setLinkFc1For]     = useState<EventCompLink | null>(null);
+  const [arenaFor,       setArenaFor]       = useState<{ link: EventCompLink; provider: ArenaProvider } | null>(null);
 
   // Judging templates (edit form only)
   const [assignedTemplates,   setAssignedTemplates]   = useState<JudgingTemplateSummary[]>([]);
@@ -1994,32 +2024,31 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                           ) : null}
                         </div>
                       )}
-                      {/* Eptim FC-1 challenges */}
-                      {link.competition.thirdPartyIntegration === "eptim-fc1" && (
-                        <div className="mt-1">
-                          {canWrite ? (
-                            <button type="button" onClick={() => setLinkFc1For(link)}
-                              className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors w-fit ${
-                                link.fc1Challenges?.length
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-                                  : "border border-dashed border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600"
-                              }`}>
-                              <Joystick className="h-3 w-3 shrink-0" />
-                              <span>
-                                {link.fc1Challenges?.length
-                                  ? `Eptim FC-1 · ${link.fc1Challenges.length} cabaran`
-                                  : "Konfigurasi Eptim FC-1…"}
-                              </span>
-                              {!!link.fc1Challenges?.length && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
-                            </button>
-                          ) : link.fc1Challenges?.length ? (
-                            <div className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit">
-                              <Joystick className="h-3 w-3 shrink-0" />
-                              <span>Eptim FC-1 · {link.fc1Challenges.length} cabaran</span>
-                            </div>
-                          ) : null}
-                        </div>
-                      )}
+                      {/* Arena challenges (Eptim FC-1, Eptim Drone) */}
+                      {ARENA_PROVIDERS.filter(p => p.integration === link.competition.thirdPartyIntegration).map(p => {
+                        const picked = link[p.challengesKey];
+                        return (
+                          <div key={p.integration} className="mt-1">
+                            {canWrite ? (
+                              <button type="button" onClick={() => setArenaFor({ link, provider: p })}
+                                className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors w-fit ${
+                                  picked?.length
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                    : "border border-dashed border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600"
+                                }`}>
+                                <p.Icon className="h-3 w-3 shrink-0" />
+                                <span>{picked?.length ? `${p.label} · ${picked.length} cabaran` : `Konfigurasi ${p.label}…`}</span>
+                                {!!picked?.length && <Link2 className="h-3 w-3 shrink-0 opacity-60" />}
+                              </button>
+                            ) : picked?.length ? (
+                              <div className="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit">
+                                <p.Icon className="h-3 w-3 shrink-0" />
+                                <span>{p.label} · {picked.length} cabaran</span>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                       {/* Asia Spark Quizzly session + quiz mapping */}
                       {link.competition.thirdPartyIntegration === "asiaspark-quizzly" && (
                         <div className="mt-1">
@@ -2287,19 +2316,24 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
         }}
       />
 
-      <Fc1ChallengesModal
-        open={!!linkFc1For}
-        ecId={linkFc1For?.id ?? null}
+      <ArenaChallengesModal
+        provider={arenaFor?.provider ?? ARENA_PROVIDERS[0]}
+        open={!!arenaFor}
+        ecId={arenaFor?.link.id ?? null}
         eventId={eventId}
-        competitionName={linkFc1For?.competition.name ?? ""}
-        currentEventId={linkFc1For?.fc1EventId ?? null}
-        currentChallenges={linkFc1For?.fc1Challenges ?? []}
-        onClose={() => setLinkFc1For(null)}
-        onSaved={(fc1EventId, challenges) => {
+        competitionName={arenaFor?.link.competition.name ?? ""}
+        currentEventId={arenaFor ? arenaFor.link[arenaFor.provider.eventIdKey] : null}
+        currentChallenges={arenaFor ? arenaFor.link[arenaFor.provider.challengesKey] ?? [] : []}
+        onClose={() => setArenaFor(null)}
+        onSaved={(partnerEventId, challenges) => {
+          if (!arenaFor) return;
+          const { link, provider } = arenaFor;
           setLinks(prev => prev.map(l =>
-            l.id === linkFc1For?.id ? { ...l, fc1EventId, fc1Challenges: challenges } : l
+            l.id === link.id
+              ? { ...l, [provider.eventIdKey]: partnerEventId, [provider.challengesKey]: challenges }
+              : l
           ));
-          setLinkFc1For(null);
+          setArenaFor(null);
         }}
       />
 
