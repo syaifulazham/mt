@@ -46,6 +46,21 @@ export async function POST(req: NextRequest) {
   const password  = randomPassword();
   let alias: string | null = null;
 
+  // Claim the team's record BEFORE touching CSI. teamId is unique, so when two
+  // members (or a double click) register at once exactly one request wins and
+  // talks to CSI. Previously both called CSI: the loser hit "already exists",
+  // reset the CSI password to its own, then silently failed to store it —
+  // leaving CSI and MT with different passwords and the team unable to log in.
+  try {
+    await db.teamCsiAccess.create({ data: { teamId: team.id, csiUserId, csiPassword: password } });
+  } catch {
+    // Another request owns the registration; report the state it left behind.
+    const existing = await db.teamCsiAccess.findUnique({ where: { teamId: team.id } });
+    return NextResponse.json({ ok: true, csiUserId, csiAlias: existing?.csiAlias ?? null });
+  }
+  // Undo the claim when CSI didn't end up holding `password`, so a retry starts clean.
+  const releaseClaim = () => db.teamCsiAccess.delete({ where: { teamId: team.id } }).catch(() => {});
+
   try {
     const created = await csiCreateUser({
       userId: csiUserId,
@@ -65,11 +80,13 @@ export async function POST(req: NextRequest) {
       `[eptim-csi] createUser failed for team ${team.id} (${csiUserId}):`,
       err.message, "| upstream:", err.detail ?? "—",
     );
-    if (err.status !== 409)
+    if (err.status !== 409) {
+      await releaseClaim();
       return NextResponse.json({ error: csiErrorMessage(err) }, { status: err.status ?? 502 });
+    }
 
-    // The player exists in CSI but we hold no password for it — rotate it so
-    // remote login works again.
+    // The player exists in CSI but MT holds no password for it — set the one
+    // we just claimed, so remote login works again.
     try {
       const patched = await csiSetPassword(csiUserId, password);
       alias = patched.alias;
@@ -79,13 +96,12 @@ export async function POST(req: NextRequest) {
         `[eptim-csi] setPassword failed for team ${team.id} (${csiUserId}):`,
         err2.message, "| upstream:", err2.detail ?? "—",
       );
+      await releaseClaim();
       return NextResponse.json({ error: csiErrorMessage(err2) }, { status: err2.status ?? 502 });
     }
   }
 
-  await db.teamCsiAccess.create({
-    data: { teamId: team.id, csiUserId, csiPassword: password, csiAlias: alias },
-  }).catch(() => {}); // idempotent under races
+  await db.teamCsiAccess.update({ where: { teamId: team.id }, data: { csiAlias: alias } });
 
   return NextResponse.json({ ok: true, csiUserId, csiAlias: alias });
 }
