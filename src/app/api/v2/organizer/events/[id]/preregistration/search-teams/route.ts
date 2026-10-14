@@ -5,12 +5,16 @@ import { Prisma } from "@prisma/client";
 
 const STATE_SCOPES = ["STATE", "ONLINE_STATE"];
 const ZONE_SCOPES  = ["ZONE",  "ONLINE_ZONE"];
+const WILDCARD_ROLES: string[] = ["SUPER_ADMIN", "ADMIN"];
 
 /**
  * GET — Search all teams globally, filtered by event eligibility:
  *   1. Competition must be offered by this event (eventCompetitions)
  *   2. Contingent state must match the event scope/area
  *   Teams already registered are flagged with alreadyRegistered = true
+ *
+ * `?wildcard=1` (administrators only): rule 2 is lifted — any state — and teams
+ * already listed for the event are left out entirely. Rule 1 still applies.
  */
 export async function GET(
   req: NextRequest,
@@ -23,6 +27,9 @@ export async function GET(
   const { searchParams } = req.nextUrl;
   const q             = (searchParams.get("q") ?? "").trim();
   const competitionId = searchParams.get("competitionId") ?? "";
+  const wildcard      = searchParams.get("wildcard") === "1";
+  if (wildcard && !WILDCARD_ROLES.includes(session.role))
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   if (q.length < 2)
     return NextResponse.json({ data: [] });
@@ -41,9 +48,11 @@ export async function GET(
   if (eventCompIds.length === 0)
     return NextResponse.json({ data: [] });
 
-  // Build scope-based state filter
+  // Build scope-based state filter (none for wildcards)
   let scopeCondition = Prisma.empty;
-  if (STATE_SCOPES.includes(event.scope) && event.stateId) {
+  if (wildcard) {
+    // any state
+  } else if (STATE_SCOPES.includes(event.scope) && event.stateId) {
     scopeCondition = Prisma.sql`
       AND COALESCE(s.id, sch_state.id, hi_state.id) = ${event.stateId}
     `;
@@ -62,9 +71,14 @@ export async function GET(
   }
   // NATIONAL / OPEN / etc. → no scope restriction
 
-  const compFilter = competitionId
+  // A specific competition must still be one the event offers.
+  const compFilter = competitionId && eventCompIds.includes(competitionId)
     ? Prisma.sql`AND c.id = ${competitionId}`
     : Prisma.sql`AND c.id IN (${Prisma.join(eventCompIds)})`;
+  // Wildcards: only teams not yet listed for this event.
+  const notListed = wildcard
+    ? Prisma.sql`AND NOT EXISTS (SELECT 1 FROM team_events te WHERE te."teamId" = t.id AND te."eventId" = ${eventId})`
+    : Prisma.empty;
 
   type SearchRow = {
     id: string;
@@ -97,6 +111,7 @@ export async function GET(
     WHERE (t.name ILIKE ${"%" + q + "%"} OR cont.name ILIKE ${"%" + q + "%"})
       ${compFilter}
       ${scopeCondition}
+      ${notListed}
     GROUP BY t.id, t.name, cont.name,
       COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name
     ORDER BY c.code, t.name

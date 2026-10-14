@@ -1233,6 +1233,8 @@ model TeamEvent {
   eventId    String
   selected   Boolean   @default(false)
   acceptance String    @default("PENDING")
+  // Added by an administrator as a wildcard — outside the event's state/zone limit.
+  wildcard   Boolean   @default(false)
   attendedAt DateTime?
   createdAt  DateTime  @default(now())
 

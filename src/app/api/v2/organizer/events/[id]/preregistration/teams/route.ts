@@ -16,6 +16,7 @@ type TeamRow = {
   members: bigint;
   selected: boolean;
   acceptance: string;
+  wildcard: boolean;
   hasDuplicateMember: boolean;
 };
 
@@ -99,6 +100,7 @@ export async function GET(
           COUNT(DISTINCT tm."contestantId") AS members,
           te.selected   AS selected,
           te.acceptance AS acceptance,
+          te.wildcard   AS wildcard,
           EXISTS (
             SELECT 1
             FROM team_members tm1
@@ -114,7 +116,7 @@ export async function GET(
         ${fromJoins}
         WHERE 1=1 ${extraConditions} ${duplicates ? duplicateFilter : Prisma.empty}
         GROUP BY t.id, t.name, cont.name,
-          COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected, te.acceptance
+          COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected, te.acceptance, te.wildcard
         ORDER BY COALESCE(s.name, sch_state.name, hi_state.name), cont.name, t.name
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `,
@@ -171,6 +173,7 @@ export async function GET(
         members:         Number(r.members),
         selected:        r.selected ?? false,
         acceptance:      r.acceptance ?? "PENDING",
+        wildcard:        r.wildcard ?? false,
         hasDuplicateMember: r.hasDuplicateMember ?? false,
         duplicateMembers: dupMap.get(r.id) ?? [],
       })),

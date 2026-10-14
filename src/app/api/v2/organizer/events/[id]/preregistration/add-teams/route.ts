@@ -5,10 +5,16 @@ import { db } from "@/lib/db";
 const STATE_SCOPES = ["STATE", "ONLINE_STATE"];
 const ZONE_SCOPES  = ["ZONE",  "ONLINE_ZONE"];
 
+const WILDCARD_ROLES: string[] = ["SUPER_ADMIN", "ADMIN"];
+
 /**
  * POST — Add teams to an event's preregistration.
- * Body: { teamIds: string[] }
+ * Body: { teamIds: string[], wildcard?: boolean }
  * Validates eligibility (competition + scope) and skips duplicates.
+ *
+ * `wildcard: true` (administrators only) lifts the scope check — any state —
+ * and marks the rows as wildcards. The competition must still be one the event
+ * offers.
  */
 export async function POST(
   req: NextRequest,
@@ -22,6 +28,9 @@ export async function POST(
   const teamIds: string[] = Array.isArray(body?.teamIds) ? body.teamIds : [];
   if (teamIds.length === 0)
     return NextResponse.json({ error: "NO_TEAMS" }, { status: 400 });
+  const wildcard = body?.wildcard === true;
+  if (wildcard && !WILDCARD_ROLES.includes(session.role))
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   // Load event
   const event = await db.event.findUnique({
@@ -83,7 +92,7 @@ export async function POST(
 
   // Filter to eligible teams
   const eligible = teams.filter(
-    (t) => eventCompIds.has(t.competitionId) && isLocationEligible(t),
+    (t) => eventCompIds.has(t.competitionId) && (wildcard || isLocationEligible(t)),
   );
 
   const eligibleIds = eligible.map((t) => t.id);
@@ -98,7 +107,7 @@ export async function POST(
 
   if (toAdd.length > 0) {
     await db.teamEvent.createMany({
-      data: toAdd.map((teamId) => ({ teamId, eventId })),
+      data: toAdd.map((teamId) => ({ teamId, eventId, wildcard })),
       skipDuplicates: true,
     });
   }

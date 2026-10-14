@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, Users, BarChart2,
   ChevronDown, ChevronUp, FileSpreadsheet, FileText, Loader2, Trash2, Download, ListChecks,
-  CheckSquare, Square, X, UserPlus, Settings, Network,
+  CheckSquare, Square, X, UserPlus, Settings, Network, Sparkles,
 } from "lucide-react";
 import { SharedMembersGraph } from "@/components/organizer/events/SharedMembersGraph";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
@@ -35,6 +35,8 @@ type Team = {
   members: number;
   selected: boolean;
   acceptance: string;
+  /** Added by an administrator as a wildcard. */
+  wildcard?: boolean;
   hasDuplicateMember?: boolean;
   duplicateMembers?: { memberName: string; otherTeams: string[] }[];
 };
@@ -267,7 +269,11 @@ function StateTable({ rows }: { rows: StateStat[] }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function EventPreregistrationClient({ event }: { event: EventSummary }) {
+export function EventPreregistrationClient({ event, canAddWildcards = false }: {
+  event: EventSummary;
+  /** SUPER_ADMIN / ADMIN only; the API enforces it too. */
+  canAddWildcards?: boolean;
+}) {
   const isCompleted = event.status === "COMPLETED";
 
   // Participants state
@@ -346,6 +352,10 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
   const [addTeamsModal, setAddTeamsModal] = useState<AddTeamsModalState | null>(null);
   const [addSearchQ, setAddSearchQ] = useState("");
   const [addSearchCompId, setAddSearchCompId] = useState("");
+  // "eligible" = Tambah Pasukan (event's state/zone limit applies);
+  // "wildcard" = Tambah Wildcard (admins: any state, only teams not yet listed)
+  const [addMode, setAddMode] = useState<"eligible" | "wildcard">("eligible");
+  const isWildcard = addMode === "wildcard";
 
   // List tab toggle
   const [listTab, setListTab] = useState<"participants" | "teams" | "trainers">("teams");
@@ -857,8 +867,9 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     }
   }
 
-  // Add-teams modal: open
-  function openAddTeamsModal() {
+  // Add-teams modal: open (regular or wildcard)
+  function openAddTeamsModal(mode: "eligible" | "wildcard" = addMode) {
+    setAddMode(mode);
     setAddSearchQ("");
     setAddSearchCompId("");
     setAddTeamsModal({ phase: "searching" });
@@ -870,6 +881,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
     try {
       const sp = new URLSearchParams({ q: searchQ.trim() });
       if (searchCompId) sp.set("competitionId", searchCompId);
+      if (isWildcard) sp.set("wildcard", "1");
       const res = await fetch(
         `/api/v2/organizer/events/${event.id}/preregistration/search-teams?${sp}`,
       );
@@ -898,7 +910,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ teamIds: [...selectedIds] }),
+          body: JSON.stringify({ teamIds: [...selectedIds], ...(isWildcard ? { wildcard: true } : {}) }),
         },
       );
       const json = await res.json();
@@ -1263,13 +1275,26 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
         {/* Add teams (teams tab) */}
         {listTab === "teams" && (
           <button
-            onClick={openAddTeamsModal}
+            onClick={() => openAddTeamsModal("eligible")}
             disabled={isCompleted}
             title="Cari dan tambah pasukan ke acara ini"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 border border-emerald-200 transition-colors"
           >
             <UserPlus className="h-3.5 w-3.5" />
             Tambah Pasukan
+          </button>
+        )}
+
+        {/* Add wildcards (teams tab, administrators only) */}
+        {listTab === "teams" && canAddWildcards && (
+          <button
+            onClick={() => openAddTeamsModal("wildcard")}
+            disabled={isCompleted}
+            title="Tambah mana-mana pasukan bagi pertandingan acara ini, tanpa had negeri/zon"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50 border border-violet-200 transition-colors"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Tambah Wildcard
           </button>
         )}
       </div>
@@ -1575,7 +1600,17 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                         </td>
                         <td className="px-4 py-2.5 text-zinc-600 text-xs">{team.contingentName ?? "–"}</td>
                         <td className="px-4 py-2.5">
-                          <p className="font-medium text-zinc-900">{team.teamName}</p>
+                          <p className="font-medium text-zinc-900">
+                            {team.teamName}
+                            {team.wildcard && (
+                              <span
+                                title="Ditambah oleh pentadbir sebagai wildcard (di luar had negeri/zon acara)"
+                                className="ml-1.5 align-middle rounded-full bg-violet-50 border border-violet-200 text-violet-700 px-1.5 py-px text-[10px] font-semibold"
+                              >
+                                Wildcard
+                              </span>
+                            )}
+                          </p>
                           {team.duplicateMembers && team.duplicateMembers.length > 0 && (
                             <div className="mt-0.5 space-y-0.5">
                               {team.duplicateMembers.map((dm, di) => (
@@ -2121,8 +2156,12 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
               <div className="p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-zinc-900">Tambah Pasukan</h3>
-                    <p className="text-xs text-zinc-400 mt-0.5">Cari pasukan layak untuk ditambah ke acara ini</p>
+                    <h3 className="text-sm font-semibold text-zinc-900">{isWildcard ? "Tambah Wildcard" : "Tambah Pasukan"}</h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {isWildcard
+                        ? "Mana-mana pasukan bagi pertandingan acara ini, tanpa had negeri/zon. Pasukan yang sudah tersenarai tidak dipaparkan."
+                        : "Cari pasukan layak untuk ditambah ke acara ini"}
+                    </p>
                   </div>
                   <button onClick={() => setAddTeamsModal(null)} className="rounded-lg p-1.5 hover:bg-zinc-100 transition-colors">
                     <X className="h-4 w-4 text-zinc-500" />
@@ -2251,7 +2290,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                   <div className="overflow-y-auto flex-1 divide-y">
                     {results.length === 0 ? (
                       <p className="px-5 py-8 text-sm text-zinc-400 text-center">
-                        Tiada pasukan layak ditemui untuk &ldquo;{lastQ}&rdquo;
+                        {isWildcard ? "Tiada pasukan (belum tersenarai) ditemui" : "Tiada pasukan layak ditemui"} untuk &ldquo;{lastQ}&rdquo;
                       </p>
                     ) : results.map(t => (
                       <label
@@ -2300,7 +2339,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                       className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
                     >
                       <UserPlus className="h-4 w-4" />
-                      Tambah {selectedIds.size} pasukan
+                      Tambah {selectedIds.size} {isWildcard ? "wildcard" : "pasukan"}
                     </button>
                   </div>
                 </>
@@ -2362,7 +2401,7 @@ export function EventPreregistrationClient({ event }: { event: EventSummary }) {
                     Tutup
                   </button>
                   <button
-                    onClick={openAddTeamsModal}
+                    onClick={() => openAddTeamsModal()}
                     className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
                   >
                     Cuba Lagi
