@@ -12,6 +12,7 @@ import {
 import { fc1 } from "@/lib/eptim-fc1";
 import { droneArena } from "@/lib/eptim-drone";
 import { arenaChallengeViews, type ArenaClient } from "@/lib/arena-client";
+import { eptimEdu, eptimEduConfigured } from "@/lib/eptimedu";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -132,6 +133,19 @@ export default async function DashboardPage() {
   // session configured. Eligibility is the precise target-group rule (class
   // grade / age range), not just the school-level filter used above, because the
   // quiz a participant sits is chosen by exactly that.
+  // Bengkel MT (EptimEdu) course of an event-competition: the event's own course
+  // first, then the competition-level one — the order the team flow uses.
+  // Enrolment status is filled in once all sections are built (see below).
+  const courseOf = (ec: {
+    eptimEduCourseId: string | null; eptimEduCourseTitle: string | null;
+    competition: { eptimEduCourseId: string | null; eptimEduCourseTitle: string | null };
+  }) => {
+    const id = ec.eptimEduCourseId ?? ec.competition.eptimEduCourseId;
+    if (!id) return null;
+    const title = (ec.eptimEduCourseId ? ec.eptimEduCourseTitle : ec.competition.eptimEduCourseTitle) ?? "Kursus Bengkel MT";
+    return { id, title, enrolled: false };
+  };
+
   const quizzlyLinks = await db.eventCompetition.findMany({
     where: {
       quizzlySessionId: { not: null },
@@ -143,10 +157,12 @@ export default async function DashboardPage() {
       quizzlySessionTitle: true,
       quizzlyAssignBy: true,
       quizzlyQuizMap: true,
+      eptimEduCourseId: true, eptimEduCourseTitle: true,
       event: { select: { id: true, name: true, slug: true, startDate: true, endDate: true, allowMultipleParticipation: true } },
       competition: {
         select: {
-          id: true, code: true, name: true,
+          id: true, code: true, name: true, participationType: true,
+          eptimEduCourseId: true, eptimEduCourseTitle: true,
           theme: { select: { name: true, color: true } },
           targetGroups: {
             select: {
@@ -199,10 +215,12 @@ export default async function DashboardPage() {
       },
       select: {
         id: true, fc1Challenges: true, droneChallenges: true,
+        eptimEduCourseId: true, eptimEduCourseTitle: true,
         event: { select: { id: true, name: true, slug: true, startDate: true, endDate: true, allowMultipleParticipation: true } },
         competition: {
           select: {
             id: true, code: true, name: true,
+            eptimEduCourseId: true, eptimEduCourseTitle: true,
             targetGroups: {
               select: {
                 targetGroup: {
@@ -234,6 +252,7 @@ export default async function DashboardPage() {
           allowMultipleParticipation: ec.event.allowMultipleParticipation,
         },
         competition: { id: ec.competition.id, code: ec.competition.code, name: ec.competition.name },
+        course: courseOf(ec),
         challenges: await arenaChallengeViews(client, userid, challenges, regs),
       };
     }));
@@ -377,8 +396,32 @@ export default async function DashboardPage() {
         allowMultipleParticipation: ec.event.allowMultipleParticipation,
       },
       competition: { id: ec.competition.id, code: ec.competition.code, name: ec.competition.name, theme: ec.competition.theme },
+      // Course buttons are for individual competitions only; team competitions
+      // enrol the team account from the Pasukan page.
+      course: ec.competition.participationType === "INDIVIDUAL" ? courseOf(ec) : null,
     }];
   });
+
+  // ── Bengkel MT courses of the individual competitions above ──────────────
+  // One EptimEdu round trip for the participant's enrolments (by IC) and the
+  // published-course list; unpublished courses are hidden, as on the Bengkel
+  // page. If EptimEdu can't be reached, courses still show as "Daftar kursus".
+  const courseHolders = [...quizzlyData, ...fc1Data, ...droneIndividualData].filter((x) => x.course);
+  if (courseHolders.length > 0 && eptimEduConfigured()) {
+    const ic = participant.ic?.replace(/\D/g, "") ?? "";
+    const [published, enrolments] = await Promise.all([
+      eptimEdu.courses().then((r: { courses?: { id: string; status: string }[] }) =>
+        new Set((r?.courses ?? []).filter((c) => c.status === "published").map((c) => c.id))).catch(() => null),
+      ic
+        ? eptimEdu.getUserEnrolments(ic).then((r: { enrolments?: { courseId: string }[] }) =>
+            new Set((r?.enrolments ?? []).map((e) => e.courseId))).catch(() => new Set<string>())
+        : Promise.resolve(new Set<string>()),
+    ]);
+    for (const h of courseHolders) {
+      if (published && !published.has(h.course!.id)) h.course = null;
+      else h.course!.enrolled = enrolments.has(h.course!.id);
+    }
+  }
 
   // Existing walk-in registrations for this participant
   const existingRegs = await db.walkInRegistration.findMany({

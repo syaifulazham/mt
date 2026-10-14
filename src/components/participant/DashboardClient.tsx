@@ -23,6 +23,7 @@ import {
   Clock,
   RefreshCw,
   KeyRound,
+  BookOpen,
 } from "lucide-react";
 import { buildSlotSchedule, fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 import type { ArenaChallengeView } from "@/lib/arena-client";
@@ -103,8 +104,58 @@ type Fc1Entry = {
     allowMultipleParticipation: boolean;
   };
   competition: { id: string; code: string; name: string };
+  course?: CourseRef | null;
   challenges: ArenaChallengeView[];
 };
+
+/** Bengkel MT (EptimEdu) course of an individual competition. */
+type CourseRef = { id: string; title: string; enrolled: boolean };
+
+/**
+ * Register for (or open) the Bengkel MT course of an individual competition,
+ * on the participant's own LMS account. One click enrols if needed and opens
+ * the LMS through SSO in a new tab.
+ */
+function CourseButton({ eventCompetitionId, course }: { eventCompetitionId: string; course: CourseRef }) {
+  const [enrolled, setEnrolled] = useState(course.enrolled);
+  const [busy, setBusy]         = useState(false);
+  const [error, setError]       = useState("");
+
+  async function open() {
+    setBusy(true); setError("");
+    try {
+      const res  = await fetch("/api/v2/participant/bengkel/course", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventCompetitionId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Gagal membuka kursus");
+      setEnrolled(true);
+      // New tab only — see EptimCsiTeamButton for why there is no fallback on
+      // window.open()'s return value.
+      window.open((json as { loginUrl: string }).loginUrl, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal membuka kursus");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="inline-flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={open}
+        disabled={busy}
+        title={course.title}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-zinc-900 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50 text-amber-700 dark:text-amber-400 px-2.5 py-1 text-xs font-medium transition-colors max-w-[18rem]"
+      >
+        {busy ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <BookOpen className="h-3.5 w-3.5 shrink-0" />}
+        <span className="truncate">{enrolled ? "Buka kursus" : "Daftar kursus"} · {course.title}</span>
+        <ArrowUpRight className="h-3 w-3 shrink-0 opacity-60" />
+      </button>
+      {error && <p className="text-[11px] text-red-500 dark:text-red-400">{error}</p>}
+    </div>
+  );
+}
 
 /** One Eptim Drone card: a team of the participant × the event-competition it is entered in. */
 type DroneEntry = {
@@ -207,6 +258,7 @@ type QuizzlyEntry = {
     allowMultipleParticipation: boolean;
   };
   competition: { id: string; code: string; name: string; theme: { name: string; color: string | null } | null };
+  course?: CourseRef | null;
 };
 
 type Props = {
@@ -1096,6 +1148,11 @@ export function DashboardClient({
                       Kuiz belum ditetapkan untuk kumpulan anda — hubungi penganjur.
                     </p>
                   )}
+                  {q.course && (
+                    <div className="mt-2">
+                      <CourseButton eventCompetitionId={q.id} course={q.course} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Token: request, reveal, copy, start */}
@@ -1255,10 +1312,15 @@ export function DashboardClient({
                         <span>untuk {f.targetGroupName}</span>
                       </div>
                     </div>
-                    {locked && (
-                      <span className="text-[10px] leading-snug text-zinc-500 dark:text-zinc-400 max-w-[16rem] text-right">
-                        Satu penyertaan sahaja bagi acara ini — anda telah memilih {locked}.
-                      </span>
+                    {(locked || f.course) && (
+                      <div className="flex flex-col items-end gap-1.5">
+                        {f.course && <CourseButton eventCompetitionId={f.id} course={f.course} />}
+                        {locked && (
+                          <span className="text-[10px] leading-snug text-zinc-500 dark:text-zinc-400 max-w-[16rem] text-right">
+                            Satu penyertaan sahaja bagi acara ini — anda telah memilih {locked}.
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
 
