@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -34,6 +34,13 @@ type EventListItem = {
 };
 
 type PrerequisiteEvent = { id: string; name: string; slug: string; status: string };
+
+// Event list panel preferences (localStorage, per browser)
+const LIST_WIDTH_KEY     = "mt.organizer.events.listWidth";
+const PINNED_KEY         = "mt.organizer.events.pinned";
+const LIST_WIDTH_DEFAULT = 256;
+const LIST_WIDTH_MIN     = 200;
+const LIST_WIDTH_MAX     = 560;
 
 type EventDetail = EventListItem & {
   description: string | null;
@@ -2799,6 +2806,55 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
   const [pushProgress, setPushProgress] = useState<{ done: number; total: number } | null>(null);
   const [showFlowGraph, setShowFlowGraph] = useState(false);
 
+  // ── Event list panel: resizable width + pinned events ──
+  // Both are a per-browser preference, kept in localStorage. Pinned events are
+  // stored as list-item snapshots so they stay on top whatever page, search or
+  // status filter the list below is showing; snapshots refresh whenever the
+  // event appears in a loaded page or is edited.
+  const [listWidth, setListWidth] = useState(LIST_WIDTH_DEFAULT);
+  const [pinned,    setPinned]    = useState<EventListItem[]>([]);
+  useEffect(() => {
+    try {
+      const w = Number(localStorage.getItem(LIST_WIDTH_KEY));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (w >= LIST_WIDTH_MIN && w <= LIST_WIDTH_MAX) setListWidth(w);
+      const p = JSON.parse(localStorage.getItem(PINNED_KEY) ?? "[]");
+      if (Array.isArray(p)) setPinned(p);
+    } catch { /* corrupt or unavailable storage — keep defaults */ }
+  }, []);
+  const savePinned = (next: EventListItem[]) => {
+    setPinned(next);
+    try { localStorage.setItem(PINNED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  const isPinned = (id: string) => pinned.some(p => p.id === id);
+  const togglePin = (ev: EventListItem) =>
+    savePinned(isPinned(ev.id) ? pinned.filter(p => p.id !== ev.id) : [...pinned, ev]);
+
+  function startResize(e: React.PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX, startW = listWidth;
+    let latest = startW;
+    const move = (ev: PointerEvent) => {
+      latest = Math.min(LIST_WIDTH_MAX, Math.max(LIST_WIDTH_MIN, startW + ev.clientX - startX));
+      setListWidth(latest);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try { localStorage.setItem(LIST_WIDTH_KEY, String(latest)); } catch { /* ignore */ }
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  function resetWidth() {
+    setListWidth(LIST_WIDTH_DEFAULT);
+    try { localStorage.removeItem(LIST_WIDTH_KEY); } catch { /* ignore */ }
+  }
+
   const PAGE_SIZE = 20;
 
   const load = useCallback(async () => {
@@ -2809,8 +2865,16 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
       else if (!showArchive) p.set("notStatus", "ARCHIVE");
       const res = await fetch(`/api/v2/organizer/events?${p}`);
       const j   = await res.json();
-      setEvents(j.data ?? []);
+      const data: EventListItem[] = j.data ?? [];
+      setEvents(data);
       setTotal(j.total ?? 0);
+      // Keep pinned snapshots in step with what the server just returned.
+      setPinned(prev => {
+        if (!prev.some(pp => data.some(e => e.id === pp.id))) return prev;
+        const fresh = prev.map(pp => data.find(e => e.id === pp.id) ?? pp);
+        try { localStorage.setItem(PINNED_KEY, JSON.stringify(fresh)); } catch { /* ignore */ }
+        return fresh;
+      });
     } finally { setLoading(false); }
   }, [page, q, statusFilter, showArchive]);
 
@@ -2864,6 +2928,9 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
         return;
       }
       if (selected?.id === archiveTarget.id) setSelected(null);
+      // Archived events drop out of the list, so refresh a pinned copy here.
+      if (isPinned(archiveTarget.id))
+        savePinned(pinned.map(p => p.id === archiveTarget.id ? { ...p, status: "ARCHIVE" } : p));
       setArchiveTarget(null);
       load();
     } finally {
@@ -2874,6 +2941,10 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
   function handleSectionSaved(updated: Partial<EventDetail>) {
     setSelected(s => s ? { ...s, ...updated } : s);
     setEvents(prev => prev.map(e => e.id === selected?.id ? { ...e, ...updated } as EventListItem : e));
+    if (selected && isPinned(selected.id))
+      savePinned(pinned.map(p => p.id === selected.id
+        ? { ...p, ...(Object.fromEntries(Object.entries(updated).filter(([k]) => k in p))) } as EventListItem
+        : p));
   }
 
   async function pushToKb() {
@@ -2913,8 +2984,16 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Left panel ─────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 flex flex-col border-r bg-white">
+      {/* ── Left panel (drag the right edge to resize; double-click resets) ── */}
+      <aside className="relative shrink-0 flex flex-col border-r bg-white" style={{ width: listWidth }}>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          title="Seret untuk ubah saiz · klik dua kali untuk set semula"
+          onPointerDown={startResize}
+          onDoubleClick={resetWidth}
+          className="absolute top-0 right-0 z-10 h-full w-1.5 translate-x-1/2 cursor-col-resize hover:bg-blue-300/60 active:bg-blue-400/60 transition-colors"
+        />
         <div className="px-4 py-3 border-b flex items-center gap-2">
           <span className="text-sm font-semibold flex-1">Events</span>
           <button
@@ -2992,11 +3071,13 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
         <div className="flex-1 overflow-y-auto py-1">
           {loading ? (
             <p className="text-xs text-zinc-400 px-4 py-3">Memuatkan…</p>
-          ) : events.length === 0 ? (
+          ) : events.length === 0 && pinned.length === 0 ? (
             <p className="text-xs text-zinc-400 px-4 py-3">Tiada acara ditemui.</p>
           ) : (() => {
-            const active   = events.filter(ev => ev.status !== "ARCHIVE");
-            const archived = events.filter(ev => ev.status === "ARCHIVE");
+            // Pinned events sit in their own section and aren't repeated below.
+            const unpinned = events.filter(ev => !isPinned(ev.id));
+            const active   = unpinned.filter(ev => ev.status !== "ARCHIVE");
+            const archived = unpinned.filter(ev => ev.status === "ARCHIVE");
 
             function renderRow(ev: EventListItem) {
               const isOnline    = ev.scope.startsWith("ONLINE");
@@ -3035,6 +3116,21 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
                       <p className="text-[10px] text-zinc-400 mt-0.5">{fmtDate(ev.startDate)}</p>
                     )}
                   </div>
+                  <div className="flex items-center gap-0.5 mr-1.5 self-center">
+                    {/* Pin: always visible when pinned or selected, otherwise on hover */}
+                    <button
+                      onClick={e => { e.stopPropagation(); togglePin(ev); }}
+                      className={cn(
+                        "p-1 rounded hover:bg-amber-50 transition-opacity",
+                        isPinned(ev.id) || selected?.id === ev.id ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                      )}
+                      title={isPinned(ev.id) ? "Nyahsemat" : "Semat di atas"}
+                    >
+                      {isPinned(ev.id)
+                        ? <Pin className="h-3 w-3 text-amber-500 fill-amber-400" />
+                        : <Pin className="h-3 w-3 text-zinc-400" />}
+                    </button>
+                  </div>
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 mr-1.5 self-center transition-opacity">
                     <a
                       href={`/organizer/events/${ev.slug}/manage`}
@@ -3058,6 +3154,20 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
 
             return (
               <>
+                {pinned.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 border-b bg-amber-50 flex items-center gap-1.5">
+                      <Pin className="h-3 w-3 text-amber-500 fill-amber-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Disemat ({pinned.length})</span>
+                    </div>
+                    {pinned.map(renderRow)}
+                    {(active.length > 0 || archived.length > 0) && (
+                      <div className="px-3 py-1.5 border-t border-b bg-zinc-50">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Semua acara</span>
+                      </div>
+                    )}
+                  </>
+                )}
                 {active.map(renderRow)}
                 {archived.length > 0 && (
                   <>
