@@ -9,8 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { TaskJudgingState } from "@/lib/judgingStatus";
-import { CompleteButton, CompleteDialog, JudgingLockBanner, useJudgingCompletion } from "@/components/judging/JudgingCompletion";
+import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
+import {
+  CompleteButton, CompleteDialog, JudgingLockBanner, StateLockStrip,
+  completeScopes, lockMapOf, lockedFor, useJudgingCompletion,
+} from "@/components/judging/JudgingCompletion";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -23,7 +26,7 @@ type Criterion = {
 };
 type Team = {
   id: string; name: string; contingent: string; contingentType: string;
-  stateName: string | null; memberCount: number; members: Member[];
+  stateId: string | null; stateName: string | null; memberCount: number; members: Member[];
 };
 type ScoreRow = {
   id: string; judgingTaskId: string; teamId: string; criterionId: string;
@@ -38,6 +41,8 @@ type BoardData = {
   isOnline:    boolean;
   teams:       Team[];
   judging:     TaskJudgingState;
+  /** National + per-state locks (absent from older servers). */
+  locks?:      TaskLockMap;
 };
 
 const GENDER_LABEL: Record<string, string> = { MALE: "L", FEMALE: "P" };
@@ -201,7 +206,7 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
   const [scores,   setScores]   = useState<ScoreRow[]>([]);
   const [q,        setQ]        = useState("");
   const [stateFilter, setStateFilter] = useState("");
-  const { judging, setJudging, locked, completing, setCompleting, announce } = useJudgingCompletion(
+  const { locks, setLocks, judging, locked, completing, setCompleting, announce } = useJudgingCompletion(
     `/api/judging/${slug}`, !!data,
     () => sessionStorage.getItem(`judging_pc_${slug}`) ?? passcode.trim().toUpperCase(),
   );
@@ -223,12 +228,12 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
       })
       .then(r => r.json())
       .then(j => {
-        if (!j.error) { setData(j); setScores(j.scores ?? []); setJudging(j.judging ?? null); }
+        if (!j.error) { setData(j); setScores(j.scores ?? []); setLocks(lockMapOf(j)); }
         else sessionStorage.removeItem(`judging_pc_${slug}`);
       })
       .catch(() => {})
       .finally(() => setRestoring(false));
-  }, [slug, setJudging]);
+  }, [slug, setLocks]);
 
   async function handleVerify() {
     if (!passcode.trim()) return;
@@ -251,7 +256,7 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
       sessionStorage.setItem(`judging_pc_${slug}`, passcode.trim().toUpperCase());
       setData(j);
       setScores(j.scores ?? []);
-      setJudging(j.judging ?? null);
+      setLocks(lockMapOf(j));
     } finally { setLoading(false); }
   }
 
@@ -323,6 +328,12 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
   ).length;
 
   const states = [...new Set(data.teams.map(t => t.stateName).filter(Boolean) as string[])].sort();
+  const stateNames = new Map(data.teams.filter(t => t.stateId).map(t => [t.stateId!, t.stateName ?? "—"]));
+  // Kebangsaan + each state on the board, for the completion dialog
+  const scopes = completeScopes(
+    data.teams.map(t => ({ stateId: t.stateId, stateName: t.stateName, scored: isTeamScored(criterions, scores.filter(s => s.teamId === t.id)) })),
+    locks,
+  );
 
   const qLower = q.trim().toLowerCase();
   const filteredTeams = data.teams.filter(t => {
@@ -381,17 +392,17 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
             <p className="text-xs text-zinc-500 font-semibold">{scoredCount}/{data.teams.length} dinilai</p>
             <p className="text-[10px] text-zinc-300 mt-0.5">{data.isOnline ? "Online" : "Fizikal"}</p>
           </div>
-          {!locked && <CompleteButton onClick={() => setCompleting(true)} />}
+          {scopes.some(s => !s.locked) && <CompleteButton onClick={() => setCompleting(true)} />}
         </div>
 
-        {/* Lock banner — updates live via the status poll */}
+        {/* Lock banner / locked states — update live via the status poll */}
         {locked && judging && <JudgingLockBanner judging={judging} />}
+        <StateLockStrip locks={locks} stateNames={stateNames} />
       </div>
 
       {completing && (
         <CompleteDialog
-          scoredCount={scoredCount}
-          total={data.teams.length}
+          scopes={scopes}
           unit="pasukan"
           onCancel={() => setCompleting(false)}
           onConfirm={announce}
@@ -461,7 +472,7 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
                     teamScores={scores.filter(s => s.teamId === team.id)}
                     hasTimeCols={hasTimeCols}
                     onJudge={() => router.push(`/judging/${slug}/team/${team.id}`)}
-                    locked={locked}
+                    locked={!!lockedFor(locks, team.stateId)}
                   />
                 ))}
               </tbody>

@@ -572,6 +572,10 @@ model Event {
   walkInJudgingEndpoints WalkInJudgingEndpoint[]
   teamEvents             TeamEvent[]
   resultsEndpoints       ResultsEndpoint[]
+  announcementEndpoints  AnnouncementEndpoint[]
+  announcementEntries    AnnouncementEntry[]
+  /// How many places the MC boards announce per result (5 = ranks 1–5).
+  announcementMaxPlaces  Int                 @default(3)
   attendanceEndpoints    AttendanceEndpoint[]
 
   @@map("events")
@@ -1137,6 +1141,99 @@ model JudgingScore {
   @@unique([judgingTaskId, teamId, criterionId])
   @@index([judgingTaskId])
   @@map("judging_scores")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANNOUNCEMENTS — MC / announcer boards of verified results
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A passcode-protected announcer board (/announce/[routeSlug]) listing the
+/// event's competitions whose results are VERIFIED and so can be announced.
+/// Created by a Super Admin.
+model AnnouncementEndpoint {
+  id        String                @id @default(cuid())
+  eventId   String
+  routeSlug String                @unique
+  passcode  String
+  label     String?
+  status    ResultsEndpointStatus @default(ACTIVE)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("announcement_endpoints")
+}
+
+/// One result in the event's announcement list (the master guideline the MC
+/// boards follow): its position, the Super Admin's green light ("ready to
+/// announce") and, once read out, when and by which board it was announced.
+/// Event-wide, so every announcer board sees the same list. `kind` is "event"
+/// (refId = EventCompetition id) or "walkin" (refId = EventWalkInCompetition
+/// id); a row exists only once something was set for that result.
+model AnnouncementEntry {
+  id          String    @id @default(cuid())
+  eventId     String
+  kind        String
+  refId       String
+  /// "" = the national (all states) results; otherwise a State id.
+  stateId     String    @default("")
+  /// Position in the announcement list (Super Admin drag-and-drop); null = not placed yet.
+  sortOrder   Int?
+  greenLight  Boolean   @default(false)
+  greenLitAt  DateTime?
+  greenLitBy  String?
+  announcedAt DateTime?
+  /// Label of the announcer board (or organizer) that marked it announced.
+  announcedBy String?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, kind, refId, stateId])
+  @@map("announcement_marks")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PER-STATE JUDGING LIFECYCLE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Judging lifecycle of one state within a competition — the per-state rows of
+/// the organizer's judging table. The competition-level fields
+/// (EventCompetition / EventWalkInCompetition.judgingStatus) are the "Semua"
+/// (national) row. No row = OPEN. `scope` is "event" (refId = EventCompetition
+/// id) or "walkin" (refId = EventWalkInCompetition id); polymorphic, so no FK.
+model JudgingStateStatus {
+  id                 String    @id @default(cuid())
+  scope              String
+  refId              String
+  stateId            String
+  judgingStatus      String    @default("OPEN")
+  judgingCompletedAt DateTime?
+  judgingCompletedBy String?
+  judgingVerifiedAt  DateTime?
+  judgingVerifiedBy  String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([scope, refId, stateId])
+  @@index([scope, refId])
+  @@map("judging_state_statuses")
+}
+
+/// A judge announced their task complete for one state ("Penghakiman Selesai"
+/// with a state chosen). `scope` is "event" (taskId = JudgingTask id) or
+/// "walkin" (taskId = WalkInJudgingEndpoint id).
+model JudgingTaskStateCompletion {
+  id          String   @id @default(cuid())
+  scope       String
+  taskId      String
+  stateId     String
+  completedAt DateTime @default(now())
+
+  @@unique([scope, taskId, stateId])
+  @@index([scope, taskId])
+  @@map("judging_task_state_completions")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

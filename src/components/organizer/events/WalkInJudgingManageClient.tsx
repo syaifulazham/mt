@@ -11,9 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { EventJudgingProgress } from "@/lib/judgingStatus";
+import type { EventJudgingProgress, JudgingRow } from "@/lib/judgingStatus";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
-import { JudgingStatusPanel, STATUS_CHIP, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
+import { JudgingStatusTable, STATUS_CHIP, applyRowChange, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
 
 /** How often the page re-reads walk-in judging status and progress. */
 const STATUS_POLL_MS = 3_000;
@@ -47,6 +47,8 @@ type WicBlock = JudgingState & {
   _count: { registrations: number };
   /** CONFIRMED walk-in participants — the set the judging form lists. */
   participantCount: number;
+  /** Judging table rows: "Semua" + each state with participants. */
+  rows: JudgingRow[];
   judgingTemplates: AssignedTemplate[];
   judgingEndpoints: EndpointItem[];
 };
@@ -241,6 +243,7 @@ export function WalkInJudgingManageClient({ event, canWrite, isSuperAdmin = fals
             judgingCompletedAt: p.judgingCompletedAt, judgingCompletedBy: p.judgingCompletedBy,
             judgingVerifiedAt: p.judgingVerifiedAt,   judgingVerifiedBy: p.judgingVerifiedBy,
             participantCount: p.teamCount,
+            rows: p.rows,
             judgingEndpoints: w.judgingEndpoints.map(e => {
               const le = byEp.get(e.id);
               return le ? { ...e, status: le.status as EndpointItem["status"], completedAt: le.completedAt, judged: le.judgedTeams } : e;
@@ -268,11 +271,16 @@ export function WalkInJudgingManageClient({ event, canWrite, isSuperAdmin = fals
     setWicList(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
   }
 
-  function handleJudgingChanged(wicId: string, judging: JudgingState) {
+  function handleJudgingChanged(wicId: string, stateId: string | null, judging: JudgingState) {
     setWicList(prev => prev.map(w => w.id !== wicId ? w : {
-      ...w, ...judging,
-      // Reopening the competition also reopens the judges' endpoint announcements.
-      ...(judging.judgingStatus === "OPEN" && { judgingEndpoints: w.judgingEndpoints.map(e => ({ ...e, completedAt: null })) }),
+      ...w,
+      rows: applyRowChange(w.rows, stateId, judging),
+      // The national row is also the competition's own status (list chip, endpoint lock).
+      ...(stateId === null && {
+        ...judging,
+        // Reopening the competition also reopens the judges' endpoint announcements.
+        ...(judging.judgingStatus === "OPEN" && { judgingEndpoints: w.judgingEndpoints.map(e => ({ ...e, completedAt: null })) }),
+      }),
     }));
   }
 
@@ -505,20 +513,16 @@ export function WalkInJudgingManageClient({ event, canWrite, isSuperAdmin = fals
 
                 {/* Announce completeness / verify / reopen */}
                 <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-                  <JudgingStatusPanel
+                  <JudgingStatusTable
                     code={selectedWic.competition.code}
                     name={selectedWic.competition.name}
-                    state={selectedWic}
-                    tasks={selectedWic.judgingEndpoints.map(e => ({
-                      id: e.id, label: e.label ?? e.judgingTemplate.name, judged: e.judged ?? 0, completedAt: e.completedAt,
-                    }))}
-                    total={selectedWic.participantCount}
+                    rows={selectedWic.rows}
+                    taskLabels={Object.fromEntries(selectedWic.judgingEndpoints.map(e => [e.id, e.label ?? e.judgingTemplate.name]))}
                     unit="peserta"
-                    taskNoun="endpoint"
                     statusUrl={`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-status`}
                     canWrite={canWrite}
                     isSuperAdmin={isSuperAdmin}
-                    onChanged={judging => handleJudgingChanged(selectedWic.id, judging)}
+                    onChanged={(stateId, judging) => handleJudgingChanged(selectedWic.id, stateId, judging)}
                   />
                 </div>
               </>

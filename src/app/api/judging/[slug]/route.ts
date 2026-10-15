@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { taskJudgingState } from "@/lib/judgingStatus";
+import { contingentStateId, taskLockMap } from "@/lib/judgingStatus";
 
 const ONLINE_SCOPES = ["ONLINE_NATIONAL", "ONLINE_STATE", "ONLINE_ZONE", "ONLINE_OPEN"];
 
@@ -35,8 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const { eventCompetition: ec } = task;
   // Locked boards still load (read-only, with a banner); scoring is refused
-  // by /scores. `judging` tells the page which lock applies.
-  const judging = taskJudgingState(task, ec.judgingStatus);
+  // by /scores. `locks` tells the page which lock applies — nationally
+  // (`judging`, kept for older clients) and per state.
+  const locks = await taskLockMap("event", task, ec.id, ec.judgingStatus);
   const isOnline = ONLINE_SCOPES.includes(ec.event.scope);
 
   // Fetch teams: for online events use preregistration (team_events JOIN),
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       teamEvents: { some: { eventId: ec.event.id } },
     },
     include: {
-      contingent:  { select: { name: true, contingentType: true, state: { select: { name: true } }, school: { select: { state: { select: { name: true } } } }, higherInstitution: { select: { state: { select: { name: true } } } } } },
+      contingent:  { select: { name: true, contingentType: true, stateId: true, state: { select: { name: true } }, school: { select: { stateId: true, state: { select: { name: true } } } }, higherInstitution: { select: { stateId: true, state: { select: { name: true } } } } } },
       members: {
         include: { participant: { select: { name: true, gender: true, eduLevel: true, age: true, classGrade: true, className: true } } },
         orderBy: { createdAt: "asc" },
@@ -84,12 +85,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     },
     scores: task.scores,
     isOnline,
-    judging,
+    judging: locks.national,
+    locks,
     teams: teams.map(t => ({
       id: t.id,
       name: t.name,
       contingent: t.contingent.name,
       contingentType: t.contingent.contingentType,
+      stateId: contingentStateId(t.contingent),
       stateName: t.contingent.state?.name ?? t.contingent.school?.state?.name ?? t.contingent.higherInstitution?.state?.name ?? null,
       memberCount: t.members.length,
       members: t.members.map(m => ({

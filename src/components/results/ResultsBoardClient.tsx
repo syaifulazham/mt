@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown, SlidersHorizontal, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -69,7 +69,15 @@ type RankEntry = {
   members: { id: string; name: string }[];
 };
 
-type CompetitionResult = { id: string; name: string; code: string; targetGroups: { code: string; name: string }[]; rankings: RankEntry[] };
+type CompetitionResult = {
+  id: string; name: string; code: string; targetGroups: { code: string; name: string }[];
+  /** Judging VERIFIED by a Super Admin — only then does the API send rankings. */
+  verified: boolean;
+  verifiedAt: string | null;
+  /** States verified on their own; when not `verified`, rankings hold only these states' teams. */
+  verifiedStateIds?: string[];
+  rankings: RankEntry[];
+};
 
 type BoardData = {
   endpoint: { id: string; label: string | null; status: string; isWalkIn?: boolean };
@@ -78,6 +86,32 @@ type BoardData = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** "Green light": the competition's results are verified and ready to announce. */
+function GreenLight({ label = true }: { label?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5" title="Keputusan disahkan — sedia diumumkan">
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_2px_rgba(52,211,153,0.7)]" />
+      </span>
+      {label && <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">Sedia diumumkan</span>}
+    </span>
+  );
+}
+
+/** First verified competition, else one with verified states, else the first. */
+function initialCompetition(cs: CompetitionResult[]) {
+  return (cs.find(c => c.verified) ?? cs.find(c => (c.verifiedStateIds?.length ?? 0) > 0) ?? cs[0])?.id ?? "";
+}
+
+/** How often an open board quietly re-reads the results (new verifications). */
+const RESULTS_REFRESH_MS = 30_000;
+
+/** "N negeri disahkan" for a competition released only per state. */
+function partialCount(c: CompetitionResult) {
+  return c.verified ? 0 : (c.verifiedStateIds?.length ?? 0);
+}
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60); const sec = s % 60;
@@ -633,7 +667,9 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [spotlight, setSpotlight] = useState<RankEntry | null>(null);
   const [showCompModal, setShowCompModal] = useState(false);
   const [selectedTargetGroup, setSelectedTargetGroup] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"national" | "state">("national");
+  // The viewer's choice; the effective `viewMode` (below) is forced to "state"
+  // while only some states of the competition are released.
+  const [viewChoice, setViewMode] = useState<"national" | "state">("national");
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
   const [scales, setScales] = useState<ScaleConfig>(() =>
@@ -668,6 +704,26 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const openSpotlight = useCallback((e: RankEntry) => setSpotlight(e), []);
 
 
+  // Quiet refresh: verifications made after the board was opened show up
+  // without a reload (selection and view are kept).
+  const loaded = !!data;
+  useEffect(() => {
+    if (!loaded) return;
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      fetch(`/api/results/${slug}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode: sessionStorage.getItem(`results_pc_${slug}`) ?? "" }),
+        cache: "no-store",
+      })
+        .then(r => r.json())
+        .then(j => { if (!j.error) setData(j); })
+        .catch(() => {});
+    }, RESULTS_REFRESH_MS);
+    return () => clearInterval(t);
+  }, [loaded, slug]);
+
   // Try public access first (no passcode), or restore stored passcode
   useEffect(() => {
     const stored = sessionStorage.getItem(`results_pc_${slug}`);
@@ -687,7 +743,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
           setError("Passcode salah. Cuba semula.");
         } else if (!j.error) {
           setData(j);
-          setActiveComp(j.competitions[0]?.id ?? "");
+          setActiveComp(initialCompetition(j.competitions));
           if (stored) sessionStorage.setItem(`results_pc_${slug}`, stored);
         } else if (j.error === "ENDPOINT_CLOSED") {
           setError("Paparan keputusan ini telah ditutup.");
@@ -717,7 +773,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       }
       sessionStorage.setItem(`results_pc_${slug}`, passcode.trim().toUpperCase());
       setData(j);
-      setActiveComp(j.competitions[0]?.id ?? "");
+      setActiveComp(initialCompetition(j.competitions));
     } finally { setLoading(false); }
   }
 
@@ -795,11 +851,22 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       ).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
     : [];
 
+  // Only some states released (national not verified): show them in "Negeri" view.
+  const nationalReleased = !!activeResult?.verified;
+  const viewMode: "national" | "state" =
+    activeResult && !nationalReleased && partialCount(activeResult) > 0 ? "state" : viewChoice;
+
+  // The state shown in "Negeri" view (a state of this competition), and whether its results are released
+  const currentStateId = (selectedState && availableStates.some(s => s.id === selectedState))
+    ? selectedState : (availableStates[0]?.id ?? null);
+  const stateReleased = !!activeResult && !!currentStateId &&
+    (activeResult.verified || (activeResult.verifiedStateIds ?? []).includes(currentStateId));
+
   // Rankings after applying view filter, re-ranked from 1 within the filtered set
   const filteredRankings: RankEntry[] = (() => {
     if (!activeResult) return [];
     if (viewMode === "national") return activeResult.rankings;
-    const stateId = selectedState ?? availableStates[0]?.id ?? null;
+    const stateId = currentStateId;
     if (!stateId) return activeResult.rankings;
     return activeResult.rankings
       .filter(r => r.stateId === stateId)
@@ -854,6 +921,17 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
               <h2 className="text-2xl font-black text-white">{activeResult.name}</h2>
             </>
           )}
+          <div className="mt-2 flex justify-center">
+            {activeResult.verified || (viewMode === "state" && stateReleased) ? <GreenLight /> : partialCount(activeResult) > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-300/80">
+                <GreenLight label={false} /> {partialCount(activeResult)} negeri disahkan
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-300/80">
+                <Hourglass className="h-3.5 w-3.5" /> Menunggu pengesahan
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -941,12 +1019,19 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
                         {c.name}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <p className="text-xs text-white/30">{c.rankings.length} pasukan</p>
+                        {c.verified
+                          ? <p className="text-xs text-white/30">{c.rankings.length} pasukan</p>
+                          : partialCount(c) > 0
+                          ? <p className="text-xs text-emerald-300/60">{partialCount(c)} negeri disahkan</p>
+                          : <p className="text-xs text-amber-300/60">Perlu disahkan</p>}
                         {c.targetGroups.map(tg => (
                           <span key={tg.code} className="text-[9px] text-white/25 border border-white/10 px-1.5 py-px rounded font-mono">{tg.code}</span>
                         ))}
                       </div>
                     </div>
+                    {c.verified || partialCount(c) > 0
+                      ? <GreenLight label={false} />
+                      : <Hourglass className="h-4 w-4 text-amber-300/60 shrink-0" />}
                     {c.id === activeComp && <div className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />}
                   </button>
                 ))}
@@ -964,13 +1049,17 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
         <div className="max-w-4xl mx-auto px-6 pb-4 flex items-center justify-center gap-2">
           <button
             onClick={() => setViewMode("national")}
+            disabled={!nationalReleased}
+            title={nationalReleased ? undefined : "Keputusan keseluruhan belum disahkan"}
             className={cn(
-              "px-5 py-1.5 rounded-full text-xs font-bold transition-all",
+              "px-5 py-1.5 rounded-full text-xs font-bold transition-all inline-flex items-center gap-1.5",
               viewMode === "national"
                 ? "bg-amber-500 text-black shadow-lg"
-                : "text-white/40 hover:text-white/70 bg-white/5 hover:bg-white/10"
+                : "text-white/40 hover:text-white/70 bg-white/5 hover:bg-white/10",
+              !nationalReleased && "opacity-40 cursor-not-allowed hover:text-white/40 hover:bg-white/5",
             )}
           >
+            {!nationalReleased && <Lock className="h-3 w-3" />}
             Kebangsaan
           </button>
           <button
@@ -985,9 +1074,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
             Negeri
             {viewMode === "state" && (
               <span className="font-normal opacity-80">
-                — {selectedState
-                  ? availableStates.find(s => s.id === selectedState)?.name
-                  : availableStates[0]?.name}
+                — {availableStates.find(s => s.id === currentStateId)?.name}
               </span>
             )}
             <ChevronDown className="h-3 w-3 opacity-60" />
@@ -1013,7 +1100,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
             </div>
             <div className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
               {availableStates.map(s => {
-                const active = (selectedState ?? availableStates[0]?.id) === s.id;
+                const active = currentStateId === s.id;
                 return (
                   <button
                     key={s.id}
@@ -1038,7 +1125,20 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
         </div>
       )}
 
-      {!activeResult || filteredRankings.length === 0 ? (
+      {activeResult && !(activeResult.verified || (viewMode === "state" && stateReleased)) ? (
+        // Not verified for this view yet: the API sends no rankings for it.
+        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-6">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-400/20 flex items-center justify-center">
+            <Hourglass className="h-8 w-8 text-amber-300" />
+          </div>
+          <p className="text-xl font-black text-amber-200">Keputusan perlu disahkan</p>
+          <p className="text-sm text-white/40 max-w-sm">
+            {partialCount(activeResult) > 0
+              ? `Keputusan keseluruhan belum disahkan. Keputusan bagi ${partialCount(activeResult)} negeri telah disahkan — pilih "Negeri" untuk melihatnya.`
+              : "Keputusan pertandingan ini akan dipaparkan sebaik sahaja disahkan oleh penganjur."}
+          </p>
+        </div>
+      ) : !activeResult || filteredRankings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3 text-white/30">
           <Trophy className="h-12 w-12" />
           <p className="text-sm">Tiada keputusan direkodkan lagi.</p>

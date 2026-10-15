@@ -54,6 +54,7 @@ export default async function EventJudgingPage({ params }: { params: Promise<{ s
     return {
       ...ec,
       teamCount: p?.teamCount ?? 0,
+      rows: p?.rows ?? [],
       judgingTasks: ec.judgingTasks.map((t) => ({ ...t, judgedTeams: byTask.get(t.id) ?? 0 })),
     };
   });

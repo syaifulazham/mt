@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useFormLock } from "@/components/judging/JudgingCompletion";
+import { lockMapOf, lockedFor, useFormLock } from "@/components/judging/JudgingCompletion";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Gavel, Loader2, Timer, Star, CheckSquare, Square, Trophy, Tag, Save,
@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ type Participant = {
   id: string; name: string; gender: string; eduLevel: string; age: number | null;
   classGrade: string | null; className: string | null;
   contingent: string; contingentShortName: string | null;
+  stateId?: string | null;
 };
 type ScoreRow = {
   id: string; walkInJudgingEndpointId: string; walkInRegistrationId: string; criterionId: string;
@@ -240,15 +242,13 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
       body: JSON.stringify({ passcode: pc }),
     })
       .then(r => r.json())
-      .then((j: BoardData & { error?: string; judging?: { locked: boolean; message: string | null } }) => {
+      .then((j: BoardData & { error?: string; judging?: TaskJudgingState; locks?: TaskLockMap }) => {
         if (j.error) { setErrorMsg("Sesi tamat. Sila log masuk semula."); setStatus("error"); return; }
-        // Endpoint or walk-in competition announced complete: the form stays closed.
-        if (j.judging?.locked) {
-          setErrorMsg(j.judging.message ?? "Penghakiman telah dikunci.");
-          setStatus("error"); return;
-        }
         const p = j.participants.find(x => x.id === regId);
         if (!p) { setErrorMsg("Peserta tidak dijumpai."); setStatus("error"); return; }
+        // Endpoint, competition or the participant's state announced complete: the form stays closed.
+        const lockMsg = lockedFor(lockMapOf(j), p.stateId);
+        if (lockMsg) { setErrorMsg(lockMsg); setStatus("error"); return; }
         setData(j);
         setParticipant(p);
 
@@ -276,7 +276,7 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
 
   // Live lock: if judging is announced complete while this form is open,
   // disable saving and say why (the API refuses the save either way).
-  const [lockedMsg, setLockedMsg] = useFormLock(`/api/walkin-judging/${slug}`, status === "ready");
+  const [lockedMsg, setLockedMsg] = useFormLock(`/api/walkin-judging/${slug}`, status === "ready", participant?.stateId);
 
   function setField(criterionId: string, field: keyof DraftScore, value: unknown) {
     setDraft(d => ({ ...d, [criterionId]: { ...d[criterionId], [field]: value } }));

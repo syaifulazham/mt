@@ -1,31 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-interface RankingEntry {
-  rank: number;
-  teamId: string;
-  teamName: string;
-  contingentId: string;
-  contingentName: string;
-  contingentShortName: string | null;
-  contingentLogo: string | null;
-  stateId: string | null;
-  stateName: string | null;
-  stateFlag: string | null;
-  totalScore: number;
-  bestTime: number | null;
-  members: { id: string; name: string }[];
-}
-
-interface CompetitionResult {
-  id: string;
-  name: string;
-  code: string;
-  targetGroups: { code: string; name: string }[];
-  rankings: RankingEntry[];
-}
+import { computeCompetitionResults, releasedRankings } from "@/lib/resultsRankings";
 
 // POST /api/results/[slug]
+//
+// Public results board. A competition's rankings are released once a Super
+// Admin VERIFIED its judging — nationally (`verified`, all rankings), or per
+// state (`verifiedStateIds`, only those states' teams, ranked within their
+// state). Nothing unreleased leaves the server, so an open or unverified
+// result can't be read off the network.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -74,229 +57,23 @@ export async function POST(
     }
   }
 
-  // 4. Determine which competitions to include
-  const targetCompetitionIds: string[] | null =
-    endpoint.competitionIds.length > 0 ? endpoint.competitionIds : null;
-
-  const competitions: CompetitionResult[] = [];
-
-  if (endpoint.isWalkIn) {
-    // ── Walk-in results ──────────────────────────────────────────────────────
-    const walkInComps = await db.eventWalkInCompetition.findMany({
-      where: {
-        eventId: endpoint.eventId,
-        ...(targetCompetitionIds ? { id: { in: targetCompetitionIds } } : {}),
-      },
-      include: {
-        competition: {
-          select: {
-            id: true, name: true, code: true,
-            targetGroups: { select: { targetGroup: { select: { code: true, name: true } } } },
-          },
-        },
-        judgingEndpoints: {
-          include: { scores: true },
-        },
-      },
-    });
-
-    for (const wc of walkInComps) {
-      const regScoreMap = new Map<string, { totalScore: number; bestTime: number | null }>();
-
-      for (const ep of wc.judgingEndpoints) {
-        for (const score of ep.scores) {
-          const existing = regScoreMap.get(score.walkInRegistrationId) ?? { totalScore: 0, bestTime: null };
-          if (score.score !== null) existing.totalScore += score.score;
-          if (score.timeSeconds !== null) {
-            if (existing.bestTime === null || score.timeSeconds < existing.bestTime) {
-              existing.bestTime = score.timeSeconds;
-            }
-          }
-          regScoreMap.set(score.walkInRegistrationId, existing);
-        }
-      }
-
-      if (regScoreMap.size === 0) {
-        competitions.push({
-          id: wc.id,
-          name: wc.competition.name,
-          code: wc.competition.code,
-          targetGroups: wc.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
-          rankings: [],
-        });
-        continue;
-      }
-
-      const regIds = Array.from(regScoreMap.keys());
-      const registrations = await db.walkInRegistration.findMany({
-        where: { id: { in: regIds } },
-        select: {
-          id: true,
-          participant: { select: { id: true, name: true } },
-          contingent: {
-            select: {
-              id: true, name: true, shortName: true, logoUrl: true,
-              contingentType: true, stateId: true,
-              state: { select: { id: true, name: true, flagUrl: true } },
-              school: { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
-              higherInstitution: { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
-            },
-          },
-        },
-      });
-
-      const ranked: Omit<RankingEntry, "rank">[] = registrations.map((reg) => {
-        const agg = regScoreMap.get(reg.id) ?? { totalScore: 0, bestTime: null };
-        const st = reg.contingent.state ?? reg.contingent.school?.state ?? reg.contingent.higherInstitution?.state;
-        return {
-          teamId: reg.id,
-          teamName: reg.participant.name,
-          contingentId: reg.contingent.id,
-          contingentName: reg.contingent.name,
-          contingentShortName: reg.contingent.shortName ?? null,
-          contingentLogo: reg.contingent.logoUrl ?? null,
-          stateId: st?.id ?? null,
-          stateName: st?.name ?? null,
-          stateFlag: st?.flagUrl ?? null,
-          totalScore: agg.totalScore,
-          bestTime: agg.bestTime,
-          members: [{ id: reg.participant.id, name: reg.participant.name }],
-        };
-      });
-
-      ranked.sort((a, b) => {
-        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-        if (a.bestTime === null && b.bestTime === null) return 0;
-        if (a.bestTime === null) return 1;
-        if (b.bestTime === null) return -1;
-        return a.bestTime - b.bestTime;
-      });
-
-      competitions.push({
-        id: wc.id,
-        name: wc.competition.name,
-        code: wc.competition.code,
-        targetGroups: wc.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
-        rankings: ranked.map((entry, idx) => ({ rank: idx + 1, ...entry })),
-      });
-    }
-  } else {
-    // ── Main competition results ─────────────────────────────────────────────
-    const eventCompetitions = await db.eventCompetition.findMany({
-      where: {
-        eventId: endpoint.eventId,
-        ...(targetCompetitionIds
-          ? { id: { in: targetCompetitionIds } }
-          : {}),
-      },
-      include: {
-        competition: {
-          select: {
-            id: true, name: true, code: true,
-            targetGroups: { select: { targetGroup: { select: { code: true, name: true } } } },
-          },
-        },
-        judgingTasks: {
-          include: {
-            scores: true,
-          },
-        },
-      },
-    });
-
-    for (const ec of eventCompetitions) {
-      const teamScoreMap = new Map<string, { totalScore: number; bestTime: number | null }>();
-
-      for (const task of ec.judgingTasks) {
-        for (const score of task.scores) {
-          const existing = teamScoreMap.get(score.teamId) ?? {
-            totalScore: 0,
-            bestTime: null,
-          };
-
-          if (score.score !== null) {
-            existing.totalScore += score.score;
-          }
-
-          if (score.timeSeconds !== null) {
-            if (existing.bestTime === null || score.timeSeconds < existing.bestTime) {
-              existing.bestTime = score.timeSeconds;
-            }
-          }
-
-          teamScoreMap.set(score.teamId, existing);
-        }
-      }
-
-      if (teamScoreMap.size === 0) {
-        competitions.push({
-          id: ec.id,
-          name: ec.competition.name,
-          code: ec.competition.code,
-          targetGroups: ec.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
-          rankings: [],
-        });
-        continue;
-      }
-
-      const teamIds = Array.from(teamScoreMap.keys());
-      const teams = await db.team.findMany({
-        where: { id: { in: teamIds } },
-        select: {
-          id: true,
-          name: true,
-          members: { select: { participant: { select: { id: true, name: true } } } },
-          contingent: {
-            select: {
-              id: true,
-              name: true,
-              shortName: true,
-              logoUrl: true,
-              contingentType: true,
-              stateId: true,
-              state: { select: { id: true, name: true, flagUrl: true } },
-              school: { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
-              higherInstitution: { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
-            },
-          },
-        },
-      });
-
-      const ranked: Omit<RankingEntry, "rank">[] = teams.map((team) => {
-        const agg = teamScoreMap.get(team.id) ?? { totalScore: 0, bestTime: null };
-        return {
-          teamId: team.id,
-          teamName: team.name,
-          contingentId: team.contingent.id,
-          contingentName: team.contingent.name,
-          contingentShortName: team.contingent.shortName ?? null,
-          contingentLogo: team.contingent.logoUrl ?? null,
-          stateId: (team.contingent.state ?? team.contingent.school?.state ?? team.contingent.higherInstitution?.state)?.id ?? null,
-          stateName: (team.contingent.state ?? team.contingent.school?.state ?? team.contingent.higherInstitution?.state)?.name ?? null,
-          stateFlag: (team.contingent.state ?? team.contingent.school?.state ?? team.contingent.higherInstitution?.state)?.flagUrl ?? null,
-          totalScore: agg.totalScore,
-          bestTime: agg.bestTime,
-          members: team.members.map(m => ({ id: m.participant.id, name: m.participant.name })),
-        };
-      });
-
-      ranked.sort((a, b) => {
-        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-        if (a.bestTime === null && b.bestTime === null) return 0;
-        if (a.bestTime === null) return 1;
-        if (b.bestTime === null) return -1;
-        return a.bestTime - b.bestTime;
-      });
-
-      competitions.push({
-        id: ec.id,
-        name: ec.competition.name,
-        code: ec.competition.code,
-        targetGroups: ec.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
-        rankings: ranked.map((entry, idx) => ({ rank: idx + 1, ...entry })),
-      });
-    }
-  }
+  // 4. Competitions of this endpoint (all of the event's when none are picked)
+  const results = await computeCompetitionResults(
+    endpoint.eventId,
+    endpoint.isWalkIn,
+    endpoint.competitionIds.length > 0 ? endpoint.competitionIds : null,
+  );
+  const competitions = results.map((r) => {
+    const { judgingStatus, judgingVerifiedAt, rankings: _all, ...c } = r;
+    void _all;
+    const verified = judgingStatus === "VERIFIED";
+    return {
+      ...c,
+      verified,
+      verifiedAt: verified ? judgingVerifiedAt : null,
+      rankings: releasedRankings(r),
+    };
+  });
 
   return NextResponse.json({
     endpoint: {

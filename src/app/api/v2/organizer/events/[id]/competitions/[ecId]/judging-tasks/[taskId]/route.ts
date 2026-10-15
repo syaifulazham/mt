@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { JUDGING_LOCKED, judgingLocked } from "@/lib/judgingStatus";
+import { JUDGING_LOCKED, judgingLocked, cleanupTaskStateCompletions } from "@/lib/judgingStatus";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
@@ -55,5 +55,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (judgingLocked(task.eventCompetition.judgingStatus)) return NextResponse.json(JUDGING_LOCKED, { status: 423 });
 
   await db.judgingTask.delete({ where: { id: taskId } });
+  await cleanupTaskStateCompletions("event", taskId);
   return NextResponse.json({ success: true });
 }

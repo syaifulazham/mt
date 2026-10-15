@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JudgingBadge, JudgingStatusStrip, judgingTheme, type ResultsJudging } from "@/components/organizer/judging/JudgingBadge";
-import { JudgingVerifyActions } from "@/components/organizer/judging/JudgingVerifyActions";
+import { ResultsVerification } from "@/components/organizer/judging/JudgingVerifyActions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -211,14 +211,6 @@ export function WalkInResultsClient({
           <h2 className={cn("text-sm font-semibold flex items-center gap-2", theme.title)}>
             <Medal className={cn("h-4 w-4 text-indigo-400", theme.icon)} /> Kedudukan Semasa
             {activeRanking && <JudgingBadge judging={activeRanking.judging} />}
-            {isSuperAdmin && activeRanking?.judging && (
-              <JudgingVerifyActions
-                code={activeRanking.code}
-                name={activeRanking.name}
-                judging={activeRanking.judging}
-                onChanged={j => setJudgingOverride(p => ({ ...p, [activeRanking.id]: j }))}
-              />
-            )}
           </h2>
           {/* Competition tabs */}
           <div className="flex gap-1 flex-wrap">
@@ -237,6 +229,17 @@ export function WalkInResultsClient({
           </div>
         </div>
         <JudgingStatusStrip judging={activeRanking?.judging} />
+        {/* Per-state verification (Semua + states) */}
+        {activeRanking?.judging && (
+          <ResultsVerification
+            code={activeRanking.code}
+            name={activeRanking.name}
+            judging={activeRanking.judging}
+            unit="peserta"
+            isSuperAdmin={isSuperAdmin}
+            onChanged={j => setJudgingOverride(p => ({ ...p, [activeRanking.id]: j }))}
+          />
+        )}
 
         {!activeRanking || activeRanking.rankings.length === 0 ? (
           <div className="py-12 text-center text-sm text-zinc-400">

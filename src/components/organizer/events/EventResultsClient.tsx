@@ -4,11 +4,12 @@ import { Fragment, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Trophy, Plus, Trash2, Loader2, Copy, Check,
-  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, FileDown, Download, ShieldCheck, Hourglass,
+  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, FileDown, Download, ShieldCheck, ArrowUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JudgingBadge, JudgingStatusStrip, judgingTheme, type ResultsJudging } from "@/components/organizer/judging/JudgingBadge";
-import { JudgingVerifyActions } from "@/components/organizer/judging/JudgingVerifyActions";
+import { ResultsVerification } from "@/components/organizer/judging/JudgingVerifyActions";
+import { STATUS_CHIP } from "@/components/organizer/judging/JudgingStatusPanel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -234,26 +235,34 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
 
 // ── Competition tab ────────────────────────────────────────────────────────────
 // Code button with a judging marker: a shield inside once VERIFIED, and an
-// hourglass beneath while judging is announced complete but awaiting a Super
-// Admin's verification. Every tab reserves the marker row so they stay aligned.
+// arrow beneath pointing at it while something awaits a Super Admin's
+// verification — the whole competition ("Semua") or any state announced
+// SELESAI. Every tab reserves the marker row so they stay aligned.
 
 function CompetitionTab({ c, active, onSelect }: {
   c: CompetitionRanking; active: boolean; onSelect: (id: string) => void;
 }) {
   const status = c.judging?.status;
+  const rows = c.judging?.rows ?? [];
+  // Rows announced SELESAI and not yet verified ("Semua" and/or states)
+  const waiting = rows.length > 0
+    ? rows.filter(r => r.judgingStatus === "COMPLETED")
+    : status === "COMPLETED" ? [{ stateId: null, stateName: "Semua" }] : [];
+  const waitingLabel = waiting.map(r => r.stateId === null ? "Semua" : r.stateName).join(", ");
   return (
     <div className="flex flex-col items-center gap-0.5">
       <button onClick={() => onSelect(c.id)}
-        title={`${c.code} – ${c.name}${status === "VERIFIED" ? " · VERIFIED" : status === "COMPLETED" ? " · menunggu pengesahan" : ""}`}
+        title={`${c.code} – ${c.name}${status === "VERIFIED" ? " · VERIFIED" : ""}${waiting.length ? ` · menunggu pengesahan: ${waitingLabel}` : ""}`}
         className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1",
           active ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
         )}>
         {c.code}
         {status === "VERIFIED" && <ShieldCheck className="h-3 w-3" />}
       </button>
-      <span className="h-3 flex items-center" aria-hidden={status !== "COMPLETED"}>
-        {status === "COMPLETED" && (
-          <Hourglass className="h-3 w-3 text-amber-500" aria-label="Menunggu pengesahan" />
+      <span className="h-3.5 flex items-center" aria-hidden={waiting.length === 0}>
+        {waiting.length > 0 && (
+          <ArrowUp className="h-3.5 w-3.5 text-amber-500 animate-bounce" strokeWidth={3}
+            aria-label={`Menunggu pengesahan: ${waitingLabel}`} />
         )}
       </span>
     </div>
@@ -447,14 +456,6 @@ export function EventResultsClient({
               ? <span className="flex items-center gap-2">
                   <span>Keputusan <span className={cn("font-mono text-rose-600", theme.code)}>{activeRanking.code}</span> {activeRanking.name}</span>
                   <JudgingBadge judging={activeRanking.judging} />
-                  {isSuperAdmin && activeRanking.judging && (
-                    <JudgingVerifyActions
-                      code={activeRanking.code}
-                      name={activeRanking.name}
-                      judging={activeRanking.judging}
-                      onChanged={j => setJudgingOverride(p => ({ ...p, [activeRanking.id]: j }))}
-                    />
-                  )}
                 </span>
               : "Kedudukan Semasa"
             }
@@ -473,6 +474,17 @@ export function EventResultsClient({
           </div>
         </div>
         <JudgingStatusStrip judging={activeRanking?.judging} />
+        {/* Per-state verification (Semua + states) */}
+        {activeRanking?.judging && (
+          <ResultsVerification
+            code={activeRanking.code}
+            name={activeRanking.name}
+            judging={activeRanking.judging}
+            unit="pasukan"
+            isSuperAdmin={isSuperAdmin}
+            onChanged={j => setJudgingOverride(p => ({ ...p, [activeRanking.id]: j }))}
+          />
+        )}
 
         {!activeRanking || !hasData ? (
           <div className="py-12 text-center text-sm text-zinc-400">
@@ -490,6 +502,13 @@ export function EventResultsClient({
                         <span className="text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
                           {group.stateName}
                         </span>
+                        {(() => {
+                          // This state's own judging status (from the verification table)
+                          const st = activeRanking.judging?.rows?.find(r => r.stateId === group.stateId)?.judgingStatus;
+                          if (!st || st === "OPEN") return null;
+                          const chip = STATUS_CHIP[st];
+                          return <span className={cn("ml-2 text-[9px] font-bold px-1.5 py-px rounded-full border", chip.cls)}>{chip.label}</span>;
+                        })()}
                       </td>
                     </tr>
                     {group.teams.map(renderTeamRow)}

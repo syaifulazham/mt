@@ -3,7 +3,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { transitionJudging } from "@/lib/judgingStatus";
 
 /**
- * PATCH { action: "complete" | "verify" | "reopen" } — walk-in counterpart of
+ * PATCH { action: "complete" | "verify" | "reopen", stateId? } — walk-in counterpart of
  * competitions/[ecId]/judging-status: complete (Admin, Super Admin) locks every
  * walk-in judging form of the competition; verify and reopen are Super Admin only.
  */
@@ -12,7 +12,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { id: eventId, wicId } = await params;
-  const { action } = await req.json().catch(() => ({})) as { action?: string };
-  const r = await transitionJudging("walkin", eventId, wicId, action, session);
+  // stateId absent = the national "Semua" row; otherwise that state's row.
+  const { action, stateId } = await req.json().catch(() => ({})) as { action?: string; stateId?: string | null };
+  const r = await transitionJudging("walkin", eventId, wicId, action, session, stateId);
   return NextResponse.json(r.body, { status: r.status });
 }

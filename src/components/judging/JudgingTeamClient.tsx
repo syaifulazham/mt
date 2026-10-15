@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useFormLock } from "@/components/judging/JudgingCompletion";
+import { lockMapOf, lockedFor, useFormLock } from "@/components/judging/JudgingCompletion";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Gavel, Loader2, Timer, Star,
@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
 
 // ── Types (mirrored from JudgingBoardClient) ───────────────────────────────────
 
@@ -22,7 +23,7 @@ type Criterion = {
 };
 type Team = {
   id: string; name: string; contingent: string; contingentType: string;
-  memberCount: number; members: Member[];
+  stateId?: string | null; memberCount: number; members: Member[];
 };
 type ScoreRow = {
   id: string; judgingTaskId: string; teamId: string; criterionId: string;
@@ -252,15 +253,13 @@ export function JudgingTeamClient({ slug, teamId }: { slug: string; teamId: stri
       body: JSON.stringify({ passcode: pc }),
     })
       .then(r => r.json())
-      .then((j: BoardData & { error?: string; judging?: { locked: boolean; message: string | null } }) => {
+      .then((j: BoardData & { error?: string; judging?: TaskJudgingState; locks?: TaskLockMap }) => {
         if (j.error) { setErrorMsg("Sesi tamat. Sila log masuk semula."); setStatus("error"); return; }
-        // Task or competition announced complete: the form stays closed.
-        if (j.judging?.locked) {
-          setErrorMsg(j.judging.message ?? "Penghakiman telah dikunci.");
-          setStatus("error"); return;
-        }
         const t = j.teams.find(x => x.id === teamId);
         if (!t) { setErrorMsg("Pasukan tidak dijumpai."); setStatus("error"); return; }
+        // Task, competition or the team's state announced complete: the form stays closed.
+        const lockMsg = lockedFor(lockMapOf(j), t.stateId);
+        if (lockMsg) { setErrorMsg(lockMsg); setStatus("error"); return; }
         setData(j);
         setTeam(t);
 
@@ -289,7 +288,7 @@ export function JudgingTeamClient({ slug, teamId }: { slug: string; teamId: stri
 
   // Live lock: if judging is announced complete while this form is open,
   // disable saving and say why (the API refuses the save either way).
-  const [lockedMsg, setLockedMsg] = useFormLock(`/api/judging/${slug}`, status === "ready");
+  const [lockedMsg, setLockedMsg] = useFormLock(`/api/judging/${slug}`, status === "ready", team?.stateId);
 
   function setField(criterionId: string, field: keyof DraftScore, value: unknown) {
     setDraft(d => ({ ...d, [criterionId]: { ...d[criterionId], [field]: value } }));

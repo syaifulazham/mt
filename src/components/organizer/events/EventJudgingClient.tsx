@@ -12,9 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { EventJudgingProgress } from "@/lib/judgingStatus";
+import type { EventJudgingProgress, JudgingRow } from "@/lib/judgingStatus";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
-import { JudgingStatusPanel, STATUS_CHIP, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
+import { JudgingStatusTable, STATUS_CHIP, applyRowChange, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
+
+/** Event scopes whose national row reads "Kebangsaan" and whose state rows start hidden. */
+const NATIONAL_SCOPES = ["NATIONAL", "ONLINE_NATIONAL"];
 
 /** How often the page re-reads judging status and progress. */
 const STATUS_POLL_MS = 3_000;
@@ -51,6 +54,8 @@ type CompetitionBlock = JudgingState & {
   judgingTasks: TaskItem[];
   /** ACTIVE teams entered in the event for this competition. */
   teamCount: number;
+  /** Judging table rows: "Semua" + each state with teams. */
+  rows: JudgingRow[];
 };
 
 type EventInfo = { id: string; name: string; slug: string; scope: string };
@@ -248,10 +253,12 @@ function TaskRow({
 // ── CompetitionCard ────────────────────────────────────────────────────────────
 
 function CompetitionCard({
-  ec, isExpanded, event, canWrite: canWriteRole, isSuperAdmin,
+  ec, isExpanded, event, canWrite: canWriteRole, isSuperAdmin, showStates,
   onToggle, onCreateTask, onTaskDeleted, onStatusChange, onJudgingChanged, onTaskReopened,
 }: {
   ec: CompetitionBlock;
+  /** Per-state rows in the judging table (always on except when toggled off for NATIONAL events). */
+  showStates: boolean;
   isExpanded: boolean;
   event: EventInfo;
   canWrite: boolean;
@@ -260,7 +267,7 @@ function CompetitionCard({
   onCreateTask: (ecId: string, template: TemplateSummary) => void;
   onTaskDeleted: (ecId: string, taskId: string) => void;
   onStatusChange: (ecId: string, taskId: string, status: "ACTIVE" | "CLOSED") => void;
-  onJudgingChanged: (ecId: string, judging: JudgingState) => void;
+  onJudgingChanged: (ecId: string, stateId: string | null, judging: JudgingState) => void;
   onTaskReopened: (ecId: string, taskId: string) => void;
 }) {
   // Tasks are frozen once judging is announced complete (the API refuses too).
@@ -371,20 +378,18 @@ function CompetitionCard({
 
           {/* Announce completeness / verify / reopen */}
           {ec.judgingTemplates.length > 0 && (
-            <JudgingStatusPanel
+            <JudgingStatusTable
               code={ec.competition.code}
               name={ec.competition.name}
-              state={ec}
-              tasks={ec.judgingTasks.map(t => ({
-                id: t.id, label: t.label ?? t.judgingTemplate.name, judged: t.judgedTeams ?? 0, completedAt: t.completedAt,
-              }))}
-              total={ec.teamCount}
+              rows={ec.rows}
+              taskLabels={Object.fromEntries(ec.judgingTasks.map(t => [t.id, t.label ?? t.judgingTemplate.name]))}
               unit="pasukan"
-              taskNoun="tugas"
               statusUrl={`/api/v2/organizer/events/${event.id}/competitions/${ec.id}/judging-status`}
               canWrite={canWriteRole}
               isSuperAdmin={isSuperAdmin}
-              onChanged={judging => onJudgingChanged(ec.id, judging)}
+              showStates={showStates}
+              nationalLabel={NATIONAL_SCOPES.includes(event.scope) ? "Kebangsaan" : "Semua"}
+              onChanged={(stateId, judging) => onJudgingChanged(ec.id, stateId, judging)}
             />
           )}
         </div>
@@ -406,6 +411,10 @@ export function EventJudgingClient({
   const [competitions, setCompetitions] = useState(initialCompetitions);
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set(initialCompetitions.map(c => c.id)));
   const [filter,       setFilter]       = useState("");
+  // NATIONAL events: state rows in "Status Penghakiman" are hidden unless toggled on.
+  const isNational = NATIONAL_SCOPES.includes(event.scope);
+  const [showStatesToggle, setShowStatesToggle] = useState(false);
+  const showStates = !isNational || showStatesToggle;
 
   // Live status: re-read every competition's judging status and progress every
   // STATUS_POLL_MS, so judges' "Penghakiman Selesai", the automatic completion
@@ -433,9 +442,10 @@ export function EventJudgingClient({
             judgingVerifiedAt:  p.judgingVerifiedAt,
             judgingVerifiedBy:  p.judgingVerifiedBy,
             teamCount:          p.teamCount,
+            rows:               p.rows,
             judgingTasks: ec.judgingTasks.map(t => {
               const lt = byTask.get(t.id);
-              return lt ? { ...t, status: lt.status, completedAt: lt.completedAt, judgedTeams: lt.judgedTeams } : t;
+              return lt ? { ...t, status: lt.status as TaskItem["status"], completedAt: lt.completedAt, judgedTeams: lt.judgedTeams } : t;
             }),
           };
         }));
@@ -524,11 +534,16 @@ export function EventJudgingClient({
   grouped.forEach(list => list.sort(byCode));
   ungrouped.sort(byCode);
 
-  function handleJudgingChanged(ecId: string, judging: JudgingState) {
+  function handleJudgingChanged(ecId: string, stateId: string | null, judging: JudgingState) {
     setCompetitions(prev => prev.map(ec => ec.id !== ecId ? ec : {
-      ...ec, ...judging,
-      // Reopening the competition also reopens the judges' task announcements.
-      ...(judging.judgingStatus === "OPEN" && { judgingTasks: ec.judgingTasks.map(t => ({ ...t, completedAt: null })) }),
+      ...ec,
+      rows: applyRowChange(ec.rows, stateId, judging),
+      // The national row is also the competition's own status (header chip, task lock).
+      ...(stateId === null && {
+        ...judging,
+        // Reopening the competition also reopens the judges' task announcements.
+        ...(judging.judgingStatus === "OPEN" && { judgingTasks: ec.judgingTasks.map(t => ({ ...t, completedAt: null })) }),
+      }),
     }));
   }
 
@@ -539,7 +554,7 @@ export function EventJudgingClient({
   }
 
   const cardProps = {
-    event, canWrite, isSuperAdmin,
+    event, canWrite, isSuperAdmin, showStates,
     onJudgingChanged: handleJudgingChanged,
     onTaskReopened: handleTaskReopened,
     onToggle: toggleExpand,
@@ -589,6 +604,27 @@ export function EventJudgingClient({
           </div>
           {filter && (
             <span className="text-xs text-zinc-500">{visible.length} / {competitions.length} pertandingan</span>
+          )}
+          {isNational && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showStatesToggle}
+              onClick={() => setShowStatesToggle(v => !v)}
+              title="Papar baris negeri dalam semua Status Penghakiman"
+              className="ml-auto inline-flex items-center gap-2 text-xs font-medium text-zinc-600"
+            >
+              <span className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors",
+                showStatesToggle ? "bg-amber-500" : "bg-zinc-300",
+              )}>
+                <span className={cn(
+                  "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                  showStatesToggle ? "translate-x-4" : "translate-x-0.5",
+                )} />
+              </span>
+              Papar negeri
+            </button>
           )}
         </div>
       )}

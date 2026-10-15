@@ -1,11 +1,14 @@
 import { Hourglass, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { JudgingRow } from "@/lib/judgingStatus";
 
 /** Judging lifecycle of a competition, as the results pages receive it. */
 export type ResultsJudging = {
   status: string; verifiedAt: string | null; verifiedBy: string | null;
   /** judging-status endpoint for Verify / Buka Semula (Super Admin only). */
   statusUrl?: string;
+  /** Per-state judging rows ("Semua" first) for the verification table. */
+  rows?: JudgingRow[];
 };
 
 /**

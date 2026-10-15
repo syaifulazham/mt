@@ -8,8 +8,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { TaskJudgingState } from "@/lib/judgingStatus";
-import { CompleteButton, CompleteDialog, JudgingLockBanner, useJudgingCompletion } from "@/components/judging/JudgingCompletion";
+import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
+import {
+  CompleteButton, CompleteDialog, JudgingLockBanner, StateLockStrip,
+  completeScopes, lockMapOf, lockedFor, useJudgingCompletion,
+} from "@/components/judging/JudgingCompletion";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -23,6 +26,7 @@ type Participant = {
   id: string; name: string; gender: string; eduLevel: string; age: number | null;
   classGrade: string | null; className: string | null;
   contingent: string; contingentShortName: string | null; contingentType: string;
+  stateId?: string | null; stateName?: string | null;
 };
 type ScoreRow = {
   id: string; walkInJudgingEndpointId: string; walkInRegistrationId: string; criterionId: string;
@@ -36,6 +40,8 @@ type BoardData = {
   scores:      ScoreRow[];
   participants: Participant[];
   judging:     TaskJudgingState;
+  /** National + per-state locks (absent from older servers). */
+  locks?:      TaskLockMap;
 };
 
 const GENDER_LABEL: Record<string, string> = { MALE: "L", FEMALE: "P" };
@@ -161,7 +167,7 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
   const storageKey = `walkin_judging_pc_${slug}`;
 
   // "Penghakiman Selesai" + live lock state (shared with regular judging).
-  const { judging, setJudging, locked, completing, setCompleting, announce } = useJudgingCompletion(
+  const { locks, setLocks, judging, locked, completing, setCompleting, announce } = useJudgingCompletion(
     `/api/walkin-judging/${slug}`, !!data,
     () => sessionStorage.getItem(storageKey) ?? passcode.trim().toUpperCase(),
   );
@@ -180,12 +186,12 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
       })
       .then(r => r.json())
       .then(j => {
-        if (!j.error) { setData(j); setScores(j.scores ?? []); setJudging(j.judging ?? null); }
+        if (!j.error) { setData(j); setScores(j.scores ?? []); setLocks(lockMapOf(j)); }
         else sessionStorage.removeItem(storageKey);
       })
       .catch(() => {})
       .finally(() => setRestoring(false));
-  }, [slug, storageKey, setJudging]);
+  }, [slug, storageKey, setLocks]);
 
   async function handleVerify() {
     if (!passcode.trim()) return;
@@ -207,7 +213,7 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
       sessionStorage.setItem(storageKey, passcode.trim().toUpperCase());
       setData(j);
       setScores(j.scores ?? []);
-      setJudging(j.judging ?? null);
+      setLocks(lockMapOf(j));
     } finally { setLoading(false); }
   }
 
@@ -275,6 +281,15 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
   const scoredCount = data.participants.filter(p =>
     isScored(criterions, scores.filter(s => s.walkInRegistrationId === p.id)),
   ).length;
+  const stateNames = new Map(data.participants.filter(p => p.stateId).map(p => [p.stateId!, p.stateName ?? "—"]));
+  // Kebangsaan + each state on the board, for the completion dialog
+  const scopes = completeScopes(
+    data.participants.map(p => ({
+      stateId: p.stateId ?? null, stateName: p.stateName ?? null,
+      scored: isScored(criterions, scores.filter(s => s.walkInRegistrationId === p.id)),
+    })),
+    locks,
+  );
 
   const sortedParticipants = [...data.participants].sort((a, b) => {
     const aScores = scores.filter(s => s.walkInRegistrationId === a.id);
@@ -327,17 +342,17 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
             <p className="text-xs text-zinc-500 font-semibold">{scoredCount}/{data.participants.length} dinilai</p>
             <p className="text-[10px] text-zinc-300 mt-0.5">Walk-in</p>
           </div>
-          {!locked && <CompleteButton onClick={() => setCompleting(true)} />}
+          {scopes.some(s => !s.locked) && <CompleteButton onClick={() => setCompleting(true)} />}
         </div>
 
-        {/* Lock banner — updates live via the status poll */}
+        {/* Lock banner / locked states — update live via the status poll */}
         {locked && judging && <JudgingLockBanner judging={judging} />}
+        <StateLockStrip locks={locks} stateNames={stateNames} />
       </div>
 
       {completing && (
         <CompleteDialog
-          scoredCount={scoredCount}
-          total={data.participants.length}
+          scopes={scopes}
           unit="peserta"
           onCancel={() => setCompleting(false)}
           onConfirm={announce}
@@ -373,7 +388,7 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
                     pScores={scores.filter(s => s.walkInRegistrationId === p.id)}
                     hasTimeCols={hasTimeCols}
                     onJudge={() => router.push(`/walkin-judging/${slug}/participant/${p.id}`)}
-                    locked={locked}
+                    locked={!!lockedFor(locks, p.stateId)}
                   />
                 ))}
               </tbody>

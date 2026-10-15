@@ -4,6 +4,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
 import { WalkInResultsClient } from "@/components/organizer/events/WalkInResultsClient";
+import { walkInJudgingProgress, type JudgingRow } from "@/lib/judgingStatus";
 
 export const metadata: Metadata = { title: "Keputusan Walk-in" };
 
@@ -53,7 +54,9 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
     totalScore: number; bestTime: number | null; rank: number;
   };
 
-  type Judging = { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string };
+  type Judging = { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string; rows: JudgingRow[] };
+  // Per-state judging rows ("Semua" + states with participants) for the verification table.
+  const progress = new Map((await walkInJudgingProgress(event.id)).map((p) => [p.id, p.rows]));
   const competitionRankings: { id: string; name: string; code: string; judging: Judging; rankings: RankEntry[] }[] = [];
 
   for (const wc of event.walkInCompetitions) {
@@ -62,6 +65,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
       verifiedAt: wc.judgingVerifiedAt?.toISOString() ?? null,
       verifiedBy: wc.judgingVerifiedBy,
       statusUrl:  `/api/v2/organizer/events/${event.id}/walkin/${wc.id}/judging-status`,
+      rows:       progress.get(wc.id) ?? [],
     };
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();
     for (const ep of wc.judgingEndpoints) {

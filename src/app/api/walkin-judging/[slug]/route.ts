@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { taskJudgingState } from "@/lib/judgingStatus";
+import { contingentStateId, taskLockMap } from "@/lib/judgingStatus";
 
 // POST /api/walkin-judging/[slug]  body: { passcode }
 // Returns endpoint + event + competition + template info and confirmed walk-in participants
@@ -33,14 +33,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const { walkInCompetition: wic } = endpoint;
   // Locked boards still load (read-only, with a banner); /scores refuses writes.
-  const judging = taskJudgingState(endpoint, wic.judgingStatus);
+  const locks = await taskLockMap("walkin", endpoint, wic.id, wic.judgingStatus);
 
   // Confirmed walk-in registrations are the judgeable participants
   const registrations = await db.walkInRegistration.findMany({
     where: { walkInCompetitionId: wic.id, status: "CONFIRMED" },
     include: {
       participant: { select: { id: true, name: true, gender: true, eduLevel: true, age: true, classGrade: true, className: true } },
-      contingent:  { select: { id: true, name: true, shortName: true, contingentType: true } },
+      contingent:  {
+        select: {
+          id: true, name: true, shortName: true, contingentType: true, stateId: true,
+          state: { select: { name: true } },
+          school: { select: { stateId: true, state: { select: { name: true } } } },
+          higherInstitution: { select: { stateId: true, state: { select: { name: true } } } },
+        },
+      },
     },
     orderBy: { confirmedAt: "asc" },
   });
@@ -71,7 +78,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       })),
     },
     scores: endpoint.scores,
-    judging,
+    judging: locks.national,
+    locks,
     participants: registrations.map(r => ({
       id: r.id,
       participantId: r.participant.id,
@@ -84,6 +92,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       contingent: r.contingent.name,
       contingentShortName: r.contingent.shortName,
       contingentType: r.contingent.contingentType,
+      stateId: contingentStateId(r.contingent),
+      stateName: r.contingent.state?.name ?? r.contingent.school?.state?.name ?? r.contingent.higherInstitution?.state?.name ?? null,
     })),
   });
 }

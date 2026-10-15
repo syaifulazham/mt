@@ -63,6 +63,7 @@ export default async function WalkInJudgingPage({
       return {
         ...w,
         participantCount: p?.teamCount ?? 0,
+        rows: p?.rows ?? [],
         judgingEndpoints: w.judgingEndpoints.map((e) => ({ ...e, judged: byEndpoint.get(e.id) ?? 0 })),
       };
     }),

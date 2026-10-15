@@ -4,6 +4,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
 import { EventResultsClient } from "@/components/organizer/events/EventResultsClient";
+import { eventJudgingProgress, type JudgingRow } from "@/lib/judgingStatus";
 
 export const metadata: Metadata = { title: "Keputusan" };
 
@@ -70,12 +71,14 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
   type CompetitionRankingOut = {
     id: string; name: string; code: string;
     targetGroup: { id: string; code: string; name: string } | null;
-    judging: { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string };
+    judging: { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string; rows: JudgingRow[] };
     rankings: RankEntry[];
     stateGroups: StateGroup[];
   };
 
   const competitionRankings: CompetitionRankingOut[] = [];
+  // Per-state judging rows ("Semua" + states with teams) for the verification table.
+  const progress = new Map((await eventJudgingProgress(event.id)).map((p) => [p.id, p.rows]));
 
   for (const ec of event.eventCompetitions) {
     const targetGroup = ec.competition.targetGroups[0]?.targetGroup ?? null;
@@ -84,6 +87,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       verifiedAt: ec.judgingVerifiedAt?.toISOString() ?? null,
       verifiedBy: ec.judgingVerifiedBy,
       statusUrl:  `/api/v2/organizer/events/${event.id}/competitions/${ec.id}/judging-status`,
+      rows:       progress.get(ec.id) ?? [],
     };
 
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();

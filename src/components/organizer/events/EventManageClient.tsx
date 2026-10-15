@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
-  LayoutDashboard, Scale, Award, Globe,
+  LayoutDashboard, Scale, Award, Globe, Megaphone,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -163,11 +163,32 @@ const WALKIN_CONNECTIONS: EdgeDef[] = [
   { from: "walkin/judging", to: "walkin/results", color: "#f59e0b" },
 ];
 
+// ─── Pengumuman ──────────────────────────────────────────────────────────────
+// Fed by both Keputusan (main flow) and Keputusan Walk-in, so it sits under the
+// walk-in row, between the two, and its arrows are drawn by a third layer that
+// spans both canvases (CROSS_CONNECTIONS).
+const ANNOUNCE_MODULE: Module = {
+  icon: Megaphone,
+  title: "Pengumuman",
+  description: "Papan MC / juruacara untuk mengumumkan keputusan yang telah disahkan.",
+  color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200",
+  href: "announcements",
+  pos: { x: COL[1], y: ROW[1] },
+};
+
+const ANNOUNCE_COLOR = "#10b981";
+
+const CROSS_CONNECTIONS: EdgeDef[] = [
+  { from: "results",        to: "announcements", color: ANNOUNCE_COLOR },
+  { from: "walkin/results", to: "announcements", color: ANNOUNCE_COLOR },
+];
+
 const LEGEND = [
   { color: "#3b82f6", label: "Aliran utama",        dashed: false },
   { color: "#0d9488", label: "Dashboard kehadiran", dashed: false },
   { color: "#8b5cf6", label: "Laporan",             dashed: true  },
   { color: "#f59e0b", label: "Aliran walk-in",      dashed: false },
+  { color: ANNOUNCE_COLOR, label: "Pengumuman",      dashed: false },
 ];
 
 const STATUS_STYLES: Record<string, string> = {
@@ -405,9 +426,11 @@ export function EventManageClient({
 
   const { wrapRef: mainWrapRef,   arrows: mainArrows,   svgH: mainSvgH   } = useArrows(MAIN_CONNECTIONS);
   const { wrapRef: walkinWrapRef, arrows: walkinArrows, svgH: walkinSvgH } = useArrows(WALKIN_CONNECTIONS);
+  // Spans both canvases, for the arrows into Pengumuman.
+  const { wrapRef: crossWrapRef,  arrows: crossArrows,  svgH: crossSvgH  } = useArrows(CROSS_CONNECTIONS);
 
   const mainH   = ROW[2] + CARD_H + 24;
-  const walkinH = CARD_H + 24;
+  const walkinH = ROW[1] + CARD_H + 24;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
@@ -433,6 +456,10 @@ export function EventManageClient({
           )}
         </div>
       </div>
+
+      {/* Main flow + walk-in, in one wrapper so the Pengumuman arrows can cross between them */}
+      <div ref={crossWrapRef} className="relative space-y-8">
+      <ArrowSvg arrows={crossArrows} height={crossSvgH} colors={[ANNOUNCE_COLOR]} />
 
       {/* ── Main flow ── */}
       <div className="overflow-x-auto">
@@ -465,8 +492,10 @@ export function EventManageClient({
             {WALKIN_MODULES.map(mod => (
               <ModuleCard key={mod.title} mod={mod} eventSlug={event.slug} />
             ))}
+            <ModuleCard mod={ANNOUNCE_MODULE} eventSlug={event.slug} />
           </div>
         </div>
+      </div>
       </div>
 
       {/* Legend */}

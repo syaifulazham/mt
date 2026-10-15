@@ -22,6 +22,7 @@ const isPublicManagerRoute = createRouteMatcher([
 const isWebhookRoute = createRouteMatcher(["/api/v2/webhooks(.*)"]);
 const isJudgingRoute = createRouteMatcher(["/judging(.*)"]);
 const isResultsRoute = createRouteMatcher(["/results(.*)"]);
+const isAnnounceRoute = createRouteMatcher(["/announce(.*)"]);
 const isWalkInRoute       = createRouteMatcher(["/walkin(.*)"]);
 const isBorangRoute       = createRouteMatcher(["/borang(.*)"]);
 const isAttendanceRoute   = createRouteMatcher(["/attendance(.*)"]);
@@ -120,9 +121,10 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
   // Skip API routes — no locale handling needed
   if (pathname.startsWith("/api/")) return NextResponse.next();
 
-  // Public judging board / results / walk-in counter / public form — no auth, no locale rewrite
+  // Public judging board / results / announcer board / walk-in counter / public form — no auth, no locale rewrite
   if (isJudgingRoute(req))    return NextResponse.next();
   if (isResultsRoute(req))    return NextResponse.next();
+  if (isAnnounceRoute(req))   return NextResponse.next();
   if (isWalkInRoute(req))     return NextResponse.next();
   if (isBorangRoute(req))     return NextResponse.next();
   if (isAttendanceRoute(req)) return NextResponse.next();
