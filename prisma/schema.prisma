@@ -658,6 +658,13 @@ model EventCompetition {
   fc1Challenges       Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim FC-1 event
   droneEventId        String? // Eptim Drone event the picks came from — EPTIMDRONE_API_KEY decides it
   droneChallenges     Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim Drone event
+  // Judging lifecycle: OPEN → COMPLETED (announced complete; judge forms locked)
+  // → VERIFIED (results confirmed by a Super Admin). Only a Super Admin reopens.
+  judgingStatus       String    @default("OPEN")
+  judgingCompletedAt  DateTime?
+  judgingCompletedBy  String?
+  judgingVerifiedAt   DateTime?
+  judgingVerifiedBy   String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -1052,6 +1059,10 @@ model JudgingTask {
   passcode           String
   label              String?
   status             JudgingTaskStatus @default(ACTIVE)
+  // Set when the judge announces their task complete from the judging page —
+  // locks the task's form. When every ACTIVE task of the competition is
+  // complete, the competition's judgingStatus moves to COMPLETED on its own.
+  completedAt        DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 

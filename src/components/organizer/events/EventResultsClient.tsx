@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Trophy, Plus, Trash2, Loader2, Copy, Check,
-  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, FileDown, Download,
+  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, FileDown, Download, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,9 +29,31 @@ type StateGroup = {
 type CompetitionRanking = {
   id: string; name: string; code: string;
   targetGroup: { id: string; code: string; name: string } | null;
+  /** Judging lifecycle of the competition (OPEN | COMPLETED | VERIFIED). */
+  judging?: { status: string; verifiedAt: string | null; verifiedBy: string | null };
   rankings: RankEntry[];
   stateGroups: StateGroup[];
 };
+
+/** VERIFIED / pending-verification marker for a competition's results. */
+function JudgingBadge({ judging }: { judging?: CompetitionRanking["judging"] }) {
+  if (judging?.status === "VERIFIED")
+    return (
+      <span
+        title={`Disahkan oleh ${judging.verifiedBy ?? "Super Admin"}${judging.verifiedAt ? ` pada ${new Date(judging.verifiedAt).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}` : ""}`}
+        className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+      >
+        <ShieldCheck className="h-3 w-3" /> VERIFIED
+      </span>
+    );
+  if (judging?.status === "COMPLETED")
+    return (
+      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+        SELESAI · belum disahkan
+      </span>
+    );
+  return null;
+}
 
 type Endpoint = {
   id: string; routeSlug: string; passcode: string | null;
@@ -205,10 +227,11 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
       <div className="flex gap-1 flex-wrap">
         {groups[0].items.map((c) => (
           <button key={c.id} onClick={() => onSelect(c.id)}
-            className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors",
+            className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1",
               activeId === c.id ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
             )}>
             {c.code}
+            {c.judging?.status === "VERIFIED" && <ShieldCheck className="h-3 w-3" />}
           </button>
         ))}
       </div>
@@ -226,11 +249,12 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
           )}
           {g.items.map((c) => (
             <button key={c.id} onClick={() => onSelect(c.id)}
-              title={`${c.code} – ${c.name}`}
-              className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors",
+              title={`${c.code} – ${c.name}${c.judging?.status === "VERIFIED" ? " · VERIFIED" : ""}`}
+              className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1",
                 activeId === c.id ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
               )}>
               {c.code}
+              {c.judging?.status === "VERIFIED" && <ShieldCheck className="h-3 w-3" />}
             </button>
           ))}
         </div>
@@ -415,7 +439,10 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
           <h2 className="text-sm font-semibold text-zinc-700 flex items-center gap-2 shrink-0">
             <Medal className="h-4 w-4 text-rose-400" />
             {activeRanking
-              ? <span>Keputusan <span className="font-mono text-rose-600">{activeRanking.code}</span> {activeRanking.name}</span>
+              ? <span className="flex items-center gap-2">
+                  <span>Keputusan <span className="font-mono text-rose-600">{activeRanking.code}</span> {activeRanking.name}</span>
+                  <JudgingBadge judging={activeRanking.judging} />
+                </span>
               : "Kedudukan Semasa"
             }
           </h2>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { randomBytes } from "crypto";
+import { JUDGING_LOCKED, judgingLocked } from "@/lib/judgingStatus";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 const PASSCODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId } });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (judgingLocked(ec.judgingStatus)) return NextResponse.json(JUDGING_LOCKED, { status: 423 });
 
   // Verify template is assigned to this event competition
   const assignment = await db.eventCompetitionJudgingTemplate.findUnique({

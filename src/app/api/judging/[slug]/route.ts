@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { taskJudgingState } from "@/lib/judgingStatus";
 
 const ONLINE_SCOPES = ["ONLINE_NATIONAL", "ONLINE_STATE", "ONLINE_ZONE", "ONLINE_OPEN"];
 
@@ -33,6 +34,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (task.passcode !== passcode.trim().toUpperCase()) return NextResponse.json({ error: "WRONG_PASSCODE" }, { status: 401 });
 
   const { eventCompetition: ec } = task;
+  // Locked boards still load (read-only, with a banner); scoring is refused
+  // by /scores. `judging` tells the page which lock applies.
+  const judging = taskJudgingState(task, ec.judgingStatus);
   const isOnline = ONLINE_SCOPES.includes(ec.event.scope);
 
   // Fetch teams: for online events use preregistration (team_events JOIN),
@@ -80,6 +84,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     },
     scores: task.scores,
     isOnline,
+    judging,
     teams: teams.map(t => ({
       id: t.id,
       name: t.name,

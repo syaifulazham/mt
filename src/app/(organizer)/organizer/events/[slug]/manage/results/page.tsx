@@ -22,6 +22,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       eventCompetitions: {
         select: {
           id: true,
+          judgingStatus: true, judgingVerifiedAt: true, judgingVerifiedBy: true,
           competition: {
             select: {
               id: true,
@@ -69,6 +70,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
   type CompetitionRankingOut = {
     id: string; name: string; code: string;
     targetGroup: { id: string; code: string; name: string } | null;
+    judging: { status: string; verifiedAt: string | null; verifiedBy: string | null };
     rankings: RankEntry[];
     stateGroups: StateGroup[];
   };
@@ -77,6 +79,11 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
   for (const ec of event.eventCompetitions) {
     const targetGroup = ec.competition.targetGroups[0]?.targetGroup ?? null;
+    const judging = {
+      status:     ec.judgingStatus,
+      verifiedAt: ec.judgingVerifiedAt?.toISOString() ?? null,
+      verifiedBy: ec.judgingVerifiedBy,
+    };
 
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();
     for (const task of ec.judgingTasks) {
@@ -93,7 +100,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     if (scoreMap.size === 0) {
       competitionRankings.push({
         id: ec.competition.id, name: ec.competition.name, code: ec.competition.code,
-        targetGroup, rankings: [], stateGroups: [],
+        targetGroup, judging, rankings: [], stateGroups: [],
       });
       continue;
     }
@@ -193,7 +200,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
     competitionRankings.push({
       id: ec.competition.id, name: ec.competition.name, code: ec.competition.code,
-      targetGroup, rankings, stateGroups,
+      targetGroup, judging, rankings, stateGroups,
     });
   }
 
