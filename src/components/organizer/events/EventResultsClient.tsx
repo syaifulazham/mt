@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Trophy, Plus, Trash2, Loader2, Copy, Check,
-  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, FileDown, Download, ShieldCheck,
+  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, FileDown, Download, ShieldCheck, Hourglass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { JudgingBadge, type ResultsJudging } from "@/components/organizer/judging/JudgingBadge";
+import { JudgingBadge, JudgingStatusStrip, judgingTheme, type ResultsJudging } from "@/components/organizer/judging/JudgingBadge";
+import { JudgingVerifyActions } from "@/components/organizer/judging/JudgingVerifyActions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -207,13 +208,7 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
     return (
       <div className="flex gap-1 flex-wrap">
         {groups[0].items.map((c) => (
-          <button key={c.id} onClick={() => onSelect(c.id)}
-            className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1",
-              activeId === c.id ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-            )}>
-            {c.code}
-            {c.judging?.status === "VERIFIED" && <ShieldCheck className="h-3 w-3" />}
-          </button>
+          <CompetitionTab key={c.id} c={c} active={activeId === c.id} onSelect={onSelect} />
         ))}
       </div>
     );
@@ -222,24 +217,45 @@ function CompetitionTabs({ competitions, activeId, onSelect }: {
   return (
     <div className="flex gap-3 flex-wrap items-start">
       {groups.map((g) => (
-        <div key={g.id ?? "__none"} className="flex items-center gap-1">
+        <div key={g.id ?? "__none"} className="flex items-start gap-1">
           {g.name && (
-            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide mr-0.5 whitespace-nowrap">
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide mr-0.5 whitespace-nowrap leading-6">
               {g.code}
             </span>
           )}
           {g.items.map((c) => (
-            <button key={c.id} onClick={() => onSelect(c.id)}
-              title={`${c.code} – ${c.name}${c.judging?.status === "VERIFIED" ? " · VERIFIED" : ""}`}
-              className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1",
-                activeId === c.id ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-              )}>
-              {c.code}
-              {c.judging?.status === "VERIFIED" && <ShieldCheck className="h-3 w-3" />}
-            </button>
+            <CompetitionTab key={c.id} c={c} active={activeId === c.id} onSelect={onSelect} />
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Competition tab ────────────────────────────────────────────────────────────
+// Code button with a judging marker: a shield inside once VERIFIED, and an
+// hourglass beneath while judging is announced complete but awaiting a Super
+// Admin's verification. Every tab reserves the marker row so they stay aligned.
+
+function CompetitionTab({ c, active, onSelect }: {
+  c: CompetitionRanking; active: boolean; onSelect: (id: string) => void;
+}) {
+  const status = c.judging?.status;
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <button onClick={() => onSelect(c.id)}
+        title={`${c.code} – ${c.name}${status === "VERIFIED" ? " · VERIFIED" : status === "COMPLETED" ? " · menunggu pengesahan" : ""}`}
+        className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1",
+          active ? "bg-rose-600 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+        )}>
+        {c.code}
+        {status === "VERIFIED" && <ShieldCheck className="h-3 w-3" />}
+      </button>
+      <span className="h-3 flex items-center" aria-hidden={status !== "COMPLETED"}>
+        {status === "COMPLETED" && (
+          <Hourglass className="h-3 w-3 text-amber-500" aria-label="Menunggu pengesahan" />
+        )}
+      </span>
     </div>
   );
 }
@@ -264,12 +280,19 @@ function ContingentCell({ name, logo }: { name: string; logo: string | null }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function EventResultsClient({ event, competitionRankings, endpoints: initialEndpoints, canWrite }: {
+export function EventResultsClient({
+  event, competitionRankings: rankingsProp, endpoints: initialEndpoints, canWrite, isSuperAdmin = false,
+}: {
   event: EventInfo;
   competitionRankings: CompetitionRanking[];
   endpoints: Endpoint[];
   canWrite: boolean;
+  isSuperAdmin?: boolean;
 }) {
+  // Verify / reopen from this page updates the competition's judging in place.
+  const [judgingOverride, setJudgingOverride] = useState<Record<string, ResultsJudging>>({});
+  const competitionRankings = rankingsProp.map(c => judgingOverride[c.id] ? { ...c, judging: judgingOverride[c.id] } : c);
+
   const [endpoints, setEndpoints] = useState(initialEndpoints);
   const [activeComp, setActiveComp] = useState(competitionRankings[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
@@ -350,6 +373,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
   }
 
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
+  const theme = judgingTheme(activeRanking?.judging?.status);
   const useStateGroups = isZone && (activeRanking?.stateGroups.length ?? 0) > 0;
   const hasData = useStateGroups
     ? (activeRanking?.stateGroups.length ?? 0) > 0
@@ -414,15 +438,23 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
         </div>
       </div>
 
-      {/* Live rankings */}
-      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b bg-zinc-50 flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-sm font-semibold text-zinc-700 flex items-center gap-2 shrink-0">
-            <Medal className="h-4 w-4 text-rose-400" />
+      {/* Live rankings — header turns green once the competition's judging is VERIFIED */}
+      <div className={cn("rounded-xl border bg-white shadow-sm overflow-hidden transition-colors", theme.card)}>
+        <div className={cn("px-5 py-3 border-b flex items-center justify-between gap-3 flex-wrap transition-colors", theme.header)}>
+          <h2 className={cn("text-sm font-semibold flex items-center gap-2 shrink-0", theme.title)}>
+            <Medal className={cn("h-4 w-4 text-rose-400", theme.icon)} />
             {activeRanking
               ? <span className="flex items-center gap-2">
-                  <span>Keputusan <span className="font-mono text-rose-600">{activeRanking.code}</span> {activeRanking.name}</span>
+                  <span>Keputusan <span className={cn("font-mono text-rose-600", theme.code)}>{activeRanking.code}</span> {activeRanking.name}</span>
                   <JudgingBadge judging={activeRanking.judging} />
+                  {isSuperAdmin && activeRanking.judging && (
+                    <JudgingVerifyActions
+                      code={activeRanking.code}
+                      name={activeRanking.name}
+                      judging={activeRanking.judging}
+                      onChanged={j => setJudgingOverride(p => ({ ...p, [activeRanking.id]: j }))}
+                    />
+                  )}
                 </span>
               : "Kedudukan Semasa"
             }
@@ -440,6 +472,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
             </Button>
           </div>
         </div>
+        <JudgingStatusStrip judging={activeRanking?.judging} />
 
         {!activeRanking || !hasData ? (
           <div className="py-12 text-center text-sm text-zinc-400">
@@ -451,8 +484,8 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
               <thead>{thead}</thead>
               <tbody>
                 {activeRanking.stateGroups.map((group) => (
-                  <>
-                    <tr key={`hdr-${group.stateId}`} className="bg-zinc-100 border-b border-zinc-200">
+                  <Fragment key={group.stateId}>
+                    <tr className="bg-zinc-100 border-b border-zinc-200">
                       <td colSpan={6} className="px-4 py-1.5">
                         <span className="text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
                           {group.stateName}
@@ -460,7 +493,7 @@ export function EventResultsClient({ event, competitionRankings, endpoints: init
                       </td>
                     </tr>
                     {group.teams.map(renderTeamRow)}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

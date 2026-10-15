@@ -53,7 +53,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
     totalScore: number; bestTime: number | null; rank: number;
   };
 
-  type Judging = { status: string; verifiedAt: string | null; verifiedBy: string | null };
+  type Judging = { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string };
   const competitionRankings: { id: string; name: string; code: string; judging: Judging; rankings: RankEntry[] }[] = [];
 
   for (const wc of event.walkInCompetitions) {
@@ -61,6 +61,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
       status:     wc.judgingStatus,
       verifiedAt: wc.judgingVerifiedAt?.toISOString() ?? null,
       verifiedBy: wc.judgingVerifiedBy,
+      statusUrl:  `/api/v2/organizer/events/${event.id}/walkin/${wc.id}/judging-status`,
     };
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();
     for (const ep of wc.judgingEndpoints) {
@@ -118,6 +119,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
         competitionRankings={competitionRankings}
         endpoints={event.resultsEndpoints.map(ep => ({ ...ep, createdAt: ep.createdAt.toISOString() }))}
         canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
+        isSuperAdmin={session.role === "SUPER_ADMIN"}
       />
     </OrganizerShell>
   );

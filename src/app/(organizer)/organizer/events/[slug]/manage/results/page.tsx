@@ -70,7 +70,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
   type CompetitionRankingOut = {
     id: string; name: string; code: string;
     targetGroup: { id: string; code: string; name: string } | null;
-    judging: { status: string; verifiedAt: string | null; verifiedBy: string | null };
+    judging: { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string };
     rankings: RankEntry[];
     stateGroups: StateGroup[];
   };
@@ -83,6 +83,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       status:     ec.judgingStatus,
       verifiedAt: ec.judgingVerifiedAt?.toISOString() ?? null,
       verifiedBy: ec.judgingVerifiedBy,
+      statusUrl:  `/api/v2/organizer/events/${event.id}/competitions/${ec.id}/judging-status`,
     };
 
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();
@@ -211,6 +212,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
         competitionRankings={competitionRankings}
         endpoints={event.resultsEndpoints.map((ep) => ({ ...ep, createdAt: ep.createdAt.toISOString() }))}
         canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
+        isSuperAdmin={session.role === "SUPER_ADMIN"}
       />
     </OrganizerShell>
   );

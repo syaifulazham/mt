@@ -7,7 +7,8 @@ import {
   Eye, EyeOff, ExternalLink, Globe, Lock, Medal, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { JudgingBadge, type ResultsJudging } from "@/components/organizer/judging/JudgingBadge";
+import { JudgingBadge, JudgingStatusStrip, judgingTheme, type ResultsJudging } from "@/components/organizer/judging/JudgingBadge";
+import { JudgingVerifyActions } from "@/components/organizer/judging/JudgingVerifyActions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -146,12 +147,19 @@ function EndpointRow({ ep, eventId, onDelete, onStatusChange }: {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function WalkInResultsClient({ event, competitionRankings, endpoints: initialEndpoints, canWrite }: {
+export function WalkInResultsClient({
+  event, competitionRankings: rankingsProp, endpoints: initialEndpoints, canWrite, isSuperAdmin = false,
+}: {
   event: EventInfo;
   competitionRankings: CompetitionRanking[];
   endpoints: Endpoint[];
   canWrite: boolean;
+  isSuperAdmin?: boolean;
 }) {
+  // Verify / reopen from this page updates the competition's judging in place.
+  const [judgingOverride, setJudgingOverride] = useState<Record<string, ResultsJudging>>({});
+  const competitionRankings = rankingsProp.map(c => judgingOverride[c.id] ? { ...c, judging: judgingOverride[c.id] } : c);
+
   const [endpoints, setEndpoints] = useState(initialEndpoints);
   const [activeComp, setActiveComp] = useState(competitionRankings[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
@@ -178,6 +186,7 @@ export function WalkInResultsClient({ event, competitionRankings, endpoints: ini
   }
 
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
+  const theme = judgingTheme(activeRanking?.judging?.status);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -196,12 +205,20 @@ export function WalkInResultsClient({ event, competitionRankings, endpoints: ini
         </div>
       </div>
 
-      {/* Live rankings preview */}
-      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b bg-zinc-50 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
-            <Medal className="h-4 w-4 text-indigo-400" /> Kedudukan Semasa
+      {/* Live rankings preview — header turns green once the competition's judging is VERIFIED */}
+      <div className={cn("rounded-xl border bg-white shadow-sm overflow-hidden transition-colors", theme.card)}>
+        <div className={cn("px-5 py-3 border-b flex items-center justify-between gap-3 transition-colors", theme.header)}>
+          <h2 className={cn("text-sm font-semibold flex items-center gap-2", theme.title)}>
+            <Medal className={cn("h-4 w-4 text-indigo-400", theme.icon)} /> Kedudukan Semasa
             {activeRanking && <JudgingBadge judging={activeRanking.judging} />}
+            {isSuperAdmin && activeRanking?.judging && (
+              <JudgingVerifyActions
+                code={activeRanking.code}
+                name={activeRanking.name}
+                judging={activeRanking.judging}
+                onChanged={j => setJudgingOverride(p => ({ ...p, [activeRanking.id]: j }))}
+              />
+            )}
           </h2>
           {/* Competition tabs */}
           <div className="flex gap-1 flex-wrap">
@@ -219,6 +236,7 @@ export function WalkInResultsClient({ event, competitionRankings, endpoints: ini
             ))}
           </div>
         </div>
+        <JudgingStatusStrip judging={activeRanking?.judging} />
 
         {!activeRanking || activeRanking.rankings.length === 0 ? (
           <div className="py-12 text-center text-sm text-zinc-400">
