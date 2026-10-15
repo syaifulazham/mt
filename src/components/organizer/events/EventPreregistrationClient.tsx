@@ -271,7 +271,7 @@ function StateTable({ rows }: { rows: StateStat[] }) {
 
 export function EventPreregistrationClient({ event, canAddWildcards = false }: {
   event: EventSummary;
-  /** SUPER_ADMIN / ADMIN only; the API enforces it too. */
+  /** SUPER_ADMIN only; the API enforces it too. */
   canAddWildcards?: boolean;
 }) {
   const isCompleted = event.status === "COMPLETED";
@@ -1604,7 +1604,7 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                             {team.teamName}
                             {team.wildcard && (
                               <span
-                                title="Ditambah oleh pentadbir sebagai wildcard (di luar had negeri/zon acara)"
+                                title="Ditambah oleh Super Admin sebagai wildcard (di luar had negeri/zon acara)"
                                 className="ml-1.5 align-middle rounded-full bg-violet-50 border border-violet-200 text-violet-700 px-1.5 py-px text-[10px] font-semibold"
                               >
                                 Wildcard

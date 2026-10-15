@@ -5,14 +5,14 @@ import { db } from "@/lib/db";
 const STATE_SCOPES = ["STATE", "ONLINE_STATE"];
 const ZONE_SCOPES  = ["ZONE",  "ONLINE_ZONE"];
 
-const WILDCARD_ROLES: string[] = ["SUPER_ADMIN", "ADMIN"];
+const WILDCARD_ROLES: string[] = ["SUPER_ADMIN"];
 
 /**
  * POST — Add teams to an event's preregistration.
  * Body: { teamIds: string[], wildcard?: boolean }
  * Validates eligibility (competition + scope) and skips duplicates.
  *
- * `wildcard: true` (administrators only) lifts the scope check — any state —
+ * `wildcard: true` (Super Admin only) lifts the scope check — any state —
  * and marks the rows as wildcards. The competition must still be one the event
  * offers.
  */

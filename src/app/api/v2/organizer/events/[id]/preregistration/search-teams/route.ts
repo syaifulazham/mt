@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 
 const STATE_SCOPES = ["STATE", "ONLINE_STATE"];
 const ZONE_SCOPES  = ["ZONE",  "ONLINE_ZONE"];
-const WILDCARD_ROLES: string[] = ["SUPER_ADMIN", "ADMIN"];
+const WILDCARD_ROLES: string[] = ["SUPER_ADMIN"];
 
 /**
  * GET — Search all teams globally, filtered by event eligibility:
@@ -13,7 +13,7 @@ const WILDCARD_ROLES: string[] = ["SUPER_ADMIN", "ADMIN"];
  *   2. Contingent state must match the event scope/area
  *   Teams already registered are flagged with alreadyRegistered = true
  *
- * `?wildcard=1` (administrators only): rule 2 is lifted — any state — and teams
+ * `?wildcard=1` (Super Admin only): rule 2 is lifted — any state — and teams
  * already listed for the event are left out entirely. Rule 1 still applies.
  */
 export async function GET(

@@ -59,7 +59,7 @@ export default async function EventPreregistrationPage({
           zoneStates,
           prerequisites: event.prerequisites,
         }}
-        canAddWildcards={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
+        canAddWildcards={session.role === "SUPER_ADMIN"}
       />
     </OrganizerShell>
   );
