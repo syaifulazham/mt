@@ -98,26 +98,145 @@ export async function eventJudgingProgress(eventId: string) {
 export type EventJudgingProgress = Awaited<ReturnType<typeof eventJudgingProgress>>;
 
 /**
- * After a task is announced complete: if every ACTIVE task of the competition
- * now is, move the competition OPEN → COMPLETED (conditional, so it can't
- * overwrite an organizer's own announcement or a reopen in between).
- * Returns the competition's resulting status.
+ * The same for walk-in judging, per walk-in competition: the judgeable set is
+ * its CONFIRMED walk-in registrations, and per endpoint the participants with
+ * at least one score. Same shape as eventJudgingProgress (teamCount = participants).
  */
-export async function completeCompetitionIfAllTasksDone(eventCompetitionId: string): Promise<string> {
-  const remaining = await db.judgingTask.count({
-    where: { eventCompetitionId, status: "ACTIVE", completedAt: null },
+export async function walkInJudgingProgress(eventId: string) {
+  const wics = await db.eventWalkInCompetition.findMany({
+    where:  { eventId },
+    select: {
+      id: true,
+      judgingStatus: true, judgingCompletedAt: true, judgingCompletedBy: true,
+      judgingVerifiedAt: true, judgingVerifiedBy: true,
+      judgingEndpoints: { select: { id: true, status: true, completedAt: true } },
+      _count: { select: { registrations: { where: { status: "CONFIRMED" } } } },
+    },
   });
-  if (remaining === 0) {
-    await db.eventCompetition.updateMany({
-      where: { id: eventCompetitionId, judgingStatus: "OPEN" },
-      data: {
-        judgingStatus: "COMPLETED",
-        judgingCompletedAt: new Date(),
-        judgingCompletedBy: "Semua hakim (automatik)",
-        judgingVerifiedAt: null, judgingVerifiedBy: null,
-      },
+  const endpointIds = wics.flatMap((w) => w.judgingEndpoints.map((e) => e.id));
+  const judged = endpointIds.length === 0 ? [] : await db.$queryRaw<{ endpointId: string; n: number }[]>`
+    SELECT "walkInJudgingEndpointId" AS "endpointId", COUNT(DISTINCT "walkInRegistrationId")::int AS n
+    FROM walkin_judging_scores
+    WHERE "walkInJudgingEndpointId" IN (${Prisma.join(endpointIds)})
+    GROUP BY 1`;
+  const judgedBy = new Map(judged.map((r) => [r.endpointId, r.n]));
+
+  return wics.map((w) => ({
+    id:                 w.id,
+    judgingStatus:      w.judgingStatus,
+    judgingCompletedAt: w.judgingCompletedAt?.toISOString() ?? null,
+    judgingCompletedBy: w.judgingCompletedBy,
+    judgingVerifiedAt:  w.judgingVerifiedAt?.toISOString() ?? null,
+    judgingVerifiedBy:  w.judgingVerifiedBy,
+    teamCount:          w._count.registrations,
+    tasks: w.judgingEndpoints.map((e) => ({
+      id: e.id, status: e.status,
+      completedAt: e.completedAt?.toISOString() ?? null,
+      judgedTeams: judgedBy.get(e.id) ?? 0,
+    })),
+  }));
+}
+
+// ── Lifecycle operations, shared by regular ("event") and walk-in judging ──
+
+/** Which judging a lifecycle operation applies to. */
+export type JudgingScope = "event" | "walkin";
+
+const LIFECYCLE_SELECT = {
+  judgingStatus: true, judgingCompletedAt: true, judgingCompletedBy: true,
+  judgingVerifiedAt: true, judgingVerifiedBy: true,
+} as const;
+
+type LifecycleData = {
+  judgingStatus: string;
+  judgingCompletedAt?: Date | null; judgingCompletedBy?: string | null;
+  judgingVerifiedAt?: Date | null;  judgingVerifiedBy?: string | null;
+};
+
+// The two lifecycle owners (EventCompetition / EventWalkInCompetition) and their
+// tasks (JudgingTask / WalkInJudgingEndpoint) have the same columns, so each
+// operation is written once against these small adapters.
+const SCOPES = {
+  event: {
+    update:    (id: string, eventId: string, from: string[], data: LifecycleData) =>
+      db.eventCompetition.updateMany({ where: { id, eventId, judgingStatus: { in: from } }, data }),
+    find:      (id: string, eventId?: string) =>
+      db.eventCompetition.findFirst({ where: { id, ...(eventId && { eventId }) }, select: LIFECYCLE_SELECT }),
+    openTasks: (id: string) => db.judgingTask.count({ where: { eventCompetitionId: id, status: "ACTIVE", completedAt: null } }),
+    reopenTasks: (id: string) => db.judgingTask.updateMany({ where: { eventCompetitionId: id }, data: { completedAt: null } }),
+  },
+  walkin: {
+    update:    (id: string, eventId: string, from: string[], data: LifecycleData) =>
+      db.eventWalkInCompetition.updateMany({ where: { id, eventId, judgingStatus: { in: from } }, data }),
+    find:      (id: string, eventId?: string) =>
+      db.eventWalkInCompetition.findFirst({ where: { id, ...(eventId && { eventId }) }, select: LIFECYCLE_SELECT }),
+    openTasks: (id: string) => db.walkInJudgingEndpoint.count({ where: { walkInCompetitionId: id, status: "ACTIVE", completedAt: null } }),
+    reopenTasks: (id: string) => db.walkInJudgingEndpoint.updateMany({ where: { walkInCompetitionId: id }, data: { completedAt: null } }),
+  },
+} as const;
+
+/**
+ * Organizer transitions:
+ *   complete  OPEN      → COMPLETED   Super Admin, Admin   (locks judge forms)
+ *   verify    COMPLETED → VERIFIED    Super Admin
+ *   reopen    COMPLETED / VERIFIED → OPEN   Super Admin  (unlocks; also reopens judges' task announcements)
+ * Conditional on the expected current status, so concurrent clicks can't skip
+ * a step or verify a reopened judging. Returns an HTTP status + JSON body.
+ */
+const TRANSITIONS = {
+  complete: { from: ["OPEN"],                  roles: ["SUPER_ADMIN", "ADMIN"] },
+  verify:   { from: ["COMPLETED"],             roles: ["SUPER_ADMIN"] },
+  reopen:   { from: ["COMPLETED", "VERIFIED"], roles: ["SUPER_ADMIN"] },
+} as const;
+
+export async function transitionJudging(
+  scope: JudgingScope, eventId: string, id: string, action: string | undefined,
+  actor: { role: string; name?: string | null; email?: string | null },
+): Promise<{ status: number; body: unknown }> {
+  if (!action || !(action in TRANSITIONS)) return { status: 400, body: { error: "INVALID_ACTION" } };
+  const t = TRANSITIONS[action as keyof typeof TRANSITIONS];
+  if (!(t.roles as readonly string[]).includes(actor.role)) return { status: 403, body: { error: "FORBIDDEN" } };
+
+  const now = new Date();
+  const by  = actor.name || actor.email || "Organizer";
+  const data: LifecycleData =
+    action === "complete" ? { judgingStatus: "COMPLETED", judgingCompletedAt: now, judgingCompletedBy: by,
+                              judgingVerifiedAt: null, judgingVerifiedBy: null }
+    : action === "verify" ? { judgingStatus: "VERIFIED", judgingVerifiedAt: now, judgingVerifiedBy: by }
+    :                       { judgingStatus: "OPEN", judgingCompletedAt: null, judgingCompletedBy: null,
+                              judgingVerifiedAt: null, judgingVerifiedBy: null };
+
+  const s = SCOPES[scope];
+  const { count } = await s.update(id, eventId, [...t.from], data);
+  if (count === 0) {
+    const cur = await s.find(id, eventId);
+    if (!cur) return { status: 404, body: { error: "NOT_FOUND" } };
+    return { status: 409, body: { error: "INVALID_STATE", message: `Status penghakiman semasa ialah ${cur.judgingStatus}. Muat semula halaman.` } };
+  }
+  if (action === "reopen") await s.reopenTasks(id);
+  return { status: 200, body: { judging: await s.find(id) } };
+}
+
+/**
+ * After a judge announces their task complete: if every ACTIVE task of the
+ * competition now is, move it OPEN → COMPLETED (conditional, so it can't
+ * overwrite an organizer's own announcement or a reopen in between).
+ * Returns the resulting status.
+ */
+export async function completeIfAllTasksDone(scope: JudgingScope, id: string): Promise<string> {
+  const s = SCOPES[scope];
+  if (await s.openTasks(id) === 0) {
+    await s.update(id, (await scopeEventId(scope, id)) ?? "", ["OPEN"], {
+      judgingStatus: "COMPLETED", judgingCompletedAt: new Date(), judgingCompletedBy: "Semua hakim (automatik)",
+      judgingVerifiedAt: null, judgingVerifiedBy: null,
     });
   }
-  const ec = await db.eventCompetition.findUnique({ where: { id: eventCompetitionId }, select: { judgingStatus: true } });
-  return ec?.judgingStatus ?? "OPEN";
+  return (await s.find(id))?.judgingStatus ?? "OPEN";
+}
+
+async function scopeEventId(scope: JudgingScope, id: string) {
+  const row = scope === "event"
+    ? await db.eventCompetition.findUnique({ where: { id }, select: { eventId: true } })
+    : await db.eventWalkInCompetition.findUnique({ where: { id }, select: { eventId: true } });
+  return row?.eventId;
 }

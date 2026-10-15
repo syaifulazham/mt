@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { taskJudgingState } from "@/lib/judgingStatus";
 
 // POST /api/walkin-judging/[slug]  body: { passcode }
 // Returns endpoint + event + competition + template info and confirmed walk-in participants
@@ -31,6 +32,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (endpoint.passcode !== passcode.trim().toUpperCase()) return NextResponse.json({ error: "WRONG_PASSCODE" }, { status: 401 });
 
   const { walkInCompetition: wic } = endpoint;
+  // Locked boards still load (read-only, with a banner); /scores refuses writes.
+  const judging = taskJudgingState(endpoint, wic.judgingStatus);
 
   // Confirmed walk-in registrations are the judgeable participants
   const registrations = await db.walkInRegistration.findMany({
@@ -68,6 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       })),
     },
     scores: endpoint.scores,
+    judging,
     participants: registrations.map(r => ({
       id: r.id,
       participantId: r.participant.id,

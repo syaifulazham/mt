@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Trophy, Plus, Trash2, Loader2, Copy, Check,
-  Eye, EyeOff, ExternalLink, Globe, Lock, Medal,
+  Eye, EyeOff, ExternalLink, Globe, Lock, Medal, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JudgingBadge, type ResultsJudging } from "@/components/organizer/judging/JudgingBadge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -20,7 +21,11 @@ type RankEntry = {
   totalScore: number; bestTime: number | null;
 };
 
-type CompetitionRanking = { id: string; name: string; code: string; rankings: RankEntry[] };
+type CompetitionRanking = {
+  id: string; name: string; code: string; rankings: RankEntry[];
+  /** Walk-in judging lifecycle (OPEN | COMPLETED | VERIFIED). */
+  judging?: ResultsJudging;
+};
 
 type Endpoint = {
   id: string; routeSlug: string; passcode: string | null;
@@ -196,17 +201,20 @@ export function WalkInResultsClient({ event, competitionRankings, endpoints: ini
         <div className="px-5 py-3 border-b bg-zinc-50 flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-zinc-700 flex items-center gap-2">
             <Medal className="h-4 w-4 text-indigo-400" /> Kedudukan Semasa
+            {activeRanking && <JudgingBadge judging={activeRanking.judging} />}
           </h2>
           {/* Competition tabs */}
           <div className="flex gap-1 flex-wrap">
             {competitionRankings.map(c => (
               <button key={c.id} onClick={() => setActiveComp(c.id)}
-                className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors",
+                title={c.judging?.status === "VERIFIED" ? `${c.code} · VERIFIED` : c.code}
+                className={cn("text-xs px-3 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1",
                   activeComp === c.id
                     ? "bg-indigo-600 text-white"
                     : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
                 )}>
                 {c.code}
+                {c.judging?.status === "VERIFIED" && <ShieldCheck className="h-3 w-3" />}
               </button>
             ))}
           </div>

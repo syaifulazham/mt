@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Gavel, Plus, Trash2, Loader2, Copy, Check,
-  Eye, EyeOff, Tag, Users,
+  Eye, EyeOff, Tag, Users, Lock, LockOpen, Search, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import type { EventJudgingProgress } from "@/lib/judgingStatus";
+import { wildcardMatcher } from "@/lib/wildcardFilter";
+import { JudgingStatusPanel, STATUS_CHIP, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
+
+/** How often the page re-reads walk-in judging status and progress. */
+const STATUS_POLL_MS = 3_000;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -22,6 +28,10 @@ type EndpointItem = {
   status: "ACTIVE" | "CLOSED";
   createdAt: string | Date;
   judgingTemplate: { id: string; name: string; code: string };
+  /** When its judge announced it complete from the walk-in judging page. */
+  completedAt?: string | Date | null;
+  /** Participants with at least one score at this endpoint. */
+  judged?: number;
 };
 
 type AssignedTemplate = {
@@ -31,10 +41,12 @@ type AssignedTemplate = {
   };
 };
 
-type WicBlock = {
+type WicBlock = JudgingState & {
   id: string;
   competition: { id: string; code: string; name: string };
   _count: { registrations: number };
+  /** CONFIRMED walk-in participants — the set the judging form lists. */
+  participantCount: number;
   judgingTemplates: AssignedTemplate[];
   judgingEndpoints: EndpointItem[];
 };
@@ -44,15 +56,17 @@ type EventInfo = { id: string; name: string; slug: string; walkInCompetitions: W
 // ── Endpoint row ───────────────────────────────────────────────────────────────
 
 function EndpointRow({
-  endpoint, wicId, eventId, canWrite, onDelete, onStatusChange,
+  endpoint, wicId, eventId, canWrite, isSuperAdmin, onDelete, onStatusChange, onReopened,
   revealed, onToggleReveal, copiedSlug, copiedPass, onCopySlug, onCopyPass,
 }: {
   endpoint: EndpointItem;
   wicId: string;
   eventId: string;
   canWrite: boolean;
+  isSuperAdmin: boolean;
   onDelete: (id: string) => void;
   onStatusChange: (status: "ACTIVE" | "CLOSED") => void;
+  onReopened: () => void;
   revealed: boolean;
   onToggleReveal: () => void;
   copiedSlug: boolean;
@@ -62,6 +76,18 @@ function EndpointRow({
 }) {
   const [deleting, setDeleting] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [reopening, setReopening] = useState(false);
+
+  // Undo a judge's "Penghakiman Selesai" for this endpoint (Super Admin only).
+  async function reopenEndpoint() {
+    setReopening(true);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wicId}/judging-endpoints/${endpoint.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reopenCompletion: true }),
+      });
+      if (res.ok) onReopened();
+    } finally { setReopening(false); }
+  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -125,16 +151,37 @@ function EndpointRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className={cn(
-          "text-[10px] font-bold px-2 py-0.5 rounded-full",
-          endpoint.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-400",
-        )}>
-          {endpoint.status}
-        </span>
+        <div className="flex flex-col items-start gap-1">
+          <span className={cn(
+            "text-[10px] font-bold px-2 py-0.5 rounded-full",
+            endpoint.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-400",
+          )}>
+            {endpoint.status}
+          </span>
+          {endpoint.completedAt && (
+            <span
+              title={`Diumumkan selesai oleh hakim pada ${fmtWhen(endpoint.completedAt)}`}
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"
+            >
+              <Lock className="h-2.5 w-2.5" /> SELESAI
+            </span>
+          )}
+        </div>
       </td>
       {canWrite && (
         <td className="px-4 py-3">
           <div className="flex items-center gap-2 justify-end">
+            {endpoint.completedAt && isSuperAdmin && (
+              <button
+                onClick={reopenEndpoint}
+                disabled={reopening}
+                title="Buka semula borang endpoint ini"
+                className="text-[11px] text-amber-600 hover:text-amber-800 font-medium whitespace-nowrap flex items-center gap-1"
+              >
+                {reopening ? <Loader2 className="h-3 w-3 animate-spin" /> : <LockOpen className="h-3 w-3" />}
+                Buka semula
+              </button>
+            )}
             <button
               onClick={toggleStatus}
               disabled={toggling}
@@ -157,9 +204,55 @@ function EndpointRow({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInfo; canWrite: boolean }) {
-  const [wicList,     setWicList]     = useState<WicBlock[]>(event.walkInCompetitions);
-  const [selectedWic, setSelectedWic] = useState<WicBlock | null>(event.walkInCompetitions[0] ?? null);
+export function WalkInJudgingManageClient({ event, canWrite, isSuperAdmin = false }: {
+  event: EventInfo; canWrite: boolean; isSuperAdmin?: boolean;
+}) {
+  const [wicList,    setWicList]    = useState<WicBlock[]>(event.walkInCompetitions);
+  const [selectedId, setSelectedId] = useState<string | null>(event.walkInCompetitions[0]?.id ?? null);
+  const [filter,     setFilter]     = useState("");
+  const selectedWic = wicList.find(w => w.id === selectedId) ?? null;
+  // Endpoints are frozen once judging is announced complete (the API refuses too).
+  const locked      = !!selectedWic && selectedWic.judgingStatus !== "OPEN";
+  const canEdit     = canWrite && !locked;
+
+  // Competition list filter (code or name; * and ? wildcards — see wildcardMatcher).
+  const matches     = wildcardMatcher(filter);
+  const visibleWics = wicList.filter(w => matches(w.competition.code) || matches(w.competition.name));
+
+  // Live status: re-read every walk-in competition's judging status and progress
+  // every STATUS_POLL_MS (paused while the tab is hidden, never overlapping).
+  useEffect(() => {
+    let inFlight = false;
+    const tick = async () => {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/judging-progress`, { cache: "no-store" });
+        if (!res.ok) return;
+        const { competitions: live } = await res.json() as { competitions: EventJudgingProgress };
+        const byWic = new Map(live.map(p => [p.id, p]));
+        setWicList(prev => prev.map(w => {
+          const p = byWic.get(w.id);
+          if (!p) return w;
+          const byEp = new Map(p.tasks.map(t => [t.id, t]));
+          return {
+            ...w,
+            judgingStatus: p.judgingStatus,
+            judgingCompletedAt: p.judgingCompletedAt, judgingCompletedBy: p.judgingCompletedBy,
+            judgingVerifiedAt: p.judgingVerifiedAt,   judgingVerifiedBy: p.judgingVerifiedBy,
+            participantCount: p.teamCount,
+            judgingEndpoints: w.judgingEndpoints.map(e => {
+              const le = byEp.get(e.id);
+              return le ? { ...e, status: le.status as EndpointItem["status"], completedAt: le.completedAt, judged: le.judgedTeams } : e;
+            }),
+          };
+        }));
+      } catch { /* transient — next tick retries */ }
+      finally { inFlight = false; }
+    };
+    const t = setInterval(tick, STATUS_POLL_MS);
+    return () => clearInterval(t);
+  }, [event.id]);
 
   const [revealedIds,  setRevealedIds]  = useState<Set<string>>(new Set());
   const [copiedSlugId, setCopiedSlugId] = useState<string | null>(null);
@@ -173,7 +266,20 @@ export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInf
 
   function updateWic(id: string, patch: Partial<WicBlock>) {
     setWicList(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
-    setSelectedWic(prev => prev?.id === id ? { ...prev, ...patch } : prev);
+  }
+
+  function handleJudgingChanged(wicId: string, judging: JudgingState) {
+    setWicList(prev => prev.map(w => w.id !== wicId ? w : {
+      ...w, ...judging,
+      // Reopening the competition also reopens the judges' endpoint announcements.
+      ...(judging.judgingStatus === "OPEN" && { judgingEndpoints: w.judgingEndpoints.map(e => ({ ...e, completedAt: null })) }),
+    }));
+  }
+
+  function handleEndpointReopened(wicId: string, endpointId: string) {
+    setWicList(prev => prev.map(w => w.id !== wicId ? w : {
+      ...w, judgingEndpoints: w.judgingEndpoints.map(e => e.id === endpointId ? { ...e, completedAt: null } : e),
+    }));
   }
 
   function toggleReveal(id: string) {
@@ -266,9 +372,30 @@ export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInf
         <div className="flex gap-5">
           {/* Left: competition list */}
           <div className="w-56 shrink-0 space-y-1.5">
-            {wicList.map(wic => (
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
+              <input
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                placeholder="Tapis kod / nama (3.*, *Dron*)"
+                title="Teks biasa sepadan di mana-mana. * = sebarang aksara, ? = satu aksara."
+                className="w-full pl-8 pr-7 py-1.5 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-200"
+              />
+              {filter && (
+                <button onClick={() => setFilter("")} className="absolute right-2 top-1.5 text-zinc-400 hover:text-zinc-600" title="Kosongkan">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {filter && (
+              <p className="text-[10px] text-zinc-400 px-0.5">{visibleWics.length} / {wicList.length} pertandingan</p>
+            )}
+            {visibleWics.length === 0 && (
+              <p className="text-xs text-zinc-400 px-0.5 py-2">Tiada pertandingan sepadan.</p>
+            )}
+            {visibleWics.map(wic => (
               <button key={wic.id} type="button"
-                onClick={() => setSelectedWic(wic)}
+                onClick={() => setSelectedId(wic.id)}
                 className={cn(
                   "w-full text-left rounded-lg border px-3 py-2.5 transition-colors",
                   selectedWic?.id === wic.id
@@ -277,7 +404,15 @@ export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInf
                 )}
               >
                 <p className="text-sm font-medium text-zinc-800 truncate">{wic.competition.name}</p>
-                <p className="text-[11px] text-zinc-400 font-mono">{wic.competition.code}</p>
+                <p className="text-[11px] text-zinc-400 font-mono flex items-center gap-1.5">
+                  {wic.competition.code}
+                  {wic.judgingStatus !== "OPEN" && (
+                    <span className={cn("font-sans text-[9px] font-bold px-1.5 py-px rounded-full border",
+                      (STATUS_CHIP[wic.judgingStatus] ?? STATUS_CHIP.OPEN).cls)}>
+                      {(STATUS_CHIP[wic.judgingStatus] ?? STATUS_CHIP.OPEN).label}
+                    </span>
+                  )}
+                </p>
                 <p className="text-[11px] text-zinc-500 mt-0.5">{wic._count.registrations} daftar</p>
               </button>
             ))}
@@ -313,7 +448,7 @@ export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInf
                           </span>
                           <span className="text-[10px] text-zinc-400">{tpl._count.criterions} kriteria</span>
                         </div>
-                        {canWrite && (
+                        {canEdit && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -337,7 +472,7 @@ export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInf
                                 <th className="px-4 py-2 text-left text-xs font-medium text-zinc-500">URL</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-zinc-500 w-36">Passcode</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-zinc-500 w-24">Status</th>
-                                {canWrite && <th className="px-4 py-2 w-28" />}
+                                {canEdit && <th className="px-4 py-2 w-28" />}
                               </tr>
                             </thead>
                             <tbody>
@@ -347,7 +482,9 @@ export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInf
                                   endpoint={endpoint}
                                   wicId={selectedWic.id}
                                   eventId={event.id}
-                                  canWrite={canWrite}
+                                  canWrite={canEdit}
+                                  isSuperAdmin={isSuperAdmin}
+                                  onReopened={() => handleEndpointReopened(selectedWic.id, endpoint.id)}
                                   revealed={revealedIds.has(endpoint.id)}
                                   onToggleReveal={() => toggleReveal(endpoint.id)}
                                   copiedSlug={copiedSlugId === endpoint.id}
@@ -365,6 +502,25 @@ export function WalkInJudgingManageClient({ event, canWrite }: { event: EventInf
                     </div>
                   );
                 })}
+
+                {/* Announce completeness / verify / reopen */}
+                <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                  <JudgingStatusPanel
+                    code={selectedWic.competition.code}
+                    name={selectedWic.competition.name}
+                    state={selectedWic}
+                    tasks={selectedWic.judgingEndpoints.map(e => ({
+                      id: e.id, label: e.label ?? e.judgingTemplate.name, judged: e.judged ?? 0, completedAt: e.completedAt,
+                    }))}
+                    total={selectedWic.participantCount}
+                    unit="peserta"
+                    taskNoun="endpoint"
+                    statusUrl={`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-status`}
+                    canWrite={canWrite}
+                    isSuperAdmin={isSuperAdmin}
+                    onChanged={judging => handleJudgingChanged(selectedWic.id, judging)}
+                  />
+                </div>
               </>
             )}
           </div>

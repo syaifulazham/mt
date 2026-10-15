@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useFormLock } from "@/components/judging/JudgingCompletion";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Gavel, Loader2, Timer, Star,
@@ -288,17 +289,7 @@ export function JudgingTeamClient({ slug, teamId }: { slug: string; teamId: stri
 
   // Live lock: if judging is announced complete while this form is open,
   // disable saving and say why (the API refuses the save either way).
-  const [lockedMsg, setLockedMsg] = useState<string | null>(null);
-  useEffect(() => {
-    if (status !== "ready") return;
-    const t = setInterval(() => {
-      fetch(`/api/judging/${slug}/status`, { cache: "no-store" })
-        .then(r => r.ok ? r.json() : null)
-        .then(j => { if (j?.judging?.locked) setLockedMsg(j.judging.message ?? "Penghakiman telah dikunci."); })
-        .catch(() => {});
-    }, 10_000);
-    return () => clearInterval(t);
-  }, [slug, status]);
+  const [lockedMsg, setLockedMsg] = useFormLock(`/api/judging/${slug}`, status === "ready");
 
   function setField(criterionId: string, field: keyof DraftScore, value: unknown) {
     setDraft(d => ({ ...d, [criterionId]: { ...d[criterionId], [field]: value } }));

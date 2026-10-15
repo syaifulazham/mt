@@ -4,12 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Gavel, Loader2, Eye, EyeOff, Users, Lock, Trophy, Tag,
-  ChevronDown, ChevronUp, ClipboardPen, RefreshCw, Search, X, Flag, ShieldCheck,
+  ChevronDown, ChevronUp, ClipboardPen, RefreshCw, Search, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { TaskJudgingState } from "@/lib/judgingStatus";
+import { CompleteButton, CompleteDialog, JudgingLockBanner, useJudgingCompletion } from "@/components/judging/JudgingCompletion";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -38,95 +39,6 @@ type BoardData = {
   teams:       Team[];
   judging:     TaskJudgingState;
 };
-
-/** How often an open board re-checks whether judging has been announced complete. */
-const STATUS_POLL_MS = 10_000;
-
-// Confirmation code for "Penghakiman Selesai": 5 random characters, without
-// look-alikes (0/O, 1/I/L) so a judge can't mistype what they read.
-const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-function confirmationCode(len = 5) {
-  const buf = new Uint32Array(len);
-  crypto.getRandomValues(buf);
-  return Array.from(buf, (n) => CODE_CHARS[n % CODE_CHARS.length]).join("");
-}
-
-// ── CompleteDialog ─────────────────────────────────────────────────────────────
-
-function CompleteDialog({
-  scoredCount, teamCount, onCancel, onConfirm,
-}: {
-  scoredCount: number; teamCount: number;
-  onCancel: () => void; onConfirm: () => Promise<string | null>;
-}) {
-  const [code]           = useState(confirmationCode);
-  const [typed, setTyped] = useState("");
-  const [busy, setBusy]   = useState(false);
-  const [error, setError] = useState("");
-  const matches = typed.trim().toUpperCase() === code;
-
-  async function submit() {
-    if (!matches) return;
-    setBusy(true); setError("");
-    const err = await onConfirm();
-    if (err) { setError(err); setBusy(false); }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6 space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-            <Flag className="h-5 w-5 text-amber-600" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-900">Umumkan penghakiman selesai?</h3>
-            <p className="text-xs text-zinc-500 mt-1">
-              Borang penghakiman ini akan <b>dikunci</b> — markah tidak lagi boleh ditambah atau diubah.
-              Hanya Super Admin boleh membukanya semula.
-            </p>
-          </div>
-        </div>
-
-        {scoredCount < teamCount && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Baru {scoredCount} daripada {teamCount} pasukan dinilai.
-          </p>
-        )}
-
-        <div className="space-y-2">
-          <p className="text-xs text-zinc-600">Taip kod di bawah untuk mengesahkan:</p>
-          <p className="select-none text-center font-mono text-2xl font-bold tracking-[0.4em] text-zinc-900 bg-zinc-100 rounded-lg py-2">
-            {code}
-          </p>
-          <Input
-            value={typed}
-            onChange={e => setTyped(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === "Enter" && submit()}
-            placeholder="Kod pengesahan"
-            maxLength={5}
-            autoFocus
-            autoComplete="off"
-            className="text-center font-mono tracking-[0.3em] text-lg h-11"
-          />
-          {error && <p className="text-xs text-red-500">{error}</p>}
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={onCancel} disabled={busy}>Batal</Button>
-          <Button
-            className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
-            onClick={submit}
-            disabled={!matches || busy}
-          >
-            {busy && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
-            Sahkan Selesai
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const GENDER_LABEL: Record<string, string> = { MALE: "L", FEMALE: "P" };
 const EDU_LABEL: Record<string, string> = {
@@ -289,38 +201,10 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
   const [scores,   setScores]   = useState<ScoreRow[]>([]);
   const [q,        setQ]        = useState("");
   const [stateFilter, setStateFilter] = useState("");
-  const [judging,  setJudging]  = useState<TaskJudgingState | null>(null);
-  const [completing, setCompleting] = useState(false);
-
-  // Live lock state: every open board re-checks, so an announcement by this
-  // judge, by the judge of the competition's last open task, or by an
-  // organizer reaches all screens within STATUS_POLL_MS.
-  const taskId = data?.task.id;
-  useEffect(() => {
-    if (!taskId) return;
-    const tick = () =>
-      fetch(`/api/judging/${slug}/status`, { cache: "no-store" })
-        .then(r => r.ok ? r.json() : null)
-        .then(j => { if (j?.judging) setJudging(j.judging); })
-        .catch(() => {});
-    const t = setInterval(tick, STATUS_POLL_MS);
-    return () => clearInterval(t);
-  }, [slug, taskId]);
-
-  // Returns an error message, or null on success.
-  async function announceComplete(): Promise<string | null> {
-    const pc = sessionStorage.getItem(`judging_pc_${slug}`) ?? passcode.trim().toUpperCase();
-    try {
-      const res = await fetch(`/api/judging/${slug}/complete`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ passcode: pc }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) return j.error === "WRONG_PASSCODE" ? "Sesi tamat. Log masuk semula." : (j.error ?? "Gagal mengumumkan.");
-      setJudging(j.judging);
-      setCompleting(false);
-      return null;
-    } catch { return "Ralat rangkaian."; }
-  }
+  const { judging, setJudging, locked, completing, setCompleting, announce } = useJudgingCompletion(
+    `/api/judging/${slug}`, !!data,
+    () => sessionStorage.getItem(`judging_pc_${slug}`) ?? passcode.trim().toUpperCase(),
+  );
 
   // On mount: check sessionStorage and auto-verify if a passcode is stored
   useEffect(() => {
@@ -344,7 +228,7 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
       })
       .catch(() => {})
       .finally(() => setRestoring(false));
-  }, [slug]);
+  }, [slug, setJudging]);
 
   async function handleVerify() {
     if (!passcode.trim()) return;
@@ -434,7 +318,6 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
 
   const criterions  = data.template.criterions;
   const hasTimeCols = criterions.some(c => c.type === "TIME");
-  const locked      = judging?.locked ?? false;
   const scoredCount = data.teams.filter(t =>
     isTeamScored(criterions, scores.filter(s => s.teamId === t.id))
   ).length;
@@ -498,49 +381,20 @@ export function JudgingBoardClient({ slug }: { slug: string }) {
             <p className="text-xs text-zinc-500 font-semibold">{scoredCount}/{data.teams.length} dinilai</p>
             <p className="text-[10px] text-zinc-300 mt-0.5">{data.isOnline ? "Online" : "Fizikal"}</p>
           </div>
-          {!locked && (
-            <Button
-              size="sm"
-              onClick={() => setCompleting(true)}
-              className="shrink-0 h-8 gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold"
-            >
-              <Flag className="h-3.5 w-3.5" /> Penghakiman Selesai
-            </Button>
-          )}
+          {!locked && <CompleteButton onClick={() => setCompleting(true)} />}
         </div>
 
         {/* Lock banner — updates live via the status poll */}
-        {locked && judging && (
-          <div className={cn(
-            "border-t px-4 py-2.5",
-            judging.judgingStatus === "VERIFIED" ? "bg-emerald-50 border-emerald-100" : "bg-amber-50 border-amber-100",
-          )}>
-            <div className="max-w-5xl mx-auto flex items-center gap-2 text-xs">
-              {judging.judgingStatus === "VERIFIED"
-                ? <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                : <Lock className="h-4 w-4 text-amber-600 shrink-0" />}
-              <span className={judging.judgingStatus === "VERIFIED" ? "text-emerald-800" : "text-amber-800"}>
-                <b>
-                  {judging.judgingStatus === "VERIFIED" ? "Keputusan VERIFIED."
-                    : judging.judgingStatus === "COMPLETED" ? "Penghakiman pertandingan selesai."
-                    : "Penghakiman selesai."}
-                </b>{" "}
-                {judging.message}
-                {judging.taskCompletedAt && (
-                  <> · {new Date(judging.taskCompletedAt).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}</>
-                )}
-              </span>
-            </div>
-          </div>
-        )}
+        {locked && judging && <JudgingLockBanner judging={judging} />}
       </div>
 
       {completing && (
         <CompleteDialog
           scoredCount={scoredCount}
-          teamCount={data.teams.length}
+          total={data.teams.length}
+          unit="pasukan"
           onCancel={() => setCompleting(false)}
-          onConfirm={announceComplete}
+          onConfirm={announce}
         />
       )}
 

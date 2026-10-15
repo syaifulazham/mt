@@ -698,6 +698,13 @@ model EventWalkInCompetition {
   viblockChallengeLocked     Boolean   @default(false)
   judgingTemplatesLocked     Boolean   @default(false)
   walkInSlotSchedule         Json?
+  // Judging lifecycle, as on EventCompetition: OPEN → COMPLETED (forms locked)
+  // → VERIFIED (Super Admin). Only a Super Admin reopens.
+  judgingStatus              String    @default("OPEN")
+  judgingCompletedAt         DateTime?
+  judgingCompletedBy         String?
+  judgingVerifiedAt          DateTime?
+  judgingVerifiedBy          String?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
@@ -789,6 +796,9 @@ model WalkInJudgingEndpoint {
   passcode            String
   label               String?
   status              WalkInJudgingEndpointStatus @default(ACTIVE)
+  // Judge announced this endpoint complete (locks its form); when every ACTIVE
+  // endpoint is, the walk-in competition moves to COMPLETED on its own.
+  completedAt         DateTime?
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { taskJudgingState } from "@/lib/judgingStatus";
 
 // POST /api/walkin-judging/[slug]/scores
 // Body: { passcode, walkInRegistrationId, criterionId, score?, timeSeconds?, optionIds? }
@@ -20,11 +21,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (!passcode || !walkInRegistrationId || !criterionId)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
 
-  const endpoint = await db.walkInJudgingEndpoint.findUnique({ where: { routeSlug: slug } });
+  const endpoint = await db.walkInJudgingEndpoint.findUnique({
+    where: { routeSlug: slug },
+    include: { walkInCompetition: { select: { judgingStatus: true } } },
+  });
   if (!endpoint) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (endpoint.status === "CLOSED") return NextResponse.json({ error: "TASK_CLOSED" }, { status: 403 });
   if (endpoint.passcode !== passcode.trim().toUpperCase())
     return NextResponse.json({ error: "WRONG_PASSCODE" }, { status: 401 });
+  // Endpoint or walk-in competition announced complete (or verified): no new or changed scores.
+  const judging = taskJudgingState(endpoint, endpoint.walkInCompetition.judgingStatus);
+  if (judging.locked)
+    return NextResponse.json({ error: "JUDGING_LOCKED", message: judging.message, judging }, { status: 423 });
 
   // Ensure the registration belongs to this endpoint's walk-in competition
   const registration = await db.walkInRegistration.findFirst({

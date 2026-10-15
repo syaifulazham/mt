@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, Gavel, Plus, Trash2, Loader2, Copy, Check,
   Eye, EyeOff, ChevronDown, ChevronRight, Tag, ExternalLink,
-  ShieldCheck, Lock, LockOpen, ClipboardCheck, Megaphone, CheckCircle2, CircleDashed, Search, X,
+  Lock, LockOpen, Search, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { EventJudgingProgress } from "@/lib/judgingStatus";
+import { wildcardMatcher } from "@/lib/wildcardFilter";
+import { JudgingStatusPanel, STATUS_CHIP, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
 
 /** How often the page re-reads judging status and progress. */
 const STATUS_POLL_MS = 3_000;
@@ -38,15 +40,6 @@ type AssignedTemplate = {
   judgingTemplate: TemplateSummary;
 };
 
-/** Judging lifecycle — see lib/judgingStatus.ts. */
-type JudgingState = {
-  judgingStatus: string; // OPEN | COMPLETED | VERIFIED
-  judgingCompletedAt: Date | string | null;
-  judgingCompletedBy: string | null;
-  judgingVerifiedAt: Date | string | null;
-  judgingVerifiedBy: string | null;
-};
-
 type CompetitionBlock = JudgingState & {
   id: string;
   competitionId: string;
@@ -59,187 +52,6 @@ type CompetitionBlock = JudgingState & {
   /** ACTIVE teams entered in the event for this competition. */
   teamCount: number;
 };
-
-const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
-  OPEN:      { label: "DIBUKA",   cls: "bg-sky-50 text-sky-700 border-sky-200" },
-  COMPLETED: { label: "SELESAI",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  VERIFIED:  { label: "VERIFIED", cls: "bg-emerald-50 text-emerald-700 border-emerald-300" },
-};
-
-/**
- * Matcher for the competition filter, case-insensitive. Without * or ? it's a
- * substring match; with them, a wildcard pattern over the whole value
- * (* = any run of characters, ? = exactly one). Empty matches everything.
- */
-function competitionFilter(raw: string): (value: string) => boolean {
-  const q = raw.trim().toLowerCase();
-  if (!q) return () => true;
-  if (!/[*?]/.test(q)) return v => v.toLowerCase().includes(q);
-  const re = new RegExp(
-    "^" + q.split("").map(ch => ch === "*" ? ".*" : ch === "?" ? "." : ch.replace(/[.+^${}()|[\]\\]/g, "\\$&")).join("") + "$",
-  );
-  return v => re.test(v.toLowerCase());
-}
-
-function fmtWhen(d: Date | string | null) {
-  return d ? new Date(d).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" }) : "";
-}
-
-// ── JudgingStatusPanel ─────────────────────────────────────────────────────────
-// The "announce completeness" subsection of a competition card.
-//   OPEN       Admin / Super Admin: "Umumkan Selesai" (locks every judging form)
-//   COMPLETED  Super Admin: "Verify" (results marked VERIFIED) or "Buka Semula"
-//   VERIFIED   Super Admin: "Buka Semula"
-
-function JudgingStatusPanel({
-  ec, eventId, canWrite, isSuperAdmin, onChanged,
-}: {
-  ec: CompetitionBlock;
-  eventId: string;
-  canWrite: boolean;
-  isSuperAdmin: boolean;
-  onChanged: (ecId: string, judging: JudgingState) => void;
-}) {
-  const [confirm, setConfirm] = useState<"complete" | "verify" | "reopen" | null>(null);
-  const [busy, setBusy]       = useState(false);
-  const [error, setError]     = useState("");
-
-  const status   = ec.judgingStatus;
-  const tasks    = ec.judgingTasks;
-  const pending  = tasks.filter(t => (t.judgedTeams ?? 0) < ec.teamCount);
-  const allDone  = tasks.length > 0 && ec.teamCount > 0 && pending.length === 0;
-
-  async function run(action: "complete" | "verify" | "reopen") {
-    setBusy(true); setError("");
-    try {
-      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${ec.id}/judging-status`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.message ?? j.error ?? "Gagal");
-      onChanged(ec.id, j.judging);
-      setConfirm(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal");
-    } finally { setBusy(false); }
-  }
-
-  const chip = STATUS_CHIP[status] ?? STATUS_CHIP.OPEN;
-
-  return (
-    <div className={cn(
-      "px-5 py-4 space-y-3",
-      status === "VERIFIED" ? "bg-emerald-50/50" : status === "COMPLETED" ? "bg-amber-50/40" : "bg-white",
-    )}>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            {status === "VERIFIED" ? <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              : status === "COMPLETED" ? <Lock className="h-4 w-4 text-amber-600" />
-              : <ClipboardCheck className="h-4 w-4 text-zinc-400" />}
-            <span className="text-sm font-semibold text-zinc-800">Status Penghakiman</span>
-            <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", chip.cls)}>{chip.label}</span>
-          </div>
-          <p className="text-xs text-zinc-500">
-            {status === "OPEN" && "Borang penghakiman dibuka. Umumkan selesai apabila semua pasukan telah dinilai — borang akan dikunci."}
-            {status === "COMPLETED" && <>Penghakiman diumumkan selesai oleh <b>{ec.judgingCompletedBy}</b> pada {fmtWhen(ec.judgingCompletedAt)}. Borang penghakiman dikunci; menunggu pengesahan Super Admin.</>}
-            {status === "VERIFIED" && <>Keputusan disahkan (<b>VERIFIED</b>) oleh <b>{ec.judgingVerifiedBy}</b> pada {fmtWhen(ec.judgingVerifiedAt)}. Diumumkan selesai oleh {ec.judgingCompletedBy} pada {fmtWhen(ec.judgingCompletedAt)}.</>}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {status === "OPEN" && canWrite && (
-            <Button size="sm" onClick={() => setConfirm("complete")} disabled={tasks.length === 0}
-              title={tasks.length === 0 ? "Tiada tugas penghakiman" : undefined}
-              className="h-7 text-xs gap-1 bg-amber-500 hover:bg-amber-600 text-white">
-              <Megaphone className="h-3.5 w-3.5" /> Umumkan Selesai
-            </Button>
-          )}
-          {status === "COMPLETED" && isSuperAdmin && (
-            <Button size="sm" onClick={() => setConfirm("verify")}
-              className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white">
-              <ShieldCheck className="h-3.5 w-3.5" /> Verify
-            </Button>
-          )}
-          {status !== "OPEN" && isSuperAdmin && (
-            <Button size="sm" variant="outline" onClick={() => setConfirm("reopen")}
-              className="h-7 text-xs gap-1 border-zinc-300 text-zinc-700">
-              <LockOpen className="h-3.5 w-3.5" /> Buka Semula
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Completeness: teams scored per task, out of the teams entered */}
-      {tasks.length > 0 && (
-        <ul className="grid gap-1 sm:grid-cols-2">
-          {tasks.map(t => {
-            const n = t.judgedTeams ?? 0;
-            const done = ec.teamCount > 0 && n >= ec.teamCount;
-            return (
-              <li key={t.id} className="flex items-center gap-2 text-xs">
-                {done
-                  ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  : <CircleDashed className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
-                <span className="truncate text-zinc-700">{t.label ?? t.judgingTemplate.name}</span>
-                {t.completedAt && (
-                  <span title={`Hakim mengumumkan selesai pada ${fmtWhen(t.completedAt)}`}
-                    className="shrink-0 text-[9px] font-bold px-1.5 py-px rounded bg-amber-100 text-amber-700">
-                    HAKIM: SELESAI
-                  </span>
-                )}
-                <span className={cn("ml-auto tabular-nums", done ? "text-emerald-700" : "text-amber-700")}>
-                  {n}/{ec.teamCount} pasukan dinilai
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-
-      <Dialog open={confirm !== null} onOpenChange={open => { if (!open) setConfirm(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">
-              {confirm === "complete" ? "Umumkan penghakiman selesai?" : confirm === "verify" ? "Sahkan keputusan (VERIFIED)?" : "Buka semula penghakiman?"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="px-4 py-2 space-y-2 text-xs text-zinc-600">
-            <p className="font-medium text-zinc-800">
-              <span className="font-mono text-zinc-400 mr-1">{ec.competition.code}</span>{ec.competition.name}
-            </p>
-            {confirm === "complete" && (
-              <>
-                <p>Semua borang penghakiman bagi pertandingan ini akan <b>dikunci</b> — hakim tidak lagi boleh menambah atau mengubah markah. Hanya Super Admin boleh membuka semula.</p>
-                {!allDone && (
-                  <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-800">
-                    {ec.teamCount === 0
-                      ? "Tiada pasukan didaftarkan untuk pertandingan ini."
-                      : `${pending.length} daripada ${tasks.length} tugas belum menilai kesemua ${ec.teamCount} pasukan.`}
-                  </p>
-                )}
-              </>
-            )}
-            {confirm === "verify" && <p>Keputusan pertandingan ini akan ditanda <b>VERIFIED</b>. Borang kekal dikunci.</p>}
-            {confirm === "reopen" && <p>Borang penghakiman akan dibuka semula dan hakim boleh mengubah markah. {status === "VERIFIED" && "Status VERIFIED akan dibatalkan."}</p>}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirm(null)} disabled={busy}>Batal</Button>
-            <Button onClick={() => confirm && run(confirm)} disabled={busy}
-              className={cn("gap-1.5 text-white",
-                confirm === "verify" ? "bg-emerald-600 hover:bg-emerald-700"
-                : confirm === "complete" ? "bg-amber-500 hover:bg-amber-600"
-                : "bg-zinc-700 hover:bg-zinc-800")}>
-              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {confirm === "complete" ? "Umumkan Selesai" : confirm === "verify" ? "Verify" : "Buka Semula"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
 
 type EventInfo = { id: string; name: string; slug: string; scope: string };
 
@@ -560,11 +372,19 @@ function CompetitionCard({
           {/* Announce completeness / verify / reopen */}
           {ec.judgingTemplates.length > 0 && (
             <JudgingStatusPanel
-              ec={ec}
-              eventId={event.id}
+              code={ec.competition.code}
+              name={ec.competition.name}
+              state={ec}
+              tasks={ec.judgingTasks.map(t => ({
+                id: t.id, label: t.label ?? t.judgingTemplate.name, judged: t.judgedTeams ?? 0, completedAt: t.completedAt,
+              }))}
+              total={ec.teamCount}
+              unit="pasukan"
+              taskNoun="tugas"
+              statusUrl={`/api/v2/organizer/events/${event.id}/competitions/${ec.id}/judging-status`}
               canWrite={canWriteRole}
               isSuperAdmin={isSuperAdmin}
-              onChanged={onJudgingChanged}
+              onChanged={judging => onJudgingChanged(ec.id, judging)}
             />
           )}
         </div>
@@ -680,7 +500,7 @@ export function EventJudgingClient({
 
   // Competition filter (code or name): plain text matches anywhere; with * or ?
   // it is a wildcard pattern over the whole code or name, e.g. "3.*", "*Dron*", "?.1R".
-  const matchesFilter = competitionFilter(filter);
+  const matchesFilter = wildcardMatcher(filter);
   const visible = competitions.filter(ec => matchesFilter(ec.competition.code) || matchesFilter(ec.competition.name));
 
   // Build groups

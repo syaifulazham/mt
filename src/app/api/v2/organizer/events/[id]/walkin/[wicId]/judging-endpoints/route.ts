@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { JUDGING_LOCKED, judgingLocked } from "@/lib/judgingStatus";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 const PASSCODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -25,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const endpoints = await db.walkInJudgingEndpoint.findMany({
     where: { walkInCompetitionId: wicId },
     select: {
-      id: true, routeSlug: true, passcode: true, label: true, status: true, createdAt: true,
+      id: true, routeSlug: true, passcode: true, label: true, status: true, createdAt: true, completedAt: true,
       judgingTemplate: { select: { id: true, name: true, code: true } },
     },
     orderBy: { createdAt: "asc" },
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const wic = await db.eventWalkInCompetition.findFirst({ where: { id: wicId, eventId } });
   if (!wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (judgingLocked(wic.judgingStatus)) return NextResponse.json(JUDGING_LOCKED, { status: 423 });
 
   // Verify template is assigned to this walk-in competition
   const assignment = await db.eventWalkInCompetitionJudgingTemplate.findUnique({
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       label: label?.trim() || null,
     },
     select: {
-      id: true, routeSlug: true, passcode: true, label: true, status: true, createdAt: true,
+      id: true, routeSlug: true, passcode: true, label: true, status: true, createdAt: true, completedAt: true,
       judgingTemplate: { select: { id: true, name: true, code: true } },
     },
   });

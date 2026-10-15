@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useFormLock } from "@/components/judging/JudgingCompletion";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Gavel, Loader2, Timer, Star, CheckSquare, Square, Trophy, Tag, Save,
@@ -239,8 +240,13 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
       body: JSON.stringify({ passcode: pc }),
     })
       .then(r => r.json())
-      .then((j: BoardData & { error?: string }) => {
+      .then((j: BoardData & { error?: string; judging?: { locked: boolean; message: string | null } }) => {
         if (j.error) { setErrorMsg("Sesi tamat. Sila log masuk semula."); setStatus("error"); return; }
+        // Endpoint or walk-in competition announced complete: the form stays closed.
+        if (j.judging?.locked) {
+          setErrorMsg(j.judging.message ?? "Penghakiman telah dikunci.");
+          setStatus("error"); return;
+        }
         const p = j.participants.find(x => x.id === regId);
         if (!p) { setErrorMsg("Peserta tidak dijumpai."); setStatus("error"); return; }
         setData(j);
@@ -267,6 +273,10 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
       })
       .catch(() => { setErrorMsg("Ralat rangkaian."); setStatus("error"); });
   }, [slug, regId, router, storageKey]);
+
+  // Live lock: if judging is announced complete while this form is open,
+  // disable saving and say why (the API refuses the save either way).
+  const [lockedMsg, setLockedMsg] = useFormLock(`/api/walkin-judging/${slug}`, status === "ready");
 
   function setField(criterionId: string, field: keyof DraftScore, value: unknown) {
     setDraft(d => ({ ...d, [criterionId]: { ...d[criterionId], [field]: value } }));
@@ -302,7 +312,12 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ passcode: pc, walkInRegistrationId: regId, criterionId: c.id, score, timeSeconds, optionIds }),
         });
-        if (!res.ok) { setSaveError("Gagal menyimpan markah."); return; }
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({})) as { error?: string; message?: string };
+          if (j.error === "JUDGING_LOCKED") setLockedMsg(j.message ?? "Penghakiman telah dikunci.");
+          else setSaveError("Gagal menyimpan markah.");
+          return;
+        }
       }
       setSaved(true);
     } finally { setSaving(false); }
@@ -410,15 +425,15 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
             <p className="text-xs text-zinc-400">Jumlah markah</p>
             <p className="text-2xl font-black text-violet-700 leading-tight">{totalScore.toFixed(1)}</p>
           </div>
-          {saveError && <p className="text-xs text-red-500">{saveError}</p>}
-          {saved && !saveError && (
+          {(lockedMsg || saveError) && <p className="text-xs text-red-500 max-w-[16rem]">{lockedMsg ?? saveError}</p>}
+          {saved && !saveError && !lockedMsg && (
             <p className="text-xs text-green-600 font-medium">Tersimpan ✓</p>
           )}
           <Button
             variant="outline"
             size="sm"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !!lockedMsg}
             className="hidden sm:flex"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -426,7 +441,7 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
           </Button>
           <Button
             onClick={handleSaveAndBack}
-            disabled={saving}
+            disabled={saving || !!lockedMsg}
             className="bg-violet-600 hover:bg-violet-700 text-white"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

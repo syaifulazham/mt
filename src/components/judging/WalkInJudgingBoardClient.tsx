@@ -8,6 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { TaskJudgingState } from "@/lib/judgingStatus";
+import { CompleteButton, CompleteDialog, JudgingLockBanner, useJudgingCompletion } from "@/components/judging/JudgingCompletion";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ type BoardData = {
   template:    { id: string; name: string; code: string; description: string | null; criterions: Criterion[] };
   scores:      ScoreRow[];
   participants: Participant[];
+  judging:     TaskJudgingState;
 };
 
 const GENDER_LABEL: Record<string, string> = { MALE: "L", FEMALE: "P" };
@@ -68,10 +71,10 @@ function isScored(criterions: Criterion[], pScores: ScoreRow[]): boolean {
 // ── ParticipantRow ─────────────────────────────────────────────────────────────
 
 function ParticipantRow({
-  participant, idx, criterions, pScores, hasTimeCols, onJudge,
+  participant, idx, criterions, pScores, hasTimeCols, onJudge, locked,
 }: {
   participant: Participant; idx: number; criterions: Criterion[]; pScores: ScoreRow[];
-  hasTimeCols: boolean; onJudge: () => void;
+  hasTimeCols: boolean; onJudge: () => void; locked: boolean;
 }) {
   const total  = totalScore(criterions, pScores);
   const time   = bestTime(criterions, pScores);
@@ -121,6 +124,11 @@ function ParticipantRow({
         </td>
       )}
       <td className="px-3 py-2.5 text-right">
+        {locked ? (
+          <span className="inline-flex items-center gap-1 text-xs text-zinc-400">
+            <Lock className="h-3 w-3" /> Dikunci
+          </span>
+        ) : (
         <button
           onClick={onJudge}
           className={cn(
@@ -132,6 +140,7 @@ function ParticipantRow({
             ? <><RefreshCw className="h-3 w-3" /> Kemaskini</>
             : <><ClipboardPen className="h-3 w-3" /> Nilai</>}
         </button>
+        )}
       </td>
     </tr>
   );
@@ -151,6 +160,12 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
 
   const storageKey = `walkin_judging_pc_${slug}`;
 
+  // "Penghakiman Selesai" + live lock state (shared with regular judging).
+  const { judging, setJudging, locked, completing, setCompleting, announce } = useJudgingCompletion(
+    `/api/walkin-judging/${slug}`, !!data,
+    () => sessionStorage.getItem(storageKey) ?? passcode.trim().toUpperCase(),
+  );
+
   useEffect(() => {
     const stored = sessionStorage.getItem(storageKey);
     if (!stored) return;
@@ -165,12 +180,12 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
       })
       .then(r => r.json())
       .then(j => {
-        if (!j.error) { setData(j); setScores(j.scores ?? []); }
+        if (!j.error) { setData(j); setScores(j.scores ?? []); setJudging(j.judging ?? null); }
         else sessionStorage.removeItem(storageKey);
       })
       .catch(() => {})
       .finally(() => setRestoring(false));
-  }, [slug, storageKey]);
+  }, [slug, storageKey, setJudging]);
 
   async function handleVerify() {
     if (!passcode.trim()) return;
@@ -192,6 +207,7 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
       sessionStorage.setItem(storageKey, passcode.trim().toUpperCase());
       setData(j);
       setScores(j.scores ?? []);
+      setJudging(j.judging ?? null);
     } finally { setLoading(false); }
   }
 
@@ -311,8 +327,22 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
             <p className="text-xs text-zinc-500 font-semibold">{scoredCount}/{data.participants.length} dinilai</p>
             <p className="text-[10px] text-zinc-300 mt-0.5">Walk-in</p>
           </div>
+          {!locked && <CompleteButton onClick={() => setCompleting(true)} />}
         </div>
+
+        {/* Lock banner — updates live via the status poll */}
+        {locked && judging && <JudgingLockBanner judging={judging} />}
       </div>
+
+      {completing && (
+        <CompleteDialog
+          scoredCount={scoredCount}
+          total={data.participants.length}
+          unit="peserta"
+          onCancel={() => setCompleting(false)}
+          onConfirm={announce}
+        />
+      )}
 
       {/* Participants table */}
       <div className="max-w-5xl mx-auto px-4 py-6">
@@ -343,6 +373,7 @@ export function WalkInJudgingBoardClient({ slug }: { slug: string }) {
                     pScores={scores.filter(s => s.walkInRegistrationId === p.id)}
                     hasTimeCols={hasTimeCols}
                     onJudge={() => router.push(`/walkin-judging/${slug}/participant/${p.id}`)}
+                    locked={locked}
                   />
                 ))}
               </tbody>

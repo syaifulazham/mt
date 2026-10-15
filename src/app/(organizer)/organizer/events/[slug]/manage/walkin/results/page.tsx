@@ -20,6 +20,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
       walkInCompetitions: {
         select: {
           id: true,
+          judgingStatus: true, judgingVerifiedAt: true, judgingVerifiedBy: true,
           competition: { select: { id: true, name: true, code: true } },
           judgingEndpoints: {
             select: {
@@ -52,9 +53,15 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
     totalScore: number; bestTime: number | null; rank: number;
   };
 
-  const competitionRankings: { id: string; name: string; code: string; rankings: RankEntry[] }[] = [];
+  type Judging = { status: string; verifiedAt: string | null; verifiedBy: string | null };
+  const competitionRankings: { id: string; name: string; code: string; judging: Judging; rankings: RankEntry[] }[] = [];
 
   for (const wc of event.walkInCompetitions) {
+    const judging = {
+      status:     wc.judgingStatus,
+      verifiedAt: wc.judgingVerifiedAt?.toISOString() ?? null,
+      verifiedBy: wc.judgingVerifiedBy,
+    };
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();
     for (const ep of wc.judgingEndpoints) {
       for (const s of ep.scores) {
@@ -67,7 +74,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
       }
     }
     if (scoreMap.size === 0) {
-      competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, rankings: [] });
+      competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, judging, rankings: [] });
       continue;
     }
 
@@ -101,7 +108,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
       })
       .map((r, i) => ({ ...r, rank: i + 1 }));
 
-    competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, rankings: sorted });
+    competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, judging, rankings: sorted });
   }
 
   return (

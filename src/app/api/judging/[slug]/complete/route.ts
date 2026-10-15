@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { completeCompetitionIfAllTasksDone, taskJudgingState } from "@/lib/judgingStatus";
+import { completeIfAllTasksDone, taskJudgingState } from "@/lib/judgingStatus";
 
 /**
  * POST /api/judging/[slug]/complete  body: { passcode }
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   // Idempotent: a second click (or another device) keeps the first timestamp.
   await db.judgingTask.updateMany({ where: { id: task.id, completedAt: null }, data: { completedAt: new Date() } });
-  const judgingStatus = await completeCompetitionIfAllTasksDone(task.eventCompetitionId);
+  const judgingStatus = await completeIfAllTasksDone("event", task.eventCompetitionId);
 
   const fresh = await db.judgingTask.findUnique({ where: { id: task.id }, select: { completedAt: true } });
   return NextResponse.json({ judging: taskJudgingState({ completedAt: fresh?.completedAt ?? new Date() }, judgingStatus) });
