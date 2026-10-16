@@ -28,11 +28,18 @@ function fmtWhen(d: string | null | undefined) {
 function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [state, setState]   = useState("");
   const registered = teams.filter(t => t.registeredAt[caseId]);
   const statusOf = (t: CsiMonitorTeam) => t.progress[caseId]?.status ?? "none";
-  const counts = Object.fromEntries(STATUS_ORDER.map(s => [s, registered.filter(t => statusOf(t) === s).length]));
+  // States of the registered teams, with counts ("—" = no state on the contingent)
+  const stateCounts = new Map<string, number>();
+  for (const t of registered) stateCounts.set(t.stateName ?? "—", (stateCounts.get(t.stateName ?? "—") ?? 0) + 1);
+  const states = [...stateCounts.keys()].sort((a, b) => a === "—" ? 1 : b === "—" ? -1 : a.localeCompare(b));
+  // Status counts follow the state filter, so the chips describe what the table can show
+  const inState = registered.filter(t => !state || (t.stateName ?? "—") === state);
+  const counts = Object.fromEntries(STATUS_ORDER.map(s => [s, inState.filter(t => statusOf(t) === s).length]));
   const ql = q.trim().toLowerCase();
-  const rows = registered
+  const rows = inState
     .filter(t => !status || statusOf(t) === status)
     .filter(t => !ql || [t.teamName, t.contingentName, t.stateName ?? "", t.alias ?? "", t.csiUserId].some(v => v.toLowerCase().includes(ql)))
     // Finished first by score, then playing, then the rest by team name
@@ -52,10 +59,16 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
             <button onClick={() => setQ("")} className="absolute right-2 top-1.5 text-zinc-400 hover:text-zinc-600"><X className="h-3.5 w-3.5" /></button>
           )}
         </div>
+        <select value={state} onChange={e => setState(e.target.value)}
+          className={cn("py-1.5 pl-2 pr-7 text-xs border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200",
+            state && "border-indigo-300 text-indigo-700")}>
+          <option value="">Semua negeri · {registered.length}</option>
+          {states.map(s => <option key={s} value={s}>{s === "—" ? "Tiada negeri" : s} · {stateCounts.get(s)}</option>)}
+        </select>
         <div className="flex items-center gap-1 flex-wrap">
           <button onClick={() => setStatus(null)}
             className={cn("text-[11px] px-2 py-0.5 rounded-full border", !status ? "bg-zinc-800 text-white border-zinc-800" : "text-zinc-500 hover:bg-zinc-50")}>
-            Semua · {registered.length}
+            Semua · {inState.length}
           </button>
           {STATUS_ORDER.map(s => (
             <button key={s} onClick={() => setStatus(status === s ? null : s)}
