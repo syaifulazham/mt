@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
-  LayoutDashboard, Scale, Award, Globe, Megaphone,
+  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -182,6 +182,18 @@ const CROSS_CONNECTIONS: EdgeDef[] = [
   { from: "results",        to: "announcements", color: ANNOUNCE_COLOR },
   { from: "walkin/results", to: "announcements", color: ANNOUNCE_COLOR },
 ];
+
+// ─── Pantauan Pertandingan Dalam Talian ─────────────────────────────────────
+// Monitoring cards for competitions integrated with online platforms; each
+// card appears only when the event has such a competition.
+const CSI_MODULE: Module = {
+  icon: Fingerprint,
+  title: "Eptim CSI",
+  description: "Pasukan berdaftar mengikut kes Eptim CSI, berserta status dan markah.",
+  color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-100",
+  href: "eptim-csi",
+  pos: { x: COL[0], y: 0 },
+};
 
 const LEGEND = [
   { color: "#3b82f6", label: "Aliran utama",        dashed: false },
@@ -397,12 +409,16 @@ function useArrows(connections: EdgeDef[]) {
 export function EventManageClient({
   event,
   hasWebcraft = false,
+  hasCsi = false,
 }: {
   event: EventSummary;
   role: OrganizerRole;
   /** The event has a competition integrated with Eptim Webcraft. */
   hasWebcraft?: boolean;
+  /** The event has a competition integrated with Eptim CSI. */
+  hasCsi?: boolean;
 }) {
+  const monitorModules = [...(hasCsi ? [CSI_MODULE] : [])];
   const start = fmtDate(event.startDate);
   const end   = fmtDate(event.endDate);
   const isOnline = ONLINE_SCOPES.includes(event.scope);
@@ -497,6 +513,26 @@ export function EventManageClient({
         </div>
       </div>
       </div>
+
+      {/* ── Pantauan Pertandingan Dalam Talian ── */}
+      {monitorModules.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-zinc-200" />
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+              <MonitorPlay className="h-3.5 w-3.5" /> Pantauan Pertandingan Dalam Talian
+            </span>
+            <div className="h-px flex-1 bg-zinc-200" />
+          </div>
+          <div className="overflow-x-auto">
+            <div style={{ position: "relative", width: CANVAS_W, height: CARD_H + 24 }}>
+              {monitorModules.map((mod, i) => (
+                <ModuleCard key={mod.title} mod={{ ...mod, pos: { x: COL[i % 3], y: 0 } }} eventSlug={event.slug} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1">

@@ -154,6 +154,51 @@ export function csiRegisterCompetitionCase(competitionId: string, userId: string
   });
 }
 
+export type CsiRegistration = {
+  id: string; user_id: string; alias: string | null;
+  case: { id: string; slug: string; title: string };
+  source: string; created_at: string;
+};
+
+/**
+ * Every registration of our players on a CSI competition's cases (all pages).
+ * Uses the list mode of GET /competitions/:id/registrations (no user_id).
+ */
+export async function csiListCompetitionRegistrations(competitionId: string): Promise<CsiRegistration[]> {
+  const all: CsiRegistration[] = [];
+  for (let offset: number | null = 0, guard = 0; offset !== null && guard < 50; guard++) {
+    const page: { registrations?: CsiRegistration[]; next_offset?: number | null } = await req(
+      `/api/v1/competitions/${encodeURIComponent(competitionId)}/registrations?limit=1000&offset=${offset}`,
+    );
+    all.push(...(page.registrations ?? []));
+    offset = page.next_offset ?? null;
+  }
+  return all;
+}
+
+export type CsiResult = {
+  run_id: string; user_id: string; alias: string | null;
+  case: { id: string; slug: string; title: string; max_score: number | null };
+  score: number | null; max_score: number | null;
+  status: "active" | "completed" | "abandoned";
+  ranked: boolean; started_at: string; completed_at: string | null; duration_seconds: number | null;
+};
+
+/** Every run of our players on one case (all pages, newest first). */
+export async function csiListCaseResults(caseSlug: string): Promise<CsiResult[]> {
+  const LIMIT = 500;
+  const all: CsiResult[] = [];
+  for (let offset = 0, guard = 0; guard < 50; guard++, offset += LIMIT) {
+    const page: { results?: CsiResult[] } = await req(
+      `/api/v1/results?case_slug=${encodeURIComponent(caseSlug)}&limit=${LIMIT}&offset=${offset}`,
+    );
+    const rows = page.results ?? [];
+    all.push(...rows);
+    if (rows.length < LIMIT) break;
+  }
+  return all;
+}
+
 /**
  * Mint a one-time browser login link. It is single-use and expires in 120
  * seconds, so it must be requested at the moment of the click and followed
