@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Fingerprint, Loader2, RefreshCw, Search, X, AlertTriangle, FolderSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,43 @@ function fmtWhen(d: string | null | undefined) {
   return d ? new Date(d).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" }) : "—";
 }
 
+/**
+ * MT-side ranking of one case: only completed runs are ranked — higher score
+ * first, then the shorter run; teams equal on both share a rank (1, 1, 3).
+ * Teams still playing, abandoned or not started have no rank.
+ */
+function rankTeams(list: CsiMonitorTeam[], caseId: string): Map<string, number> {
+  const durationOf = (t: CsiMonitorTeam) => {
+    const p = t.progress[caseId];
+    return p?.completedAt ? new Date(p.completedAt).getTime() - new Date(p.startedAt).getTime() : Number.MAX_SAFE_INTEGER;
+  };
+  const done = list
+    .filter(t => t.progress[caseId]?.status === "completed" && t.progress[caseId]?.score != null)
+    .sort((a, b) => (b.progress[caseId]!.score! - a.progress[caseId]!.score!) || (durationOf(a) - durationOf(b)));
+  const ranks = new Map<string, number>();
+  done.forEach((t, i) => {
+    const prev = done[i - 1];
+    const tied = prev && prev.progress[caseId]!.score === t.progress[caseId]!.score && durationOf(prev) === durationOf(t);
+    ranks.set(t.teamId, tied ? ranks.get(prev.teamId)! : i + 1);
+  });
+  return ranks;
+}
+
+function fmtDuration(p: { startedAt: string; completedAt: string | null } | undefined) {
+  if (!p?.completedAt) return null;
+  const s = Math.round((new Date(p.completedAt).getTime() - new Date(p.startedAt).getTime()) / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}j ${m}m` : `${m}m ${String(sec).padStart(2, "0")}s`;
+}
+
+const RANK_CLS = ["bg-amber-400 text-white", "bg-zinc-400 text-white", "bg-orange-400 text-white"];
+
 function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [state, setState]   = useState("");
+  // Ranking scope: across all states, or within each state (grouped)
+  const [scope, setScope]   = useState<"national" | "state">("national");
   const registered = teams.filter(t => t.registeredAt[caseId]);
   const statusOf = (t: CsiMonitorTeam) => t.progress[caseId]?.status ?? "none";
   // States of the registered teams, with counts ("—" = no state on the contingent)
@@ -38,19 +71,41 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
   // Status counts follow the state filter, so the chips describe what the table can show
   const inState = registered.filter(t => !state || (t.stateName ?? "—") === state);
   const counts = Object.fromEntries(STATUS_ORDER.map(s => [s, inState.filter(t => statusOf(t) === s).length]));
+  // Ranks are computed over every registered team of the scope, before any
+  // search / status / state filter, so filtering never changes a team's rank.
+  const stateKey = (t: CsiMonitorTeam) => t.stateName ?? "—";
+  const ranks = new Map<string, number>();
+  if (scope === "national") rankTeams(registered, caseId).forEach((r, id) => ranks.set(id, r));
+  else for (const s of states) rankTeams(registered.filter(t => stateKey(t) === s), caseId).forEach((r, id) => ranks.set(id, r));
+
   const ql = q.trim().toLowerCase();
   const rows = inState
     .filter(t => !status || statusOf(t) === status)
     .filter(t => !ql || [t.teamName, t.contingentName, t.stateName ?? "", t.alias ?? "", t.csiUserId].some(v => v.toLowerCase().includes(ql)))
-    // Finished first by score, then playing, then the rest by team name
+    // Ranked first by rank, then playing / abandoned / not started, then team name
     .sort((a, b) =>
-      STATUS_ORDER.indexOf(statusOf(a)) - STATUS_ORDER.indexOf(statusOf(b))
+      (ranks.get(a.teamId) ?? Number.MAX_SAFE_INTEGER) - (ranks.get(b.teamId) ?? Number.MAX_SAFE_INTEGER)
+      || STATUS_ORDER.indexOf(statusOf(a)) - STATUS_ORDER.indexOf(statusOf(b))
       || (b.progress[caseId]?.score ?? -1) - (a.progress[caseId]?.score ?? -1)
       || a.teamName.localeCompare(b.teamName));
+  // "Ikut Negeri": one block per state, in state order
+  const groups = scope === "national"
+    ? [{ key: "", rows }]
+    : states.map(s => ({ key: s, rows: rows.filter(t => stateKey(t) === s) })).filter(g => g.rows.length > 0);
 
   return (
     <>
       <div className="px-5 py-3 border-b flex items-center gap-2 flex-wrap">
+        {/* Ranking scope */}
+        <div className="inline-flex rounded-lg border p-0.5 bg-zinc-50" role="group" aria-label="Kedudukan">
+          {([["national", "Kebangsaan"], ["state", "Ikut Negeri"]] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setScope(v)}
+              className={cn("text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors",
+                scope === v ? "bg-white text-indigo-700 shadow-sm" : "text-zinc-500 hover:text-zinc-700")}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="relative flex-1 min-w-56 max-w-sm">
           <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cari pasukan, kontingen, negeri, akaun…"
@@ -88,7 +143,9 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-zinc-50/60 text-[11px] font-medium text-zinc-500">
-                <th className="px-3 py-2 text-left w-10">#</th>
+                <th className="px-3 py-2 text-left w-14" title={scope === "national" ? "Kedudukan kebangsaan" : "Kedudukan dalam negeri"}>
+                  {scope === "national" ? "Kedudukan" : "Kdd. Negeri"}
+                </th>
                 <th className="px-3 py-2 text-left">Pasukan</th>
                 <th className="px-3 py-2 text-left">Kontingen</th>
                 <th className="px-3 py-2 text-left w-28">Negeri</th>
@@ -96,16 +153,35 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
                 <th className="px-3 py-2 text-left w-36">Didaftarkan</th>
                 <th className="px-3 py-2 text-left w-28">Status</th>
                 <th className="px-3 py-2 text-right w-24">Markah</th>
+                <th className="px-3 py-2 text-right w-20">Tempoh</th>
                 <th className="px-3 py-2 text-left w-36">Tamat</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((t, i) => {
+              {groups.map(g => (
+                <Fragment key={g.key || "__all"}>
+                  {scope === "state" && (
+                    <tr className="bg-zinc-100 border-b">
+                      <td colSpan={10} className="px-3 py-1.5 text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
+                        {g.key === "—" ? "Tiada negeri" : g.key}
+                        <span className="ml-2 font-normal normal-case text-zinc-400">
+                          {stateCounts.get(g.key)} pasukan · {registered.filter(t => stateKey(t) === g.key && ranks.has(t.teamId)).length} selesai
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+              {g.rows.map(t => {
                 const p = t.progress[caseId];
                 const st = STATUS[statusOf(t)];
+                const rank = ranks.get(t.teamId);
                 return (
                   <tr key={t.teamId} className="border-b last:border-0 hover:bg-zinc-50/60">
-                    <td className="px-3 py-2 text-xs text-zinc-400 tabular-nums">{i + 1}</td>
+                    <td className="px-3 py-2 text-xs tabular-nums">
+                      {rank == null ? <span className="text-zinc-300">—</span> : (
+                        <span className={cn("inline-flex min-w-6 h-6 px-1.5 items-center justify-center rounded-full font-bold",
+                          RANK_CLS[rank - 1] ?? "bg-zinc-100 text-zinc-600")}>{rank}</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 font-medium text-zinc-800">{t.teamName}</td>
                     <td className="px-3 py-2 text-zinc-600">{t.contingentName}</td>
                     <td className="px-3 py-2 text-xs text-zinc-600">{t.stateName ?? "—"}</td>
@@ -121,10 +197,13 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
                     <td className="px-3 py-2 text-right tabular-nums text-zinc-800">
                       {p?.score != null ? <>{p.score}{p.maxScore != null && <span className="text-zinc-400">/{p.maxScore}</span>}</> : "—"}
                     </td>
+                    <td className="px-3 py-2 text-right text-[11px] tabular-nums text-zinc-500">{fmtDuration(p) ?? "—"}</td>
                     <td className="px-3 py-2 text-[11px] text-zinc-500">{p?.completedAt ? fmtWhen(p.completedAt) : "—"}</td>
                   </tr>
                 );
               })}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         </div>
