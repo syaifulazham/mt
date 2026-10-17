@@ -17,7 +17,7 @@ export default async function EptimCsiMonitorPage({ params }: { params: Promise<
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <EptimCsiMonitorClient event={event} />
+      <EptimCsiMonitorClient event={event} canReset={session.role === "SUPER_ADMIN" || session.role === "ADMIN"} />
     </OrganizerShell>
   );
 }

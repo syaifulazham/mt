@@ -2,8 +2,9 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Fingerprint, Loader2, RefreshCw, Search, X, AlertTriangle, FolderSearch } from "lucide-react";
+import { ArrowLeft, Fingerprint, Loader2, RefreshCw, Search, X, AlertTriangle, FolderSearch, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { CsiMonitorCompetition, CsiMonitorTeam } from "@/lib/csiMonitor";
 
@@ -56,7 +57,74 @@ function fmtDuration(p: { startedAt: string; completedAt: string | null } | unde
 
 const RANK_CLS = ["bg-amber-400 text-white", "bg-zinc-400 text-white", "bg-orange-400 text-white"];
 
-function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string }) {
+/** Reset context: lets an admin give a team a fresh start on this case. */
+type ResetCtx = { eventId: string; ecId: string; caseTitle: string; onDone: () => void } | null;
+
+function ResetDialog({ team, caseId, ctx, onClose }: {
+  team: CsiMonitorTeam; caseId: string; ctx: NonNullable<ResetCtx>; onClose: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const p = team.progress[caseId];
+
+  async function confirm() {
+    setBusy(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${ctx.eventId}/eptim-csi/reset`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ecId: ctx.ecId, teamId: team.teamId, caseId, reason }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? "Gagal menetapkan semula.");
+      onClose(); ctx.onDone();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Dialog open onOpenChange={o => { if (!o && !busy) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2 text-rose-700">
+            <RotateCcw className="h-4 w-4" /> Set semula percubaan?
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 px-4 py-2 text-sm text-zinc-600">
+          <p><b className="text-zinc-800">{team.teamName}</b> · {team.contingentName}</p>
+          <p>Kes: <b>{ctx.caseTitle}</b></p>
+          {p && (
+            <p className="text-xs">
+              Percubaan semasa: <b>{STATUS[p.status]?.label ?? p.status}</b>
+              {p.score != null && <> · markah {p.score}{p.maxScore != null && `/${p.maxScore}`}</>}
+              {p.runs > 1 && <> · {p.runs} percubaan</>}
+            </p>
+          )}
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-2 text-xs text-rose-800">
+            Semua percubaan pasukan ini bagi kes ini akan <b>dibatalkan</b> di Eptim CSI — markah tidak lagi dikira dan pasukan
+            boleh bermula semula dari awal. Rekod lama disimpan untuk audit. Pendaftaran kes kekal.
+          </p>
+          <div>
+            <label className="text-xs font-medium text-zinc-700">Sebab (pilihan)</label>
+            <input value={reason} onChange={e => setReason(e.target.value)} maxLength={500}
+              placeholder="cth. Gangguan internet semasa bermain"
+              className="mt-1 w-full px-2.5 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200" />
+          </div>
+          {err && <p className="text-xs text-red-600">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Batal</Button>
+          <Button onClick={confirm} disabled={busy} className="bg-rose-600 hover:bg-rose-700 text-white gap-1.5">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Set semula
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CaseTable({ teams, caseId, reset }: { teams: CsiMonitorTeam[]; caseId: string; reset: ResetCtx }) {
+  const [resetFor, setResetFor] = useState<CsiMonitorTeam | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [state, setState]   = useState("");
@@ -155,6 +223,7 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
                 <th className="px-3 py-2 text-right w-24">Markah</th>
                 <th className="px-3 py-2 text-right w-20">Tempoh</th>
                 <th className="px-3 py-2 text-left w-36">Tamat</th>
+                {reset && <th className="px-3 py-2 w-24" />}
               </tr>
             </thead>
             <tbody>
@@ -162,7 +231,7 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
                 <Fragment key={g.key || "__all"}>
                   {scope === "state" && (
                     <tr className="bg-zinc-100 border-b">
-                      <td colSpan={10} className="px-3 py-1.5 text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
+                      <td colSpan={reset ? 11 : 10} className="px-3 py-1.5 text-[11px] font-bold text-zinc-600 uppercase tracking-wide">
                         {g.key === "—" ? "Tiada negeri" : g.key}
                         <span className="ml-2 font-normal normal-case text-zinc-400">
                           {stateCounts.get(g.key)} pasukan · {registered.filter(t => stateKey(t) === g.key && ranks.has(t.teamId)).length} selesai
@@ -199,6 +268,16 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
                     </td>
                     <td className="px-3 py-2 text-right text-[11px] tabular-nums text-zinc-500">{fmtDuration(p) ?? "—"}</td>
                     <td className="px-3 py-2 text-[11px] text-zinc-500">{p?.completedAt ? fmtWhen(p.completedAt) : "—"}</td>
+                    {reset && (
+                      <td className="px-3 py-2 text-right">
+                        {p && (
+                          <button onClick={() => setResetFor(t)} title="Set semula percubaan — pasukan bermula semula dari awal"
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded px-1.5 py-0.5">
+                            <RotateCcw className="h-3 w-3" /> Set semula
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -208,11 +287,14 @@ function CaseTable({ teams, caseId }: { teams: CsiMonitorTeam[]; caseId: string 
           </table>
         </div>
       )}
+      {resetFor && reset && <ResetDialog team={resetFor} caseId={caseId} ctx={reset} onClose={() => setResetFor(null)} />}
     </>
   );
 }
 
-function CompetitionPanel({ comp }: { comp: CsiMonitorCompetition }) {
+function CompetitionPanel({ comp, eventId, canReset, onReload }: {
+  comp: CsiMonitorCompetition; eventId: string; canReset: boolean; onReload: () => void;
+}) {
   const [caseId, setCaseId] = useState<string | null>(comp.cases[0]?.id ?? null);
   const active = comp.cases.find(c => c.id === caseId) ?? comp.cases[0];
 
@@ -256,14 +338,17 @@ function CompetitionPanel({ comp }: { comp: CsiMonitorCompetition }) {
               Kes ini dipilih dalam konfigurasi acara tetapi tidak lagi dilampirkan pada pertandingan CSI — semak konfigurasi Eptim CSI pertandingan.
             </p>
           )}
-          {active && <CaseTable key={active.id} teams={comp.teams} caseId={active.id} />}
+          {active && (
+            <CaseTable key={active.id} teams={comp.teams} caseId={active.id}
+              reset={canReset && active.inCompetition ? { eventId, ecId: comp.ecId, caseTitle: active.title, onDone: onReload } : null} />
+          )}
         </>
       )}
     </div>
   );
 }
 
-export function EptimCsiMonitorClient({ event }: { event: EventInfo }) {
+export function EptimCsiMonitorClient({ event, canReset }: { event: EventInfo; canReset: boolean }) {
   const [data, setData]   = useState<{ competitions: CsiMonitorCompetition[]; fetchedAt: string } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -340,7 +425,7 @@ export function EptimCsiMonitorClient({ event }: { event: EventInfo }) {
         </div>
       )}
 
-      {active && <CompetitionPanel key={active.ecId} comp={active} />}
+      {active && <CompetitionPanel key={active.ecId} comp={active} eventId={event.id} canReset={canReset} onReload={load} />}
     </div>
   );
 }

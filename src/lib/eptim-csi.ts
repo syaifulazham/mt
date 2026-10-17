@@ -200,6 +200,25 @@ export async function csiListCaseResults(caseSlug: string): Promise<CsiResult[]>
 }
 
 /**
+ * Give a player a fresh start on a competition case: CSI voids their runs on it
+ * (kept for audit, no longer counted anywhere). Idempotent.
+ */
+export function csiResetAttempt(competitionId: string, opts: {
+  userId: string; caseId: string; by: string; reason?: string;
+}) {
+  return req<{ voided: number; runs: { id: string; status: string; score: number }[] }>(
+    `/api/v1/competitions/${encodeURIComponent(competitionId)}/resets`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: opts.userId, case_id: opts.caseId, by: opts.by,
+        ...(opts.reason ? { reason: opts.reason } : {}),
+      }),
+    },
+  );
+}
+
+/**
  * Mint a one-time browser login link. It is single-use and expires in 120
  * seconds, so it must be requested at the moment of the click and followed
  * straight away.
