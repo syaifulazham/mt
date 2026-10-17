@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
-  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay,
+  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay, UserCheck,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -99,6 +99,18 @@ const MAIN_MODULES: Module[] = [
   },
 ];
 
+// Per-participant attendance from the competition counter, attached below the
+// attendance dashboard (physical events only — hidden with the other attendance
+// cards for online events, which is also when the Webcraft card can take this slot).
+const INDIVIDUAL_ATTENDANCE_MODULE: Module = {
+  icon: UserCheck,
+  title: "Kehadiran Individu",
+  description: "Kehadiran setiap peserta mengikut negeri, pasukan hadir penuh dan ahli yang tidak hadir.",
+  color: "text-teal-600", bg: "bg-teal-50", border: "border-teal-100",
+  href: "attendance/individual",
+  pos: { x: COL[1], y: ROW[2] },
+};
+
 // Shown only when the event has a competition integrated with Eptim Webcraft.
 // Sits in the free slot left-below Penghakiman, joined to it by a dashed
 // (indirect) edge: it is a view onto judging, not a step in the flow.
@@ -120,8 +132,9 @@ const MAIN_CONNECTIONS: EdgeDef[] = [
   // Col-2 vertical spine
   { from: "attendance",           to: "judging",              color: "#3b82f6" },
   { from: "judging",              to: "results",              color: "#3b82f6" },
-  // Branch: Log → Dashboard (diagonal left-down)
+  // Branch: Log → Dashboard (diagonal left-down) → Kehadiran Individu
   { from: "attendance",           to: "attendance/dashboard", color: "#0d9488" },
+  { from: "attendance/dashboard", to: "attendance/individual", color: "#0d9488" },
   // Feedback: Laporan → Pre-reg (dashed, same col up)
   { from: "reports",              to: "preregistration",      color: "#8b5cf6", dashed: true },
   // Indirect: Penghakiman → Penghakiman Webcraft. Skipped by `useArrows` when
@@ -431,6 +444,10 @@ export function EventManageClient({
         m.href === "attendance/dashboard"
       )),
     ),
+    // Shares its slot with the Webcraft card; when both show, it moves one column left.
+    ...(isOnline ? [] : [hasWebcraft
+      ? { ...INDIVIDUAL_ATTENDANCE_MODULE, pos: { x: COL[0], y: ROW[2] } }
+      : INDIVIDUAL_ATTENDANCE_MODULE]),
     ...(hasWebcraft ? [WEBCRAFT_JUDGING_MODULE] : []),
   ];
   const legend = hasWebcraft
