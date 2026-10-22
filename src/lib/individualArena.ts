@@ -7,7 +7,7 @@ import { ensureIndividualEntry, singleParticipationConflict } from "@/lib/indivi
 import { resolveLaunchLink, type ArenaClient } from "@/lib/arena-client";
 import { fc1 } from "@/lib/eptim-fc1";
 import { droneArena } from "@/lib/eptim-drone";
-import { ensureFc1Account } from "@/lib/fc1Participant";
+import { ensureFc1Account, isFc1UserMissing, repairFc1Account } from "@/lib/fc1Participant";
 import { ensureDroneParticipantAccount } from "@/lib/droneTeam";
 
 // The participant-side flow for INDIVIDUAL arena competitions — Eptim FC-1 and
@@ -30,6 +30,13 @@ export type IndividualArena = {
   /** Which EventCompetition column holds the organizer's picks. */
   picksOf: (ec: { fc1Challenges: Prisma.JsonValue; droneChallenges: Prisma.JsonValue }) => Prisma.JsonValue;
   ensureAccount: (participantId: string) => Promise<{ userid: string; contingentId: string }>;
+  /**
+   * Self-heal for a partner that lost a player MT created: `isUserMissing`
+   * recognises its "user not found", `repairAccount` re-provisions the player
+   * and its challenge registrations. Absent = no repair for this integration.
+   */
+  isUserMissing?: (e: unknown) => boolean;
+  repairAccount?: (participantId: string) => Promise<{ userid: string; contingentId: string }>;
   existingUserid: (participantId: string) => Promise<string | null>;
   regs: {
     find:     (key: RegKey) => Promise<RegRow | null>;
@@ -44,6 +51,8 @@ export const FC1_INDIVIDUAL: IndividualArena = {
   client: fc1,
   picksOf: (ec) => ec.fc1Challenges,
   ensureAccount: ensureFc1Account,
+  isUserMissing: isFc1UserMissing,
+  repairAccount: repairFc1Account,
   existingUserid: async (participantId) =>
     (await db.participantFc1Access.findUnique({ where: { participantId }, select: { fc1UserId: true } }))?.fc1UserId ?? null,
   regs: {
@@ -136,6 +145,20 @@ export async function loadIndividualChallengeAccess(
   return { participant, ec, challenge } as const;
 }
 
+/**
+ * Run a partner call for a player; if the partner says the player doesn't exist
+ * (it lost an account MT created), re-provision it once and retry.
+ */
+async function withUserRepair<T>(arena: IndividualArena, participantId: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (e: unknown) {
+    if (!arena.repairAccount || !arena.isUserMissing?.(e)) throw e;
+    await arena.repairAccount(participantId);
+    return call();
+  }
+}
+
 function launchLinkFor(arena: IndividualArena, row: RegRow, userid: string, contingentId: string) {
   return resolveLaunchLink(arena.client, row, userid, contingentId, (fresh) => arena.regs.saveLink(row.id, fresh));
 }
@@ -189,9 +212,10 @@ export function individualRegisterHandler(arena: IndividualArena) {
     let contingentId: string;
     try {
       ({ userid, contingentId } = await arena.ensureAccount(participant.id));
-      await arena.client.withSectorRepair(userid, contingentId, () => arena.client.registerChallenge({
-        challengeId: body.challengeId, userid, externalRef: externalRef(ec.id, participant.id),
-      }));
+      await withUserRepair(arena, participant.id, () =>
+        arena.client.withSectorRepair(userid, contingentId, () => arena.client.registerChallenge({
+          challengeId: body.challengeId, userid, externalRef: externalRef(ec.id, participant.id),
+        })));
     } catch (e: unknown) {
       const err = e as { message?: string; status?: number; detail?: string };
       console.error(
@@ -253,12 +277,13 @@ export function individualLinkHandler(arena: IndividualArena) {
     if (!userid || !row) return NextResponse.json({ error: "Daftar cabaran ini dahulu." }, { status: 409 });
 
     try {
-      const attempts = await arena.client.attempts(body.challengeId, userid);
+      const attempts = await withUserRepair(arena, participant.id, () => arena.client.attempts(body.challengeId, userid));
       if (attempts.completed)
         return NextResponse.json({ error: "Anda telah menyelesaikan cabaran ini." }, { status: 409 });
       if (attempts.attempts_remaining === 0)
         return NextResponse.json({ error: "Cubaan untuk cabaran ini telah habis." }, { status: 409 });
-      return NextResponse.json({ link: await launchLinkFor(arena, row, userid, participant.contingentId) });
+      const link = await withUserRepair(arena, participant.id, () => launchLinkFor(arena, row, userid, participant.contingentId));
+      return NextResponse.json({ link });
     } catch (e: unknown) {
       const err = e as { message?: string; status?: number; detail?: string };
       console.error(
