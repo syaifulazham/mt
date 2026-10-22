@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
+import { confirmationCode } from "@/lib/confirmationCode";
 
 // "Penghakiman Selesai" on the judge-facing boards, shared by regular judging
 // (/judging/[slug] → /api/judging/[slug]) and walk-in judging
@@ -16,14 +17,6 @@ import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
 /** How often an open board or form re-checks whether judging has been announced complete. */
 export const STATUS_POLL_MS = 10_000;
 
-// Confirmation code: 5 random characters, without look-alikes (0/O, 1/I/L) so a
-// judge can't mistype what they read.
-const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-function confirmationCode(len = 5) {
-  const buf = new Uint32Array(len);
-  crypto.getRandomValues(buf);
-  return Array.from(buf, (n) => CODE_CHARS[n % CODE_CHARS.length]).join("");
-}
 
 /** Lock map from a board / status / complete response (older shape: `judging` only). */
 export function lockMapOf(j: { judging?: TaskJudgingState | null; locks?: TaskLockMap | null } | null | undefined): TaskLockMap | null {

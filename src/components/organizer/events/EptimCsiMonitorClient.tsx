@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { CsiMonitorCompetition, CsiMonitorTeam } from "@/lib/csiMonitor";
+import { confirmationCode } from "@/lib/confirmationCode";
 
 // Pantauan Pertandingan Dalam Talian → Eptim CSI: per CSI-linked competition of
 // the event, the teams registered on each case (toggle by case), with their
@@ -66,9 +67,14 @@ function ResetDialog({ team, caseId, ctx, onClose }: {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // Irreversible for the team's score: unlocked only by typing back a fresh random code
+  const [code] = useState(confirmationCode);
+  const [typed, setTyped] = useState("");
+  const matches = typed.trim().toUpperCase() === code;
   const p = team.progress[caseId];
 
   async function confirm() {
+    if (!matches) return;
     setBusy(true); setErr("");
     try {
       const res = await fetch(`/api/v2/organizer/events/${ctx.eventId}/eptim-csi/reset`, {
@@ -110,11 +116,22 @@ function ResetDialog({ team, caseId, ctx, onClose }: {
               placeholder="cth. Gangguan internet semasa bermain"
               className="mt-1 w-full px-2.5 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200" />
           </div>
+          <div className="space-y-2">
+            <p className="text-xs text-zinc-600">Taip kod di bawah untuk mengesahkan:</p>
+            <p className="select-none text-center font-mono text-2xl font-bold tracking-[0.4em] text-zinc-900 bg-zinc-100 rounded-lg py-2">
+              {code}
+            </p>
+            <input value={typed} onChange={e => setTyped(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === "Enter" && confirm()}
+              placeholder="Kod pengesahan" maxLength={5} autoComplete="off" autoFocus
+              className={cn("w-full h-11 text-center font-mono tracking-[0.3em] text-lg border rounded-lg focus:outline-none focus:ring-2",
+                typed && !matches && typed.length === 5 ? "border-red-300 focus:ring-red-200" : "focus:ring-rose-200")} />
+          </div>
           {err && <p className="text-xs text-red-600">{err}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>Batal</Button>
-          <Button onClick={confirm} disabled={busy} className="bg-rose-600 hover:bg-rose-700 text-white gap-1.5">
+          <Button onClick={confirm} disabled={busy || !matches} className="bg-rose-600 hover:bg-rose-700 text-white gap-1.5">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Set semula
           </Button>
         </DialogFooter>
