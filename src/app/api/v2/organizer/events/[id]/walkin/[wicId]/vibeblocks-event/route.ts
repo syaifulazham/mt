@@ -3,7 +3,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { vibeBlocksConfigured, vibeBlocksCreateEvent, vibeBlocksUpdateEvent } from "@/lib/vibeblocks";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
 // POST /api/v2/organizer/events/[id]/walkin/[wicId]/vibeblocks-event
 // Creates a VibeBlocks competition event using the event slug as the stable event_id.

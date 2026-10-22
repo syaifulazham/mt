@@ -4,7 +4,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { JUDGING_LOCKED, judgingLocked } from "@/lib/judgingStatus";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 const PASSCODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function genSlug() {

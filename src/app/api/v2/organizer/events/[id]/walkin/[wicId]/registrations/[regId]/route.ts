@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
 // PATCH — confirm or reject a registration
 export async function PATCH(

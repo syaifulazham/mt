@@ -3,7 +3,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { viblockConfigured, viblockCompetitionRegister, viblockGetToken, viblockRenewToken } from "@/lib/viblock";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
 // GET — get token info for this registration
 export async function GET(

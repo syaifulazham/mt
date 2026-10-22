@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
 // GET /api/v2/organizer/events/[id]/walkin/[wicId]/judging-templates
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string; wicId: string }> }) {

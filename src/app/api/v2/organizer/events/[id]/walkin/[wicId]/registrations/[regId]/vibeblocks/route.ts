@@ -10,7 +10,7 @@ import {
   parseVibeBlocksToken,
 } from "@/lib/vibeblocks";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
 // GET — return parsed token info for this registration
 export async function GET(

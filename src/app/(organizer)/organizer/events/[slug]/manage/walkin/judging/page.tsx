@@ -73,7 +73,7 @@ export default async function WalkInJudgingPage({
     <OrganizerShell userName={session.name} role={session.role}>
       <WalkInJudgingManageClient
         event={withProgress}
-        canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
+        canWrite={["SUPER_ADMIN", "ADMIN", "OPERATOR"].includes(session.role)}
         isSuperAdmin={session.role === "SUPER_ADMIN"}
       />
     </OrganizerShell>

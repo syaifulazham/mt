@@ -64,7 +64,7 @@ export default async function WalkInManagePage({
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <WalkInManageClient event={serializedEvent} canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)} />
+      <WalkInManageClient event={serializedEvent} canWrite={["SUPER_ADMIN", "ADMIN", "OPERATOR"].includes(session.role)} />
     </OrganizerShell>
   );
 }

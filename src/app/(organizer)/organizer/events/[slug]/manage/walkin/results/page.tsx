@@ -122,7 +122,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
         event={{ id: event.id, name: event.name, slug: event.slug, scope: event.scope }}
         competitionRankings={competitionRankings}
         endpoints={event.resultsEndpoints.map(ep => ({ ...ep, createdAt: ep.createdAt.toISOString() }))}
-        canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
+        canWrite={["SUPER_ADMIN", "ADMIN", "OPERATOR"].includes(session.role)}
         isSuperAdmin={session.role === "SUPER_ADMIN"}
       />
     </OrganizerShell>

@@ -13,7 +13,7 @@ import {
   deriveDroneUserId,
 } from "@/lib/drone";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
 // GET — return parsed drone token info for this registration
 export async function GET(

@@ -3,7 +3,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { JUDGING_LOCKED, judgingLocked, cleanupTaskStateCompletions } from "@/lib/judgingStatus";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
 // While the walk-in competition's judging is announced complete or verified,
 // endpoints are frozen too: deleting one would delete its scores, and reopening
