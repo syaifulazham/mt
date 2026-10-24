@@ -2,10 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Sparkles, Loader2, RefreshCw, Search, X, AlertTriangle, ListChecks } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, RefreshCw, Search, X, AlertTriangle, ListChecks, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { QuizzlyMonitorCompetition, QuizzlyMonitorRow } from "@/lib/quizzlyMonitor";
+import { rankQuizRows, exportQuizzlyResultsExcel } from "@/lib/export/quizzlyResultsExport";
 
 // Pantauan Pertandingan Dalam Talian → Asia Spark Quizzes: per Quizzly-linked
 // competition of the event, its registered participants by quiz (toggle by
@@ -35,23 +36,6 @@ function fmtDuration(ms: number | null) {
   return h ? `${h}j ${m}m` : `${m}m ${String(sec).padStart(2, "0")}s`;
 }
 
-/**
- * Ranks submitted attempts: higher percentage first, then the shorter attempt;
- * equal on both share a rank (1, 1, 3). Unsubmitted participants are unranked.
- */
-function rankRows(list: QuizzlyMonitorRow[]): Map<string, number> {
-  const dur = (r: QuizzlyMonitorRow) => r.durationMs ?? Number.MAX_SAFE_INTEGER;
-  const done = list.filter(r => r.status === "submitted" && r.score)
-    .sort((a, b) => (b.score!.percentage - a.score!.percentage) || (dur(a) - dur(b)));
-  const ranks = new Map<string, number>();
-  done.forEach((r, i) => {
-    const prev = done[i - 1];
-    const tied = prev && prev.score!.percentage === r.score!.percentage && dur(prev) === dur(r);
-    ranks.set(r.participantId, tied ? ranks.get(prev.participantId)! : i + 1);
-  });
-  return ranks;
-}
-
 function QuizTable({ rows: all }: { rows: QuizzlyMonitorRow[] }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -67,8 +51,8 @@ function QuizTable({ rows: all }: { rows: QuizzlyMonitorRow[] }) {
 
   // Computed over every participant of the scope, before search / status / state filters.
   const ranks = new Map<string, number>();
-  if (scope === "national") rankRows(all).forEach((v, k) => ranks.set(k, v));
-  else for (const s of states) rankRows(all.filter(r => stateKey(r) === s)).forEach((v, k) => ranks.set(k, v));
+  if (scope === "national") rankQuizRows(all).forEach((v, k) => ranks.set(k, v));
+  else for (const s of states) rankQuizRows(all.filter(r => stateKey(r) === s)).forEach((v, k) => ranks.set(k, v));
 
   const ql = q.trim().toLowerCase();
   const rows = inState
@@ -192,6 +176,13 @@ function QuizTable({ rows: all }: { rows: QuizzlyMonitorRow[] }) {
   );
 }
 
+async function fetchQuizRows(eventId: string, ecId: string, quizId: string): Promise<QuizzlyMonitorRow[]> {
+  const r = await fetch(`/api/v2/organizer/events/${eventId}/asia-spark-quizzes?ecId=${encodeURIComponent(ecId)}&quizId=${encodeURIComponent(quizId)}`, { cache: "no-store" });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error ?? "Gagal memuatkan keputusan kuiz.");
+  return j.rows;
+}
+
 function QuizPanel({ eventId, ecId, quizId }: { eventId: string; ecId: string; quizId: string }) {
   const [rows, setRows]     = useState<QuizzlyMonitorRow[] | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
@@ -201,9 +192,8 @@ function QuizPanel({ eventId, ecId, quizId }: { eventId: string; ecId: string; q
 
   useEffect(() => {
     let alive = true;
-    fetch(`/api/v2/organizer/events/${eventId}/asia-spark-quizzes?ecId=${encodeURIComponent(ecId)}&quizId=${encodeURIComponent(quizId)}`, { cache: "no-store" })
-      .then(async r => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error ?? "Gagal memuatkan keputusan kuiz."); return j; })
-      .then(j => { if (alive) { setRows(j.rows); setFetchedAt(j.fetchedAt); setError(""); } })
+    fetchQuizRows(eventId, ecId, quizId)
+      .then(rows => { if (alive) { setRows(rows); setFetchedAt(new Date().toISOString()); setError(""); } })
       .catch(e => { if (alive) setError(e instanceof Error ? e.message : "Gagal"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -276,6 +266,22 @@ export function QuizzlyMonitorClient({ event }: { event: EventInfo }) {
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(true);
   const [activeEc, setActiveEc] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
+
+  async function exportXlsx() {
+    if (!data) return;
+    setError("");
+    setExporting({ done: 0, total: 0 });
+    try {
+      await exportQuizzlyResultsExcel({
+        eventName: event.name,
+        competitions: data.competitions,
+        load: (ecId, quizId) => fetchQuizRows(event.id, ecId, quizId),
+        onProgress: (done, total) => setExporting({ done, total }),
+      });
+    } catch (e) { setError(`Muat turun gagal: ${e instanceof Error ? e.message : "ralat"}`); }
+    finally { setExporting(null); }
+  }
 
   const fetchData = useCallback(async () => {
     const res = await fetch(`/api/v2/organizer/events/${event.id}/asia-spark-quizzes`, { cache: "no-store" });
@@ -318,6 +324,12 @@ export function QuizzlyMonitorClient({ event }: { event: EventInfo }) {
           <p className="text-sm text-zinc-500">{event.name} · Pantauan Pertandingan Dalam Talian</p>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+          <Button size="sm" onClick={exportXlsx} disabled={!data || comps.length === 0 || !!exporting}
+            className="h-7 text-xs gap-1 bg-orange-600 hover:bg-orange-700 text-white"
+            title="Satu helaian bagi setiap pertandingan, disenaraikan mengikut kuiz">
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {exporting ? (exporting.total ? `Memuatkan kuiz ${exporting.done}/${exporting.total}…` : "Menyediakan…") : "Muat turun XLSX"}
+          </Button>
           <Button size="sm" variant="outline" onClick={load} disabled={loading} className="h-7 text-xs gap-1">
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Muat semula
           </Button>
