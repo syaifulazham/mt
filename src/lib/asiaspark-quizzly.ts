@@ -305,7 +305,9 @@ const PROGRESS_BATCH = 500; // Quizzly's per-request cap
  * quiz). Uses POST /competition-sessions/{id}/progress, which applies the same
  * rules as Quizzly's own Live page and never returns a login code or a score.
  */
-export async function quizzlySessionProgress(sessionId: string, quizzlyParticipantIds: string[]): Promise<QuizzlyProgressRow[]> {
+export async function quizzlySessionProgress(
+  sessionId: string, quizzlyParticipantIds: string[], quizId?: string,
+): Promise<QuizzlyProgressRow[]> {
   const ids = [...new Set(quizzlyParticipantIds.filter(Boolean))];
   if (ids.length === 0) return [];
   const parts: string[][] = [];
@@ -313,10 +315,43 @@ export async function quizzlySessionProgress(sessionId: string, quizzlyParticipa
   const results = await Promise.all(parts.map((participant_ids) =>
     req<{ data: QuizzlyProgressRow[] }>(`/api/v1/competition-sessions/${encodeURIComponent(sessionId)}/progress`, {
       method: "POST",
-      body: JSON.stringify({ participant_ids }),
+      body: JSON.stringify({ participant_ids, ...(quizId ? { quiz_id: quizId } : {}) }),
     }),
   ));
   return results.flatMap((r) => r.data ?? []);
+}
+
+export type QuizzlyAttempt = {
+  session_id: string;
+  participant_id: string;
+  participant: { personal_id: string | null; full_name: string | null; school: string | null; agency: string | null };
+  state: "issued" | "active" | "submitted" | "voided" | "expired" | "abandoned";
+  score: { raw: number; max: number; percentage: number; passed: boolean | null; correct: number; incorrect: number; unanswered: number } | null;
+  timing: { started_at: string | null; submitted_at: string | null; duration_ms: number | null };
+  integrity_flags: unknown[];
+};
+
+/**
+ * Submitted attempts at one quiz within one competition session (all pages,
+ * GET /api/v1/sessions with cursor paging). Carries the score, which the
+ * progress call above deliberately doesn't. Scoped to one quiz: a whole
+ * session can hold far too many attempts to page through per request.
+ */
+export async function quizzlyQuizAttempts(sessionId: string, quizId: string): Promise<QuizzlyAttempt[]> {
+  const all: QuizzlyAttempt[] = [];
+  let cursor: string | null = null;
+  for (let guard = 0; guard < 50; guard++) {
+    const qs = new URLSearchParams({
+      competition_session_id: sessionId, quiz_id: quizId, state: "submitted", limit: "200",
+      ...(cursor ? { cursor } : {}),
+    });
+    const page: { data?: QuizzlyAttempt[]; pagination?: { next_cursor: string | null; has_more: boolean } } =
+      await req(`/api/v1/sessions?${qs}`);
+    all.push(...(page.data ?? []));
+    if (!page.pagination?.has_more || !page.pagination.next_cursor) break;
+    cursor = page.pagination.next_cursor;
+  }
+  return all;
 }
 
 /** Confirms the key and reports its effective scopes — useful for diagnosis. */

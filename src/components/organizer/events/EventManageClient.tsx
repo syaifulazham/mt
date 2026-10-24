@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
-  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay, UserCheck,
+  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -205,6 +205,15 @@ const CSI_MODULE: Module = {
   description: "Pasukan berdaftar mengikut kes Eptim CSI, berserta status dan markah.",
   color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-100",
   href: "eptim-csi",
+  pos: { x: COL[0], y: 0 },
+};
+
+const QUIZZLY_MODULE: Module = {
+  icon: Sparkles,
+  title: "Asia Spark Quizzes",
+  description: "Peserta mengikut kuiz Asia Spark Quizzly, berserta kemajuan, markah dan kedudukan.",
+  color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100",
+  href: "asia-spark-quizzes",
   pos: { x: COL[0], y: 0 },
 };
 
@@ -423,6 +432,7 @@ export function EventManageClient({
   event,
   hasWebcraft = false,
   hasCsi = false,
+  hasQuizzly = false,
 }: {
   event: EventSummary;
   role: OrganizerRole;
@@ -430,8 +440,10 @@ export function EventManageClient({
   hasWebcraft?: boolean;
   /** The event has a competition integrated with Eptim CSI. */
   hasCsi?: boolean;
+  /** The event has a competition integrated with Asia Spark Quizzly. */
+  hasQuizzly?: boolean;
 }) {
-  const monitorModules = [...(hasCsi ? [CSI_MODULE] : [])];
+  const monitorModules = [...(hasCsi ? [CSI_MODULE] : []), ...(hasQuizzly ? [QUIZZLY_MODULE] : [])];
   const start = fmtDate(event.startDate);
   const end   = fmtDate(event.endDate);
   const isOnline = ONLINE_SCOPES.includes(event.scope);
