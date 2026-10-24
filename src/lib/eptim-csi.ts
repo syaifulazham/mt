@@ -166,9 +166,11 @@ export type CsiRegistration = {
  */
 export async function csiListCompetitionRegistrations(competitionId: string): Promise<CsiRegistration[]> {
   const all: CsiRegistration[] = [];
-  for (let offset: number | null = 0, guard = 0; offset !== null && guard < 50; guard++) {
+  // Small pages: CSI resolves each page's players in one lookup, and before its
+  // chunked lookup a page of ~650 came back empty (URL too long upstream).
+  for (let offset: number | null = 0, guard = 0; offset !== null && guard < 200; guard++) {
     const page: { registrations?: CsiRegistration[]; next_offset?: number | null } = await req(
-      `/api/v1/competitions/${encodeURIComponent(competitionId)}/registrations?limit=1000&offset=${offset}`,
+      `/api/v1/competitions/${encodeURIComponent(competitionId)}/registrations?limit=200&offset=${offset}`,
     );
     all.push(...(page.registrations ?? []));
     offset = page.next_offset ?? null;
@@ -186,15 +188,23 @@ export type CsiResult = {
 
 /** Every run of our players on one case (all pages, newest first). */
 export async function csiListCaseResults(caseSlug: string): Promise<CsiResult[]> {
-  const LIMIT = 500;
+  const LIMIT = 200;
   const all: CsiResult[] = [];
-  for (let offset = 0, guard = 0; guard < 50; guard++, offset += LIMIT) {
-    const page: { results?: CsiResult[] } = await req(
+  for (let offset = 0, guard = 0; guard < 200; guard++) {
+    const page: { results?: CsiResult[]; next_offset?: number | null } = await req(
       `/api/v1/results?case_slug=${encodeURIComponent(caseSlug)}&limit=${LIMIT}&offset=${offset}`,
     );
     const rows = page.results ?? [];
     all.push(...rows);
-    if (rows.length < LIMIT) break;
+    // CSI omits runs of players we didn't provision, so a short page isn't the
+    // last one: follow next_offset; an older CSI without it → stop on an empty page.
+    if (page.next_offset !== undefined) {
+      if (page.next_offset === null) break;
+      offset = page.next_offset;
+    } else {
+      if (rows.length === 0) break;
+      offset += LIMIT;
+    }
   }
   return all;
 }
