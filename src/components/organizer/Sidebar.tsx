@@ -4,86 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
-import {
-  LayoutDashboard,
-  Users,
-  CalendarDays,
-  Trophy,
-  UserCheck,
-  Gavel,
-  Database,
-  DatabaseBackup,
-  LogOut,
-  ChevronRight,
-  ChevronDown,
-  BotMessageSquare,
-  BookMarked,
-  UserCircle,
-  Globe,
-  Images,
-  Newspaper,
-  Megaphone,
-  Map,
-  Building2,
-  ShieldAlert,
-  Mail,
-  Send,
-  Users2,
-  FileBadge,
-  BadgeCheck,
-} from "lucide-react";
+import { LogOut, ChevronRight, ChevronDown, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
 import { Badge } from "@/components/ui/badge";
-
-type SubItem = { label: string; href: string; icon: React.ElementType };
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: React.ElementType;
-  roles?: OrganizerRole[];
-  phase2?: boolean;
-  children?: SubItem[];
-};
-
-const NAV: NavItem[] = [
-  { label: "Dashboard",      href: "/organizer/dashboard",      icon: LayoutDashboard },
-  { label: "Staff",          href: "/organizer/users",          icon: Users,      roles: ["SUPER_ADMIN", "ADMIN"] },
-  { label: "Reference Data", href: "/organizer/reference-data", icon: Database,   roles: ["SUPER_ADMIN", "ADMIN"] },
-  { label: "Competitions",   href: "/organizer/competitions",   icon: Trophy },
-  { label: "Contingents",    href: "/organizer/contingents",    icon: Building2 },
-  { label: "Participation",  href: "/organizer/participation",  icon: UserCheck },
-  { label: "Events",         href: "/organizer/events",         icon: CalendarDays },
-  { label: "Judging",        href: "/organizer/judging",        icon: Gavel },
-  {
-    label: "Certificates", href: "/organizer/certificates", icon: FileBadge,
-    children: [
-      { label: "Templates", href: "/organizer/certificates",        icon: FileBadge },
-      { label: "Issued",    href: "/organizer/certificates/issued", icon: BadgeCheck },
-    ],
-  },
-  {
-    label: "Landing Page", href: "/organizer/landing", icon: Globe,
-    children: [
-      { label: "Galleries",           href: "/organizer/landing/galleries",     icon: Images },
-      { label: "News",               href: "/organizer/landing/news",          icon: Newspaper },
-      { label: "Announcements",      href: "/organizer/landing/announcements", icon: Megaphone },
-      { label: "Competition Mapping", href: "/organizer/landing/mapping",       icon: Map },
-    ],
-  },
-  {
-    label: "Email", href: "/organizer/email", icon: Mail, roles: ["SUPER_ADMIN", "ADMIN"],
-    children: [
-      { label: "Test",      href: "/organizer/email/test", icon: Send },
-      { label: "Bulk Send", href: "/organizer/email/bulk", icon: Users2 },
-    ],
-  },
-  { label: "Smart Chat",     href: "/organizer/smart-chat",     icon: BotMessageSquare },
-  { label: "Knowledge Base", href: "/organizer/knowledge-base", icon: BookMarked },
-  { label: "DB Backups",     href: "/organizer/backups",        icon: DatabaseBackup, roles: ["SUPER_ADMIN"] },
-  { label: "Data Watch",     href: "/organizer/data-watch",     icon: ShieldAlert,    roles: ["SUPER_ADMIN", "ADMIN"] },
-];
+import { ORGANIZER_NAV as NAV, navForRole } from "./nav";
 
 export function Sidebar({ userName, role }: { userName: string; role: OrganizerRole }) {
   const pathname = usePathname();
@@ -105,15 +30,13 @@ export function Sidebar({ userName, role }: { userName: string; role: OrganizerR
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-white">
-      <div className="px-6 py-5 border-b">
+      <Link href="/organizer" className="block px-6 py-5 border-b hover:bg-zinc-50 transition-colors">
         <p className="text-lg font-bold">Techlympics</p>
         <p className="text-xs text-muted-foreground">Organizer Portal</p>
-      </div>
+      </Link>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {NAV
-          .filter((item) => role === "VIEWER" ? item.href === "/organizer/dashboard" : (!item.roles || item.roles.includes(role)))
-          .map((item) => {
+        {navForRole(role).map((item) => {
           const Icon = item.icon;
 
           // ── Parent with sub-items ───────────────────────────────────────

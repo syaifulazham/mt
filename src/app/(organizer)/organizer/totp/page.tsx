@@ -30,7 +30,7 @@ export default function TotpPage() {
       return;
     }
 
-    router.push("/organizer/dashboard");
+    router.push("/organizer");
     router.refresh();
   }
 

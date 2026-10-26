@@ -19,6 +19,7 @@ import { DeleteDialog } from "@/components/organizer/reference-data/DeleteDialog
 import { EventFlowGraph } from "@/components/organizer/events/EventFlowGraph";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
+import { PINNED_EVENTS_KEY } from "./pinnedEvents";
 
 const MapPicker = lazy(() =>
   import("./MapPicker").then((m) => ({ default: m.MapPicker }))
@@ -37,7 +38,7 @@ type PrerequisiteEvent = { id: string; name: string; slug: string; status: strin
 
 // Event list panel preferences (localStorage, per browser)
 const LIST_WIDTH_KEY     = "mt.organizer.events.listWidth";
-const PINNED_KEY         = "mt.organizer.events.pinned";
+const PINNED_KEY         = PINNED_EVENTS_KEY;
 const LIST_WIDTH_DEFAULT = 256;
 const LIST_WIDTH_MIN     = 200;
 const LIST_WIDTH_MAX     = 560;

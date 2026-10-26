@@ -42,7 +42,7 @@ export default function ChangePasswordPage() {
 
     if (isForced) {
       await update({ forcePasswordChange: false });
-      window.location.replace("/organizer/dashboard");
+      window.location.replace("/organizer");
     } else {
       setSuccess(true);
       setCurrentPassword(""); setPassword(""); setConfirm("");
