@@ -21,7 +21,10 @@ export async function GET(
             select: {
               id: true, maxSlots: true, walkInSlotSchedule: true,
               competition: {
-                select: { id: true, code: true, name: true, participationType: true },
+                select: {
+                  id: true, code: true, name: true, participationType: true,
+                  targetGroups: { select: { targetGroup: { select: { schoolLevel: true } } } },
+                },
               },
               _count: { select: { registrations: true } },
             },

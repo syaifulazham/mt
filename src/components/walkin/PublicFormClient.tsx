@@ -97,9 +97,30 @@ function TechHeader({ compact = false }: { compact?: boolean }) {
 type Competition = {
   id: string; maxSlots: number;
   walkInSlotSchedule: SlotScheduleConfig | null;
-  competition: { id: string; code: string; name: string; participationType: string };
+  competition: {
+    id: string; code: string; name: string; participationType: string;
+    targetGroups?: { targetGroup: { schoolLevel: string } }[];
+  };
   _count: { registrations: number };
 };
+
+// Target group levels (Reference Data → Target Groups), in Bahasa Malaysia
+const LEVEL_LABEL: Record<string, string> = {
+  KINDERGARTEN: "Pra-Sekolah",
+  PRIMARY:      "Sekolah Rendah",
+  SECONDARY:    "Sekolah Menengah",
+  YOUTH:        "Belia",
+  HIGHER:       "Pengajian Tinggi",
+};
+const LEVEL_ORDER = Object.keys(LEVEL_LABEL);
+
+/** Distinct levels of a competition's target groups, in school order. */
+function competitionLevels(c: Competition["competition"]): string[] {
+  const levels = new Set((c.targetGroups ?? []).map(t => t.targetGroup.schoolLevel.toUpperCase()));
+  return [...levels]
+    .sort((a, b) => (LEVEL_ORDER.indexOf(a) + 1 || 99) - (LEVEL_ORDER.indexOf(b) + 1 || 99))
+    .map(l => LEVEL_LABEL[l] ?? l);
+}
 type FormInfo = {
   endpointId: string; label: string | null;
   uniqueParticipation: boolean;
@@ -469,22 +490,33 @@ export function PublicFormClient({ slug }: { slug: string }) {
                           : "border-pink-500/10 hover:border-pink-500/30 hover:scale-[1.01]"
                       }`}
                       style={{ background: blocked ? "rgba(255,255,255,.02)" : "rgba(236,72,153,.04)", backdropFilter: "blur(8px)", animationDelay: `${i * 0.06}s` }}>
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded"
-                          style={{ background: "rgba(236,72,153,.1)", color: B.pinkLt }}>
-                          {c.competition.code}
-                        </span>
-                        {blocked ? (
-                          <span className="text-[9px] font-bold tracking-widest uppercase text-red-400">
-                            Sudah didaftarkan
-                          </span>
-                        ) : c.walkInSlotSchedule ? (
-                          <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: B.pink }}>
-                            Tempahan slot
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="text-sm font-bold text-white leading-snug">{c.competition.name}</p>
+                      {(blocked || c.walkInSlotSchedule) && (
+                        <div className="flex items-center justify-end">
+                          {blocked ? (
+                            <span className="text-[9px] font-bold tracking-widest uppercase text-red-400">
+                              Sudah didaftarkan
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: B.pink }}>
+                              Tempahan slot
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-sm font-bold text-white leading-snug">
+                        <span className="font-mono mr-1.5" style={{ color: B.pinkLt }}>{c.competition.code}</span>
+                        {c.competition.name}
+                      </p>
+                      {competitionLevels(c.competition).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {competitionLevels(c.competition).map(l => (
+                            <span key={l} className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                              style={{ background: "rgba(255,255,255,.06)", color: "rgba(255,255,255,.7)", border: "1px solid rgba(255,255,255,.1)" }}>
+                              {l}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <p className="text-[11px]" style={{ color: "rgba(255,255,255,.4)" }}>
                           {c._count.registrations} daftar{c.maxSlots > 0 ? ` / ${c.maxSlots} slot` : ""}
