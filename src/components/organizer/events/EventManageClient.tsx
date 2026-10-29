@@ -4,10 +4,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
-  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles,
+  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles, Medal,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
+// Events whose results roll up into a medal tally by state.
+const MEDAL_TALLY_SCOPES = ["NATIONAL", "ONLINE_NATIONAL"];
 const ONLINE_SCOPES = ["ONLINE_NATIONAL", "ONLINE_STATE", "ONLINE_ZONE", "ONLINE_OPEN"];
 
 // Canvas geometry
@@ -30,6 +32,8 @@ type Module = {
   bg: string;
   border: string;
   href?: string;
+  /** Extra buttons on the card, each to a page under the event's manage path. */
+  actions?: { label: string; href: string; icon: React.ElementType }[];
   pos: { x: number; y: number };
 };
 
@@ -364,7 +368,18 @@ function ModuleCard({ mod, eventSlug }: { mod: Module; eventSlug: string }) {
         <h3 className="text-sm font-semibold text-zinc-800">{mod.title}</h3>
         <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{mod.description}</p>
       </div>
-      <div className="absolute top-3 right-3">
+      {mod.actions && (
+        // Above the card's full-size link so the buttons get their own clicks.
+        <div className="relative z-10 flex flex-wrap gap-1.5">
+          {mod.actions.map(({ label, href, icon: ActionIcon }) => (
+            <Link key={href} href={`/organizer/events/${eventSlug}/manage/${href}`}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100">
+              <ActionIcon className="h-3 w-3" /> {label}
+            </Link>
+          ))}
+        </div>
+      )}
+      <div className="absolute top-3 right-3 pointer-events-none">
         <span className={`text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
           mod.href ? "bg-blue-100 text-blue-600" : "bg-zinc-100 text-zinc-400"
         }`}>
@@ -373,6 +388,20 @@ function ModuleCard({ mod, eventSlug }: { mod: Module; eventSlug: string }) {
       </div>
     </>
   );
+  // A link can't contain other links, so a card with action buttons is a div
+  // with its main link stretched underneath them.
+  if (mod.href && mod.actions) {
+    return (
+      <div
+        data-module={mod.href}
+        style={posStyle}
+        className={`relative rounded-xl border ${mod.border} bg-white p-5 flex flex-col gap-3 hover:shadow-md transition-shadow`}
+      >
+        <Link href={`/organizer/events/${eventSlug}/manage/${mod.href}`} aria-label={mod.title} className="absolute inset-0 rounded-xl" />
+        {inner}
+      </div>
+    );
+  }
   return mod.href ? (
     <Link
       href={`/organizer/events/${eventSlug}/manage/${mod.href}`}
@@ -447,6 +476,7 @@ export function EventManageClient({
   const start = fmtDate(event.startDate);
   const end   = fmtDate(event.endDate);
   const isOnline = ONLINE_SCOPES.includes(event.scope);
+  const hasMedalTally = MEDAL_TALLY_SCOPES.includes(event.scope);
 
   const mainModules = [
     ...MAIN_MODULES.filter(m =>
@@ -455,7 +485,9 @@ export function EventManageClient({
         m.href === "attendance/confirmed" ||
         m.href === "attendance/dashboard"
       )),
-    ),
+    ).map(m => (m.href === "results" && hasMedalTally
+      ? { ...m, actions: [{ label: "Medal Tally", href: "results/medals", icon: Medal }] }
+      : m)),
     // Shares its slot with the Webcraft card; when both show, it moves one column left.
     ...(isOnline ? [] : [hasWebcraft
       ? { ...INDIVIDUAL_ATTENDANCE_MODULE, pos: { x: COL[0], y: ROW[2] } }
