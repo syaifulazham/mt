@@ -24,6 +24,7 @@ import {
   FileBadge,
   BadgeCheck,
   GraduationCap,
+  LayoutTemplate,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -103,6 +104,8 @@ export const ORGANIZER_NAV: NavItem[] = [
         description: "Post announcements to participants." },
       { label: "Competition Mapping", href: "/organizer/landing/mapping", icon: Map,
         description: "Map competitions to target groups for the public listing." },
+      { label: "Custom Sections", href: "/organizer/landing/sections", icon: LayoutTemplate,
+        description: "Build your own landing page sections and set the order of all sections." },
     ],
   },
   {

@@ -8,6 +8,9 @@ import { db } from "@/lib/db";
 import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 import { Images, ChevronRight } from "lucide-react";
+import { Fragment, type ReactNode } from "react";
+import { CustomSection, CUSTOM_SECTION_CSS } from "@/components/landing/CustomSection";
+import { LAYOUT_SETTING_KEY, parseLayout, resolveOrder, toSectionDto, type FixedKey } from "@/lib/landingSections";
 
 export const metadata: Metadata = {
   title: "Malaysia Techlympics 2026",
@@ -55,7 +58,7 @@ export default async function LandingPage({
   const { locale } = await params;
 
   const { userId } = await auth().catch(() => ({ userId: null }));
-  const [manager, themes, galleries, newsArticles, t] = await Promise.all([
+  const [manager, themes, galleries, newsArticles, t, customRows, layoutSetting] = await Promise.all([
     userId
       ? db.managerProfile.findUnique({
           where: { clerkUserId: userId },
@@ -88,7 +91,24 @@ export default async function LandingPage({
       take: 6,
     }),
     getTranslations({ locale, namespace: "landing" }),
+    db.landingSection.findMany({ where: { isPublished: true }, orderBy: { createdAt: "asc" } }),
+    db.appSetting.findUnique({ where: { key: LAYOUT_SETTING_KEY } }),
   ]);
+
+  // ── Section order: fixed + published custom sections ────────────────────────
+  const customSections = customRows.map(toSectionDto);
+  const customById = new Map(customSections.map((c) => [c.id, c]));
+  const layout = parseLayout(layoutSetting?.value);
+  const hidden = new Set(layout.hidden);
+  const pageOrder = resolveOrder(layout, customSections.map((c) => c.id)).filter((k) => !hidden.has(k));
+  // Top navigation follows the page order.
+  const navLinks = pageOrder.flatMap((key): { href: string; label: string }[] => {
+    if (key === "fixed:categories") return [{ href: "#categories", label: t("navCompetition") }];
+    if (key === "fixed:news") return [{ href: "#news", label: t("navNews") }, { href: "#announcements", label: t("navAnnouncements") }];
+    if (key === "fixed:gallery") return [{ href: "#gallery", label: t("navGallery") }];
+    const sec = customById.get(key.slice(7));
+    return sec?.navLabel ? [{ href: `#s-${sec.id}`, label: sec.navLabel }] : [];
+  });
 
   const clerkUser = userId && !manager ? await currentUser() : null;
   const clerkDisplayName =
@@ -104,6 +124,277 @@ export default async function LandingPage({
   // eslint-disable-next-line react-hooks/purity
   const shuffled = [...galleryPhotos].sort(() => Math.random() - 0.5).slice(0, 5);
   const carouselImages = shuffled.map((p) => p.thumbUrl);
+
+  // Fixed sections, placed in the order set under Landing Page → Custom Sections.
+  const fixedSections: Record<FixedKey, ReactNode> = {
+    categories: <>
+        {/* ── CATEGORIES ──────────────────────────────────────────────────────── */}
+        <section id="categories" style={{ background: "#f8fafc", padding: "clamp(48px,8vw,96px) 0" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
+            <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
+              {t("competitionTracksLabel")}
+            </p>
+            <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
+              {t.rich("tagline", {
+                golden: (chunks) => <span style={{ color: "#003893" }}>{chunks}</span>,
+              })}
+              <br />
+              <span style={{ color: "#CC0001" }}>{t("tagline2")}</span>
+            </h2>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 16 }}>
+              {/* ── Competition Mapping featured card ── */}
+              <Link
+                href="/mapping"
+                style={{ textDecoration: "none" }}
+              >
+                <div
+                  style={{
+                    background: "linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f2044 100%)",
+                    border: "1px solid rgba(255,215,0,0.25)",
+                    borderRadius: 12,
+                    padding: "28px 24px",
+                    position: "relative",
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    transition: "box-shadow 0.25s, border-color 0.25s, transform 0.25s",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                  className="mapping-feat-card"
+                >
+                  {/* Background dot grid */}
+                  <div style={{
+                    position: "absolute", inset: 0, opacity: 0.06,
+                    backgroundImage: "radial-gradient(circle, #FFD700 1px, transparent 1px)",
+                    backgroundSize: "20px 20px",
+                  }} />
+                  {/* Gold accent bar */}
+                  <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: 3, background: "linear-gradient(90deg, #FFD700, #f59e0b, #FFD700)" }} />
+
+                  <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", flex: 1 }}>
+                    {/* Icon */}
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "#FFD700", marginBottom: 6 }}>
+                      {t("mappingTitle")}
+                    </div>
+                    <div style={{ fontSize: "0.78rem", lineHeight: 1.6, color: "rgba(255,255,255,0.6)", marginBottom: 20, flex: 1 }}>
+                      {t("mappingDescription")}
+                    </div>
+
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.75rem", fontWeight: 700, color: "#FFD700", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "auto" }}>
+                      {t("viewFullMap")}
+                      <ChevronRight size={14} />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+
+              {themes.map((c) => {
+                const accent = c.color ?? "#003893";
+                return (
+                  <div key={c.id} className="theme-card">
+                    <div className="theme-card-bar" style={{ background: accent }} />
+                    {renderThemeIcon(c.logoUrl, c.name)}
+                    <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "#111827", marginBottom: 6 }}>
+                      {c.name}
+                    </div>
+                    {c.description && (
+                      <div style={{ fontSize: "0.78rem", lineHeight: 1.55, color: "#6b7280", marginBottom: 14 }}>
+                        {c.description}
+                      </div>
+                    )}
+
+                    {/* Competition list */}
+                    {c.competitions.length > 0 && (
+                      <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+                        {c.competitions.map((comp) => {
+                          const tg = comp.targetGroups[0]?.targetGroup;
+                          const pill = tg ? levelPill(tg.schoolLevel) : LEVEL_PILL.PRIMARY;
+                          return (
+                            <li key={comp.id}>
+                              <Link
+                                href={`/competition/${comp.id}`}
+                                style={{ display: "flex", alignItems: "flex-start", gap: 8, textDecoration: "none", padding: "6px 8px", borderRadius: 6, background: "#f9fafb", border: "1px solid #f3f4f6", transition: "background 0.15s" }}
+                                className="comp-link"
+                              >
+                                <span style={{ flexShrink: 0, fontSize: "0.65rem", fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: pill.bg, color: pill.color, marginTop: 1, whiteSpace: "nowrap" }}>
+                                  {pill.label}
+                                </span>
+                                <span style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.4, fontWeight: 500 }}>
+                                  <span style={{ color: "#9ca3af", marginRight: 4, fontWeight: 600 }}>{comp.code}</span>
+                                  {comp.name}
+                                </span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    {/* See more */}
+                    <Link
+                      href={`/theme/${c.id}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.75rem", fontWeight: 700, color: accent, textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase", marginTop: "auto" }}
+                    >
+                      {c._count.competitions > 5 ? `${t("morePlus", { count: c._count.competitions - 5 })} · ` : ""}{t("seeMore")} <ChevronRight size={14} />
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      </>,
+    news: <>
+        {/* ── NEWS ────────────────────────────────────────────────────────────── */}
+        {newsArticles.length > 0 && (
+          <section id="news" style={{ background: "#f1f5f9", padding: "clamp(48px,8vw,96px) 0" }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
+              <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
+                {t("navNews")}
+              </p>
+              <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
+                {t("newsHeading")} <span style={{ color: "#003893" }}>{t("newsLatest")}</span>
+              </h2>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 20 }}>
+                {newsArticles.map((article) => (
+                  <div
+                    key={article.id}
+                    className="news-card"
+                    style={{ background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", overflow: "hidden", display: "flex", flexDirection: "column", transition: "box-shadow 0.2s, transform 0.2s" }}
+                  >
+                    {/* Cover image */}
+                    {article.images?.[0] && (
+                      <div style={{ aspectRatio: "16/9", overflow: "hidden", background: "#f3f4f6" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={article.images[0]} alt={article.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      </div>
+                    )}
+
+                    <div style={{ padding: "20px 24px", flex: 1, display: "flex", flexDirection: "column" }}>
+                      {/* Source + date */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                        {article.source && (
+                          <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#dbeafe", color: "#1e40af" }}>
+                            {article.source}
+                          </span>
+                        )}
+                        {article.publishedAt && (
+                          <span style={{ fontSize: "0.7rem", color: "#9ca3af", marginLeft: "auto" }}>
+                            {new Date(article.publishedAt).toLocaleDateString(locale === "ms" ? "ms-MY" : "en-MY", { day: "numeric", month: "short", year: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Title */}
+                      <h3 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", color: "#111827", marginBottom: 10, lineHeight: 1.35 }}>
+                        {article.title}
+                      </h3>
+
+                      {/* Content preview */}
+                      <p style={{ fontSize: "0.82rem", color: "#6b7280", lineHeight: 1.6, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
+                        {article.content}
+                      </p>
+
+                      {/* Source link */}
+                      {article.sourceUrl && (
+                        <a
+                          href={article.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 14, fontSize: "0.75rem", fontWeight: 700, color: "#003893", textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase" }}
+                        >
+                          {t("readFull")} <ChevronRight size={13} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+      </>,
+    gallery: <>
+        {/* ── GALLERY ─────────────────────────────────────────────────────────── */}
+        {galleries.length > 0 && (
+          <section id="gallery" style={{ background: "#ffffff", padding: "clamp(48px,8vw,96px) 0" }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
+              <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
+                {t("navGallery")}
+              </p>
+              <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
+                {t("galleryHeading")} <span style={{ color: "#CC0001" }}>{t("galleryPhotos")}</span>
+              </h2>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 20 }}>
+                {galleries.map((g) => {
+                  const thumb = g.coverUrl ?? g.photos[0]?.thumbUrl ?? null;
+                  return (
+                    <Link key={g.id} href={`/gallery/${g.id}`} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+                    <div className="gallery-card" style={{ height: "100%" }}>
+                      {/* Cover image */}
+                      <div style={{ aspectRatio: "16/9", background: "#f3f4f6", overflow: "hidden", position: "relative" }}>
+                        {thumb ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={thumb}
+                            alt={g.title}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }}
+                            className="gallery-cover-img"
+                          />
+                        ) : (
+                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Images style={{ width: 36, height: 36, color: "#d1d5db" }} />
+                          </div>
+                        )}
+                        {/* Year badge */}
+                        <div
+                          style={{
+                            position: "absolute", top: 12, right: 12,
+                            background: "rgba(0,56,147,0.85)", backdropFilter: "blur(4px)",
+                            color: "#fff", fontSize: "0.7rem", fontWeight: 700,
+                            letterSpacing: "0.1em", padding: "4px 10px", borderRadius: 20,
+                          }}
+                        >
+                          {g.year}
+                        </div>
+                      </div>
+
+                      {/* Info */}
+                      <div style={{ padding: "16px 20px 20px" }}>
+                        <p style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", color: "#111827", marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {g.title}
+                        </p>
+                        {g.description && (
+                          <p style={{ fontSize: "0.8rem", color: "#6b7280", lineHeight: 1.55, marginBottom: 10, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                            {g.description}
+                          </p>
+                        )}
+                        <p style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
+                          {g._count.photos > 0 ? t("photoCount", { count: g._count.photos }) : t("noPhotos")}
+                        </p>
+                      </div>
+                    </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+      </>,
+  };
 
   return (
     <>
@@ -190,6 +481,7 @@ export default async function LandingPage({
           to   { opacity: 1; transform: translateY(0); }
         }
         .hero-content { animation: fadein 0.8s ease both; }
+        ${CUSTOM_SECTION_CSS}
       `}</style>
 
       <div style={{ fontFamily: "'Rajdhani', sans-serif", background: "#f8fafc", color: "#111827", minHeight: "100vh", overflowX: "hidden" }}>
@@ -217,10 +509,9 @@ export default async function LandingPage({
           </Link>
 
           <ul className="hidden md:flex gap-8 list-none m-0 p-0">
-            <li><a href="#categories" className="nav-link">{t("navCompetition")}</a></li>
-            <li><a href="#news" className="nav-link">{t("navNews")}</a></li>
-            <li><a href="#announcements" className="nav-link">{t("navAnnouncements")}</a></li>
-            <li><a href="#gallery" className="nav-link">{t("navGallery")}</a></li>
+            {navLinks.map((l) => (
+              <li key={l.href}><a href={l.href} className="nav-link">{l.label}</a></li>
+            ))}
           </ul>
 
           <div className="flex items-center gap-4">
@@ -400,271 +691,13 @@ export default async function LandingPage({
           </div>
         </section>
 
-        {/* ── CATEGORIES ──────────────────────────────────────────────────────── */}
-        <section id="categories" style={{ background: "#f8fafc", padding: "clamp(48px,8vw,96px) 0" }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
-            <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
-              {t("competitionTracksLabel")}
-            </p>
-            <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
-              {t.rich("tagline", {
-                golden: (chunks) => <span style={{ color: "#003893" }}>{chunks}</span>,
-              })}
-              <br />
-              <span style={{ color: "#CC0001" }}>{t("tagline2")}</span>
-            </h2>
+        {pageOrder.map((key) => {
+          if (key.startsWith("fixed:")) return <Fragment key={key}>{fixedSections[key.slice(6) as FixedKey]}</Fragment>;
+          const sec = customById.get(key.slice(7));
+          return sec ? <CustomSection key={key} {...sec} /> : null;
+        })}
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 16 }}>
-              {/* ── Competition Mapping featured card ── */}
-              <Link
-                href="/mapping"
-                style={{ textDecoration: "none" }}
-              >
-                <div
-                  style={{
-                    background: "linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f2044 100%)",
-                    border: "1px solid rgba(255,215,0,0.25)",
-                    borderRadius: 12,
-                    padding: "28px 24px",
-                    position: "relative",
-                    overflow: "hidden",
-                    cursor: "pointer",
-                    transition: "box-shadow 0.25s, border-color 0.25s, transform 0.25s",
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                  className="mapping-feat-card"
-                >
-                  {/* Background dot grid */}
-                  <div style={{
-                    position: "absolute", inset: 0, opacity: 0.06,
-                    backgroundImage: "radial-gradient(circle, #FFD700 1px, transparent 1px)",
-                    backgroundSize: "20px 20px",
-                  }} />
-                  {/* Gold accent bar */}
-                  <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: 3, background: "linear-gradient(90deg, #FFD700, #f59e0b, #FFD700)" }} />
-
-                  <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", flex: 1 }}>
-                    {/* Icon */}
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                        </svg>
-                      </div>
-                    </div>
-
-                    <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "#FFD700", marginBottom: 6 }}>
-                      {t("mappingTitle")}
-                    </div>
-                    <div style={{ fontSize: "0.78rem", lineHeight: 1.6, color: "rgba(255,255,255,0.6)", marginBottom: 20, flex: 1 }}>
-                      {t("mappingDescription")}
-                    </div>
-
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.75rem", fontWeight: 700, color: "#FFD700", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "auto" }}>
-                      {t("viewFullMap")}
-                      <ChevronRight size={14} />
-                    </div>
-                  </div>
-                </div>
-              </Link>
-
-              {themes.map((c) => {
-                const accent = c.color ?? "#003893";
-                return (
-                  <div key={c.id} className="theme-card">
-                    <div className="theme-card-bar" style={{ background: accent }} />
-                    {renderThemeIcon(c.logoUrl, c.name)}
-                    <div style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "#111827", marginBottom: 6 }}>
-                      {c.name}
-                    </div>
-                    {c.description && (
-                      <div style={{ fontSize: "0.78rem", lineHeight: 1.55, color: "#6b7280", marginBottom: 14 }}>
-                        {c.description}
-                      </div>
-                    )}
-
-                    {/* Competition list */}
-                    {c.competitions.length > 0 && (
-                      <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px", display: "flex", flexDirection: "column", gap: 6 }}>
-                        {c.competitions.map((comp) => {
-                          const tg = comp.targetGroups[0]?.targetGroup;
-                          const pill = tg ? levelPill(tg.schoolLevel) : LEVEL_PILL.PRIMARY;
-                          return (
-                            <li key={comp.id}>
-                              <Link
-                                href={`/competition/${comp.id}`}
-                                style={{ display: "flex", alignItems: "flex-start", gap: 8, textDecoration: "none", padding: "6px 8px", borderRadius: 6, background: "#f9fafb", border: "1px solid #f3f4f6", transition: "background 0.15s" }}
-                                className="comp-link"
-                              >
-                                <span style={{ flexShrink: 0, fontSize: "0.65rem", fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: pill.bg, color: pill.color, marginTop: 1, whiteSpace: "nowrap" }}>
-                                  {pill.label}
-                                </span>
-                                <span style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.4, fontWeight: 500 }}>
-                                  <span style={{ color: "#9ca3af", marginRight: 4, fontWeight: 600 }}>{comp.code}</span>
-                                  {comp.name}
-                                </span>
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-
-                    {/* See more */}
-                    <Link
-                      href={`/theme/${c.id}`}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.75rem", fontWeight: 700, color: accent, textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase", marginTop: "auto" }}
-                    >
-                      {c._count.competitions > 5 ? `${t("morePlus", { count: c._count.competitions - 5 })} · ` : ""}{t("seeMore")} <ChevronRight size={14} />
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* ── NEWS ────────────────────────────────────────────────────────────── */}
-        {newsArticles.length > 0 && (
-          <section id="news" style={{ background: "#f1f5f9", padding: "clamp(48px,8vw,96px) 0" }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
-              <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
-                {t("navNews")}
-              </p>
-              <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
-                {t("newsHeading")} <span style={{ color: "#003893" }}>{t("newsLatest")}</span>
-              </h2>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 20 }}>
-                {newsArticles.map((article) => (
-                  <div
-                    key={article.id}
-                    className="news-card"
-                    style={{ background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", overflow: "hidden", display: "flex", flexDirection: "column", transition: "box-shadow 0.2s, transform 0.2s" }}
-                  >
-                    {/* Cover image */}
-                    {article.images?.[0] && (
-                      <div style={{ aspectRatio: "16/9", overflow: "hidden", background: "#f3f4f6" }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={article.images[0]} alt={article.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      </div>
-                    )}
-
-                    <div style={{ padding: "20px 24px", flex: 1, display: "flex", flexDirection: "column" }}>
-                      {/* Source + date */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                        {article.source && (
-                          <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#dbeafe", color: "#1e40af" }}>
-                            {article.source}
-                          </span>
-                        )}
-                        {article.publishedAt && (
-                          <span style={{ fontSize: "0.7rem", color: "#9ca3af", marginLeft: "auto" }}>
-                            {new Date(article.publishedAt).toLocaleDateString(locale === "ms" ? "ms-MY" : "en-MY", { day: "numeric", month: "short", year: "numeric" })}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Title */}
-                      <h3 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", color: "#111827", marginBottom: 10, lineHeight: 1.35 }}>
-                        {article.title}
-                      </h3>
-
-                      {/* Content preview */}
-                      <p style={{ fontSize: "0.82rem", color: "#6b7280", lineHeight: 1.6, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
-                        {article.content}
-                      </p>
-
-                      {/* Source link */}
-                      {article.sourceUrl && (
-                        <a
-                          href={article.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 14, fontSize: "0.75rem", fontWeight: 700, color: "#003893", textDecoration: "none", letterSpacing: "0.04em", textTransform: "uppercase" }}
-                        >
-                          {t("readFull")} <ChevronRight size={13} />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ── GALLERY ─────────────────────────────────────────────────────────── */}
-        {galleries.length > 0 && (
-          <section id="gallery" style={{ background: "#ffffff", padding: "clamp(48px,8vw,96px) 0" }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px,5vw,40px)" }}>
-              <p style={{ fontSize: "0.7rem", letterSpacing: "0.35em", textTransform: "uppercase", color: "#003893", marginBottom: 10, fontWeight: 700 }}>
-                {t("navGallery")}
-              </p>
-              <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 800, fontSize: "clamp(1.6rem, 3vw, 2.6rem)", textTransform: "uppercase", color: "#111827", marginBottom: 48, lineHeight: 1.15 }}>
-                {t("galleryHeading")} <span style={{ color: "#CC0001" }}>{t("galleryPhotos")}</span>
-              </h2>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: 20 }}>
-                {galleries.map((g) => {
-                  const thumb = g.coverUrl ?? g.photos[0]?.thumbUrl ?? null;
-                  return (
-                    <Link key={g.id} href={`/gallery/${g.id}`} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
-                    <div className="gallery-card" style={{ height: "100%" }}>
-                      {/* Cover image */}
-                      <div style={{ aspectRatio: "16/9", background: "#f3f4f6", overflow: "hidden", position: "relative" }}>
-                        {thumb ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={thumb}
-                            alt={g.title}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s" }}
-                            className="gallery-cover-img"
-                          />
-                        ) : (
-                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Images style={{ width: 36, height: 36, color: "#d1d5db" }} />
-                          </div>
-                        )}
-                        {/* Year badge */}
-                        <div
-                          style={{
-                            position: "absolute", top: 12, right: 12,
-                            background: "rgba(0,56,147,0.85)", backdropFilter: "blur(4px)",
-                            color: "#fff", fontSize: "0.7rem", fontWeight: 700,
-                            letterSpacing: "0.1em", padding: "4px 10px", borderRadius: 20,
-                          }}
-                        >
-                          {g.year}
-                        </div>
-                      </div>
-
-                      {/* Info */}
-                      <div style={{ padding: "16px 20px 20px" }}>
-                        <p style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1rem", color: "#111827", marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {g.title}
-                        </p>
-                        {g.description && (
-                          <p style={{ fontSize: "0.8rem", color: "#6b7280", lineHeight: 1.55, marginBottom: 10, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                            {g.description}
-                          </p>
-                        )}
-                        <p style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                          {g._count.photos > 0 ? t("photoCount", { count: g._count.photos }) : t("noPhotos")}
-                        </p>
-                      </div>
-                    </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ── AI RIMAU CHAT ────────────────────────────────────────────────────── */}
+        {/* ── AI RIMAU CHAT (floating) ─────────────────────────────────────── */}
         <AiRimauChat />
 
         {/* ── FOOTER ──────────────────────────────────────────────────────────── */}

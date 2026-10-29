@@ -1345,6 +1345,26 @@ model NewsArticle {
   @@map("news_articles")
 }
 
+/**
+ * A custom section on the public landing page, built from blocks (see
+ * src/lib/landingSections.ts). Where it sits relative to the fixed sections is
+ * kept in app_settings under "landing_layout".
+ */
+model LandingSection {
+  id          String   @id @default(cuid())
+  title       String
+  eyebrow     String?
+  navLabel    String? // shown in the top navigation when set
+  background  String   @default("white")
+  backdrop    Json? // background image + colour/gradient fill, see landingSections.ts
+  blocks      Json     @default("[]")
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("landing_sections")
+}
+
 model TeamEvent {
   id         String    @id @default(cuid())
   teamId     String
