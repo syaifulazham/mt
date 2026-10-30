@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { vibeBlocksConfigured, vibeBlocksQueryResults, parseVibeBlocksToken, type VibeBlocksResultEntry } from "@/lib/vibeblocks";
+import { vibeBlocksConfigured, vibeBlocksQueryAllResults, vibeBlocksErrorMessage, parseVibeBlocksToken, type VibeBlocksError } from "@/lib/vibeblocks";
 
 // GET /api/v2/organizer/events/[id]/walkin/[wicId]/vibeblocks-results
 // Queries VibeBlocks for results of all registered entries in this walk-in competition.
@@ -14,11 +14,12 @@ export async function GET(
   if (!vibeBlocksConfigured())
     return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED", message: "VibeBlocks API tidak dikonfigurasi." }, { status: 400 });
 
-  const { wicId } = await params;
+  const { id, wicId } = await params;
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId },
     select: {
+      eventId: true,
       viblockChallengeId: true,
       registrations: {
         where: { viblockToken: { not: null } },
@@ -30,7 +31,7 @@ export async function GET(
       },
     },
   });
-  if (!wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (!wic || wic.eventId !== id) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (!wic.viblockChallengeId)
     return NextResponse.json({ error: "NO_EVENT_CREATED", message: "Acara VibeBlocks belum dicipta." }, { status: 400 });
 
@@ -44,15 +45,11 @@ export async function GET(
   if (entryIds.length === 0) return NextResponse.json({ data: [], missing: [] });
 
   try {
-    // Batch in chunks to stay within API limits
-    const CHUNK = 100;
-    const results: VibeBlocksResultEntry[] = [];
-    const missing: string[] = [];
-    for (let i = 0; i < entryIds.length; i += CHUNK) {
-      const res = await vibeBlocksQueryResults(wic.viblockChallengeId, entryIds.slice(i, i + CHUNK));
-      results.push(...res.results);
-      missing.push(...res.missing_entry_ids);
-    }
+    // One query for every entry: VibeBlocks ranks only within the IDs sent
+    // together, so splitting them would restart the ranking in each batch.
+    const res = await vibeBlocksQueryAllResults(wic.viblockChallengeId, entryIds);
+    const results = res.results;
+    const missing = res.missing_entry_ids;
 
     const data = results
       .map(r => {
@@ -81,7 +78,8 @@ export async function GET(
 
     return NextResponse.json({ data, missing: missing.map(id => byEntryId.get(id)?.participant.name ?? id) });
   } catch (e: unknown) {
-    const err = e as { message?: string; status?: number };
-    return NextResponse.json({ error: err.message ?? "VibeBlocks API error" }, { status: err.status ?? 502 });
+    const err = e as VibeBlocksError;
+    console.error("[vibeblocks] results query failed:", err.message, "status:", err.status, "code:", err.code);
+    return NextResponse.json({ error: err.code ?? "VIBEBLOCKS_ERROR", message: vibeBlocksErrorMessage(e) }, { status: 502 });
   }
 }

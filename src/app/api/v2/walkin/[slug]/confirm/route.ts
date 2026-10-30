@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { viblockCompetitionRegister, viblockConfigured } from "@/lib/viblock";
 import {
-  vibeBlocksConfigured, vibeBlocksRegisterEntry,
-  generateEntryToken, encodeVibeBlocksToken, parseVibeBlocksToken,
+  vibeBlocksConfigured, vibeBlocksRegisterFreshEntry,
+  encodeVibeBlocksToken, parseVibeBlocksToken,
 } from "@/lib/vibeblocks";
 import {
   droneConfigured, droneRegisterParticipant, encodeDroneToken, parseDroneToken,
@@ -94,13 +94,12 @@ export async function POST(
       }
     } else if (!viblockToken && reg.walkInCompetition?.useVibeblocks && vibeBlocksConfigured() && reg.walkInCompetition.viblockChallengeId) {
       try {
-        const entryToken = generateEntryToken();
-        const vRes = await vibeBlocksRegisterEntry(reg.walkInCompetition.viblockChallengeId, {
-          entryToken,
+        const vRes = await vibeBlocksRegisterFreshEntry(reg.walkInCompetition.viblockChallengeId, {
+          walkInCompetitionId: reg.walkInCompetitionId,
           partnerReference: registrationId,
         });
-        viblockToken = encodeVibeBlocksToken(entryToken, vRes.entry_id);
-        vibeBlocksToken = entryToken;
+        viblockToken = encodeVibeBlocksToken(vRes.entryToken, vRes.entry_id);
+        vibeBlocksToken = vRes.entryToken;
       } catch (e) {
         console.error("[vibeblocks] register entry on confirm failed:", e);
       }

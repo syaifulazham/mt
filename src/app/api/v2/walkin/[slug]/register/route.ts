@@ -3,8 +3,7 @@ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { viblockCompetitionRegister, viblockConfigured } from "@/lib/viblock";
 import {
-  vibeBlocksConfigured, vibeBlocksRegisterEntry,
-  generateEntryToken, encodeVibeBlocksToken,
+  vibeBlocksConfigured, vibeBlocksRegisterFreshEntry, encodeVibeBlocksToken,
 } from "@/lib/vibeblocks";
 import {
   droneConfigured, droneRegisterParticipant, encodeDroneToken,
@@ -116,17 +115,8 @@ export async function POST(
       console.error("[viblock] competition register failed:", e);
     }
   } else if (wic.useVibeblocks && vibeBlocksConfigured() && wic.viblockChallengeId) {
-    try {
-      const entryToken = generateEntryToken();
-      const vRes = await vibeBlocksRegisterEntry(wic.viblockChallengeId, {
-        entryToken,
-        partnerReference: undefined, // reg id not yet known; organizer can set it later
-      });
-      viblockToken = encodeVibeBlocksToken(entryToken, vRes.entry_id);
-      vibeBlocksToken = entryToken;
-    } catch (e) {
-      console.error("[vibeblocks] register entry failed:", e);
-    }
+    // Registered with VibeBlocks after the row exists, so that its id can be
+    // sent as partner_reference (contract §10.5).
   } else if (wic.useDronearena && droneConfigured()) {
     try {
       const sectorCustomId = (participant.contingentId ?? "").slice(-16);
@@ -177,6 +167,20 @@ export async function POST(
       },
       select: { id: true, status: true, sessionNumber: true, slotNumber: true },
     });
+    if (wic.useVibeblocks && vibeBlocksConfigured() && wic.viblockChallengeId) {
+      try {
+        const vRes = await vibeBlocksRegisterFreshEntry(wic.viblockChallengeId, {
+          walkInCompetitionId: wic.id,
+          partnerReference: reg.id,
+        });
+        viblockToken = encodeVibeBlocksToken(vRes.entryToken, vRes.entry_id);
+        await db.walkInRegistration.update({ where: { id: reg.id }, data: { viblockToken } });
+        vibeBlocksToken = vRes.entryToken;
+      } catch (e) {
+        // The registration stands; the organizer can register the token later.
+        console.error("[vibeblocks] register entry failed:", e);
+      }
+    }
     return NextResponse.json({ data: { ...reg, viblockToken, vibeBlocksToken, droneToken } }, { status: 201 });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
