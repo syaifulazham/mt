@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   FolderOpen, FileText, Plus, Upload, Trash2, Save,
-  RefreshCw, ChevronRight, ChevronDown, Eye, Edit3, X,
+  RefreshCw, ChevronRight, ChevronDown, Eye, Edit3, X, Loader2, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,23 @@ type KbDetail = KbItem & { content: string };
 
 type FolderNode = { name: string; path: string; files: KbItem[]; open: boolean };
 
+type Draft = {
+  key: string;
+  title: string;
+  path: string;
+  content: string;
+  kind: "pdf" | "image" | "word" | "sheet" | "text";
+  fileName: string;
+};
+
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+
+const UPLOAD_ACCEPT =
+  ".pdf,.docx,.xlsx,.xls,.ods,.csv,.png,.jpg,.jpeg,.webp,.heic,.heif,.md,.markdown,.txt";
+
+const KIND_LABEL: Record<Draft["kind"], string> = {
+  pdf: "PDF", image: "imej", word: "Word", sheet: "hamparan", text: "teks",
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -146,7 +162,13 @@ export function KnowledgeBaseClient({ role }: { role: OrganizerRole }) {
   const [newPath,  setNewPath]  = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [err,      setErr]      = useState("");
+  const [drafts,   setDrafts]   = useState<Draft[]>([]);
+  const [importing, setImporting] = useState<{ name: string; done: number; total: number } | null>(null);
+  const [importErrs, setImportErrs] = useState<string[]>([]);
+  const [draftMode, setDraftMode] = useState<"edit" | "view">("view");
+  const [draftErr, setDraftErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const draft = drafts[0] ?? null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -217,38 +239,61 @@ export function KnowledgeBaseClient({ role }: { role: OrganizerRole }) {
     finally { setSaving(false); }
   }
 
-  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const text = reader.result as string;
-      const titleMatch = text.match(/^# (.+)$/m);
-      const title = titleMatch?.[1] ?? file.name.replace(/\.md$/, "");
-      const path  = file.name.replace(/\.md$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      setSaving(true);
+  // Each uploaded file is converted on the server into a Markdown draft.
+  // Drafts are reviewed one at a time and only saved when the organiser clicks Simpan.
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setImportErrs([]);
+    for (const [i, file] of files.entries()) {
+      setImporting({ name: file.name, done: i, total: files.length });
       try {
-        const res = await fetch("/api/v2/organizer/knowledge-base", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path, title, content: text }),
-        });
-        if (!res.ok) {
-          // try update if path exists — fetch list to find by path
-          const list = await (await fetch("/api/v2/organizer/knowledge-base")).json();
-          const existing = (list.items as KbItem[]).find(i => i.path === path);
-          if (existing) {
-            await fetch(`/api/v2/organizer/knowledge-base/${existing.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ title, content: text }),
-            });
-          }
-        }
-        await load();
-      } finally { setSaving(false); e.target.value = ""; }
-    };
-    reader.readAsText(file);
+        const body = new FormData();
+        body.append("file", file);
+        const res = await fetch("/api/v2/organizer/knowledge-base/import", { method: "POST", body });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j.draft) throw new Error(j.message ?? `Ralat ${res.status}`);
+        setDrafts(prev => [...prev, { ...j.draft, key: `${Date.now()}-${i}-${file.name}` }]);
+      } catch (ex) {
+        setImportErrs(prev => [...prev, `${file.name}: ${ex instanceof Error ? ex.message : String(ex)}`]);
+      }
+    }
+    setImporting(null);
+    setDraftMode("view");
+  }
+
+  function updateDraft(patch: Partial<Draft>) {
+    setDrafts(prev => prev.length ? [{ ...prev[0], ...patch }, ...prev.slice(1)] : prev);
+  }
+
+  function discardDraft() {
+    setDrafts(prev => prev.slice(1));
+    setDraftErr(""); setDraftMode("view");
+  }
+
+  async function saveDraft() {
+    if (!draft) return;
+    if (!draft.path.trim() || !draft.title.trim()) { setDraftErr("Laluan dan tajuk diperlukan."); return; }
+    setSaving(true); setDraftErr("");
+    try {
+      const res = await fetch("/api/v2/organizer/knowledge-base", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: draft.path.trim(), title: draft.title.trim(), content: draft.content }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(String(j.detail ?? "").includes("Unique")
+          ? "Laluan ini sudah wujud. Tukar laluan dahulu."
+          : "Gagal menyimpan.");
+      }
+      const j = await res.json();
+      discardDraft();
+      await load();
+      if (drafts.length <= 1) await select(j.item);
+    } catch (ex) { setDraftErr(ex instanceof Error ? ex.message : String(ex)); }
+    finally { setSaving(false); }
   }
 
   function toggleFolder(name: string) {
@@ -273,15 +318,37 @@ export function KnowledgeBaseClient({ role }: { role: OrganizerRole }) {
               </button>
               <button
                 onClick={() => fileRef.current?.click()}
-                title="Muat naik .md"
-                className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500"
+                disabled={!!importing}
+                title="Muat naik dokumen (PDF, Word, Excel/CSV, imej, .md)"
+                className="h-6 w-6 flex items-center justify-center rounded hover:bg-zinc-100 text-zinc-500 disabled:opacity-40"
               >
                 <Upload className="h-3.5 w-3.5" />
               </button>
-              <input ref={fileRef} type="file" accept=".md" className="hidden" onChange={handleUpload} />
+              <input ref={fileRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUpload} />
             </div>
           )}
         </div>
+
+        {/* Import progress / errors */}
+        {importing && (
+          <div className="px-4 py-2 border-b bg-violet-50 text-[11px] text-violet-700 flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+            <span className="truncate">
+              Menukar {importing.name}{importing.total > 1 && ` (${importing.done + 1}/${importing.total})`}...
+            </span>
+          </div>
+        )}
+        {importErrs.length > 0 && (
+          <div className="px-4 py-2 border-b bg-red-50 text-[11px] text-red-600 space-y-0.5">
+            {importErrs.map(m => <p key={m}>{m}</p>)}
+            <button onClick={() => setImportErrs([])} className="underline text-red-500">Tutup</button>
+          </div>
+        )}
+        {drafts.length > 0 && (
+          <div className="px-4 py-2 border-b bg-amber-50 text-[11px] text-amber-700">
+            {drafts.length} draf menunggu semakan
+          </div>
+        )}
 
         {/* New file form */}
         {newOpen && (
@@ -312,7 +379,7 @@ export function KnowledgeBaseClient({ role }: { role: OrganizerRole }) {
           {loading ? (
             <p className="text-xs text-zinc-400 px-4 py-3">Memuatkan...</p>
           ) : items.length === 0 ? (
-            <p className="text-xs text-zinc-400 px-4 py-3">Tiada fail. Mula dengan + atau muat naik.</p>
+            <p className="text-xs text-zinc-400 px-4 py-3">Tiada fail. Mula dengan + atau muat naik dokumen.</p>
           ) : (
             folders.map(folder => (
               <div key={folder.name}>
@@ -359,7 +426,67 @@ export function KnowledgeBaseClient({ role }: { role: OrganizerRole }) {
 
       {/* ── Right: Editor / Preview ──────────────────────────── */}
       <main className="flex-1 flex flex-col overflow-hidden bg-zinc-50">
-        {!selected ? (
+        {draft ? (
+          <>
+            <div className="shrink-0 bg-white border-b px-5 py-2.5 flex items-start gap-2">
+              <div className="flex-1 min-w-0 space-y-1">
+                <Input
+                  value={draft.title}
+                  onChange={e => updateDraft({ title: e.target.value })}
+                  className="h-8 font-semibold"
+                  placeholder="Tajuk"
+                />
+                <Input
+                  value={draft.path}
+                  onChange={e => updateDraft({ path: e.target.value })}
+                  className="h-6 text-[10px] font-mono"
+                  placeholder="folder/nama-fail (cth: logistik/penginapan-zon-tengah)"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => setDraftMode(m => m === "edit" ? "view" : "edit")}
+                  className="h-7 text-xs gap-1.5">
+                  {draftMode === "edit" ? <><Eye className="h-3 w-3" /> Pratonton</> : <><Edit3 className="h-3 w-3" /> Edit</>}
+                </Button>
+                <Button size="sm" onClick={saveDraft} disabled={saving} className="h-7 text-xs gap-1.5">
+                  <Save className="h-3 w-3" /> {saving ? "Menyimpan..." : "Simpan"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={discardDraft}
+                  className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50 gap-1.5">
+                  <X className="h-3 w-3" /> Buang
+                </Button>
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-start gap-2 px-5 py-2 text-[11px] text-amber-800 bg-amber-50 border-b">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 mt-px" />
+              <span>
+                Draf daripada <strong>{draft.fileName}</strong> ({KIND_LABEL[draft.kind]}).
+                {draft.kind === "pdf" || draft.kind === "image" || draft.kind === "word"
+                  ? " Ditukar oleh AI, jadi semak tarikh, harga dan nombor telefon sebelum simpan."
+                  : " Semak kandungan sebelum simpan."}
+                {" "}Belum disimpan, dan chatbot hanya guna halaman yang disimpan.
+                {drafts.length > 1 && ` ${drafts.length - 1} lagi menunggu.`}
+              </span>
+            </div>
+
+            {draftErr && <p className="text-xs text-red-500 px-5 py-1 bg-red-50 border-b">{draftErr}</p>}
+
+            {draftMode === "edit" ? (
+              <textarea
+                value={draft.content}
+                onChange={e => updateDraft({ content: e.target.value })}
+                className="flex-1 resize-none bg-white border-none outline-none font-mono text-xs p-5 leading-relaxed"
+              />
+            ) : (
+              <div className="flex-1 overflow-y-auto px-8 py-6">
+                <div className="max-w-3xl mx-auto">
+                  <MdPreview content={draft.content} />
+                </div>
+              </div>
+            )}
+          </>
+        ) : !selected ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-400">
             <FileText className="h-12 w-12 text-zinc-200" />
             <p className="text-sm">Pilih fail di sebelah kiri atau cipta yang baharu.</p>
