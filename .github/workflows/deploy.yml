@@ -56,6 +56,8 @@ jobs:
           WALKIN_VIBEBLOCKS_API_KEY=${{ secrets.WALKIN_VIBEBLOCKS_API_KEY }}
           WALKIN_EPTIM_DRONE_URL=${{ secrets.WALKIN_EPTIM_DRONE_URL }}
           WALKIN_EPTIM_DRONE_API_KEY=${{ secrets.WALKIN_EPTIM_DRONE_API_KEY }}
+          TELEGRAM_LINK_SECRET=${{ secrets.TELEGRAM_LINK_SECRET }}
+          TELEGRAM_BOT_USERNAME=${{ secrets.TELEGRAM_BOT_USERNAME }}
           PORT=${{ secrets.PORT }}
           R2_ACCOUNT_ID=${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}

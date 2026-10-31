@@ -20,6 +20,7 @@ import {
   LogOut,
   Lock,
   UserCheck,
+  Send,
 } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -232,6 +233,13 @@ export function MobileManagerNav({ hasContingent }: { hasContingent: boolean }) 
                 onClick={() => setMoreOpen(false)}
               />
             ))}
+
+            <GridTile
+              icon={Send}
+              label={t("telegram")}
+              color="bg-sky-600"
+              onClick={() => { window.location.href = "/api/v2/manager/telegram-link"; }}
+            />
 
             <GridTile
               icon={LogOut}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
-import { LogOut, ChevronRight, ChevronDown, UserCircle } from "lucide-react";
+import { LogOut, ChevronRight, ChevronDown, UserCircle, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OrganizerRole } from "@/types";
 import { Badge } from "@/components/ui/badge";
@@ -124,6 +124,14 @@ export function Sidebar({ userName, role }: { userName: string; role: OrganizerR
             <Badge variant="outline" className="text-[10px] mt-0.5">{role}</Badge>
           </div>
         </Link>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- API route that redirects to t.me; <Link> would prefetch it */}
+        <a
+          href="/api/v2/organizer/telegram-link"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
+        >
+          <Send className="h-4 w-4" />
+          Sambung Telegram
+        </a>
         <button
           onClick={() => signOut({ callbackUrl: "/organizer/login" })}
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
