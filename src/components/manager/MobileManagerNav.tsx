@@ -238,7 +238,7 @@ export function MobileManagerNav({ hasContingent }: { hasContingent: boolean }) 
               icon={Send}
               label={t("telegram")}
               color="bg-sky-600"
-              onClick={() => { window.location.href = "/api/v2/manager/telegram-link"; }}
+              onClick={() => { window.open("/api/v2/manager/telegram-link", "_blank", "noopener,noreferrer"); }}
             />
 
             <GridTile

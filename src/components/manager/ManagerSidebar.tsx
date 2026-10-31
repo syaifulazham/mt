@@ -88,9 +88,11 @@ export function ManagerSidebar({ userName, institutionName, hasContingent }: Pro
             </Link>
           );
         })}
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- API route that redirects to t.me; <Link> would prefetch it */}
+        {/* API route that redirects to t.me; <Link> would prefetch it */}
         <a
           href="/api/v2/manager/telegram-link"
+          target="_blank"
+          rel="noopener noreferrer"
           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
         >
           <Send className="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500" strokeWidth={1.8} />
