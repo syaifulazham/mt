@@ -775,6 +775,32 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
     return () => clearTimeout(t);
   }, [vbWicId, loadVbLive]);
 
+  // Live VibeBlocks status per registration (VibeBlocks has no push, so poll its
+  // results query — one call for the whole competition — every 15 s while visible).
+  type VbEntryStatus = {
+    status: "ready" | "in_progress" | "completed" | "timed_out";
+    rank: number | null; completedStageCount: number; officialElapsedMs: number | null;
+  };
+  const [vbStatus, setVbStatus] = useState<{ wicId: string; byReg: Record<string, VbEntryStatus>; at: number } | null>(null);
+  useEffect(() => {
+    if (!vbWicId) return;
+    let alive = true;
+    const load = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${vbWicId}/vibeblocks-results`, { cache: "no-store" });
+        if (!res.ok || !alive) return;
+        const j = await res.json() as { data?: (VbEntryStatus & { registrationId: string | null })[] };
+        const byReg: Record<string, VbEntryStatus> = {};
+        for (const r of j.data ?? []) if (r.registrationId) byReg[r.registrationId] = r;
+        setVbStatus({ wicId: vbWicId, byReg, at: Date.now() });
+      } catch { /* keep the last known status */ }
+    };
+    const first = setTimeout(load, 0);
+    const timer = setInterval(load, 15_000);
+    return () => { alive = false; clearTimeout(first); clearInterval(timer); };
+  }, [vbWicId, event.id]);
+
   // Show the live configuration while the form is locked.
   useEffect(() => {
     const ev = vbLive?.event;
@@ -2175,6 +2201,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                     <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                                       {entryToken}
                                     </span>
+                                    <VbStatusBadge s={vbStatus?.wicId === selectedWic.id ? vbStatus.byReg[reg.id] : undefined} />
                                     {canWrite && (
                                       <button type="button" onClick={() => setVbRenewTarget({ regId: reg.id, name: reg.participant.name, token: entryToken })}
                                         disabled={vibeBlocksActionId === reg.id}
@@ -2497,5 +2524,23 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         document.body,
       )}
     </div>
+  );
+}
+
+// ── VibeBlocks live status label (registrations table) ───────────────────────
+function VbStatusBadge({ s }: {
+  s?: { status: string; rank: number | null; completedStageCount: number; officialElapsedMs: number | null };
+}) {
+  if (!s) return null;
+  const time = s.officialElapsedMs != null
+    ? `${Math.floor(s.officialElapsedMs / 60000)}m ${String(Math.floor((s.officialElapsedMs % 60000) / 1000)).padStart(2, "0")}s`
+    : null;
+  const [label, cls, title] =
+    s.status === "in_progress" ? [`Sedang bermain${s.completedStageCount ? ` · ${s.completedStageCount} peringkat` : ""}`, "bg-sky-50 text-sky-700 border-sky-200 animate-pulse", "Peserta sedang bermain"]
+    : s.status === "completed" ? [`Selesai${time ? ` · ${time}` : ""}${s.rank != null ? ` · #${s.rank}` : ""}`, "bg-emerald-50 text-emerald-700 border-emerald-200", `${s.completedStageCount} peringkat selesai`]
+    : s.status === "timed_out" ? [`Tamat masa${s.completedStageCount ? ` · ${s.completedStageCount} peringkat` : ""}`, "bg-amber-50 text-amber-700 border-amber-200", "Masa larian tamat sebelum selesai"]
+    : ["Sedia", "bg-zinc-50 text-zinc-500 border-zinc-200", "Token belum digunakan"];
+  return (
+    <span title={title} className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>
   );
 }
