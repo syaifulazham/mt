@@ -56,23 +56,43 @@ export async function PATCH(
 }
 
 // DELETE /api/v2/organizer/events/[id]/walkin/[wicId]
+/**
+ * DELETE — remove a walk-in competition from the event. Refused while it has
+ * registrations, unless a Super Admin passes ?force=1: the database then
+ * cascades the registrations, their judging scores and form submissions with it.
+ */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; wicId: string }> },
 ) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-  const { wicId } = await params;
+  const { id: eventId, wicId } = await params;
+  const force = req.nextUrl.searchParams.get("force") === "1";
+  if (force && session.role !== "SUPER_ADMIN")
+    return NextResponse.json({ error: "FORBIDDEN", message: "Only a Super Admin can remove a walk-in competition with its registrations." }, { status: 403 });
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId },
-    include: { _count: { select: { registrations: true } } },
+    include: {
+      competition: { select: { code: true, name: true } },
+      _count: { select: { registrations: true, formSubmissions: true } },
+    },
   });
-  if (!wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  if (wic._count.registrations > 0)
-    return NextResponse.json({ error: "HAS_REGISTRATIONS", message: "Remove all registrations first." }, { status: 409 });
+  if (!wic || wic.eventId !== eventId) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (wic._count.registrations > 0 && !force)
+    return NextResponse.json(
+      { error: "HAS_REGISTRATIONS", message: "Remove all registrations first.", registrations: wic._count.registrations },
+      { status: 409 },
+    );
 
   await db.eventWalkInCompetition.delete({ where: { id: wicId } });
-  return NextResponse.json({ success: true });
+  if (force && wic._count.registrations > 0) {
+    console.warn(
+      `[walkin] ${session.name || session.email} (SUPER_ADMIN) removed walk-in ${wic.competition.code} ${wic.competition.name} ` +
+      `from event ${eventId} with ${wic._count.registrations} registrations and ${wic._count.formSubmissions} form submissions`,
+    );
+  }
+  return NextResponse.json({ success: true, removedRegistrations: wic._count.registrations });
 }

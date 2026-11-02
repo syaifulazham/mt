@@ -2558,7 +2558,7 @@ function WalkInPickerModal({ linkedIds, onAdd, onClose }: {
   );
 }
 
-function WalkInCompetitionsSection({ event, canWrite, hasViblockKey, hasDroneKey, hasVibeBlocksKey, onSaved }: { event: EventDetail; canWrite: boolean; hasViblockKey: boolean; hasDroneKey: boolean; hasVibeBlocksKey: boolean; onSaved: (u: Partial<EventDetail>) => void }) {
+function WalkInCompetitionsSection({ event, canWrite, isSuperAdmin = false, hasViblockKey, hasDroneKey, hasVibeBlocksKey, onSaved }: { event: EventDetail; canWrite: boolean; isSuperAdmin?: boolean; hasViblockKey: boolean; hasDroneKey: boolean; hasVibeBlocksKey: boolean; onSaved: (u: Partial<EventDetail>) => void }) {
   const eventId = event.id;
   const [links,        setLinks]        = useState<WalkInComp[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -2609,8 +2609,19 @@ function WalkInCompetitionsSection({ event, canWrite, hasViblockKey, hasDroneKey
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${deleteTarget.id}`, { method: "DELETE" });
-    if (res.ok) { setLinks(prev => prev.filter(l => l.id !== deleteTarget.id)); setDeleteTarget(null); }
+    // Super Admin removing one that still has registrations: removes them too (?force=1)
+    const force = isSuperAdmin && (deleteTarget._count?.registrations ?? 0) > 0;
+    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${deleteTarget.id}${force ? "?force=1" : ""}`, { method: "DELETE" });
+    if (!res.ok) {
+      // Thrown so DeleteDialog stays open and shows why (it closes only on success)
+      const j = await res.json().catch(() => ({}));
+      const n = deleteTarget._count?.registrations;
+      throw new Error(j.error === "HAS_REGISTRATIONS"
+        ? `Masih ada ${n ? `${n} ` : ""}pendaftaran walk-in. Buang semua pendaftaran di halaman Walk-in terlebih dahulu.`
+        : (j.message ?? j.error ?? "Gagal membuang."));
+    }
+    setLinks(prev => prev.filter(l => l.id !== deleteTarget.id));
+    setDeleteTarget(null);
   }
 
   const BOT_FIELDS = ["useViblockarena", "useDronearena", "useVibeblocks"] as const;
@@ -2761,11 +2772,14 @@ function WalkInCompetitionsSection({ event, canWrite, hasViblockKey, hasDroneKey
       )}
 
       <DeleteDialog
+        key={deleteTarget?.id ?? "none"}
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title={`Buang "${deleteTarget?.competition.name}" dari walk-in?`}
-        description="Pertandingan walk-in ini akan dibuang. Semua pendaftaran mesti dibuang terlebih dahulu."
+        description={isSuperAdmin && (deleteTarget?._count?.registrations ?? 0) > 0
+          ? `Pertandingan walk-in ini akan dibuang BERSAMA ${deleteTarget?._count.registrations} pendaftaran, markah penghakiman dan borang yang berkaitan. Tindakan ini tidak boleh dibatalkan.`
+          : "Pertandingan walk-in ini akan dibuang. Semua pendaftaran mesti dibuang terlebih dahulu."}
       />
     </>
   );
@@ -3226,7 +3240,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
             <ParticipationModeSection   event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
-            <WalkInCompetitionsSection event={selected} canWrite={canWrite} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} onSaved={handleSectionSaved} />
+            <WalkInCompetitionsSection event={selected} canWrite={canWrite} isSuperAdmin={role === "SUPER_ADMIN"} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} onSaved={handleSectionSaved} />
           </div>
         )}
       </main>
