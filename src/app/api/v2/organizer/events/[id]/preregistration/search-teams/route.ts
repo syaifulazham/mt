@@ -88,6 +88,7 @@ export async function GET(
     competitionCode: string;
     competitionName: string;
     members: bigint;
+    memberNames: string[] | null;
   };
 
   const rows = await db.$queryRaw<SearchRow[]>`
@@ -98,10 +99,12 @@ export async function GET(
       COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
       c.code   AS "competitionCode",
       c.name   AS "competitionName",
-      COUNT(DISTINCT tm."contestantId") AS members
+      COUNT(DISTINCT tm."contestantId") AS members,
+      ARRAY_AGG(DISTINCT p.name) FILTER (WHERE p.name IS NOT NULL) AS "memberNames"
     FROM teams t
     JOIN competitions         c          ON c.id   = t."competitionId"
     LEFT JOIN team_members    tm         ON tm."teamId" = t.id
+    LEFT JOIN contestants     p          ON p.id = tm."contestantId"
     LEFT JOIN contingents     cont       ON cont.id = t."contingentId"
     LEFT JOIN states          s          ON s.id   = cont."stateId"
     LEFT JOIN schools         sch        ON sch.id = cont."schoolId"
@@ -138,6 +141,8 @@ export async function GET(
       competitionCode:   r.competitionCode,
       competitionName:   r.competitionName,
       members:           Number(r.members),
+      // Teams can share a name within one contingent; members tell them apart.
+      memberNames:       r.memberNames ?? [],
       alreadyRegistered: alreadySet.has(r.id),
     })),
   });

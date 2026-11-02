@@ -82,6 +82,7 @@ type PrereqTeam = {
   competitionCode: string | null;
   competitionName: string | null;
   members: number;
+  memberNames: string[];
   alreadyRegistered: boolean;
 };
 
@@ -122,6 +123,7 @@ type SearchTeam = {
   competitionCode: string;
   competitionName: string;
   members: number;
+  memberNames: string[];
   alreadyRegistered: boolean;
 };
 
@@ -320,7 +322,13 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
   const [loadMissingResult, setLoadMissingResult] = useState<{ added: number } | null>(null);
 
   // Unselected-from-prerequisite teams (registered here but never selected in prereq)
-  type UnselectedPrereqTeam = { id: string; teamName: string; contingentName: string | null };
+  type UnselectedPrereqTeam = {
+    id: string;
+    teamName: string;
+    contingentName: string | null;
+    memberNames: string[];
+    reason: "NOT_SELECTED" | "NOT_IN_PREREQ";
+  };
   const [unselectedPrereqTeams, setUnselectedPrereqTeams] = useState<UnselectedPrereqTeam[]>([]);
   const [unselectedPrereqDismissed, setUnselectedPrereqDismissed] = useState(false);
   const [removingUnselectedPrereq, setRemovingUnselectedPrereq] = useState(false);
@@ -1449,7 +1457,8 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
               {unselectedPrereqTeams.length} pasukan dalam acara ini tidak dipilih (tidak lulus) dalam acara prasyarat
             </p>
             <p className="text-rose-700 mt-0.5 text-xs">
-              Pasukan-pasukan berikut wujud di acara ini tetapi tidak pernah dipilih dalam mana-mana acara prasyarat.
+              Pasukan-pasukan berikut wujud di acara ini tetapi tidak pernah dipilih dalam mana-mana acara prasyarat
+              (atau tiada langsung dalam acara prasyarat). Pasukan yang ditambah sebagai wildcard tidak disenaraikan.
               Buang mereka daripada acara ini jika mereka tidak sepatutnya menyertai.
             </p>
             <ul className="mt-2 space-y-0.5 max-h-28 overflow-y-auto pr-1">
@@ -1458,6 +1467,16 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
                   <span className="font-medium">{t.teamName}</span>
                   {t.contingentName && <span className="text-rose-500">— {t.contingentName}</span>}
+                  {t.memberNames.length > 0 && (
+                    <span className="text-rose-500 truncate" title={t.memberNames.join(", ")}>
+                      ({t.memberNames.join(", ")})
+                    </span>
+                  )}
+                  {t.reason === "NOT_IN_PREREQ" && (
+                    <span className="shrink-0 rounded bg-rose-100 px-1 text-[10px] font-medium text-rose-700">
+                      tiada dalam prasyarat
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -2035,6 +2054,11 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-zinc-900 truncate">{t.name}</p>
                                 <p className="text-xs text-zinc-400 truncate">{t.contingentName ?? "—"}</p>
+                                {t.memberNames.length > 0 && (
+                                  <p className="text-xs text-zinc-500 truncate" title={t.memberNames.join(", ")}>
+                                    {t.memberNames.join(", ")}
+                                  </p>
+                                )}
                               </div>
                               <div className="text-right shrink-0">
                                 {t.competitionCode && (
@@ -2313,6 +2337,11 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">{t.teamName}</p>
                           <p className="text-xs text-zinc-400 truncate">{t.contingentName ?? "—"} · {t.stateName ?? "—"}</p>
+                          {t.memberNames.length > 0 && (
+                            <p className="text-xs text-zinc-500 truncate" title={t.memberNames.join(", ")}>
+                              {t.memberNames.join(", ")}
+                            </p>
+                          )}
                         </div>
                         <div className="text-right shrink-0">
                           <span className="text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{t.competitionCode}</span>

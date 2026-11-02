@@ -64,7 +64,10 @@ export async function GET(
         select: {
           id: true,
           name: true,
-          _count: { select: { members: true } },
+          members: {
+            select: { participant: { select: { name: true } } },
+            orderBy: { participant: { name: "asc" } },
+          },
           competition: { select: { name: true, code: true } },
           contingent: {
             select: {
@@ -109,6 +112,7 @@ export async function GET(
       competitionCode: string | null;
       competitionName: string | null;
       members: number;
+      memberNames: string[];
       alreadyRegistered: boolean;
     }[];
   };
@@ -129,7 +133,9 @@ export async function GET(
       contingentName: te.team.contingent?.shortName ?? te.team.contingent?.name ?? null,
       competitionCode: te.team.competition?.code ?? null,
       competitionName: te.team.competition?.name ?? null,
-      members: te.team._count.members,
+      members: te.team.members.length,
+      // Teams can share a name within one contingent; members tell them apart.
+      memberNames: te.team.members.map((m) => m.participant.name),
       alreadyRegistered: alreadySet.has(te.teamId),
     });
   }
