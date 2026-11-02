@@ -63,9 +63,13 @@ export function Sidebar({ userName, role }: { userName: string; role: OrganizerR
                 </button>
                 {isOpen && (
                   <div className="ml-4 mt-0.5 space-y-0.5 border-l border-zinc-100 pl-3">
-                    {item.children.map((child) => {
+                    {item.children.map((child, _i, all) => {
                       const CIcon = child.icon;
-                      const childActive = pathname.startsWith(child.href);
+                      // Only the most specific matching child is active ("Overview" at
+                      // /organizer/participation must not light up on its sub-pages).
+                      const best = all.filter((c) => pathname.startsWith(c.href))
+                        .sort((a, b) => b.href.length - a.href.length)[0];
+                      const childActive = best?.href === child.href;
                       return (
                         <Link
                           key={child.href}

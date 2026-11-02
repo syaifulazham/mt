@@ -1,7 +1,8 @@
 import { cn } from "@/lib/utils";
 import type { Breakdown, WorkshopDimension } from "@/lib/workshopStats";
 
-// Pieces shared by the Workshops list and the workshop detail page.
+// Pieces shared by the Workshops list, the workshop detail page and
+// Participation → School Level.
 
 export type CourseMeta = {
   title: string;
@@ -77,11 +78,17 @@ function BreakdownCard({ title, rows, total }: { title: string; rows: Breakdown[
   );
 }
 
-export function Breakdowns({ breakdown, total }: { breakdown: Breakdown; total: number }) {
+export function Breakdowns({ breakdown, total, dimensions }: {
+  breakdown: Partial<Breakdown>;
+  total: number;
+  /** Which breakdowns to show (default: all five). */
+  dimensions?: WorkshopDimension[];
+}) {
+  const shown = dimensions ? DIMENSIONS.filter((d) => dimensions.includes(d.key)) : DIMENSIONS;
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      {DIMENSIONS.map((d) => (
-        <BreakdownCard key={d.key} title={d.title} rows={breakdown[d.key]} total={total} />
+      {shown.map((d) => (
+        <BreakdownCard key={d.key} title={d.title} rows={breakdown[d.key] ?? []} total={total} />
       ))}
     </div>
   );

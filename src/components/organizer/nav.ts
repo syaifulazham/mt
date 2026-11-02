@@ -26,6 +26,7 @@ import {
   GraduationCap,
   LayoutTemplate,
   Settings,
+  School,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -74,6 +75,12 @@ export const ORGANIZER_NAV: NavItem[] = [
   {
     label: "Participation", href: "/organizer/participation", icon: UserCheck,
     description: "Participants, managers, teams and contingents registered this season.",
+    children: [
+      { label: "Overview", href: "/organizer/participation", icon: UserCheck,
+        description: "Participants, managers, teams and contingents registered this season." },
+      { label: "School Level", href: "/organizer/participation/school-level", icon: School,
+        description: "Competitions by eligibility, from school contingents — schools, participations and gender." },
+    ],
   },
   {
     label: "Events", href: "/organizer/events", icon: CalendarDays,
