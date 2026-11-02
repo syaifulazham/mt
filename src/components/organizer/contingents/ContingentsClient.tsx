@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { CONTINGENT_SEARCH_COOKIE } from "./searchCookie";
 import { useRouter } from "next/navigation";
 import { Search, Users, Trophy, UserCheck, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -57,10 +58,31 @@ function ContingentLogo({ logoUrl, name }: { logoUrl: string | null; name: strin
   );
 }
 
-export function ContingentsClient() {
+// The last search is kept in a cookie (read by the page on the server), so
+// revisiting Contingents starts with it.
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 days
+
+function saveSearchCookie(value: string) {
+  const v = value.trim();
+  document.cookie = v
+    ? `${CONTINGENT_SEARCH_COOKIE}=${encodeURIComponent(v.slice(0, 200))}; path=/organizer/contingents; max-age=${COOKIE_MAX_AGE}; samesite=lax`
+    : `${CONTINGENT_SEARCH_COOKIE}=; path=/organizer/contingents; max-age=0; samesite=lax`;
+}
+
+function readSearchCookie(): string | null {
+  const m = document.cookie.match(new RegExp(`(?:^|; )${CONTINGENT_SEARCH_COOKIE}=([^;]*)`));
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
+}
+
+export function ContingentsClient({ initialSearch = "" }: { initialSearch?: string }) {
   const router = useRouter();
-  const [q, setQ]             = useState("");
-  const [search, setSearch]   = useState("");
+  // The cookie wins over the server's value: going back can restore a cached
+  // render of this page whose initialSearch is older than the last search.
+  const [startSearch] = useState(() =>
+    typeof document === "undefined" ? initialSearch : (readSearchCookie() ?? initialSearch));
+  const [q, setQ]             = useState(startSearch);
+  const [search, setSearch]   = useState(startSearch);
   const [page, setPage]       = useState(1);
   const [pageSize, setPageSize] = useState<20 | 50 | 100>(50);
   const [rows, setRows]       = useState<ContingentRow[]>([]);
@@ -91,6 +113,7 @@ export function ContingentsClient() {
     debounceRef.current = setTimeout(() => {
       setSearch(value);
       setPage(1);
+      saveSearchCookie(value);
     }, 300);
   }
 
@@ -189,7 +212,11 @@ export function ContingentsClient() {
                 rows.map((row, i) => (
                   <tr
                     key={row.id}
-                    onClick={() => router.push(`/organizer/contingents/${row.id}`)}
+                    onClick={() => {
+                      // Save what's in the box now, even if the 300 ms debounce hasn't fired
+                      saveSearchCookie(q);
+                      router.push(`/organizer/contingents/${row.id}`);
+                    }}
                     className="hover:bg-zinc-50 transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-3 text-zinc-400 tabular-nums text-xs">
