@@ -1,3 +1,4 @@
+import { snapshotResponse } from "@/lib/dashboardSnapshot";
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -42,11 +43,15 @@ const ETHNICITY_LABEL: Record<string, string> = {
 };
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  // Stats Snapshot: serve the saved copy when the dashboard is set to one
+  const snap = await snapshotResponse(req, `state:${(await params).id}`);
+  if (snap) return snap;
 
   const { id } = await params;
 

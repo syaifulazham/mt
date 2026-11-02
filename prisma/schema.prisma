@@ -130,6 +130,23 @@ model Country {
   @@map("countries")
 }
 
+/// A frozen copy of the organizer dashboard (Overview, View by Zone, View by
+/// State and every zone / state page), built part by part by a Super Admin.
+/// `parts` maps a part key ("overview", "zones", "zone:<id>", "states",
+/// "state:<id>") to the exact JSON the live endpoint returned.
+model DashboardSnapshot {
+  id          String    @id @default(cuid())
+  label       String?
+  status      String    @default("BUILDING") // BUILDING | READY | FAILED
+  parts       Json      @default("{}")
+  partCount   Int       @default(0)
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@map("dashboard_snapshots")
+}
+
 model AppSetting {
   key   String @id
   value String

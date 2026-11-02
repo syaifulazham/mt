@@ -1,10 +1,16 @@
+import type { NextRequest } from "next/server";
+import { snapshotResponse } from "@/lib/dashboardSnapshot";
 import { NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  // Stats Snapshot: serve the saved copy when the dashboard is set to one
+  const snap = await snapshotResponse(req, "zones");
+  if (snap) return snap;
 
   const [zones, zoneStateRows, competitions, allParticipants] = await Promise.all([
     db.zone.findMany({ orderBy: { name: "asc" } }),

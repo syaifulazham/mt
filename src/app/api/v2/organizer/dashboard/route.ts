@@ -1,3 +1,5 @@
+import type { NextRequest } from "next/server";
+import { snapshotResponse } from "@/lib/dashboardSnapshot";
 import { NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -51,9 +53,13 @@ const SCHOOL_CATEGORY_LABEL: Record<string, string> = {
   SEKOLAH_RENDAH_AKADEMIK:                  "Rendah Akademik",
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  // Stats Snapshot: serve the saved copy when the dashboard is set to one
+  const snap = await snapshotResponse(req, "overview");
+  if (snap) return snap;
 
   // ── All data in one parallel batch ────────────────────────────────────────
 

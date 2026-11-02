@@ -13,7 +13,7 @@ export default async function OrganizerDashboardPage() {
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <DashboardTabNav />
+      <DashboardTabNav role={session.role} />
       <DashboardClient userName={session.name} />
     </OrganizerShell>
   );

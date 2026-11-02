@@ -13,7 +13,7 @@ export default async function DashboardZonePage() {
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <DashboardTabNav />
+      <DashboardTabNav role={session.role} />
       <ZoneDashboardClient />
     </OrganizerShell>
   );

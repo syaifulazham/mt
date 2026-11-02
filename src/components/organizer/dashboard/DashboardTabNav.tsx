@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { SnapshotNotice, StatsSnapshotMenu } from "./StatsSnapshotMenu";
 
 const TABS = [
   { label: "Overview",       href: "/organizer/dashboard",       exact: true  },
@@ -10,7 +11,7 @@ const TABS = [
   { label: "View by State",  href: "/organizer/dashboard/state", exact: false },
 ] as const;
 
-export function DashboardTabNav() {
+export function DashboardTabNav({ role }: { role?: string }) {
   const pathname = usePathname();
 
   function isActive(href: string, exact: boolean) {
@@ -20,7 +21,7 @@ export function DashboardTabNav() {
 
   return (
     <div className="border-b border-zinc-200 bg-white">
-      <nav className="flex gap-1 px-6 max-w-6xl mx-auto" aria-label="Dashboard views">
+      <nav className="flex items-center gap-1 px-6 max-w-6xl mx-auto" aria-label="Dashboard views">
         {TABS.map(({ label, href, exact }) => {
           const active = isActive(href, exact);
           return (
@@ -39,7 +40,10 @@ export function DashboardTabNav() {
             </Link>
           );
         })}
+        {/* Stats Snapshot is Super Admin only; the notice shows to everyone */}
+        {role === "SUPER_ADMIN" && <StatsSnapshotMenu />}
       </nav>
+      <SnapshotNotice />
     </div>
   );
 }
