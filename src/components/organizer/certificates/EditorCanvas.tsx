@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type PointerEvent as ReactPointerEvent } from "react";
-import type { CertConfig, CertElement, FontId } from "@/lib/certificates/config-schema";
+import { boxTopLeft, type CertConfig, type CertElement, type FontId } from "@/lib/certificates/config-schema";
 
 /**
  * The canvas is an SVG overlay whose viewBox is the page in PDF points, which is
@@ -164,18 +164,19 @@ export function EditorCanvas({
           if (el.type === "image" || el.type === "qr") {
             const w = el.type === "image" ? el.width : el.size;
             const h = el.type === "image" ? el.height : el.size;
+            const { left, top } = boxTopLeft(el, w, h); // same rule as render.ts
             return (
               <g key={el.id} onPointerDown={(e) => beginDrag(e, el)} style={{ cursor: readOnly ? "default" : "move" }}>
                 {el.type === "image"
-                  ? <image href={el.url} x={el.x} y={el.y - h} width={w} height={h} opacity={el.opacity ?? 1} preserveAspectRatio="none" />
-                  : <rect x={el.x} y={el.y - h} width={w} height={h} fill="#111" opacity={0.15} />}
+                  ? <image href={el.url} x={left} y={top} width={w} height={h} opacity={el.opacity ?? 1} preserveAspectRatio="none" />
+                  : <rect x={left} y={top} width={w} height={h} fill="#111" opacity={0.15} />}
                 <rect
-                  x={el.x} y={el.y - h} width={w} height={h}
+                  x={left} y={top} width={w} height={h}
                   fill="transparent" stroke={selected ? "#2563eb" : "transparent"} strokeWidth={1}
                   strokeDasharray="3 2" vectorEffect="non-scaling-stroke"
                 />
                 {el.type === "qr" && (
-                  <text x={el.x + w / 2} y={el.y - h / 2} textAnchor="middle" dominantBaseline="central"
+                  <text x={left + w / 2} y={top + h / 2} textAnchor="middle" dominantBaseline="central"
                         fontSize={Math.min(10, w / 3)} fill="#111">QR</text>
                 )}
               </g>

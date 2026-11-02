@@ -57,6 +57,8 @@ const fieldElement = z.object({
   prefix:   z.string().optional(),
   suffix:   z.string().optional(),
   fallback: z.string().optional(),
+  /** Display mask, e.g. "000000-00-0000": each 0 takes the next digit of the value. */
+  format:   z.string().max(40).optional(),
   maxWidth: z.number().positive().optional(),
   fit:      z.enum(["shrink", "wrap", "clip"]).default("shrink"),
   style:    styleSchema,
@@ -113,6 +115,38 @@ export const PAPER_SIZES = {
   A3:     { width: 842, height: 1191 },
   LETTER: { width: 612, height: 792 },
 } as const;
+
+/**
+ * Apply a field's display mask: every "0" in `mask` takes the value's next digit,
+ * anything else is printed as is — "000000-00-0000" turns "081231140123" (or
+ * "081231-14-0123") into "081231-14-0123". When the value's digit count doesn't
+ * match the mask (e.g. a passport number) it is printed unchanged rather than
+ * mangled. Shared by the renderer and the editor preview.
+ */
+export function applyFormatMask(value: string, mask?: string): string {
+  if (!mask || !value) return value;
+  const slots = (mask.match(/0/g) ?? []).length;
+  const digits = value.replace(/\D/g, "");
+  if (!slots || digits.length !== slots) return value;
+  let i = 0;
+  return mask.replace(/0/g, () => digits[i++]);
+}
+
+/**
+ * Where an image / QR box sits, from its anchor point — the one rule shared by
+ * the editor canvas and `render.ts`, so the two cannot disagree. Like text,
+ * `align` picks the box's left / centre / right edge at `x`, and `vAlign` its
+ * top / middle / bottom at `y` ("baseline" = the box sits on the line, i.e. bottom).
+ * Returns the top-left corner in template coordinates (points, y downward).
+ */
+export function boxTopLeft(
+  el: { x: number; y: number; align: "left" | "center" | "right"; vAlign: "top" | "middle" | "baseline" | "bottom" },
+  width: number, height: number,
+): { left: number; top: number } {
+  const left = el.align === "center" ? el.x - width / 2 : el.align === "right" ? el.x - width : el.x;
+  const top  = el.vAlign === "top" ? el.y : el.vAlign === "middle" ? el.y - height / 2 : el.y - height;
+  return { left, top };
+}
 
 export function emptyConfig(
   paper: keyof typeof PAPER_SIZES = "A4",

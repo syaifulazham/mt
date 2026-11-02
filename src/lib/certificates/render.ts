@@ -13,7 +13,7 @@
 
 import { PDFDocument, rgb, type PDFFont, type PDFPage, type PDFImage } from "pdf-lib";
 import QRCode from "qrcode";
-import type { CertConfig, CertElement, CertTextStyle, FontId } from "./config-schema";
+import { applyFormatMask, boxTopLeft, type CertConfig, type CertElement, type CertTextStyle, type FontId } from "./config-schema";
 import { embedFonts, isStandardFont, winAnsiSafe, type FontKey } from "./fonts";
 import { resolveFieldToken, type CertFieldSource } from "./fields";
 
@@ -186,7 +186,8 @@ export async function renderCertificatePdf(
       const bytes = await fetchAsset(el.url).catch(() => null);
       if (!bytes) { warnings.push({ elementId: el.id, message: `image fetch failed: ${el.url}` }); continue; }
       const img = bytes[0] === 0x89 ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
-      page.drawImage(img, { x: el.x, y: anchorY - el.height, width: el.width, height: el.height, opacity: el.opacity });
+      const box = boxTopLeft(el, el.width, el.height);
+      page.drawImage(img, { x: box.left, y: pageHeight - box.top - el.height, width: el.width, height: el.height, opacity: el.opacity });
       continue;
     }
 
@@ -197,7 +198,8 @@ export async function renderCertificatePdf(
         `${(input.appUrl ?? "").replace(/\/$/, "")}/verify/${data.uniqueCode}`;
       const png = await QRCode.toBuffer(payload, { type: "png", margin: 0, width: Math.ceil(el.size * 4) });
       const img = await doc.embedPng(new Uint8Array(png));
-      page.drawImage(img, { x: el.x, y: anchorY - el.size, width: el.size, height: el.size });
+      const box = boxTopLeft(el, el.size, el.size);
+      page.drawImage(img, { x: box.left, y: pageHeight - box.top - el.size, width: el.size, height: el.size });
       continue;
     }
 
@@ -208,7 +210,7 @@ export async function renderCertificatePdf(
     } else {
       const resolved = resolveFieldToken(el.field, data);
       if (resolved === null) { warnings.push({ elementId: el.id, message: `unknown field ${el.field}` }); continue; }
-      value = resolved || (el.fallback ?? "");
+      value = resolved ? applyFormatMask(resolved, el.format) : (el.fallback ?? "");
       if (value) value = `${el.prefix ?? ""}${value}${el.suffix ?? ""}`;
     }
 

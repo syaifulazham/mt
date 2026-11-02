@@ -134,6 +134,11 @@ export function ElementInspector({
             <Input value={element.suffix ?? ""} className="h-7 text-xs"
                    onChange={(e) => onChange({ suffix: e.target.value || undefined } as Partial<CertElement>)} />
           </Row>
+          <Row label="Format">
+            <Input value={element.format ?? ""} className="h-7 font-mono text-xs" placeholder="e.g. 000000-00-0000"
+                   title="Each 0 takes the next digit of the value; other characters print as typed. Values with a different number of digits print unchanged."
+                   onChange={(e) => onChange({ format: e.target.value || undefined } as Partial<CertElement>)} />
+          </Row>
           <Row label="Fallback">
             <Input value={element.fallback ?? ""} className="h-7 text-xs" placeholder="printed when empty"
                    onChange={(e) => onChange({ fallback: e.target.value || undefined } as Partial<CertElement>)} />

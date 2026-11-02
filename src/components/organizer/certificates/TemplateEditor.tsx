@@ -6,10 +6,11 @@ import {
   ArrowLeft, Copy, Eye, Image as ImageIcon, Loader2, QrCode, Save, Type, Upload, Layers, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConvertIssuedButton } from "./ConvertIssuedButton";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  certConfigSchema, emptyConfig, PAPER_SIZES, type CertConfig, type CertElement,
+  applyFormatMask, certConfigSchema, emptyConfig, PAPER_SIZES, type CertConfig, type CertElement,
 } from "@/lib/certificates/config-schema";
 import { resolveFieldToken, sampleFieldSource, type CertFieldToken } from "@/lib/certificates/fields";
 import { EditorCanvas } from "./EditorCanvas";
@@ -65,7 +66,7 @@ export function TemplateEditor({
     if (el.type !== "static_text" && el.type !== "field") return "";
     const raw = el.type === "static_text"
       ? el.text
-      : `${el.prefix ?? ""}${resolveFieldToken(el.field, sample) || el.fallback || ""}${el.suffix ?? ""}`;
+      : `${el.prefix ?? ""}${applyFormatMask(resolveFieldToken(el.field, sample) ?? "", el.format) || el.fallback || ""}${el.suffix ?? ""}`;
     if (el.style.transform === "upper") return raw.toUpperCase();
     if (el.style.transform === "title")
       return raw.toLowerCase().replace(/(^|\s|[-'"(])([\p{L}])/gu, (_, p, c: string) => p + c.toUpperCase());
@@ -179,6 +180,9 @@ export function TemplateEditor({
     } finally { setBusy(null); }
   }
 
+  const [publishedTick, setPublishedTick] = useState(0); // re-checks "Convert to vN" after publishing
+  const [latestVersion, setLatestVersion] = useState<number | null>(template.versions[0]?.version ?? null);
+
   async function publish() {
     if (dirty) { setMessage("Save the draft before publishing"); return; }
     setBusy("publish"); setMessage(null);
@@ -186,7 +190,9 @@ export function TemplateEditor({
       const res = await fetch(`/api/v2/organizer/certificates/templates/${template.id}/publish`, { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      setMessage(`Published version ${json.data.version} — certificates already issued keep their own version`);
+      setMessage(`Published version ${json.data.version} — certificates already issued keep their own version unless you convert them`);
+      setLatestVersion(json.data.version);
+      setPublishedTick((t) => t + 1);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Publish failed");
     } finally { setBusy(null); }
@@ -239,8 +245,8 @@ export function TemplateEditor({
         <Badge variant="outline" className="text-[10px]">{template.season.code}</Badge>
         <Badge variant="outline" className="text-[10px]">{template.targetType}</Badge>
         <Badge className="text-[10px]">{template.status}</Badge>
-        {template.versions.length > 0 && (
-          <span className="text-[11px] text-zinc-500">v{template.versions[0].version} published</span>
+        {latestVersion !== null && (
+          <span className="text-[11px] text-zinc-500">v{latestVersion} published</span>
         )}
         {archived && (
           <span className="text-[11px] text-amber-600">
@@ -249,6 +255,7 @@ export function TemplateEditor({
         )}
 
         <div className="ml-auto flex items-center gap-1.5">
+          {editable && <ConvertIssuedButton templateId={template.id} refreshKey={publishedTick} />}
           <select
             className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs"
             value={zoom} onChange={(e) => setZoom(Number(e.target.value))}
