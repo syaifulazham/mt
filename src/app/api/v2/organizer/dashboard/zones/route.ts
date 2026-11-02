@@ -10,6 +10,7 @@ export async function GET() {
     db.zone.findMany({ orderBy: { name: "asc" } }),
     db.zoneState.findMany({ select: { zoneId: true, stateId: true } }),
     db.competition.findMany({
+      where: { includeInDashboardStats: true }, // Competitions → Dashboard Stats
       select: {
         id: true,
         targetGroups: {

@@ -97,6 +97,7 @@ export async function GET() {
     }),
 
     db.competition.findMany({
+      where: { includeInDashboardStats: true }, // Competitions → Dashboard Stats
       select: {
         id: true, code: true, name: true,
         targetGroups: {

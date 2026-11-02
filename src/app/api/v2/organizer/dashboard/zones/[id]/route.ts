@@ -47,6 +47,7 @@ export async function GET(
     primaryContingents, secondaryContingents, higherContingents,
     independentContingents, internationalContingents] = await Promise.all([
     db.competition.findMany({
+      where: { includeInDashboardStats: true }, // Competitions → Dashboard Stats
       select: {
         id: true,
         targetGroups: {

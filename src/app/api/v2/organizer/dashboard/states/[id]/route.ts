@@ -60,6 +60,7 @@ export async function GET(
     independentContingents, internationalContingents] = await Promise.all([
     db.state.findUnique({ where: { id } }),
     db.competition.findMany({
+      where: { includeInDashboardStats: true }, // Competitions → Dashboard Stats
       select: {
         id: true,
         targetGroups: {

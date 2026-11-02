@@ -32,6 +32,7 @@ type CompetitionDetail = CompetitionListItem & {
   eptimEduCourseId: string | null;
   eptimEduCourseTitle: string | null;
   thirdPartyIntegration: string | null;
+  includeInDashboardStats: boolean;
   eventCompetitions: LinkedEventRow[];
   docs: CompetitionDoc[];
   _count: { teams: number };
@@ -715,6 +716,65 @@ function ThirdPartySection({
   );
 }
 
+// ── Dashboard stats ────────────────────────────────────────────────────────────
+
+/** Whether the competition is counted in the dashboard's initial participation stats. Saves on toggle. */
+function DashboardStatsSection({ competition, canWrite, onSaved }: {
+  competition: CompetitionDetail;
+  canWrite: boolean;
+  onSaved: (u: Partial<CompetitionDetail>) => void;
+}) {
+  const included = competition.includeInDashboardStats ?? true;
+  const [saving, setSaving] = useState(false);
+  const [err,    setErr]    = useState("");
+
+  async function toggle() {
+    const next = !included;
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/competitions/${competition.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeInDashboardStats: next }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Gagal");
+      onSaved({ includeInDashboardStats: next });
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal menyimpan."); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <SectionCard title="Dashboard Stats">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-zinc-800">Include this competition as initial stats</p>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            {included
+              ? "Counted in Total Participation and the participation breakdowns on the dashboards, and in Participation → School Level."
+              : "Left out of Total Participation and the participation breakdowns on the dashboards, and of Participation → School Level."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={included}
+          aria-label="Include this competition as initial stats"
+          onClick={toggle}
+          disabled={!canWrite || saving}
+          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            included ? "bg-blue-600" : "bg-zinc-300"
+          }`}
+        >
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            included ? "translate-x-5" : "translate-x-0.5"
+          }`} />
+        </button>
+      </div>
+      {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+    </SectionCard>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function CompetitionsClient({ role, availableIntegrations }: { role: OrganizerRole; availableIntegrations: AvailableIntegrations }) {
@@ -1171,6 +1231,7 @@ export function CompetitionsClient({ role, availableIntegrations }: { role: Orga
             <ThirdPartySection    competition={selected} canWrite={canWrite} availableIntegrations={availableIntegrations} onSaved={handleSectionSaved} />
             <ConceptPaperSection  competition={selected} canWrite={canWrite}                        onDocsChanged={(docs) => handleSectionSaved({ docs })} />
             <LinkedEventsSection competition={selected} />
+            <DashboardStatsSection competition={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
           </div>
         )}
       </main>

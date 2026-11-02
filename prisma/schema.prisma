@@ -614,6 +614,8 @@ model Competition {
   eptimEduCourseId             String?
   eptimEduCourseTitle          String?
   thirdPartyIntegration        String?           @default("none")
+  /// Counted in the dashboard's initial participation stats (eligibility pass).
+  includeInDashboardStats      Boolean           @default(true)
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
 

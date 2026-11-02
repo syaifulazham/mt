@@ -9,6 +9,7 @@ export async function GET() {
   const [states, competitions, allParticipants] = await Promise.all([
     db.state.findMany({ orderBy: { name: "asc" } }),
     db.competition.findMany({
+      where: { includeInDashboardStats: true }, // Competitions → Dashboard Stats
       select: {
         id: true,
         targetGroups: {

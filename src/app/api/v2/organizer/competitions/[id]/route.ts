@@ -41,6 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     targetGroupIds,
     eptimEduCourseId, eptimEduCourseTitle,
     thirdPartyIntegration,
+    includeInDashboardStats,
   } = await req.json();
 
   try {
@@ -69,6 +70,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(eptimEduCourseId       !== undefined && { eptimEduCourseId:    eptimEduCourseId    || null }),
           ...(eptimEduCourseTitle    !== undefined && { eptimEduCourseTitle: eptimEduCourseTitle || null }),
           ...(thirdPartyIntegration  !== undefined && { thirdPartyIntegration: thirdPartyIntegration || "none" }),
+          ...(typeof includeInDashboardStats === "boolean" && { includeInDashboardStats }),
         },
         include: {
           targetGroups: { include: { targetGroup: { select: { id: true, name: true, schoolLevel: true } } } },
