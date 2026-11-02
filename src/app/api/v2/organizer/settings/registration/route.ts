@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { isRegistrationOpen, setRegistrationOpen } from "@/lib/registration";
 
-const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
+const WRITE_ROLES = ["SUPER_ADMIN"];
 
 export async function GET() {
   const session = await getOrganizerSession();

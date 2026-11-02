@@ -36,7 +36,6 @@ const PERMISSION_MAP: Record<string, Partial<Record<OrganizerRole, "write" | "re
   },
   "/organizer/settings": {
     SUPER_ADMIN: "write",
-    ADMIN: "write",
   },
   "/organizer/system": {
     SUPER_ADMIN: "write",

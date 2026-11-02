@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Settings" };
 export default async function SettingsPage() {
   const session = await getOrganizerSession();
   if (!session) redirect("/organizer/login");
-  if (session.role !== "SUPER_ADMIN" && session.role !== "ADMIN") redirect("/organizer/dashboard");
+  if (session.role !== "SUPER_ADMIN") redirect("/organizer/dashboard");
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>

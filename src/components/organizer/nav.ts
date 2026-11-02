@@ -136,7 +136,7 @@ export const ORGANIZER_NAV: NavItem[] = [
     description: "Monitor data-quality issues and application error logs.",
   },
   {
-    label: "Settings", href: "/organizer/settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN"],
+    label: "Settings", href: "/organizer/settings", icon: Settings, roles: ["SUPER_ADMIN"],
     description: "Open or close registration for new managers and participants.",
   },
 ];
