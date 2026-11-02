@@ -3,10 +3,26 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { onboardingSchema } from "@/lib/validations/manager";
 import { Prisma } from "@prisma/client";
+import { isRegistrationOpen, REGISTRATION_CLOSED_MESSAGE } from "@/lib/registration";
 
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
+
+  // While registration is closed, only managers who already finished onboarding
+  // may resubmit; new managers cannot register.
+  if (!(await isRegistrationOpen())) {
+    const existing = await db.managerProfile.findUnique({
+      where: { clerkUserId: userId },
+      select: { profileComplete: true },
+    });
+    if (!existing?.profileComplete) {
+      return NextResponse.json(
+        { error: { code: "REGISTRATION_CLOSED", message: REGISTRATION_CLOSED_MESSAGE } },
+        { status: 403 },
+      );
+    }
+  }
 
   const body = await req.json();
   const parsed = onboardingSchema.safeParse(body);

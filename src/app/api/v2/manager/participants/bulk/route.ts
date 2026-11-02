@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { foldEmail } from "@/lib/email";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Gender, EduLevel, Ethnicity } from "@prisma/client";
+import { isRegistrationOpen, participantsClosedResponse } from "@/lib/registration";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
   try {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!(await isRegistrationOpen())) return participantsClosedResponse();
 
   const manager = await db.managerProfile.findUnique({
     where: { clerkUserId: userId },

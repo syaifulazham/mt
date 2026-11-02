@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { foldEmail, isValidEmail } from "@/lib/email";
 import { Gender, EduLevel } from "@prisma/client";
+import { isRegistrationOpen, participantsClosedResponse } from "@/lib/registration";
 
 const PAGE_SIZE_DEFAULT = 20;
 const PAGE_SIZE_MAX     = 100;
@@ -84,6 +85,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!(await isRegistrationOpen())) return participantsClosedResponse();
 
   const manager = await db.managerProfile.findUnique({
     where: { clerkUserId: userId },

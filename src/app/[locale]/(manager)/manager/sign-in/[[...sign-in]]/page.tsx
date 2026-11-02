@@ -4,12 +4,14 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
+import { isRegistrationOpen } from "@/lib/registration";
 
 export const metadata: Metadata = { title: "Sign In — Malaysia Techlympics 2026" };
 
 export default async function ManagerSignInPage() {
   const { userId } = await auth();
   if (userId) redirect("/manager/dashboard");
+  const registrationOpen = await isRegistrationOpen();
 
   return (
     <>
@@ -203,6 +205,8 @@ export default async function ManagerSignInPage() {
                   boxShadow:     "0 2px 12px rgba(0,56,147,0.25)",
                 },
                 footerActionLink:          { color: "#003893" },
+                // Hide Clerk's "Sign up" link while registration is closed.
+                ...(registrationOpen ? {} : { footerAction: { display: "none" } }),
                 identityPreviewEditButton: { color: "#003893" },
                 formFieldInput: {
                   border:     "1px solid #e5e7eb",

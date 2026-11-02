@@ -311,7 +311,7 @@ function AddEditDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, age: form.age ? Number(form.age) : null }),
       });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Failed"); }
+      if (!res.ok) { const j = await res.json(); throw new Error(j.message ?? j.error ?? "Failed"); }
       onSaved(); onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -760,9 +760,9 @@ function BulkUploadDialog({
         body: JSON.stringify({ csvText, contingentId }),
       });
       const text = await res.text();
-      let j: { data?: CleanRow[]; errors?: string[]; error?: string } = {};
+      let j: { data?: CleanRow[]; errors?: string[]; error?: string; message?: string } = {};
       try { j = JSON.parse(text); } catch { throw new Error("Server error — check console"); }
-      if (!res.ok) throw new Error(j.error ?? "AI parse failed");
+      if (!res.ok) throw new Error(j.message ?? j.error ?? "AI parse failed");
       const aiRows: CleanRow[] = ((j.data ?? []) as CleanRow[]).map(r => ({
         ...r,
         _icShort: (r.ic ?? "").replace(/\D/g, "").length < 12,
@@ -791,7 +791,7 @@ function BulkUploadDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: validRows, contingentId }),
       });
-      if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? "Import failed"); }
+      if (!res.ok) { const j = await res.json(); throw new Error(j.message ?? j.error ?? "Import failed"); }
       const j = await res.json();
       setImportCount(j.count);
       setStep("done");
@@ -1469,7 +1469,9 @@ function DeleteParticipantDialog({
   );
 }
 
-export function ParticipantsClient({ contingents }: { contingents: Contingent[] }) {
+export function ParticipantsClient({
+  contingents, registrationOpen = true,
+}: { contingents: Contingent[]; registrationOpen?: boolean }) {
   const t = useTranslations("participants");
   const [tab, setTab]               = useState<EduLevel | "ALL">("ALL");
   const [q, setQ]                   = useState("");
@@ -1620,6 +1622,17 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
           </span>
         </div>
 
+        {!registrationOpen && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>
+              <span className="font-semibold">Pendaftaran telah ditutup.</span>{" "}
+              Peserta baharu tidak boleh ditambah atau diimport. Maklumat peserta sedia ada masih boleh dikemas kini.
+            </span>
+          </div>
+        )}
+
+        {registrationOpen && (
         <div className="grid grid-cols-3 gap-2">
           <Button size="sm" variant="outline" className="gap-1.5 justify-center"
             onClick={() => {
@@ -1639,6 +1652,7 @@ export function ParticipantsClient({ contingents }: { contingents: Contingent[] 
             <span className="hidden sm:inline">{t("addBtn")}</span>
           </Button>
         </div>
+        )}
       </div>
 
       {/* ── Search ────────────────────────────────────── */}

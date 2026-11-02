@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { ParticipantsClient } from "@/components/manager/ParticipantsClient";
 import type { Metadata } from "next";
+import { isRegistrationOpen } from "@/lib/registration";
 
 export const metadata: Metadata = { title: "Participants" };
 
@@ -25,5 +26,5 @@ export default async function ParticipantsPage() {
     name: cm.contingent.name,
   }));
 
-  return <ParticipantsClient contingents={contingents} />;
+  return <ParticipantsClient contingents={contingents} registrationOpen={await isRegistrationOpen()} />;
 }

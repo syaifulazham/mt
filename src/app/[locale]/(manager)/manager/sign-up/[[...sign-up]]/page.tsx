@@ -2,10 +2,15 @@ import { SignUp } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
+import { isRegistrationOpen } from "@/lib/registration";
+
+// Rendered per request so closing registration takes effect immediately.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Daftar Akaun — Malaysia Techlympics 2026" };
 
 export default async function ManagerSignUpPage() {
+  const registrationOpen = await isRegistrationOpen();
   return (
     <>
       <style>{`
@@ -64,7 +69,7 @@ export default async function ManagerSignUpPage() {
               fontSize: "0.68rem", letterSpacing: "0.22em", textTransform: "uppercase", color: "#fff",
             }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", animation: "pulse-gold 2s infinite", display: "inline-block" }} />
-              Pendaftaran Dibuka
+              {registrationOpen ? "Pendaftaran Dibuka" : "Pendaftaran Ditutup"}
             </div>
 
             {/* Logo */}
@@ -159,6 +164,34 @@ export default async function ManagerSignUpPage() {
             </Link>
           </div>
 
+          {!registrationOpen ? (
+            <div
+              style={{
+                maxWidth: 400, width: "100%", textAlign: "center",
+                background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 10,
+                boxShadow: "0 4px 32px rgba(0,56,147,0.08), 0 1px 4px rgba(0,0,0,0.04)",
+                padding: "36px 28px",
+              }}
+            >
+              <h2 style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1.4rem", color: "#111827", marginBottom: 10 }}>
+                Pendaftaran telah ditutup
+              </h2>
+              <p style={{ color: "#6b7280", fontSize: "1rem", lineHeight: 1.5, marginBottom: 24 }}>
+                Akaun pengurus baharu tidak boleh didaftarkan buat masa ini. Pengurus yang sudah berdaftar boleh log masuk seperti biasa.
+              </p>
+              <Link
+                href="/manager/sign-in"
+                style={{
+                  display: "inline-block", background: "#003893", color: "#ffffff",
+                  fontFamily: "'Exo 2', sans-serif", fontWeight: 700, letterSpacing: "0.1em",
+                  textTransform: "uppercase", fontSize: "0.85rem", textDecoration: "none",
+                  padding: "10px 24px", borderRadius: 10,
+                }}
+              >
+                Log Masuk
+              </Link>
+            </div>
+          ) : (
           <SignUp
             appearance={{
               variables: {
@@ -210,6 +243,7 @@ export default async function ManagerSignUpPage() {
             fallbackRedirectUrl="/manager/onboarding"
             signInUrl="/manager/sign-in"
           />
+          )}
 
           <p className="hidden lg:block" style={{ marginTop: 24, fontSize: "0.78rem", color: "#9ca3af" }}>
             <Link href="/" style={{ color: "#003893", textDecoration: "none" }}>

@@ -10,7 +10,11 @@ import type { Metadata } from "next";
 import { Images, ChevronRight } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { CustomSection, CUSTOM_SECTION_CSS } from "@/components/landing/CustomSection";
+import { isRegistrationOpen } from "@/lib/registration";
 import { LAYOUT_SETTING_KEY, parseLayout, resolveOrder, toSectionDto, type FixedKey } from "@/lib/landingSections";
+
+// Rendered per request: the registration switch and signed-in state must be live.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Malaysia Techlympics 2026",
@@ -58,7 +62,7 @@ export default async function LandingPage({
   const { locale } = await params;
 
   const { userId } = await auth().catch(() => ({ userId: null }));
-  const [manager, themes, galleries, newsArticles, t, customRows, layoutSetting] = await Promise.all([
+  const [manager, themes, galleries, newsArticles, t, customRows, layoutSetting, registrationOpen] = await Promise.all([
     userId
       ? db.managerProfile.findUnique({
           where: { clerkUserId: userId },
@@ -93,6 +97,7 @@ export default async function LandingPage({
     getTranslations({ locale, namespace: "landing" }),
     db.landingSection.findMany({ where: { isPublished: true }, orderBy: { createdAt: "asc" } }),
     db.appSetting.findUnique({ where: { key: LAYOUT_SETTING_KEY } }),
+    isRegistrationOpen(),
   ]);
 
   // ── Section order: fixed + published custom sections ────────────────────────
@@ -532,7 +537,7 @@ export default async function LandingPage({
                   </button>
                 </Link>
               </div>
-            ) : userId ? (
+            ) : userId && registrationOpen ? (
               <div className="flex items-center gap-3">
                 {clerkDisplayName && (
                   <span className="text-xs text-slate-500 hidden lg:block">{clerkDisplayName}</span>
@@ -546,13 +551,22 @@ export default async function LandingPage({
                   </button>
                 </Link>
               </div>
-            ) : (
+            ) : userId ? null : registrationOpen ? (
               <Link href="/manager/sign-up">
                 <button
                   className="text-xs font-bold tracking-widest uppercase px-5 py-2 rounded-full transition-all hover:opacity-90"
                   style={{ background: "#CC0001", color: "#fff", letterSpacing: "0.12em" }}
                 >
                   {t("registerNow")}
+                </button>
+              </Link>
+            ) : (
+              <Link href="/manager/sign-in">
+                <button
+                  className="text-xs font-bold tracking-widest uppercase px-5 py-2 rounded-full transition-all hover:opacity-90"
+                  style={{ background: "#003893", color: "#fff", letterSpacing: "0.12em" }}
+                >
+                  {t("managerLogin")}
                 </button>
               </Link>
             )}
@@ -592,8 +606,8 @@ export default async function LandingPage({
               className="inline-flex items-center gap-2 mb-8 rounded-full px-5 py-2"
               style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.3)", fontSize: "0.7rem", letterSpacing: "0.22em", textTransform: "uppercase", color: "#fff" }}
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-              {t("registrationOpen")}
+              <span className={`h-1.5 w-1.5 rounded-full ${registrationOpen ? "bg-green-400 animate-pulse" : "bg-red-400"}`} />
+              {registrationOpen ? t("registrationOpen") : t("registrationClosed")}
             </div>
 
             {/* Logo — white edge glow so original colours stand out on dark carousel */}
@@ -658,18 +672,25 @@ export default async function LandingPage({
                     {t("goToDashboard")}
                   </button>
                 </Link>
-              ) : userId ? (
+              ) : userId ? (registrationOpen &&
                 <Link href="/manager/onboarding">
                   <button className="px-8 py-3.5 rounded-full font-bold text-sm tracking-widest uppercase transition-all hover:opacity-90"
                     style={{ background: "#CC0001", color: "#fff", boxShadow: "0 4px 20px rgba(204,0,1,0.4)" }}>
                     {t("registerNow")}
                   </button>
                 </Link>
-              ) : (
+              ) : registrationOpen ? (
                 <Link href="/manager/sign-up">
                   <button className="px-8 py-3.5 rounded-full font-bold text-sm tracking-widest uppercase transition-all hover:opacity-90"
                     style={{ background: "#CC0001", color: "#fff", boxShadow: "0 4px 20px rgba(204,0,1,0.4)" }}>
                     {t("registerNow")}
+                  </button>
+                </Link>
+              ) : (
+                <Link href="/manager/sign-in">
+                  <button className="px-8 py-3.5 rounded-full font-bold text-sm tracking-widest uppercase transition-all hover:opacity-90"
+                    style={{ background: "#003893", color: "#fff", boxShadow: "0 4px 20px rgba(0,56,147,0.4)" }}>
+                    {t("managerLogin")}
                   </button>
                 </Link>
               )}

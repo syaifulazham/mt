@@ -7,6 +7,7 @@ import { Link } from "@/i18n/navigation";
 import Image from "next/image";
 import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
+import { isRegistrationOpen } from "@/lib/registration";
 
 export const metadata: Metadata = { title: "Complete your profile — Malaysia Techlympics 2026" };
 
@@ -35,6 +36,7 @@ export default async function OnboardingPage({
   // Redirect if profile is complete OR if already active in a contingent
   // (covers the case where an organizer activated them before onboarding completed)
   if (profile?.profileComplete || profile?.contingentManagers?.length) redirect("/manager/dashboard");
+  const registrationOpen = await isRegistrationOpen();
 
   return (
     <>
@@ -234,7 +236,18 @@ export default async function OnboardingPage({
                 "0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)",
             }}
           >
-            <OnboardingForm />
+            {registrationOpen ? (
+              <OnboardingForm />
+            ) : (
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontFamily: "'Exo 2', sans-serif", fontWeight: 700, fontSize: "1.2rem", marginBottom: 10 }}>
+                  Pendaftaran telah ditutup
+                </p>
+                <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.95rem", lineHeight: 1.5 }}>
+                  Pendaftaran pengurus baharu tidak dibuka buat masa ini. Sila hubungi penganjur jika anda memerlukan bantuan.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

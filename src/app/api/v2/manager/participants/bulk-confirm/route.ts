@@ -3,12 +3,14 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { foldEmail } from "@/lib/email";
 import { Gender, EduLevel, Ethnicity } from "@prisma/client";
+import { isRegistrationOpen, participantsClosedResponse } from "@/lib/registration";
 
 // ── POST /api/v2/manager/participants/bulk-confirm ───────────────────────────
 // Body: { rows: ParsedRow[], contingentId: string }
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!(await isRegistrationOpen())) return participantsClosedResponse();
 
   const manager = await db.managerProfile.findUnique({
     where: { clerkUserId: userId },

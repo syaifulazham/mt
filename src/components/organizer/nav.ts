@@ -25,6 +25,7 @@ import {
   BadgeCheck,
   GraduationCap,
   LayoutTemplate,
+  Settings,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -133,6 +134,10 @@ export const ORGANIZER_NAV: NavItem[] = [
   {
     label: "Data Watch", href: "/organizer/data-watch", icon: ShieldAlert, roles: ["SUPER_ADMIN", "ADMIN"],
     description: "Monitor data-quality issues and application error logs.",
+  },
+  {
+    label: "Settings", href: "/organizer/settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN"],
+    description: "Open or close registration for new managers and participants.",
   },
 ];
 
