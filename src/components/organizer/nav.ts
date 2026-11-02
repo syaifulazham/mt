@@ -27,6 +27,7 @@ import {
   LayoutTemplate,
   Settings,
   School,
+  Wand2,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -98,6 +99,8 @@ export const ORGANIZER_NAV: NavItem[] = [
         description: "Edit and publish certificate layouts." },
       { label: "Issued", href: "/organizer/certificates/issued", icon: BadgeCheck,
         description: "Search, download and verify issued certificates." },
+      { label: "Generator", href: "/organizer/certificates/generator", icon: Wand2,
+        description: "Generate certificate records from a template for event participants, winners or a list." },
     ],
   },
   {

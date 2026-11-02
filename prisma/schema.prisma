@@ -1820,6 +1820,30 @@ model Certificate {
   @@map("certificates")
 }
 
+/// Certificates → Generator: a job that issues certificate rows from a template
+/// for a recipient source. `config` holds the source settings (event,
+/// competitions, ranks, custom rows, event-name override). Runs in batches
+/// driven by the page; re-running skips recipients already issued for the
+/// template (certificates.meta.genKey).
+model CertGeneratorJob {
+  id          String    @id @default(cuid())
+  templateId  String
+  source      String // EVENT_PARTICIPANTS | EVENT_WINNERS | ALL_REGISTERED | CUSTOM
+  config      Json      @default("{}")
+  status      String    @default("DRAFT") // DRAFT | RUNNING | DONE | FAILED
+  total       Int       @default(0)
+  created     Int       @default(0)
+  skipped     Int       @default(0)
+  error       String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([templateId])
+  @@map("cert_generator_jobs")
+}
+
 model CertSerialCounter {
   id           String   @id @default(cuid())
   seasonId     String
