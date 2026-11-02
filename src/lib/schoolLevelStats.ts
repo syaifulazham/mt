@@ -17,6 +17,8 @@ export type LevelBreakdown = Record<SchoolLevelDimension, { label: string; count
 
 export type LevelCompetition = {
   id: string; code: string; name: string;
+  /** This level's target groups of the competition (the table groups by these). */
+  targetGroups: { id: string; name: string }[];
   schools: number; participations: number; male: number; female: number;
 };
 
@@ -149,7 +151,7 @@ export async function getSchoolLevelResult(level: string): Promise<SchoolLevelRe
         includeInDashboardStats: true, // Competitions → Dashboard Stats, as on the dashboard
         targetGroups: { some: { targetGroup: { schoolLevel: { equals: lvl, mode: "insensitive" } } } },
       },
-      select:  { id: true, code: true, name: true, targetGroups: { select: { targetGroup: { select: { schoolLevel: true, ppki: true } } } } },
+      select:  { id: true, code: true, name: true, targetGroups: { select: { targetGroup: { select: { id: true, name: true, schoolLevel: true, ppki: true } } } } },
       orderBy: { code: "asc" },
     }),
     participantGroups(),
@@ -178,7 +180,11 @@ export async function getSchoolLevelResult(level: string): Promise<SchoolLevelRe
         for (const [k, v] of g.dims[d]) dimTotals[d].set(k, (dimTotals[d].get(k) ?? 0) + v);
     }
     participations += n; male += m; female += f;
-    return { id: c.id, code: c.code, name: c.name, schools: schools.size, participations: n, male: m, female: f };
+    const targetGroups = c.targetGroups
+      .filter(t => t.targetGroup.schoolLevel.toUpperCase() === lvl)
+      .map(t => ({ id: t.targetGroup.id, name: t.targetGroup.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { id: c.id, code: c.code, name: c.name, targetGroups, schools: schools.size, participations: n, male: m, female: f };
   });
 
   const breakdown = Object.fromEntries(SCHOOL_LEVEL_DIMENSIONS.map(d => [
@@ -190,4 +196,93 @@ export async function getSchoolLevelResult(level: string): Promise<SchoolLevelRe
     schools: levelSchools.size, participations, male, female, breakdown,
     ms: Date.now() - t0,
   };
+}
+
+// ── One competition (Participation → School Level → competition page) ───────
+
+export type SchoolLevelCompetitionStats = {
+  id: string; code: string; name: string;
+  /** Each target group with the participations it admits (PPKI groups admit PPKI only). */
+  targetGroups: { id: string; name: string; level: string; label: string; ppki: boolean; participations: number }[];
+  schools: number; participations: number; male: number; female: number;
+  breakdown: LevelBreakdown;
+};
+
+/** The competition's eligibility counts — the same rule as the dashboard, school contingents only. */
+export async function getSchoolLevelCompetition(id: string): Promise<SchoolLevelCompetitionStats | null> {
+  const [c, groups] = await Promise.all([
+    db.competition.findUnique({
+      where:  { id },
+      select: { id: true, code: true, name: true, targetGroups: { select: { targetGroup: { select: { id: true, name: true, schoolLevel: true, ppki: true } } } } },
+    }),
+    participantGroups(),
+  ]);
+  if (!c) return null;
+  const tgs = c.targetGroups.map(t => t.targetGroup);
+  const admits = (t: (typeof tgs)[number], g: Group) => t.schoolLevel.toUpperCase() === g.level && (!t.ppki || g.ppki);
+
+  const eligible = groups.filter(g => tgs.some(t => admits(t, g)));
+  const schools = new Set<string>();
+  const dimTotals: Record<SchoolLevelDimension, Map<string, number>> = {
+    state: new Map(), schoolCategory: new Map(), ethnicity: new Map(), gender: new Map(),
+  };
+  let participations = 0, male = 0, female = 0;
+  for (const g of eligible) {
+    participations += g.n; male += g.male; female += g.female;
+    for (const sid of g.schools) schools.add(sid);
+    for (const d of SCHOOL_LEVEL_DIMENSIONS)
+      for (const [k, v] of g.dims[d]) dimTotals[d].set(k, (dimTotals[d].get(k) ?? 0) + v);
+  }
+  const breakdown = Object.fromEntries(SCHOOL_LEVEL_DIMENSIONS.map(d => [
+    d, [...dimTotals[d].entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
+  ])) as LevelBreakdown;
+
+  return {
+    id: c.id, code: c.code, name: c.name,
+    targetGroups: tgs
+      .map(t => ({
+        id: t.id, name: t.name, level: t.schoolLevel.toUpperCase(),
+        label: LEVEL_LABEL[t.schoolLevel.toUpperCase()] ?? t.schoolLevel, ppki: t.ppki,
+        participations: groups.filter(g => admits(t, g)).reduce((sum, g) => sum + g.n, 0),
+      }))
+      .sort((a, b) => (LEVEL_ORDER.indexOf(a.level) + 1 || 99) - (LEVEL_ORDER.indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name)),
+    schools: schools.size, participations, male, female, breakdown,
+  };
+}
+
+// ── Eligible participants of one competition, in pages (for the XLSX download) ─
+
+export type SchoolLevelParticipant = {
+  id: string; name: string; age: number | null; gender: string; classGrade: string | null; ethnicity: string;
+  school: string; schoolCode: string | null; schoolCategory: string; state: string;
+};
+
+export const PARTICIPANT_PAGE_SIZE = 5000;
+
+/** One page of eligible school-contingent participants, keyset-paged by participant id. */
+export async function getSchoolLevelParticipantsPage(competitionId: string, after: string | null, limit = PARTICIPANT_PAGE_SIZE) {
+  const rows = await db.$queryRawUnsafe<{
+    id: string; name: string; age: number | null; gender: string | null; classGrade: string | null; ethnicity: string | null;
+    school: string; schoolCode: string | null; category: string | null; state: string | null;
+  }[]>(`
+    SELECT p.id, p.name, p.age, p.gender::text AS gender, p."classGrade", p.ethnicity::text AS ethnicity,
+           s.name AS school, s.code AS "schoolCode", s.category::text AS category, st.name AS state
+    ${SCHOOL_PARTICIPANTS}
+    LEFT JOIN states st ON st.id = s."stateId"
+    WHERE EXISTS (
+      SELECT 1 FROM competition_target_groups ctg JOIN target_groups tg ON tg.id = ctg."targetGroupId"
+      WHERE ctg."competitionId" = $1
+        AND upper(tg."schoolLevel") = upper(p."eduLevel"::text) AND (NOT tg.ppki OR p.ppki))
+      ${after ? `AND p.id > $2` : ""}
+    ORDER BY p.id
+    LIMIT ${Math.min(Math.max(1, limit), PARTICIPANT_PAGE_SIZE)}`,
+    ...(after ? [competitionId, after] : [competitionId]));
+  const data: SchoolLevelParticipant[] = rows.map(r => ({
+    id: r.id, name: r.name, age: r.age,
+    gender: label("gender", r.gender), classGrade: r.classGrade?.trim() || null,
+    ethnicity: label("ethnicity", r.ethnicity),
+    school: r.school, schoolCode: r.schoolCode, schoolCategory: label("schoolCategory", r.category),
+    state: label("state", r.state),
+  }));
+  return { data, next: rows.length === Math.min(limit, PARTICIPANT_PAGE_SIZE) ? rows[rows.length - 1].id : null };
 }

@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { School, Users, Trophy, Info, Loader2, CheckCircle2, Circle, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { LevelBreakdown, SchoolLevelOverview, SchoolLevelResult } from "@/lib/schoolLevelStats";
+import type { LevelBreakdown, LevelCompetition, SchoolLevelOverview, SchoolLevelResult } from "@/lib/schoolLevelStats";
 import { Breakdowns, StatCard, fmt } from "@/components/organizer/workshops/parts";
 
 // Participation → School Level: competitions by eligibility, school contingents
@@ -136,6 +137,19 @@ export function SchoolLevelClient() {
     : loaded.flatMap((r) => r.competitions).sort((a, b) => a.code.localeCompare(b.code));
   const processing = steps.some((s) => s.state === "running" || s.state === "pending");
 
+  // Table grouped by target group (a competition with two groups is listed under each)
+  const byGroup = new Map<string, { name: string; rows: LevelCompetition[] }>();
+  for (const c of competitions) {
+    for (const t of c.targetGroups.length ? c.targetGroups : [{ id: "-", name: "Tiada kumpulan sasaran" }]) {
+      const g = byGroup.get(t.id) ?? { name: t.name, rows: [] };
+      g.rows.push(c);
+      byGroup.set(t.id, g);
+    }
+  }
+  const groups = [...byGroup.entries()]
+    .map(([id, g]) => ({ id, ...g, participations: g.rows.reduce((s, c) => s + c.participations, 0) }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ms", { numeric: true }));
+
   return (
     <div className="mx-auto max-w-6xl space-y-7 p-6">
       <div className="flex items-start justify-between gap-4">
@@ -205,20 +219,33 @@ export function SchoolLevelClient() {
                     <th className="px-4 py-3 text-right">Female</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {competitions.map((c, i) => (
-                    <tr key={`${c.id}:${i}`} className={cn("hover:bg-sky-50/60", c.participations === 0 && "text-zinc-400")}>
-                      <td className="px-4 py-2.5">
-                        <span className="mr-1.5 font-mono text-xs text-zinc-400">{c.code}</span>
-                        <span className={c.participations ? "text-zinc-900" : ""}>{c.name}</span>
+                {groups.map((g) => (
+                  <tbody key={g.id} className="divide-y border-b last:border-b-0">
+                    <tr className="bg-zinc-50/70">
+                      <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-zinc-700">
+                        {g.name}
+                        <span className="ml-2 font-normal text-zinc-400">
+                          {g.rows.length} pertandingan · {fmt(g.participations)} penyertaan
+                        </span>
                       </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(c.schools)}</td>
-                      <td className="px-4 py-2.5 text-right font-medium tabular-nums">{fmt(c.participations)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(c.male)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(c.female)}</td>
                     </tr>
-                  ))}
-                </tbody>
+                    {g.rows.map((c) => (
+                      <tr key={`${g.id}:${c.id}`} className={cn("group hover:bg-sky-50/60", c.participations === 0 && "text-zinc-400")}>
+                        <td className="px-4 py-2.5 pl-7">
+                          <Link href={`/organizer/participation/school-level/${c.id}`}
+                            className={cn("hover:text-[#085782] hover:underline", c.participations ? "text-zinc-900" : "")}>
+                            <span className="mr-1.5 font-mono text-xs text-zinc-400">{c.code}</span>
+                            {c.name}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{fmt(c.schools)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium tabular-nums">{fmt(c.participations)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{fmt(c.male)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{fmt(c.female)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                ))}
               </table>
             </div>
           </div>

@@ -1,8 +1,12 @@
 import type { WorkshopParticipant } from "@/lib/workshopStats";
 
+/** What the export needs per participant; `team` is optional (eligibility lists have none). */
+type ExportParticipant = Omit<WorkshopParticipant, "team" | "competitionCode"> & { team?: string };
+
 // Workshop (EptimEdu course) participants → XLSX (client-side, ExcelJS):
 // a "Ringkasan" sheet with counts per state, then one sheet per state listing
-// participants grouped by school.
+// participants grouped by school. Also used by Participation → School Level
+// (eligible participants, no team column), which passes onProgress.
 
 const C = {
   brand:     "FF085782", // workshop blue (matches the page)
@@ -23,7 +27,7 @@ const TAB_COLORS = ["FF085782", "FF0E7490", "FF0F766E", "FF4338CA", "FF7C3AED", 
 const FONT = "Calibri";
 const TITLE_FONT = "Calibri Light";
 
-const COLS: { header: string; width: number; align?: "left" | "center" | "right" }[] = [
+const ALL_COLS: { header: string; width: number; align?: "left" | "center" | "right" }[] = [
   { header: "Bil.",               width: 6,  align: "center" },
   { header: "Nama Peserta",       width: 42 },
   { header: "Umur",               width: 7,  align: "center" },
@@ -44,11 +48,20 @@ function sheetName(name: string, used: Set<string>) {
 
 const byText = (a: string, b: string) => a.localeCompare(b, "ms", { numeric: true, sensitivity: "base" });
 
-export async function exportWorkshopParticipantsExcel({ title, competitions, participants }: {
+export async function exportWorkshopParticipantsExcel({
+  title, competitions, participants,
+  teamColumn = true, filePrefix = "bengkel", countLabel = "peserta berdaftar", onProgress,
+}: {
   title: string;
   competitions: string; // e.g. "4.1R Cabaran Robot Tempur"
-  participants: WorkshopParticipant[];
+  participants: ExportParticipant[];
+  teamColumn?: boolean;
+  filePrefix?: string;
+  countLabel?: string;
+  /** Called per sheet while the workbook is built (done, total, current sheet). */
+  onProgress?: (done: number, total: number, sheet: string) => void;
 }): Promise<void> {
+  const COLS = teamColumn ? ALL_COLS : ALL_COLS.filter((c) => c.header !== "Pasukan");
   const ExcelJS = (await import("exceljs")).default;
   type Worksheet = import("exceljs").Worksheet;
 
@@ -62,7 +75,7 @@ export async function exportWorkshopParticipantsExcel({ title, competitions, par
   const solid = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
 
   // state → school key → participants
-  const states = new Map<string, Map<string, WorkshopParticipant[]>>();
+  const states = new Map<string, Map<string, ExportParticipant[]>>();
   for (const p of participants) {
     let schools = states.get(p.state);
     if (!schools) states.set(p.state, (schools = new Map()));
@@ -118,7 +131,7 @@ export async function exportWorkshopParticipantsExcel({ title, competitions, par
     });
     ws.columns = SUM.map((c) => ({ width: c.width }));
     titleBlock(ws, SUM.length, title,
-      `${competitions}  ·  ${participants.length.toLocaleString()} peserta berdaftar  ·  Dijana ${generated}`);
+      `${competitions}  ·  ${participants.length.toLocaleString()} ${countLabel}  ·  Dijana ${generated}`);
     headerRow(ws, 4, SUM);
 
     let r = 5;
@@ -154,7 +167,9 @@ export async function exportWorkshopParticipantsExcel({ title, competitions, par
 
   // ── One sheet per state ───────────────────────────────────────────────────
   const last = COLS.length;
-  stateNames.forEach((st, si) => {
+  for (const [si, st] of stateNames.entries()) {
+    onProgress?.(si, stateNames.length, st);
+    await new Promise((r) => setTimeout(r, 0)); // let the page repaint between sheets
     const schools = states.get(st)!;
     const count = [...schools.values()].reduce((s, l) => s + l.length, 0);
     const ws = wb.addWorksheet(sheetName(st, used), {
@@ -201,7 +216,7 @@ export async function exportWorkshopParticipantsExcel({ title, competitions, par
 
       list.forEach((p, i) => {
         const row = ws.getRow(r++);
-        row.values = [i + 1, p.name, p.age ?? "", p.gender, p.classGrade ?? "", p.ethnicity, p.team];
+        row.values = [i + 1, p.name, p.age ?? "", p.gender, p.classGrade ?? "", p.ethnicity, ...(teamColumn ? [p.team ?? ""] : [])];
         row.eachCell({ includeEmpty: true }, (cell, col) => {
           if (col > last) return;
           cell.font = { name: FONT, size: 10 };
@@ -219,7 +234,8 @@ export async function exportWorkshopParticipantsExcel({ title, competitions, par
       });
       r++; // gap between schools
     }
-  });
+  }
+  onProgress?.(stateNames.length, stateNames.length, "");
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -228,7 +244,7 @@ export async function exportWorkshopParticipantsExcel({ title, competitions, par
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60);
   a.href = url;
-  a.download = `bengkel-${slug || "peserta"}-${stamp}.xlsx`;
+  a.download = `${filePrefix}-${slug || "peserta"}-${stamp}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
 }
