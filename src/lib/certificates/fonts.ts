@@ -76,8 +76,10 @@ export async function embedFonts(doc: PDFDocument, keys: Iterable<FontKey>): Pro
       doc.registerFontkit(fontkit);
       fontkitRegistered = true;
     }
-    // subset: only the glyphs actually used, which keeps a certificate ~30 kB
-    out.set(key, await doc.embedFont(await fontBytes(weight === "bold" ? def.bold : def.normal), { subset: true }));
+    // Embedded whole: @pdf-lib/fontkit's subsetter drops most glyphs of these
+    // TTFs (Inter rendered "AHMAD" as "  A  "), so subsetting is off. Costs a few
+    // hundred kB per font per certificate, which is small next to the artwork.
+    out.set(key, await doc.embedFont(await fontBytes(weight === "bold" ? def.bold : def.normal), { subset: false }));
   }
   return out;
 }
