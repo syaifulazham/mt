@@ -236,8 +236,10 @@ export function CertificateGeneratorClient() {
   const [events, setEvents] = useState<EventOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [running, setRunning] = useState<{ id: string; processed: number; total: number; created: number; skipped: number } | null>(null);
+  const [running, setRunning] = useState<{ id: string; processed: number; total: number; created: number; skipped: number; updated: number } | null>(null);
+  const [refresh, setRefresh] = useState(false);
   const [err, setErr] = useState("");
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -257,18 +259,20 @@ export function CertificateGeneratorClient() {
   async function run(job: Job) {
     setConfirmRun(null);
     setErr("");
-    let offset: number | null = 0, created = 0, skipped = 0;
-    setRunning({ id: job.id, processed: 0, total: job.total, created: 0, skipped: 0 });
+    let offset: number | null = 0, created = 0, skipped = 0, updated = 0;
+    setRunning({ id: job.id, processed: 0, total: job.total, created: 0, skipped: 0, updated: 0 });
     try {
       while (offset !== null) {
-        const r: { created: number; skipped: number; processed: number; total: number; nextOffset: number | null } =
-          await call(`${API}/${job.id}`, { method: "POST", body: JSON.stringify({ offset }) });
-        created += r.created; skipped += r.skipped;
-        setRunning({ id: job.id, processed: r.processed, total: r.total, created, skipped });
+        const r: { created: number; skipped: number; updated: number; processed: number; total: number; nextOffset: number | null } =
+          await call(`${API}/${job.id}`, { method: "POST", body: JSON.stringify({ offset, refresh }) });
+        created += r.created; skipped += r.skipped; updated += r.updated ?? 0;
+        setRunning({ id: job.id, processed: r.processed, total: r.total, created, skipped, updated });
         offset = r.nextOffset;
       }
+      if (updated) setErr("");
+      setNotice(updated ? `${fmt(updated)} sijil sedia ada dikemas kini · ${fmt(created)} baharu` : "");
     } catch (e) { setErr(e instanceof Error ? e.message : "Gagal menjana"); }
-    finally { setRunning(null); load(); }
+    finally { setRunning(null); setRefresh(false); load(); }
   }
 
   async function remove(job: Job) {
@@ -305,6 +309,7 @@ export function CertificateGeneratorClient() {
       )}
 
       {err && <p className="flex items-center gap-1.5 text-xs text-red-600"><AlertTriangle className="h-3.5 w-3.5" /> {err}</p>}
+      {notice && <p className="flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {notice}</p>}
 
       {loading ? (
         <div className="flex h-40 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>
@@ -350,7 +355,7 @@ export function CertificateGeneratorClient() {
                     </div>
                     <p className="mt-1 text-[11px] text-zinc-500">
                       {isRunning
-                        ? `${fmt(running.processed)} / ${fmt(running.total)} · ${fmt(running.created)} baharu · ${fmt(running.skipped)} dilangkau`
+                        ? `${fmt(running.processed)} / ${fmt(running.total)} · ${fmt(running.created)} baharu${running.updated ? ` · ${fmt(running.updated)} dikemas kini` : ""} · ${fmt(running.skipped)} dilangkau`
                         : j.status === "DONE"
                           ? <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 className="h-3 w-3" /> {fmt(j.created)} dijana · {fmt(j.skipped)} sedia ada · {fmt(j.total)} penerima</span>
                           : j.status === "FAILED"
@@ -388,8 +393,18 @@ export function CertificateGeneratorClient() {
               {describe(confirmRun).map(d => <p key={d}>{d}</p>)}
             </div>
           )}
+          {confirmRun && confirmRun.created + confirmRun.skipped > 0 && (
+            <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <input type="checkbox" className="mt-0.5" checked={refresh} onChange={e => setRefresh(e.target.checked)} />
+              <span>
+                <b>Kemas kini sijil sedia ada</b> — sijil yang telah dijana untuk penerima ini diperbaharui mengikut data
+                dan istilah semasa (cth. anugerah, nama, kontinjen, nama acara). Nombor siri, kod pengesahan dan tarikh kekal.
+                Sijil yang dibatalkan tidak diubah.
+              </span>
+            </label>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmRun(null)}>Batal</Button>
+            <Button variant="outline" onClick={() => { setConfirmRun(null); setRefresh(false); }}>Batal</Button>
             <Button onClick={() => confirmRun && run(confirmRun)}>
               <Play className="mr-1.5 h-3.5 w-3.5" /> {confirmRun?.total ? "Jana" : "Cuba jana juga"}
             </Button>

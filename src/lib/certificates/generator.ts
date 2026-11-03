@@ -208,13 +208,27 @@ export async function resolveRecipients(
   };
 }
 
+/** The snapshot fields a recipient contributes to its certificate row. */
+function snapshotOf(r: Recipient) {
+  return {
+    recipientName: r.name, recipientType: r.participantId ? "PARTICIPANT" as const : "OTHER" as const, recipientIc: r.ic,
+    contingentName: r.contingentName, schoolName: r.schoolName, stateName: r.stateName, teamName: r.teamName,
+    competitionName: r.competitionName, competitionCode: r.competitionCode, eventName: r.eventName,
+    awardTitle: r.awardTitle, rank: r.rank,
+    participantId: r.participantId, contingentId: r.contingentId, teamId: r.teamId,
+    eventId: r.eventId, competitionId: r.competitionId,
+  };
+}
+
 /**
  * Issue one batch: certificates for `rows` against the template's current
- * version, skipping recipients already issued for this template.
+ * version, skipping recipients already issued for this template — or, with
+ * `refresh`, rewriting those certificates' snapshot from the current data
+ * (serial number, verification code, issue date and version unchanged).
  */
 export async function issueBatch(opts: {
-  jobId: string; templateId: string; rows: Recipient[]; createdBy: string;
-}): Promise<{ created: number; skipped: number }> {
+  jobId: string; templateId: string; rows: Recipient[]; createdBy: string; refresh?: boolean;
+}): Promise<{ created: number; skipped: number; updated: number }> {
   const template = await db.certTemplate.findUnique({
     where: { id: opts.templateId },
     include: { season: { select: { id: true, serialPrefix: true, archivedAt: true } } },
@@ -224,10 +238,16 @@ export async function issueBatch(opts: {
   if (template.season.archivedAt) throw new Error("Musim templat ini telah diarkibkan.");
 
   const genKeys = opts.rows.map(r => `${template.id}:${r.key}`);
-  const existing = genKeys.length ? await db.$queryRaw<{ k: string }[]>`
-    SELECT meta->>'genKey' AS k FROM certificates WHERE meta->>'genKey' = ANY(${genKeys})` : [];
-  const done = new Set(existing.map(e => e.k));
+  const existing = genKeys.length ? await db.$queryRaw<{ k: string; id: string; status: string }[]>`
+    SELECT meta->>'genKey' AS k, id, status::text AS status FROM certificates WHERE meta->>'genKey' = ANY(${genKeys})` : [];
+  const done = new Map(existing.map(e => [e.k, e]));
   const todo = opts.rows.filter((_, i) => !done.has(genKeys[i]));
+  const toRefresh = opts.refresh
+    ? opts.rows.flatMap((r, i) => {
+        const e = done.get(genKeys[i]);
+        return e && e.status !== "REVOKED" ? [{ id: e.id, r }] : []; // revoked certificates stay as they were
+      })
+    : [];
   const now = new Date();
 
   await db.$transaction(async (tx) => {
@@ -237,17 +257,17 @@ export async function issueBatch(opts: {
         data: {
           seasonId: template.seasonId, templateVersionId: template.currentVersionId!,
           serialNumber, uniqueCode: newUniqueCode(), status: "READY", issuedAt: now,
-          recipientName: r.name, recipientType: r.participantId ? "PARTICIPANT" : "OTHER", recipientIc: r.ic,
-          contingentName: r.contingentName, schoolName: r.schoolName, stateName: r.stateName, teamName: r.teamName,
-          competitionName: r.competitionName, competitionCode: r.competitionCode, eventName: r.eventName,
-          awardTitle: r.awardTitle, rank: r.rank,
+          ...snapshotOf(r),
           meta: { genKey: `${template.id}:${r.key}`, jobId: opts.jobId } as Prisma.InputJsonValue,
-          participantId: r.participantId, contingentId: r.contingentId, teamId: r.teamId,
-          eventId: r.eventId, competitionId: r.competitionId, createdBy: opts.createdBy,
+          createdBy: opts.createdBy,
         },
       });
     }
+    for (const { id, r } of toRefresh) await tx.certificate.update({ where: { id }, data: snapshotOf(r) });
   }, { timeout: 120_000 });
 
-  return { created: todo.length, skipped: opts.rows.length - todo.length };
+  return {
+    created: todo.length, updated: toRefresh.length,
+    skipped: opts.rows.length - todo.length - toRefresh.length,
+  };
 }
