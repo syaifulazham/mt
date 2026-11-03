@@ -67,8 +67,10 @@ export async function POST(req: NextRequest) {
   if (template.season.archivedAt) return NextResponse.json({ error: "Musim templat ini telah diarkibkan." }, { status: 409 });
 
   const source = body.source as GeneratorSource;
+  // Trainers / Contingent Manager Portal users: no event and no portal distribution
+  const personSource = source === "TRAINERS" || source === "MANAGERS";
   const cfg: GeneratorConfig = {
-    eventId:           body.config?.eventId || undefined,
+    eventId:           personSource ? undefined : body.config?.eventId || undefined,
     competitionCodes:  body.config?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!body.config?.attendedOnly,
     rankFrom:          body.config?.rankFrom ? Math.max(1, Math.floor(body.config.rankFrom)) : undefined,
@@ -78,7 +80,7 @@ export async function POST(req: NextRequest) {
     contingentType:    body.config?.contingentType || undefined,
     rows:              source === "CUSTOM" ? (body.config?.rows ?? []).slice(0, 20000) : undefined,
     eventNameOverride: body.config?.eventNameOverride?.trim() || undefined,
-    distributionLevel: DISTRIBUTION_LEVELS.includes(body.config?.distributionLevel as DistributionLevel)
+    distributionLevel: !personSource && DISTRIBUTION_LEVELS.includes(body.config?.distributionLevel as DistributionLevel)
       ? body.config!.distributionLevel : "NONE",
   };
   if ((source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS") && !cfg.eventId)

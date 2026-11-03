@@ -18,7 +18,7 @@ import { getCertDistribution } from "@/lib/certificates/distribution";
  * Public access goes through /verify/<uniqueCode>, never through this route —
  * ids are not secrets but they are not verification either.
  */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const certificate = await db.certificate.findUnique({
@@ -55,7 +55,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return new NextResponse(bytes as unknown as BodyInit, {
     headers: {
       "Content-Type":        "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      // ?inline=1 opens it in the browser (review) instead of saving it
+      "Content-Disposition": `${req.nextUrl.searchParams.get("inline") === "1" ? "inline" : "attachment"}; filename="${filename}"`,
       "Content-Length":      String(bytes.length),
       "Cache-Control":       "private, no-store",
     },

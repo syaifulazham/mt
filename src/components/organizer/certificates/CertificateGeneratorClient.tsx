@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
+import { ArrowRight, Eye, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,7 @@ type Job = {
             resultsBy?: "NATIONAL" | "STATE";
             distributionLevel?: DistLevel };
 };
-type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "ALL_REGISTERED" | "CUSTOM";
+type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM";
 type DistLevel = "NONE" | "SCHOOL" | "STATE" | "NATIONAL";
 const DIST_LABEL: Record<DistLevel, string> = {
   NONE: "Tiada", SCHOOL: "Peringkat Sekolah", STATE: "Peringkat Negeri", NATIONAL: "Peringkat Kebangsaan",
@@ -35,6 +35,8 @@ const SOURCE_LABEL: Record<Source, string> = {
   EVENT_PARTICIPANTS: "Peserta Acara",
   EVENT_WINNERS:      "Pencapaian Acara",
   ALL_REGISTERED:     "Semua Berdaftar",
+  TRAINERS:           "Jurulatih",
+  MANAGERS:           "Pengurus Kontinjen",
   CUSTOM:             "Custom",
 };
 const CONTINGENT_TYPES = [["", "Semua kontinjen"], ["SCHOOL", "Sekolah"], ["HIGHER", "IPT"], ["INDEPENDENT", "Bebas"], ["INTERNATIONAL", "Antarabangsa"]];
@@ -133,6 +135,8 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
   const [err, setErr] = useState("");
 
   const needsEvent = source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS";
+  // Trainers / Contingent Manager Portal users: no event, no portal distribution
+  const personSource = source === "TRAINERS" || source === "MANAGERS";
   const customRows = source === "CUSTOM" ? parseCustom(customText) : [];
   const chosen = templates.find(t => t.id === templateId);
 
@@ -189,6 +193,14 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
                     {events.map(e => <option key={e.id} value={e.id}>{e.name} ({e.scope})</option>)}
                   </select>
                 </div>
+              )}
+              {personSource && (
+                <p className="text-[11px] text-zinc-400">
+                  {source === "TRAINERS"
+                    ? "Semua jurulatih berdaftar — satu sijil setiap jurulatih, dengan kontinjen masing-masing."
+                    : "Semua pengguna Portal Pengurus Kontinjen — satu sijil setiap pengurus, dengan kontinjen pertama yang diurus."}
+                  {" "}Tidak terikat kepada acara dan tidak diedarkan ke portal.
+                </p>
               )}
               {needsEvent && competitions.length > 0 && (
                 <div className="flex flex-wrap items-start gap-2">
@@ -263,6 +275,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
                   <p className="text-[11px] text-zinc-400">{fmt(customRows.length)} baris dikesan.</p>
                 </div>
               )}
+              {!personSource && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="w-28 text-xs text-zinc-500">Edaran</span>
                 <select value={distributionLevel} onChange={e => setDistributionLevel(e.target.value as DistLevel)} className={cn(sel, "w-56")}>
@@ -270,6 +283,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
                 </select>
                 <span className="text-[11px] text-zinc-400">Lajur sijil di portal pengurus / peserta (Certificates → Distribution). “Tiada” = tidak diedarkan.</span>
               </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="w-28 text-xs text-zinc-500">Nama acara</span>
                 <input value={eventNameOverride} onChange={e => setOverride(e.target.value)} maxLength={120}
@@ -433,6 +447,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                     <p className="rounded-md border bg-zinc-50 px-2.5 py-1.5 text-sm font-medium">{SOURCE_LABEL[j.source]}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       {describe(j).map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
+                      {j.source !== "TRAINERS" && j.source !== "MANAGERS" && (
                       <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-zinc-500">
                         Edaran
                         <select value={j.config.distributionLevel ?? "NONE"} disabled={!!running}
@@ -442,6 +457,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                           {(Object.keys(DIST_LABEL) as DistLevel[]).map(l => <option key={l} value={l}>{DIST_LABEL[l]}</option>)}
                         </select>
                       </label>
+                      )}
                     </div>
                   </div>
                   <ArrowRight className="mt-6 h-4 w-4 shrink-0 text-zinc-300" />
@@ -473,10 +489,16 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                     </p>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] text-zinc-400">
-                  Dicipta {new Date(j.createdAt).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}{j.createdBy && ` oleh ${j.createdBy}`}
-                  {j.status === "DONE" && <> · <Link href="/organizer/certificates/issued" className="text-[#085782] hover:underline">Lihat sijil dikeluarkan</Link></>}
-                </p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="text-[11px] text-zinc-400">
+                    Dicipta {new Date(j.createdAt).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}{j.createdBy && ` oleh ${j.createdBy}`}
+                  </p>
+                  {/* This generator's issued certificates: review + download */}
+                  <Link href={`/organizer/certificates/generator/${j.id}`}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-white px-2.5 py-1 text-xs font-medium text-[#085782] hover:bg-sky-50">
+                    <Eye className="h-3.5 w-3.5" /> Lihat sijil{j.created + j.skipped > 0 ? ` (${fmt(j.created + j.skipped)})` : ""}
+                  </Link>
+                </div>
               </div>
             );
           })}

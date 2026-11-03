@@ -24,7 +24,7 @@ import { db } from "@/lib/db";
 import { computeCompetitionResults } from "@/lib/resultsRankings";
 import { allocateSerial, newUniqueCode } from "./serial";
 
-export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "ALL_REGISTERED", "CUSTOM"] as const;
+export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM"] as const;
 export type GeneratorSource = (typeof GENERATOR_SOURCES)[number];
 
 /** Where issued certificates are offered on the portals (Certificates → Distribution). */
@@ -58,6 +58,7 @@ export type GeneratorConfig = {
 
 export type Recipient = {
   key: string;                         // stable per (source, event, competition, person)
+  recipientType?: "PARTICIPANT" | "TRAINER" | "MANAGER" | "OTHER";
   participantId: string | null;
   name: string; ic: string | null;
   contingentId: string | null; contingentName: string | null;
@@ -224,6 +225,39 @@ export async function resolveRecipients(
     };
   }
 
+  if (source === "TRAINERS" || source === "MANAGERS") {
+    // Not tied to an event: every registered trainer, or every Contingent
+    // Manager Portal user (one certificate per person, with their first
+    // contingent printed). Only the event-name override applies.
+    const sql = source === "TRAINERS"
+      ? `SELECT tr.id AS pid, tr.name, tr.ic, ct.id AS contingent_id, ct.name AS contingent_name,
+                COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name
+         FROM trainers tr ${PERSON_JOINS.replace("%CT%", `tr."contingentId"`)}`
+      : `SELECT mp.id AS pid, mp.name, NULL::text AS ic, ct.id AS contingent_id, ct.name AS contingent_name,
+                COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name
+         FROM manager_profiles mp
+         LEFT JOIN LATERAL (
+           SELECT cm."contingentId" FROM contingent_managers cm
+           WHERE cm."managerId" = mp.id AND cm.status = 'ACTIVE' ORDER BY cm."createdAt" LIMIT 1
+         ) first_cm ON true
+         ${PERSON_JOINS.replace("JOIN contingents ct ", "LEFT JOIN contingents ct ").replace("%CT%", `first_cm."contingentId"`)}
+         WHERE mp."deletedAt" IS NULL`;
+    const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${sql}) y`);
+    const rows = await db.$queryRawUnsafe<PersonRow[]>(`${sql} ORDER BY state_name NULLS LAST, contingent_name NULLS LAST, name, pid OFFSET ${offset} LIMIT ${limit}`);
+    const trainers = source === "TRAINERS";
+    return {
+      total: n,
+      rows: rows.map(r => ({
+        key: `${trainers ? "trainer" : "manager"}:${r.pid}`,
+        recipientType: trainers ? "TRAINER" as const : "MANAGER" as const,
+        participantId: null, name: r.name, ic: r.ic,
+        contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
+        teamId: null, teamName: null, competitionId: null, competitionName: null, competitionCode: null,
+        eventId: null, eventName: cfg.eventNameOverride?.trim() || null, awardTitle: null, rank: null,
+      })),
+    };
+  }
+
   // CUSTOM
   const all = (cfg.rows ?? []).filter(r => r.name?.trim());
   return {
@@ -246,7 +280,7 @@ export async function resolveRecipients(
 /** The snapshot fields a recipient contributes to its certificate row. */
 function snapshotOf(r: Recipient) {
   return {
-    recipientName: r.name, recipientType: r.participantId ? "PARTICIPANT" as const : "OTHER" as const, recipientIc: r.ic,
+    recipientName: r.name, recipientType: r.recipientType ?? (r.participantId ? "PARTICIPANT" as const : "OTHER" as const), recipientIc: r.ic,
     contingentName: r.contingentName, schoolName: r.schoolName, stateName: r.stateName, teamName: r.teamName,
     competitionName: r.competitionName, competitionCode: r.competitionCode, eventName: r.eventName,
     awardTitle: r.awardTitle, rank: r.rank,
