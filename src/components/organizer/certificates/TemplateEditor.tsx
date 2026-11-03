@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowLeft, Copy, Eye, Image as ImageIcon, Loader2, QrCode, Save, Type, Upload, Layers, Send,
 } from "lucide-react";
@@ -49,6 +51,17 @@ export function TemplateEditor({
   const [selectedId, select]  = useState<string | null>(null);
   const [zoom, setZoom]       = useState(0.75);
   const [dirty, setDirty]     = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const router = useRouter();
+
+  // Unsaved changes: the browser asks before a reload / tab close, and the
+  // back arrow opens a dialog (edits only reach the server on Save).
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const [busy, setBusy]       = useState<null | "save" | "publish" | "upload" | "duplicate">(null);
   const [message, setMessage] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
@@ -165,7 +178,7 @@ export function TemplateEditor({
     });
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     setBusy("save"); setMessage(null);
     try {
       const res = await fetch(`/api/v2/organizer/certificates/templates/${template.id}`, {
@@ -175,8 +188,10 @@ export function TemplateEditor({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       setDirty(false); setMessage("Draft saved");
+      return true;
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Save failed");
+      return false;
     } finally { setBusy(null); }
   }
 
@@ -235,7 +250,8 @@ export function TemplateEditor({
     <div className="flex h-full flex-col">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2 border-b bg-white px-4 py-2">
-        <Link href="/organizer/certificates" className="text-zinc-400 hover:text-zinc-700">
+        <Link href="/organizer/certificates" className="text-zinc-400 hover:text-zinc-700"
+              onClick={(e) => { if (dirty) { e.preventDefault(); setLeaveOpen(true); } }}>
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <Input
@@ -459,6 +475,29 @@ export function TemplateEditor({
       <TruePreviewDialog
         templateId={template.id} config={config} open={preview} onClose={() => setPreview(false)}
       />
+      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Perubahan belum disimpan</DialogTitle>
+            <DialogDescription>
+              Suntingan pada templat ini belum disimpan dan akan hilang jika anda keluar sekarang.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLeaveOpen(false)}>Kekal di sini</Button>
+            <Button variant="destructive" onClick={() => { setDirty(false); setLeaveOpen(false); router.push("/organizer/certificates"); }}>
+              Keluar tanpa simpan
+            </Button>
+            {editable && (
+              <Button onClick={async () => {
+                const ok = await save();
+                setLeaveOpen(false);
+                if (ok) router.push("/organizer/certificates");
+              }}>Simpan &amp; keluar</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
