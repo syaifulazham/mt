@@ -28,6 +28,7 @@ import {
   Settings,
   School,
   Wand2,
+  Share2,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -101,6 +102,8 @@ export const ORGANIZER_NAV: NavItem[] = [
         description: "Search, download and verify issued certificates." },
       { label: "Generator", href: "/organizer/certificates/generator", icon: Wand2,
         description: "Generate certificate records from a template for event participants, winners or a list." },
+      { label: "Distribution", href: "/organizer/certificates/distribution", icon: Share2,
+        description: "Choose whether certificates appear on the contingent manager and participant portals." },
     ],
   },
   {
