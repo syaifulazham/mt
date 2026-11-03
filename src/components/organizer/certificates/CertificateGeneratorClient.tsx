@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Eye, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
+import { ArrowRight, Copy, Eye, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -114,23 +114,35 @@ function describe(j: Job) {
 }
 
 // ── New generator form ───────────────────────────────────────────────────────
-function NewGenerator({ templates, events, onCreated, onCancel }: {
+function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
   templates: Template[]; events: EventOpt[]; onCreated: () => void; onCancel: () => void;
+  /** Duplicate: start from an existing generator's settings (saved as a new generator). */
+  initial?: Job | null;
 }) {
-  const [templateId, setTemplateId] = useState("");
-  const [source, setSource] = useState<Source | "">("");
-  const [eventId, setEventId] = useState("");
+  const c = initial?.config;
+  const [templateId, setTemplateId] = useState(initial && templates.some(t => t.id === initial.templateId) ? initial.templateId : "");
+  const [source, setSource] = useState<Source | "">(initial?.source ?? "");
+  const [eventId, setEventId] = useState(c?.eventId ?? "");
   const [competitions, setCompetitions] = useState<{ code: string; name: string }[]>([]);
-  const [codes, setCodes] = useState<string[]>([]);
-  const [attendedOnly, setAttendedOnly] = useState(false);
-  const [rankFrom, setRankFrom] = useState(1);
-  const [rankTo, setRankTo] = useState(3);
-  const [verifiedOnly, setVerifiedOnly] = useState(true);
-  const [resultsBy, setResultsBy] = useState<"NATIONAL" | "STATE">("NATIONAL");
-  const [contingentType, setContingentType] = useState("");
+  const [codes, setCodes] = useState<string[]>(c?.competitionCodes ?? []);
+  const [attendedOnly, setAttendedOnly] = useState(c?.attendedOnly ?? false);
+  const [rankFrom, setRankFrom] = useState(c?.rankFrom ?? 1);
+  const [rankTo, setRankTo] = useState(c?.rankTo ?? 3);
+  const [verifiedOnly, setVerifiedOnly] = useState(c?.verifiedOnly ?? true);
+  const [resultsBy, setResultsBy] = useState<"NATIONAL" | "STATE">(c?.resultsBy ?? "NATIONAL");
+  const [contingentType, setContingentType] = useState(c?.contingentType ?? "");
   const [customText, setCustomText] = useState("");
-  const [eventNameOverride, setOverride] = useState("");
-  const [distributionLevel, setDistributionLevel] = useState<DistLevel>("NONE");
+  const [eventNameOverride, setOverride] = useState(c?.eventNameOverride ?? "");
+  const [distributionLevel, setDistributionLevel] = useState<DistLevel>(c?.distributionLevel ?? "NONE");
+
+  // Duplicating a generator with an event: load that event's competitions for the filter
+  useEffect(() => {
+    if (!initial?.config.eventId) return;
+    let alive = true;
+    call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${initial.config.eventId}`)
+      .then(j => { if (alive) setCompetitions(j.competitions); }).catch(() => {});
+    return () => { alive = false; };
+  }, [initial]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -165,7 +177,14 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
   const ready = templateId && source && (!needsEvent || eventId) && (source !== "CUSTOM" || customRows.length > 0) && (source !== "EVENT_WINNERS" || rankTo >= rankFrom);
 
   return (
-    <div className="rounded-xl border bg-white p-5 shadow-sm">
+    <div className={cn("rounded-xl border bg-white p-5 shadow-sm", initial && "border-sky-300 ring-2 ring-sky-100")}>
+      {initial && (
+        <p className="mb-3 flex items-center gap-1.5 text-xs text-sky-800">
+          <Copy className="h-3.5 w-3.5" /> Salinan tetapan daripada penjana &ldquo;{initial.templateName}&rdquo; ({SOURCE_LABEL[initial.source]}).
+          Ubah suai, kemudian simpan sebagai penjana baharu.
+          {initial.source === "CUSTOM" && " Senarai Custom perlu ditampal semula."}
+        </p>
+      )}
       <div className="flex flex-wrap items-start gap-3">
         <div className="space-y-1">
           <p className="text-xs font-medium text-zinc-500">Template</p>
@@ -319,6 +338,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
   const [events, setEvents] = useState<EventOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [duplicateFrom, setDuplicateFrom] = useState<Job | null>(null);
   const [running, setRunning] = useState<{ id: string; processed: number; total: number; created: number; skipped: number; updated: number } | null>(null);
   const [refresh, setRefresh] = useState(false);
   const [err, setErr] = useState("");
@@ -385,7 +405,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
           </p>
         </div>
         {!creating && (
-          <Button onClick={() => setCreating(true)} disabled={!templates.length}>
+          <Button onClick={() => { setDuplicateFrom(null); setCreating(true); }} disabled={!templates.length}>
             <Plus className="mr-1.5 h-4 w-4" /> Create New Generator
           </Button>
         )}
@@ -398,8 +418,9 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
       )}
 
       {creating && (
-        <NewGenerator templates={templates} events={events}
-          onCreated={() => { setCreating(false); load(); }} onCancel={() => setCreating(false)} />
+        <NewGenerator key={duplicateFrom?.id ?? "new"} templates={templates} events={events} initial={duplicateFrom}
+          onCreated={() => { setCreating(false); setDuplicateFrom(null); load(); }}
+          onCancel={() => { setCreating(false); setDuplicateFrom(null); }} />
       )}
 
       {err && <p className="flex items-center gap-1.5 text-xs text-red-600"><AlertTriangle className="h-3.5 w-3.5" /> {err}</p>}
@@ -469,6 +490,11 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                           : j.status === "DONE" ? <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
                         {isRunning ? "Menjana…" : j.status === "DONE" ? "Jana semula" : "Jana"}
                       </Button>
+                      <button onClick={() => { setDuplicateFrom(j); setCreating(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                        disabled={!!running} title="Duplikasi tetapan ke penjana baharu"
+                        className="rounded p-1.5 text-zinc-400 hover:bg-sky-50 hover:text-sky-700 disabled:opacity-40">
+                        <Copy className="h-4 w-4" />
+                      </button>
                       <button onClick={() => setConfirmDelete(j)} disabled={!!running} title="Padam penjana"
                         className="rounded p-1.5 text-zinc-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-40">
                         <Trash2 className="h-4 w-4" />
