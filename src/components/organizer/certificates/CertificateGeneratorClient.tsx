@@ -180,7 +180,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
                     <input type="number" min={1} value={rankFrom} onChange={e => setRankFrom(Number(e.target.value) || 1)} className={cn(sel, "h-8 w-16")} />
                     <span>–</span>
                     <input type="number" min={1} value={rankTo} onChange={e => setRankTo(Number(e.target.value) || 1)} className={cn(sel, "h-8 w-16")} />
-                    <span className="text-zinc-400">Anugerah: 1 Johan · 2 Naib Johan · 3 Tempat Ketiga · 4+ Tempat Ke-n</span>
+                    <span className="text-zinc-400">Anugerah: 1 Tempat Pertama · 2+ Tempat Ke-n</span>
                   </div>
                   <label className="flex items-center gap-2 text-xs text-zinc-600">
                     <span className="w-28 text-zinc-500">Keputusan</span>
@@ -203,7 +203,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
                     Tanpa tajuk, lajur dibaca dalam susunan itu.
                   </p>
                   <textarea value={customText} onChange={e => setCustomText(e.target.value)} rows={5}
-                    placeholder={"nama,ic,kontingen,pertandingan,anugerah\nAli bin Abu,080101-01-0101,SMK Bukit Jalil,Cabaran EZBOT,Johan"}
+                    placeholder={"nama,ic,kontingen,pertandingan,anugerah\nAli bin Abu,080101-01-0101,SMK Bukit Jalil,Cabaran EZBOT,Tempat Pertama"}
                     className="w-full rounded-md border bg-white p-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-200" />
                   <p className="text-[11px] text-zinc-400">{fmt(customRows.length)} baris dikesan.</p>
                 </div>

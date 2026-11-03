@@ -59,7 +59,7 @@ export type Recipient = {
 export const BATCH_SIZE = 250;
 
 export function awardTitleForRank(rank: number): string {
-  return rank === 1 ? "JOHAN" : rank === 2 ? "NAIB JOHAN" : rank === 3 ? "TEMPAT KETIGA" : `TEMPAT KE-${rank}`;
+  return rank === 1 ? "TEMPAT PERTAMA" : `TEMPAT KE-${rank}`;
 }
 
 type PersonRow = {
