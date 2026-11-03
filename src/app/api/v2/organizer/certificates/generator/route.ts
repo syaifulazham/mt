@@ -36,15 +36,18 @@ export async function GET(req: NextRequest) {
     db.event.findMany({ select: { id: true, name: true, slug: true, scope: true, startDate: true }, orderBy: { startDate: "desc" } }),
   ]);
   const tName = new Map(templates.map(t => [t.id, t.name]));
+  const tType = new Map(templates.map(t => [t.id, t.targetType as string]));
   const missing = jobs.filter(j => !tName.has(j.templateId)).map(j => j.templateId);
   if (missing.length)
-    for (const t of await db.certTemplate.findMany({ where: { id: { in: missing } }, select: { id: true, name: true } })) tName.set(t.id, t.name);
+    for (const t of await db.certTemplate.findMany({ where: { id: { in: missing } }, select: { id: true, name: true, targetType: true } })) {
+      tName.set(t.id, t.name); tType.set(t.id, t.targetType);
+    }
   const evName = new Map(events.map(e => [e.id, e.name]));
 
   return NextResponse.json({
     jobs: jobs.map(j => {
       const cfg = j.config as GeneratorConfig;
-      return { ...j, templateName: tName.get(j.templateId) ?? "(templat dipadam)", eventName: cfg.eventId ? evName.get(cfg.eventId) ?? null : null, config: { ...cfg, rows: undefined, rowCount: cfg.rows?.length } };
+      return { ...j, templateName: tName.get(j.templateId) ?? "(templat dipadam)", templateType: tType.get(j.templateId) ?? null, eventName: cfg.eventId ? evName.get(cfg.eventId) ?? null : null, config: { ...cfg, rows: undefined, rowCount: cfg.rows?.length } };
     }),
     templates, events,
   }, { headers: { "Cache-Control": "no-store" } });

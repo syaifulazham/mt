@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 type Template = { id: string; name: string; targetType: string; season: { name: string } };
 type EventOpt = { id: string; name: string; slug: string; scope: string };
 type Job = {
-  id: string; templateId: string; templateName: string; source: Source; status: string;
+  id: string; templateId: string; templateName: string; templateType: string | null; source: Source; status: string;
   total: number; created: number; skipped: number; error: string | null;
   createdBy: string | null; createdAt: string; completedAt: string | null; eventName: string | null;
   config: { eventId?: string; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
@@ -33,6 +33,33 @@ const SOURCE_LABEL: Record<Source, string> = {
 const CONTINGENT_TYPES = [["", "Semua kontinjen"], ["SCHOOL", "Sekolah"], ["HIGHER", "IPT"], ["INDEPENDENT", "Bebas"], ["INTERNATIONAL", "Antarabangsa"]];
 const CUSTOM_COLUMNS = ["nama", "ic", "kontingen", "sekolah", "negeri", "pasukan", "pertandingan", "kod", "anugerah", "kedudukan"];
 const fmt = (n: number) => n.toLocaleString();
+
+type GroupBy = "none" | "event" | "type" | "template";
+const GROUP_BY: { key: GroupBy; label: string }[] = [
+  { key: "none", label: "Tiada" }, { key: "event", label: "Acara" },
+  { key: "type", label: "Jenis Templat" }, { key: "template", label: "Templat" },
+];
+const TYPE_LABEL: Record<string, string> = {
+  GENERAL: "Umum", EVENT_PARTICIPANT: "Penyertaan Acara", EVENT_WINNER: "Pencapaian Acara",
+  NON_CONTEST_PARTICIPANT: "Penyertaan Bukan Pertandingan", QUIZ_PARTICIPANT: "Penyertaan Kuiz",
+  QUIZ_WINNER: "Pencapaian Kuiz", TRAINER: "Jurulatih", CONTINGENT: "Kontinjen", SCHOOL_WINNER: "Pencapaian Sekolah",
+};
+
+/** Jobs grouped under headings, in order of each group's newest job. */
+function groupJobs(jobs: Job[], by: GroupBy): { key: string; label: string; jobs: Job[] }[] {
+  if (by === "none") return [{ key: "all", label: "", jobs }];
+  const groups = new Map<string, { key: string; label: string; jobs: Job[] }>();
+  for (const j of jobs) {
+    const [key, label] =
+      by === "event"    ? [j.config.eventId ?? "-", j.eventName ?? (j.config.eventNameOverride ? `"${j.config.eventNameOverride}"` : "Tanpa acara")]
+      : by === "type"   ? [j.templateType ?? "-", TYPE_LABEL[j.templateType ?? ""] ?? j.templateType ?? "Tidak diketahui"]
+      :                   [j.templateId, j.templateName];
+    const g = groups.get(key) ?? { key, label, jobs: [] };
+    g.jobs.push(j);
+    groups.set(key, g);
+  }
+  return [...groups.values()];
+}
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, { cache: "no-store", ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
@@ -240,6 +267,7 @@ export function CertificateGeneratorClient() {
   const [refresh, setRefresh] = useState(false);
   const [err, setErr] = useState("");
   const [notice, setNotice] = useState("");
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
 
   const load = useCallback(async () => {
     try {
@@ -316,8 +344,28 @@ export function CertificateGeneratorClient() {
       ) : jobs.length === 0 ? (
         <p className="rounded-xl border border-dashed bg-white py-12 text-center text-sm text-zinc-400">Belum ada penjana. Klik “Create New Generator”.</p>
       ) : (
-        <div className="space-y-3">
-          {jobs.map(j => {
+        <div className="space-y-5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-zinc-500">Kumpulkan ikut</span>
+            {GROUP_BY.map(g => (
+              <button key={g.key} onClick={() => setGroupBy(g.key)}
+                className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
+                  groupBy === g.key ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
+                {g.label}
+              </button>
+            ))}
+          </div>
+          {groupJobs(jobs, groupBy).map(group => (
+          <div key={group.key} className="space-y-3">
+            {group.label && (
+              <h2 className="flex items-baseline gap-2 border-b pb-1 text-sm font-semibold text-zinc-800">
+                {group.label}
+                <span className="text-[11px] font-normal text-zinc-400">
+                  {group.jobs.length} penjana · {fmt(group.jobs.reduce((s, j) => s + j.created + j.skipped, 0))} sijil
+                </span>
+              </h2>
+            )}
+          {group.jobs.map(j => {
             const isRunning = running?.id === j.id;
             const pct = isRunning && running.total ? Math.round((running.processed / running.total) * 100) : j.status === "DONE" ? 100 : 0;
             return (
@@ -371,6 +419,8 @@ export function CertificateGeneratorClient() {
               </div>
             );
           })}
+          </div>
+          ))}
         </div>
       )}
 
