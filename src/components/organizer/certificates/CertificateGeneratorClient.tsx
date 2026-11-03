@@ -6,6 +6,7 @@ import { ArrowRight, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { GENERATOR_GROUP_COOKIE } from "./generatorCookie";
 
 // Certificates → Generator. A generator = template + recipient data
 // (event participants / event winners / all registered / custom) + settings.
@@ -40,7 +41,7 @@ const CONTINGENT_TYPES = [["", "Semua kontinjen"], ["SCHOOL", "Sekolah"], ["HIGH
 const CUSTOM_COLUMNS = ["nama", "ic", "kontingen", "sekolah", "negeri", "pasukan", "pertandingan", "kod", "anugerah", "kedudukan"];
 const fmt = (n: number) => n.toLocaleString();
 
-type GroupBy = "none" | "event" | "type" | "template";
+export type GroupBy = "none" | "event" | "type" | "template";
 const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "none", label: "Tiada" }, { key: "event", label: "Acara" },
   { key: "type", label: "Jenis Templat" }, { key: "template", label: "Templat" },
@@ -290,8 +291,15 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
   );
 }
 
+/** Remember the grouping for a year; "none" clears it. */
+function saveGroupCookie(g: GroupBy) {
+  document.cookie = g === "none"
+    ? `${GENERATOR_GROUP_COOKIE}=; path=/organizer/certificates/generator; max-age=0; samesite=lax`
+    : `${GENERATOR_GROUP_COOKIE}=${g}; path=/organizer/certificates/generator; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
-export function CertificateGeneratorClient() {
+export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initialGroupBy?: GroupBy }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [events, setEvents] = useState<EventOpt[]>([]);
@@ -301,7 +309,8 @@ export function CertificateGeneratorClient() {
   const [refresh, setRefresh] = useState(false);
   const [err, setErr] = useState("");
   const [notice, setNotice] = useState("");
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [groupBy, setGroupByState] = useState<GroupBy>(initialGroupBy);
+  const setGroupBy = (g: GroupBy) => { setGroupByState(g); saveGroupCookie(g); };
 
   const load = useCallback(async () => {
     try {
