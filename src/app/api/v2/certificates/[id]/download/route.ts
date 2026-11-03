@@ -33,7 +33,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "REVOKED", reason: certificate.revokedReason }, { status: 410 });
 
   if (!(await isAllowed(certificate.participantId, certificate.contingentId, certificate.meta, certificate.status,
-                        !!certificate.season.archivedAt, certificate.recipientIc)))
+                        !!certificate.season.archivedAt, certificate.recipientIc, certificate.recipientType)))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   const parsed = certConfigSchema.safeParse(certificate.templateVersion.configuration);
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // distributed to their portal (Certificates → Distribution + the generator's level).
 async function isAllowed(
   participantId: string | null, contingentId: string | null, meta: unknown, status: string,
-  archivedSeason: boolean, recipientIc: string | null,
+  archivedSeason: boolean, recipientIc: string | null, recipientType: string,
 ): Promise<boolean> {
   if (await getOrganizerSession()) return true;
 
@@ -94,6 +94,9 @@ async function isAllowed(
     if (archivedSeason)
       return status === "READY" && (await getCertDistribution()).manager
         && (ids.includes(contingentId ?? "") || await managerOwnsByIc(ids, recipientIc));
+    // Trainer certificates have no distribution level: the manager-portal switch alone decides
+    if (recipientType === "TRAINER")
+      return status === "READY" && ids.includes(contingentId ?? "") && (await getCertDistribution()).manager;
     return ids.includes(contingentId ?? "") && await portalMayServe("manager", meta, status);
   }
 
