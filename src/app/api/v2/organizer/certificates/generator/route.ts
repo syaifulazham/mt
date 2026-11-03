@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { GENERATOR_SOURCES, resolveRecipients, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { DISTRIBUTION_LEVELS, GENERATOR_SOURCES, resolveRecipients, type DistributionLevel, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
 
 export const dynamic = "force-dynamic";
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
     contingentType:    body.config?.contingentType || undefined,
     rows:              source === "CUSTOM" ? (body.config?.rows ?? []).slice(0, 20000) : undefined,
     eventNameOverride: body.config?.eventNameOverride?.trim() || undefined,
+    distributionLevel: DISTRIBUTION_LEVELS.includes(body.config?.distributionLevel as DistributionLevel)
+      ? body.config!.distributionLevel : "NONE",
   };
   if ((source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS") && !cfg.eventId)
     return NextResponse.json({ error: "Pilih acara." }, { status: 400 });

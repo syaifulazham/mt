@@ -19,9 +19,14 @@ type Job = {
   total: number; created: number; skipped: number; error: string | null;
   createdBy: string | null; createdAt: string; completedAt: string | null; eventName: string | null;
   config: { eventId?: string; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
-            verifiedOnly?: boolean; contingentType?: string; eventNameOverride?: string; rowCount?: number };
+            verifiedOnly?: boolean; contingentType?: string; eventNameOverride?: string; rowCount?: number;
+            distributionLevel?: DistLevel };
 };
 type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "ALL_REGISTERED" | "CUSTOM";
+type DistLevel = "NONE" | "SCHOOL" | "STATE" | "NATIONAL";
+const DIST_LABEL: Record<DistLevel, string> = {
+  NONE: "Tiada", SCHOOL: "Peringkat Sekolah", STATE: "Peringkat Negeri", NATIONAL: "Peringkat Kebangsaan",
+};
 
 const API = "/api/v2/organizer/certificates/generator";
 const SOURCE_LABEL: Record<Source, string> = {
@@ -117,6 +122,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
   const [contingentType, setContingentType] = useState("");
   const [customText, setCustomText] = useState("");
   const [eventNameOverride, setOverride] = useState("");
+  const [distributionLevel, setDistributionLevel] = useState<DistLevel>("NONE");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -134,7 +140,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
     try {
       await call(API, { method: "POST", body: JSON.stringify({
         templateId, source,
-        config: { eventId: eventId || undefined, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, contingentType, eventNameOverride,
+        config: { eventId: eventId || undefined, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
       onCreated();
@@ -236,6 +242,13 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-2">
+                <span className="w-28 text-xs text-zinc-500">Edaran</span>
+                <select value={distributionLevel} onChange={e => setDistributionLevel(e.target.value as DistLevel)} className={cn(sel, "w-56")}>
+                  {(Object.keys(DIST_LABEL) as DistLevel[]).map(l => <option key={l} value={l}>{DIST_LABEL[l]}</option>)}
+                </select>
+                <span className="text-[11px] text-zinc-400">Lajur sijil di portal pengurus / peserta (Certificates → Distribution). “Tiada” = tidak diedarkan.</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="w-28 text-xs text-zinc-500">Nama acara</span>
                 <input value={eventNameOverride} onChange={e => setOverride(e.target.value)} maxLength={120}
                   placeholder={needsEvent ? "Kosongkan untuk guna nama acara asal" : "Pilihan — dicetak pada sijil"}
@@ -301,6 +314,15 @@ export function CertificateGeneratorClient() {
       setNotice(updated ? `${fmt(updated)} sijil sedia ada dikemas kini · ${fmt(created)} baharu` : "");
     } catch (e) { setErr(e instanceof Error ? e.message : "Gagal menjana"); }
     finally { setRunning(null); setRefresh(false); load(); }
+  }
+
+  async function setDistribution(job: Job, level: DistLevel) {
+    setErr(""); setNotice("");
+    try {
+      const r = await call<{ applied: number }>(`${API}/${job.id}`, { method: "PATCH", body: JSON.stringify({ distributionLevel: level }) });
+      setNotice(`Edaran ditukar ke "${DIST_LABEL[level]}" · ${fmt(r.applied)} sijil sedia ada dikemas kini`);
+      load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
   }
 
   async function remove(job: Job) {
@@ -379,8 +401,17 @@ export function CertificateGeneratorClient() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-medium text-zinc-400">Data Penerima</p>
                     <p className="rounded-md border bg-zinc-50 px-2.5 py-1.5 text-sm font-medium">{SOURCE_LABEL[j.source]}</p>
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
                       {describe(j).map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
+                      <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-zinc-500">
+                        Edaran
+                        <select value={j.config.distributionLevel ?? "NONE"} disabled={!!running}
+                          onChange={e => setDistribution(j, e.target.value as DistLevel)}
+                          className={cn("h-6 rounded border bg-white px-1 text-[11px]",
+                            (j.config.distributionLevel ?? "NONE") === "NONE" ? "text-zinc-500" : "border-emerald-300 text-emerald-700")}>
+                          {(Object.keys(DIST_LABEL) as DistLevel[]).map(l => <option key={l} value={l}>{DIST_LABEL[l]}</option>)}
+                        </select>
+                      </label>
                     </div>
                   </div>
                   <ArrowRight className="mt-6 h-4 w-4 shrink-0 text-zinc-300" />

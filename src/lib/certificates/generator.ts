@@ -3,8 +3,9 @@
  * template's current version.
  *
  * Sources:
- *   EVENT_PARTICIPANTS — members of accepted teams of an event (+ confirmed
- *                        walk-in registrations), optionally attended only
+ *   EVENT_PARTICIPANTS — members of accepted teams of an event (online events:
+ *                        every team not rejected) + confirmed walk-in
+ *                        registrations, optionally attended only
  *   EVENT_WINNERS      — ranked members from the event's results, rank range,
  *                        verified judging only by default
  *   ALL_REGISTERED     — every registered participant (optionally by contingent type)
@@ -26,6 +27,13 @@ import { allocateSerial, newUniqueCode } from "./serial";
 export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "ALL_REGISTERED", "CUSTOM"] as const;
 export type GeneratorSource = (typeof GENERATOR_SOURCES)[number];
 
+/** Where issued certificates are offered on the portals (Certificates → Distribution). */
+export const DISTRIBUTION_LEVELS = ["NONE", "SCHOOL", "STATE", "NATIONAL"] as const;
+export type DistributionLevel = (typeof DISTRIBUTION_LEVELS)[number];
+export const DISTRIBUTION_LABEL: Record<DistributionLevel, string> = {
+  NONE: "Tiada", SCHOOL: "Peringkat Sekolah", STATE: "Peringkat Negeri", NATIONAL: "Peringkat Kebangsaan",
+};
+
 export type CustomRow = {
   name: string; ic?: string; contingent?: string; school?: string; state?: string;
   team?: string; competition?: string; competitionCode?: string; award?: string; rank?: number | null;
@@ -42,6 +50,8 @@ export type GeneratorConfig = {
   rows?: CustomRow[];                  // CUSTOM
   /** Printed instead of the event's own name. */
   eventNameOverride?: string;
+  /** Portal column the certificates appear under; NONE = not distributed. */
+  distributionLevel?: DistributionLevel;
 };
 
 export type Recipient = {
@@ -96,6 +106,10 @@ export async function resolveRecipients(
     const params: unknown[] = [cfg.eventId];
     const codeFilter = codes ? (params.push(codes), `AND c.code = ANY($${params.length})`) : "";
     const attended = cfg.attendedOnly ? `AND te."attendedAt" IS NOT NULL` : "";
+    // Physical events accept teams one by one; online events never do (their
+    // teams stay PENDING), so there every team that isn't rejected takes part.
+    const scope = (await db.event.findUnique({ where: { id: cfg.eventId }, select: { scope: true } }))?.scope ?? "";
+    const accepted = String(scope).startsWith("ONLINE") ? `te.acceptance <> 'REJECT'` : `te.acceptance = 'ACCEPT'`;
     const sql = `
       SELECT * FROM (
         SELECT ${PERSON_COLS}, t.id AS team_id, t.name AS team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code
@@ -105,7 +119,7 @@ export async function resolveRecipients(
         JOIN team_members tm ON tm."teamId" = t.id
         JOIN contestants p   ON p.id = tm."contestantId"
         ${PERSON_JOINS.replace("%CT%", `t."contingentId"`)}
-        WHERE te."eventId" = $1 AND te.acceptance = 'ACCEPT' ${attended} ${codeFilter}
+        WHERE te."eventId" = $1 AND ${accepted} ${attended} ${codeFilter}
         UNION ALL
         SELECT ${PERSON_COLS}, NULL, NULL, c.id, c.name, c.code
         FROM walkin_registrations wr
@@ -228,7 +242,9 @@ function snapshotOf(r: Recipient) {
  */
 export async function issueBatch(opts: {
   jobId: string; templateId: string; rows: Recipient[]; createdBy: string; refresh?: boolean;
+  distributionLevel?: DistributionLevel;
 }): Promise<{ created: number; skipped: number; updated: number }> {
+  const distLevel = opts.distributionLevel ?? "NONE";
   const template = await db.certTemplate.findUnique({
     where: { id: opts.templateId },
     include: { season: { select: { id: true, serialPrefix: true, archivedAt: true } } },
@@ -249,6 +265,16 @@ export async function issueBatch(opts: {
       })
     : [];
   const now = new Date();
+  // Online events (scope ONLINE_*) are flagged on the certificate itself, so the
+  // portals can mark them without depending on the event row later.
+  const eventIds = [...new Set(opts.rows.map(r => r.eventId).filter((x): x is string => !!x))];
+  const onlineEvents = new Set((await db.event.findMany({
+    where: { id: { in: eventIds } }, select: { id: true, scope: true },
+  })).filter(e => String(e.scope).startsWith("ONLINE")).map(e => e.id));
+  const metaOf = (r: Recipient) => ({
+    genKey: `${template.id}:${r.key}`, jobId: opts.jobId, distLevel,
+    online: !!r.eventId && onlineEvents.has(r.eventId),
+  }) as Prisma.InputJsonValue;
 
   await db.$transaction(async (tx) => {
     for (const r of todo) {
@@ -258,12 +284,16 @@ export async function issueBatch(opts: {
           seasonId: template.seasonId, templateVersionId: template.currentVersionId!,
           serialNumber, uniqueCode: newUniqueCode(), status: "READY", issuedAt: now,
           ...snapshotOf(r),
-          meta: { genKey: `${template.id}:${r.key}`, jobId: opts.jobId } as Prisma.InputJsonValue,
+          meta: metaOf(r),
           createdBy: opts.createdBy,
         },
       });
     }
-    for (const { id, r } of toRefresh) await tx.certificate.update({ where: { id }, data: snapshotOf(r) });
+    for (const { id, r } of toRefresh)
+      await tx.certificate.update({
+        where: { id },
+        data: { ...snapshotOf(r), meta: metaOf(r) },
+      });
   }, { timeout: 120_000 });
 
   return {
