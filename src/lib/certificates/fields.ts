@@ -19,6 +19,7 @@ export const CERT_FIELD_TOKENS = [
   "team_name",
   "competition_name",
   "competition_code",
+  "competition_full",
   "event_name",
   "award_title",
   "rank",
@@ -44,6 +45,7 @@ export const CERT_FIELDS: ReadonlyArray<{
   { token: "team_name",        label: "Team name",        sample: "TEAM ALPHA" },
   { token: "competition_name", label: "Competition name",   sample: "CABARAN CSI ARENA" },
   { token: "competition_code", label: "Competition code",    sample: "6.3R" },
+  { token: "competition_full", label: "Competition (code + name)", sample: "6.3R CABARAN CSI ARENA" },
   { token: "event_name",       label: "Event name",          sample: "ZON TENGAH" },
   { token: "award_title",      label: "Award title",            sample: "TEMPAT PERTAMA" },
   { token: "rank",             label: "Rank",           sample: "1" },
@@ -107,6 +109,8 @@ export function resolveFieldToken(token: string, src: CertFieldSource): string |
     case "team_name":        return src.teamName         ?? "";
     case "competition_name": return src.competitionName  ?? "";
     case "competition_code": return src.competitionCode  ?? "";
+    // "<code> <name>", e.g. "6.3R Cabaran Siasatan Jenayah" — either part may be absent
+    case "competition_full": return [src.competitionCode, src.competitionName].filter(Boolean).join(" ");
     case "event_name":       return src.eventName        ?? "";
     case "award_title":      return src.awardTitle       ?? "";
     case "rank":             return src.rank === null ? "" : String(src.rank);
