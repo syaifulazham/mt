@@ -46,6 +46,8 @@ export type GeneratorConfig = {
   attendedOnly?: boolean;              // EVENT_PARTICIPANTS
   rankFrom?: number; rankTo?: number;  // EVENT_WINNERS
   verifiedOnly?: boolean;              // EVENT_WINNERS (default true)
+  /** EVENT_WINNERS: rank across the whole event, or within each state. */
+  resultsBy?: "NATIONAL" | "STATE";
   contingentType?: string;             // ALL_REGISTERED: SCHOOL | HIGHER | INDEPENDENT | INTERNATIONAL
   rows?: CustomRow[];                  // CUSTOM
   /** Printed instead of the event's own name. */
@@ -149,15 +151,34 @@ export async function resolveRecipients(
     if (!cfg.eventId) throw new Error("Pilih acara.");
     const from = Math.max(1, cfg.rankFrom ?? 1), to = Math.max(from, cfg.rankTo ?? 3);
     const verifiedOnly = cfg.verifiedOnly !== false;
+    const byState = cfg.resultsBy === "STATE";
     const results = [
       ...await computeCompetitionResults(cfg.eventId, false, null),
       ...await computeCompetitionResults(cfg.eventId, true, null),
-    ].filter(r => (!codes || codes.includes(r.code)) && (!verifiedOnly || r.judgingStatus === "VERIFIED"));
+    ].filter(r => !codes || codes.includes(r.code));
 
-    const entries = results.flatMap(r => r.rankings
-      .filter(e => e.rank >= from && e.rank <= to)
-      .flatMap(e => e.members.map(m => ({ r, e, pid: m.id }))));
-    entries.sort((a, b) => a.r.code.localeCompare(b.r.code) || a.e.rank - b.e.rank || a.e.teamName.localeCompare(b.e.teamName));
+    // National: the event-wide rank. By state: re-rank each state's entries in
+    // the same order (rankings are already sorted by score, then best time).
+    // "Verified only" means the competition — or, by state, that state's own
+    // judging row — is VERIFIED.
+    const ranked = results.flatMap(r => {
+      if (!byState)
+        return verifiedOnly && r.judgingStatus !== "VERIFIED" ? [] : r.rankings.map(e => ({ r, e, rank: e.rank }));
+      const perState = new Map<string, number>();
+      return r.rankings.flatMap(e => {
+        const st = e.stateId ?? "-";
+        const rank = (perState.get(st) ?? 0) + 1;
+        perState.set(st, rank);
+        const verified = r.judgingStatus === "VERIFIED" || (!!e.stateId && r.verifiedStateIds.includes(e.stateId));
+        return verifiedOnly && !verified ? [] : [{ r, e, rank }];
+      });
+    });
+    const entries = ranked
+      .filter(x => x.rank >= from && x.rank <= to)
+      .flatMap(x => x.e.members.map(m => ({ ...x, pid: m.id })));
+    entries.sort((a, b) => a.r.code.localeCompare(b.r.code)
+      || (byState ? (a.e.stateName ?? "").localeCompare(b.e.stateName ?? "") : 0)
+      || a.rank - b.rank || a.e.teamName.localeCompare(b.e.teamName));
     const page = entries.slice(offset, offset + limit);
 
     const people = page.length ? await db.$queryRawUnsafe<PersonRow[]>(`
@@ -170,7 +191,7 @@ export async function resolveRecipients(
 
     return {
       total: entries.length,
-      rows: page.map(({ r, e, pid }) => {
+      rows: page.map(({ r, e, pid, rank }) => {
         const p = byId.get(pid);
         return {
           key: `win:${cfg.eventId}:${r.code}:${pid}`,
@@ -179,7 +200,7 @@ export async function resolveRecipients(
           schoolName: p?.school_name ?? null, stateName: e.stateName ?? p?.state_name ?? null,
           teamId: e.teamId, teamName: e.teamName,
           competitionId: compIds.get(r.code) ?? null, competitionName: r.name, competitionCode: r.code,
-          eventId: cfg.eventId!, eventName: evName, awardTitle: awardTitleForRank(e.rank), rank: e.rank,
+          eventId: cfg.eventId!, eventName: evName, awardTitle: awardTitleForRank(rank), rank,
         };
       }),
     };

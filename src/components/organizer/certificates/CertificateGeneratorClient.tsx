@@ -20,6 +20,7 @@ type Job = {
   createdBy: string | null; createdAt: string; completedAt: string | null; eventName: string | null;
   config: { eventId?: string; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
             verifiedOnly?: boolean; contingentType?: string; eventNameOverride?: string; rowCount?: number;
+            resultsBy?: "NATIONAL" | "STATE";
             distributionLevel?: DistLevel };
 };
 type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "ALL_REGISTERED" | "CUSTOM";
@@ -97,7 +98,10 @@ function describe(j: Job) {
   const c = j.config;
   const parts: string[] = [];
   if (j.eventName) parts.push(j.eventName);
-  if (j.source === "EVENT_WINNERS") parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
+  if (j.source === "EVENT_WINNERS") {
+    parts.push(c.resultsBy === "STATE" ? "Keputusan ikut negeri" : "Keputusan kebangsaan");
+    parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
+  }
   if (j.source === "EVENT_PARTICIPANTS" && c.attendedOnly) parts.push("Hadir sahaja");
   if (c.competitionCodes?.length) parts.push(`${c.competitionCodes.length} pertandingan`);
   if (j.source === "ALL_REGISTERED") parts.push(CONTINGENT_TYPES.find(t => t[0] === (c.contingentType ?? ""))?.[1] ?? "");
@@ -119,6 +123,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
   const [rankFrom, setRankFrom] = useState(1);
   const [rankTo, setRankTo] = useState(3);
   const [verifiedOnly, setVerifiedOnly] = useState(true);
+  const [resultsBy, setResultsBy] = useState<"NATIONAL" | "STATE">("NATIONAL");
   const [contingentType, setContingentType] = useState("");
   const [customText, setCustomText] = useState("");
   const [eventNameOverride, setOverride] = useState("");
@@ -132,6 +137,9 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
 
   async function pickEvent(id: string) {
     setEventId(id); setCodes([]); setCompetitions([]);
+    // Zone events rank by state by default; national (and other) events nationally
+    const scope = events.find(e => e.id === id)?.scope ?? "";
+    setResultsBy(scope === "ZONE" || scope === "ONLINE_ZONE" ? "STATE" : "NATIONAL");
     if (id) call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${id}`).then(j => setCompetitions(j.competitions)).catch(() => {});
   }
 
@@ -140,7 +148,7 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
     try {
       await call(API, { method: "POST", body: JSON.stringify({
         templateId, source,
-        config: { eventId: eventId || undefined, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, contingentType, eventNameOverride, distributionLevel,
+        config: { eventId: eventId || undefined, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
       onCreated();
@@ -208,6 +216,19 @@ function NewGenerator({ templates, events, onCreated, onCancel }: {
               )}
               {source === "EVENT_WINNERS" && (
                 <>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="w-28 text-zinc-500">Results by</span>
+                    {([["STATE", "State (ikut negeri)"], ["NATIONAL", "National (kebangsaan)"]] as const).map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setResultsBy(v)}
+                        className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
+                          resultsBy === v ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
+                        {l}
+                      </button>
+                    ))}
+                    <span className="text-zinc-400">
+                      {resultsBy === "STATE" ? "Kedudukan dikira semula dalam setiap negeri." : "Kedudukan merentas semua negeri."}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2 text-xs">
                     <span className="w-28 text-zinc-500">Kedudukan</span>
                     <input type="number" min={1} value={rankFrom} onChange={e => setRankFrom(Number(e.target.value) || 1)} className={cn(sel, "h-8 w-16")} />

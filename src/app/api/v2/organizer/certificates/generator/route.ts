@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
     rankFrom:          body.config?.rankFrom ? Math.max(1, Math.floor(body.config.rankFrom)) : undefined,
     rankTo:            body.config?.rankTo ? Math.max(1, Math.floor(body.config.rankTo)) : undefined,
     verifiedOnly:      body.config?.verifiedOnly !== false,
+    resultsBy:         body.config?.resultsBy === "STATE" ? "STATE" : "NATIONAL",
     contingentType:    body.config?.contingentType || undefined,
     rows:              source === "CUSTOM" ? (body.config?.rows ?? []).slice(0, 20000) : undefined,
     eventNameOverride: body.config?.eventNameOverride?.trim() || undefined,
