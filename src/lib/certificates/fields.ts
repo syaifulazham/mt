@@ -16,6 +16,7 @@ export const CERT_FIELD_TOKENS = [
   "contingent_name",
   "school_name",
   "state_name",
+  "country_name",
   "team_name",
   "competition_name",
   "competition_code",
@@ -42,6 +43,7 @@ export const CERT_FIELDS: ReadonlyArray<{
   { token: "contingent_name",  label: "Contingent name",      sample: "SMK BUKIT JALIL" },
   { token: "school_name",      label: "School name",        sample: "SMK BUKIT JALIL" },
   { token: "state_name",       label: "State",              sample: "WILAYAH PERSEKUTUAN KUALA LUMPUR" },
+  { token: "country_name",     label: "Country",            sample: "MALAYSIA" },
   { token: "team_name",        label: "Team name",        sample: "TEAM ALPHA" },
   { token: "competition_name", label: "Competition name",   sample: "CABARAN CSI ARENA" },
   { token: "competition_code", label: "Competition code",    sample: "6.3R" },
@@ -79,6 +81,7 @@ export type CertFieldSource = {
   contingentName:  string | null;
   schoolName:      string | null;
   stateName:       string | null;
+  countryName:     string | null;
   teamName:        string | null;
   competitionName: string | null;
   competitionCode: string | null;
@@ -106,6 +109,7 @@ export function resolveFieldToken(token: string, src: CertFieldSource): string |
     case "contingent_name":  return src.contingentName   ?? "";
     case "school_name":      return src.schoolName       ?? "";
     case "state_name":       return src.stateName        ?? "";
+    case "country_name":     return src.countryName      ?? "";
     case "team_name":        return src.teamName         ?? "";
     case "competition_name": return src.competitionName  ?? "";
     case "competition_code": return src.competitionCode  ?? "";
@@ -131,6 +135,7 @@ export function sampleFieldSource(season: { name: string; year: number }): CertF
     contingentName:  by("contingent_name"),
     schoolName:      by("school_name"),
     stateName:       by("state_name"),
+    countryName:     by("country_name"),
     teamName:        by("team_name"),
     competitionName: by("competition_name"),
     competitionCode: by("competition_code"),

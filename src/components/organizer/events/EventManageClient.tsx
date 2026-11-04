@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
-  LayoutDashboard, Scale, Award, Globe, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles, Medal,
+  LayoutDashboard, Scale, Award, Globe, Globe2, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles, Medal,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -16,7 +16,7 @@ const ONLINE_SCOPES = ["ONLINE_NATIONAL", "ONLINE_STATE", "ONLINE_ZONE", "ONLINE
 const CARD_W   = 260;
 const CARD_H   = 200; // generous estimate — only used for canvas height, not positioning
 const COL      = [0, 320, 640] as const;
-const ROW      = [0, 260, 520] as const; // extra row gap so diagonal arcs clear card bottoms
+const ROW      = [0, 260, 520, 780] as const; // extra row gap so diagonal arcs clear card bottoms
 const CANVAS_W = COL[2] + CARD_W; // 900
 
 type EventSummary = {
@@ -37,7 +37,8 @@ type Module = {
   pos: { x: number; y: number };
 };
 
-type EdgeDef    = { from: string; to: string; color: string; dashed?: boolean; arcDir?: 1 | -1 };
+/** `gutter`: leave the card's right side, run up the gap to the next column and enter the target from below — for a target in the same column with another card in between. */
+type EdgeDef    = { from: string; to: string; color: string; dashed?: boolean; arcDir?: 1 | -1; route?: "gutter" };
 type ArrowEntry = { d: string; color: string; dashed?: boolean; id: string };
 
 // ─── Main flow ───────────────────────────────────────────────────────────────
@@ -129,6 +130,21 @@ const WEBCRAFT_JUDGING_MODULE: Module = {
 
 const WEBCRAFT_COLOR = "#7c3aed";
 
+// Organizer-driven registration of foreign schools (ADMIN / SUPER_ADMIN only).
+// Its teams are entered into the event and land in Pra-Pendaftaran, hence the
+// arrow into it. Sits in the free bottom-left slot, or a row lower when the
+// Kehadiran Individu card has moved there (Webcraft events).
+const INTERNATIONAL_MODULE: Module = {
+  icon: Globe2,
+  title: "International Participation",
+  description: "Daftar peserta antarabangsa: negara, sekolah, peserta, jurulatih, pasukan dan penyertaan.",
+  color: "text-sky-600", bg: "bg-sky-50", border: "border-sky-100",
+  href: "international",
+  pos: { x: COL[0], y: ROW[2] },
+};
+const INTERNATIONAL_COLOR = "#0284c7";
+const INTERNATIONAL_ROLES: OrganizerRole[] = ["SUPER_ADMIN", "ADMIN"];
+
 const MAIN_CONNECTIONS: EdgeDef[] = [
   // Row-0 horizontal chain
   { from: "preregistration",      to: "attendance/confirmed", color: "#3b82f6" },
@@ -144,6 +160,9 @@ const MAIN_CONNECTIONS: EdgeDef[] = [
   // Indirect: Penghakiman → Penghakiman Webcraft. Skipped by `useArrows` when
   // the card isn't rendered, so it is safe to list unconditionally.
   { from: "judging",              to: "judging/webcraft",     color: WEBCRAFT_COLOR, dashed: true },
+  // International registration feeds Pra-Pendaftaran. Skipped when the card
+  // isn't rendered (other roles).
+  { from: "international",        to: "preregistration",      color: INTERNATIONAL_COLOR, route: "gutter" },
 ];
 
 // ─── Walk-in section ─────────────────────────────────────────────────────────
@@ -248,6 +267,7 @@ function buildPath(
   toEl: Element,
   containerRect: DOMRect,
   arcDir?: 1 | -1,
+  route?: "gutter",
 ): string {
   function rel(el: Element) {
     const r = el.getBoundingClientRect();
@@ -263,6 +283,15 @@ function buildPath(
 
   const f = rel(fromEl);
   const t = rel(toEl);
+
+  if (route === "gutter") {
+    const gx = f.r + (COL[1] - CARD_W) / 2; // middle of the gap between columns
+    const x1 = f.r, y1 = f.cy;
+    const x2 = t.r - 50, y2 = t.b;
+    const r = 12;
+    return `M ${x1} ${y1} H ${gx - r} Q ${gx} ${y1} ${gx} ${y1 - r} V ${y2 + 24 + r} `
+      + `Q ${gx} ${y2 + 24} ${gx - r} ${y2 + 24} H ${x2 + r} Q ${x2} ${y2 + 24} ${x2} ${y2 + 24 - r} V ${y2}`;
+  }
 
   const THRESHOLD = 50;
   const goingLeft  = t.cx < f.cx - THRESHOLD;
@@ -438,7 +467,7 @@ function useArrows(connections: EdgeDef[]) {
       const toEl   = wrap.querySelector(`[data-module="${conn.to}"]`);
       if (!fromEl || !toEl) continue;
       next.push({
-        d: buildPath(fromEl, toEl, cr, conn.arcDir),
+        d: buildPath(fromEl, toEl, cr, conn.arcDir, conn.route),
         color: conn.color,
         dashed: conn.dashed,
         id: `${conn.from}--${conn.to}`,
@@ -459,6 +488,7 @@ function useArrows(connections: EdgeDef[]) {
 
 export function EventManageClient({
   event,
+  role,
   hasWebcraft = false,
   hasCsi = false,
   hasQuizzly = false,
@@ -477,6 +507,9 @@ export function EventManageClient({
   const end   = fmtDate(event.endDate);
   const isOnline = ONLINE_SCOPES.includes(event.scope);
   const hasMedalTally = MEDAL_TALLY_SCOPES.includes(event.scope);
+  const showInternational = INTERNATIONAL_ROLES.includes(role);
+  // The bottom-left slot is taken by Kehadiran Individu on physical Webcraft events.
+  const internationalLow = showInternational && hasWebcraft && !isOnline;
 
   const mainModules = [
     ...MAIN_MODULES.filter(m =>
@@ -493,10 +526,15 @@ export function EventManageClient({
       ? { ...INDIVIDUAL_ATTENDANCE_MODULE, pos: { x: COL[0], y: ROW[2] } }
       : INDIVIDUAL_ATTENDANCE_MODULE]),
     ...(hasWebcraft ? [WEBCRAFT_JUDGING_MODULE] : []),
+    ...(showInternational
+      ? [internationalLow ? { ...INTERNATIONAL_MODULE, pos: { x: COL[0], y: ROW[3] } } : INTERNATIONAL_MODULE]
+      : []),
   ];
-  const legend = hasWebcraft
-    ? [...LEGEND, { color: WEBCRAFT_COLOR, label: "Penghakiman Webcraft", dashed: true }]
-    : LEGEND;
+  const legend = [
+    ...LEGEND,
+    ...(hasWebcraft ? [{ color: WEBCRAFT_COLOR, label: "Penghakiman Webcraft", dashed: true }] : []),
+    ...(showInternational ? [{ color: INTERNATIONAL_COLOR, label: "Penyertaan antarabangsa", dashed: false }] : []),
+  ];
 
   const mainColors   = [...new Set(MAIN_CONNECTIONS.map(c => c.color))];
   const walkinColors = [...new Set(WALKIN_CONNECTIONS.map(c => c.color))];
@@ -506,7 +544,7 @@ export function EventManageClient({
   // Spans both canvases, for the arrows into Pengumuman.
   const { wrapRef: crossWrapRef,  arrows: crossArrows,  svgH: crossSvgH  } = useArrows(CROSS_CONNECTIONS);
 
-  const mainH   = ROW[2] + CARD_H + 24;
+  const mainH   = (internationalLow ? ROW[3] : ROW[2]) + CARD_H + 24;
   const walkinH = ROW[1] + CARD_H + 24;
 
   return (

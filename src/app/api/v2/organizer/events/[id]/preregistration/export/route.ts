@@ -78,7 +78,7 @@ export async function GET(
           p."classGrade",
           cont.name AS "contingentName",
           t.name    AS "teamName",
-          COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
+          COALESCE(s.name, sch_state.name, hi_state.name, ctry.name) AS "stateName",
           c.code    AS "competitionCode",
           c.name    AS "competitionName"
         FROM team_members tm
@@ -93,6 +93,7 @@ export async function GET(
         LEFT JOIN states          sch_state  ON sch_state.id = sch."stateId"
         LEFT JOIN higher_institutions hi     ON hi.id  = cont."higherInstitutionId"
         LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
+        LEFT JOIN countries       ctry       ON ctry.id = cont."countryId" AND ctry."codeIso2" <> 'MY'
         WHERE 1=1 ${extraConditions}
         ORDER BY c.code, t.name, p.name
       `;
@@ -124,7 +125,7 @@ export async function GET(
           tr.email,
           tr."phoneNumber",
           cont.name AS "contingentName",
-          COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
+          COALESCE(s.name, sch_state.name, hi_state.name, ctry.name) AS "stateName",
           COUNT(DISTINCT t.id)               AS teams,
           COUNT(DISTINCT tm."contestantId")  AS participants,
           ARRAY_AGG(DISTINCT t.name ORDER BY t.name) AS "teamNames"
@@ -140,9 +141,10 @@ export async function GET(
         LEFT JOIN states          sch_state  ON sch_state.id = sch."stateId"
         LEFT JOIN higher_institutions hi     ON hi.id  = cont."higherInstitutionId"
         LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
+        LEFT JOIN countries       ctry       ON ctry.id = cont."countryId" AND ctry."codeIso2" <> 'MY'
         WHERE 1=1 ${extraConditions}
         GROUP BY tr.id, tr.name, tr.email, tr."phoneNumber", cont.name,
-          COALESCE(s.name, sch_state.name, hi_state.name)
+          COALESCE(s.name, sch_state.name, hi_state.name, ctry.name)
         ORDER BY cont.name, tr.name
       `;
 
@@ -181,7 +183,7 @@ export async function GET(
       SELECT
         t.name    AS "teamName",
         cont.name AS "contingentName",
-        COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
+        COALESCE(s.name, sch_state.name, hi_state.name, ctry.name) AS "stateName",
         c.code    AS "competitionCode",
         c.name    AS "competitionName",
         (SELECT tg.code FROM competition_target_groups ctg2
@@ -204,10 +206,11 @@ export async function GET(
       LEFT JOIN states          sch_state  ON sch_state.id = sch."stateId"
       LEFT JOIN higher_institutions hi     ON hi.id  = cont."higherInstitutionId"
       LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
+      LEFT JOIN countries       ctry       ON ctry.id = cont."countryId" AND ctry."codeIso2" <> 'MY'
       WHERE 1=1 ${extraConditions}
       GROUP BY t.id, t.name, cont.name,
-        COALESCE(s.name, sch_state.name, hi_state.name), c.id, c.code, c.name
-      ORDER BY c.code, COALESCE(s.name, sch_state.name, hi_state.name), cont.name, t.name
+        COALESCE(s.name, sch_state.name, hi_state.name, ctry.name), c.id, c.code, c.name
+      ORDER BY c.code, COALESCE(s.name, sch_state.name, hi_state.name, ctry.name), cont.name, t.name
     `;
 
     return NextResponse.json({

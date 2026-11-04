@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { completeIfAllTasksDone, taskLockMap } from "@/lib/judgingStatus";
+import { completeIfAllTasksDone, taskLockMap, isJudgingScopeId } from "@/lib/judgingStatus";
 
 /**
  * POST /api/walkin-judging/[slug]/complete  body: { passcode, stateId? }
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   // Idempotent: a second click (or another device) keeps the first timestamp.
   if (stateId) {
-    if (!(await db.state.findUnique({ where: { id: stateId }, select: { id: true } })))
+    if (!(await isJudgingScopeId(stateId)))
       return NextResponse.json({ error: "INVALID_STATE_ID" }, { status: 400 });
     await db.judgingTaskStateCompletion.upsert({
       where:  { scope_taskId_stateId: { scope: "walkin", taskId: endpoint.id, stateId } },

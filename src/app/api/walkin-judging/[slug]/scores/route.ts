@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   // Ensure the registration belongs to this endpoint's walk-in competition
   const registration = await db.walkInRegistration.findFirst({
     where:  { id: walkInRegistrationId, walkInCompetitionId: endpoint.walkInCompetitionId, status: "CONFIRMED" },
-    select: { contingent: { select: { stateId: true, school: { select: { stateId: true } }, higherInstitution: { select: { stateId: true } } } } },
+    select: { contingent: { select: { stateId: true, school: { select: { stateId: true } }, higherInstitution: { select: { stateId: true } }, country: { select: { codeIso2: true } } } } },
   });
   if (!registration) return NextResponse.json({ error: "REGISTRATION_NOT_FOUND" }, { status: 404 });
 

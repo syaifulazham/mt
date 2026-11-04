@@ -392,6 +392,10 @@ model Participant {
   id           String     @id @default(cuid())
   name         String
   ic           String?
+  /// Foreign participants (INTERNATIONAL contingent with a non-MY country) have
+  /// a passport instead of an IC; birthDate then stands in for the IC-derived age.
+  passport     String?
+  birthDate    DateTime?  @db.Date
   email        String?
   phoneNumber  String?
   gender       Gender
@@ -1025,6 +1029,7 @@ model Trainer {
   id           String   @id @default(cuid())
   name         String
   ic           String?
+  passport     String?
   email        String?
   phoneNumber  String?
   contingentId String
@@ -1786,6 +1791,7 @@ model Certificate {
   contingentName  String?
   schoolName      String?
   stateName       String?
+  countryName     String?
   teamName        String?
   competitionName String?
   competitionCode String?

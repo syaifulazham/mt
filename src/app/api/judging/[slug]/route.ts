@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contingentStateId, taskLockMap } from "@/lib/judgingStatus";
+import { INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME, contingentStateId, taskLockMap } from "@/lib/judgingStatus";
 
 const ONLINE_SCOPES = ["ONLINE_NATIONAL", "ONLINE_STATE", "ONLINE_ZONE", "ONLINE_OPEN"];
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       teamEvents: { some: { eventId: ec.event.id } },
     },
     include: {
-      contingent:  { select: { name: true, contingentType: true, stateId: true, state: { select: { name: true } }, school: { select: { stateId: true, state: { select: { name: true } } } }, higherInstitution: { select: { stateId: true, state: { select: { name: true } } } } } },
+      contingent:  { select: { name: true, contingentType: true, stateId: true, state: { select: { name: true } }, school: { select: { stateId: true, state: { select: { name: true } } } }, higherInstitution: { select: { stateId: true, state: { select: { name: true } } } }, country: { select: { codeIso2: true } } } },
       members: {
         include: { participant: { select: { name: true, gender: true, eduLevel: true, age: true, classGrade: true, className: true } } },
         orderBy: { createdAt: "asc" },
@@ -93,7 +93,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       contingent: t.contingent.name,
       contingentType: t.contingent.contingentType,
       stateId: contingentStateId(t.contingent),
-      stateName: t.contingent.state?.name ?? t.contingent.school?.state?.name ?? t.contingent.higherInstitution?.state?.name ?? null,
+      stateName: contingentStateId(t.contingent) === INTERNATIONAL_SCOPE_ID ? INTERNATIONAL_SCOPE_NAME
+        : t.contingent.state?.name ?? t.contingent.school?.state?.name ?? t.contingent.higherInstitution?.state?.name ?? null,
       memberCount: t.members.length,
       members: t.members.map(m => ({
         name: m.participant.name,

@@ -1,7 +1,8 @@
 import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
-import { computeCompetitionResults, type RankingEntry } from "@/lib/resultsRankings";
+import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
 import { announceKey } from "@/lib/announceKey";
+import { INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME } from "@/lib/countries";
 
 export { announceKey };
 
@@ -94,6 +95,8 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
   const stateNames = new Map((stateRows.length
     ? await db.state.findMany({ where: { id: { in: [...new Set(stateRows.map(r => r.stateId))] } }, select: { id: true, name: true } })
     : []).map(s => [s.id, s.name]));
+  // The Antarabangsa judging scope (every foreign team) is stored like a state.
+  stateNames.set(INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME);
   const entryBy = new Map(entries.map(e => [announceKey(e.kind, e.refId, e.stateId || null), e]));
   const compOf = (kind: string, refId: string) => all.find(a => a.kind === kind && a.c.id === refId);
   const levelsOf = (c: (typeof all)[number]["c"]) =>
@@ -131,9 +134,14 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
     rankingsBy = new Map([
       ...reg.map(r => [`event:${r.id}`, r.rankings] as const),
       ...walk.map(r => [`walkin:${r.id}`, r.rankings] as const),
+      // Antarabangsa: top 2 of each country (Malaysia included) ranked together —
+      // the same list as the results board's Antara Bangsa view.
+      ...reg.map(r => [`event:${r.id}:${INTERNATIONAL_SCOPE_ID}`, internationalRankings(r)] as const),
+      ...walk.map(r => [`walkin:${r.id}:${INTERNATIONAL_SCOPE_ID}`, internationalRankings(r)] as const),
     ]);
   }
   const rankingsFor = (kind: string, refId: string, stateId: string | null) => {
+    if (stateId === INTERNATIONAL_SCOPE_ID) return rankingsBy.get(`${kind}:${refId}:${INTERNATIONAL_SCOPE_ID}`) ?? [];
     const r = rankingsBy.get(`${kind}:${refId}`) ?? [];
     return stateId === null ? r : r.filter(x => x.stateId === stateId).map((x, i) => ({ ...x, rank: i + 1 }));
   };

@@ -86,6 +86,7 @@ export async function GET(
       LEFT JOIN states          sch_state  ON sch_state.id = sch."stateId"
       LEFT JOIN higher_institutions hi     ON hi.id  = cont."higherInstitutionId"
       LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
+      LEFT JOIN countries       ctry       ON ctry.id = cont."countryId" AND ctry."codeIso2" <> 'MY'
     `;
 
     const [rows, countRows] = await Promise.all([
@@ -94,7 +95,7 @@ export async function GET(
           t.id,
           t.name   AS "teamName",
           cont.name AS "contingentName",
-          COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
+          COALESCE(s.name, sch_state.name, hi_state.name, ctry.name) AS "stateName",
           c.code   AS "competitionCode",
           c.name   AS "competitionName",
           COUNT(DISTINCT tm."contestantId") AS members,
@@ -116,8 +117,8 @@ export async function GET(
         ${fromJoins}
         WHERE 1=1 ${extraConditions} ${duplicates ? duplicateFilter : Prisma.empty}
         GROUP BY t.id, t.name, cont.name,
-          COALESCE(s.name, sch_state.name, hi_state.name), c.code, c.name, te.selected, te.acceptance, te.wildcard
-        ORDER BY COALESCE(s.name, sch_state.name, hi_state.name), cont.name, t.name
+          COALESCE(s.name, sch_state.name, hi_state.name, ctry.name), c.code, c.name, te.selected, te.acceptance, te.wildcard
+        ORDER BY COALESCE(s.name, sch_state.name, hi_state.name, ctry.name), cont.name, t.name
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `,
       db.$queryRaw<CountRow[]>`

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
+import { flagEmoji, isForeignCountry } from "@/lib/countries";
 import { EventResultsClient } from "@/components/organizer/events/EventResultsClient";
 import { eventJudgingProgress, type JudgingRow } from "@/lib/judgingStatus";
 
@@ -125,6 +126,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
               stateId: true,
               school: { select: { stateId: true } },
               higherInstitution: { select: { stateId: true } },
+              country: { select: { name: true, codeIso2: true } },
             },
           },
         },
@@ -151,7 +153,11 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       return {
         teamId: t.id,
         teamName: t.name,
-        contingentName: t.contingent.name,
+        // Foreign teams are ranked here with everyone (the public board keeps them
+        // to the Antara Bangsa view); the country tells them apart.
+        contingentName: isForeignCountry(t.contingent.country)
+          ? `${t.contingent.name} · ${flagEmoji(t.contingent.country!.codeIso2)} ${t.contingent.country!.name}`
+          : t.contingent.name,
         contingentLogo: t.contingent.logoUrl,
         totalScore: agg.total,
         bestTime: agg.minTime,

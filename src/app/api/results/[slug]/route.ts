@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { computeCompetitionResults, releasedRankings } from "@/lib/resultsRankings";
+import {
+  computeCompetitionResults, internationalRankings, internationalReleased, releasedRankings,
+} from "@/lib/resultsRankings";
+import { INTERNATIONAL_SCOPE_ID } from "@/lib/countries";
 
 // POST /api/results/[slug]
 //
@@ -64,14 +67,22 @@ export async function POST(
     endpoint.competitionIds.length > 0 ? endpoint.competitionIds : null,
   );
   const competitions = results.map((r) => {
-    const { judgingStatus, judgingVerifiedAt, rankings: _all, ...c } = r;
-    void _all;
+    const { judgingStatus, judgingVerifiedAt, rankings: _all, foreignRankings: _foreign, ...c } = r;
+    void _all; void _foreign;
     const verified = judgingStatus === "VERIFIED";
     return {
       ...c,
       verified,
       verifiedAt: verified ? judgingVerifiedAt : null,
+      // States only: the Antarabangsa scope is reported on its own below.
+      verifiedStateIds: r.verifiedStateIds.filter(id => id !== INTERNATIONAL_SCOPE_ID),
       rankings: releasedRankings(r),
+      // Antara Bangsa: top 2 of each country (Malaysia included) ranked together.
+      // Malaysia's teams join with Kebangsaan's verify; the foreign teams with
+      // the Antarabangsa scope's verify.
+      hasInternational: r.foreignRankings.length > 0,
+      internationalReleased: internationalReleased(r),
+      internationalRankings: internationalRankings(r),
     };
   });
 

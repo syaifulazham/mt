@@ -1,11 +1,18 @@
 import { db } from "@/lib/db";
 import { verifiedStatesBy } from "@/lib/judgingStatus";
+import { HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, isForeignCountry } from "@/lib/countries";
 
 // Competition rankings from judging scores — shared by the public results
 // board (/api/results/[slug]) and the announcer board (/api/announce/[slug]).
 // Regular competitions rank teams by the sum of every judging task's scores;
 // walk-in competitions rank confirmed walk-in registrations the same way.
 // Ties on total score go to the best (lowest) time.
+//
+// Foreign teams (contingent of a country other than Malaysia — see
+// src/lib/international.ts) are kept out of `rankings`, so national and state
+// standings, the medal tally, MC boards and certificates stay local-only; local
+// teams are ranked 1..n among themselves. Foreign teams go to
+// `foreignRankings`, ranked within their own country.
 
 export interface RankingEntry {
   rank: number;
@@ -18,6 +25,10 @@ export interface RankingEntry {
   stateId: string | null;
   stateName: string | null;
   stateFlag: string | null;
+  /** Set for foreign contingents only. */
+  countryId: string | null;
+  countryName: string | null;
+  countryCode: string | null;
   totalScore: number;
   bestTime: number | null;
   members: { id: string; name: string }[];
@@ -34,7 +45,10 @@ export interface CompetitionResult {
   judgingVerifiedAt: Date | null;
   /** States whose own judging row is VERIFIED (per-state release). */
   verifiedStateIds: string[];
+  /** Local teams only, ranked 1..n. */
   rankings: RankingEntry[];
+  /** Foreign teams, each ranked within its country. */
+  foreignRankings: RankingEntry[];
 }
 
 type Agg = { totalScore: number; bestTime: number | null };
@@ -46,16 +60,32 @@ function addScore(map: Map<string, Agg>, key: string, score: number | null, time
   map.set(key, cur);
 }
 
+/** Higher total first; ties go to the best (lowest) time, no time last. */
+function compareEntries(a: Pick<RankingEntry, "totalScore" | "bestTime">, b: Pick<RankingEntry, "totalScore" | "bestTime">) {
+  if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+  if (a.bestTime === null && b.bestTime === null) return 0;
+  if (a.bestTime === null) return 1;
+  if (b.bestTime === null) return -1;
+  return a.bestTime - b.bestTime;
+}
+
 function rank(entries: Omit<RankingEntry, "rank">[]): RankingEntry[] {
   return [...entries]
-    .sort((a, b) => {
-      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-      if (a.bestTime === null && b.bestTime === null) return 0;
-      if (a.bestTime === null) return 1;
-      if (b.bestTime === null) return -1;
-      return a.bestTime - b.bestTime;
-    })
-    .map((entry, idx) => ({ rank: idx + 1, ...entry }));
+    .sort(compareEntries)
+    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+}
+
+/** Ranks everyone once, then splits: locals re-ranked 1..n, foreigners per country. */
+function rankSplit(entries: Omit<RankingEntry, "rank">[]): Pick<CompetitionResult, "rankings" | "foreignRankings"> {
+  const all = rank(entries);
+  const rankings = all.filter(r => !r.countryId).map((r, i) => ({ ...r, rank: i + 1 }));
+  const counters = new Map<string, number>();
+  const foreignRankings = all.filter(r => r.countryId).map(r => {
+    const n = (counters.get(r.countryId!) ?? 0) + 1;
+    counters.set(r.countryId!, n);
+    return { ...r, rank: n };
+  });
+  return { rankings, foreignRankings };
 }
 
 const CONTINGENT_SELECT = {
@@ -63,6 +93,7 @@ const CONTINGENT_SELECT = {
   state:             { select: { id: true, name: true, flagUrl: true } },
   school:            { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
   higherInstitution: { select: { state: { select: { id: true, name: true, flagUrl: true } } } },
+  country:           { select: { id: true, name: true, codeIso2: true } },
 } as const;
 
 type ContingentRow = {
@@ -70,10 +101,12 @@ type ContingentRow = {
   state: { id: string; name: string; flagUrl: string | null } | null;
   school: { state: { id: string; name: string; flagUrl: string | null } | null } | null;
   higherInstitution: { state: { id: string; name: string; flagUrl: string | null } | null } | null;
+  country: { id: string; name: string; codeIso2: string } | null;
 };
 
 function contingentFields(c: ContingentRow) {
   const st = c.state ?? c.school?.state ?? c.higherInstitution?.state;
+  const foreign = isForeignCountry(c.country) ? c.country : null;
   return {
     contingentId: c.id,
     contingentName: c.name,
@@ -82,6 +115,9 @@ function contingentFields(c: ContingentRow) {
     stateId: st?.id ?? null,
     stateName: st?.name ?? null,
     stateFlag: st?.flagUrl ?? null,
+    countryId: foreign?.id ?? null,
+    countryName: foreign?.name ?? null,
+    countryCode: foreign?.codeIso2 ?? null,
   };
 }
 
@@ -126,7 +162,7 @@ export async function computeCompetitionResults(
         judgingStatus: wc.judgingStatus,
         judgingVerifiedAt: wc.judgingVerifiedAt,
         verifiedStateIds: [],
-        rankings: rank(registrations.map((reg) => {
+        ...rankSplit(registrations.map((reg) => {
           const agg = scoreMap.get(reg.id) ?? { totalScore: 0, bestTime: null };
           return {
             teamId: reg.id,
@@ -179,7 +215,7 @@ export async function computeCompetitionResults(
       judgingStatus: ec.judgingStatus,
       judgingVerifiedAt: ec.judgingVerifiedAt,
       verifiedStateIds: [],
-      rankings: rank(teams.map((team) => {
+      ...rankSplit(teams.map((team) => {
         const agg = scoreMap.get(team.id) ?? { totalScore: 0, bestTime: null };
         return {
           teamId: team.id,
@@ -213,4 +249,34 @@ export function releasedRankings(c: Pick<CompetitionResult, "judgingStatus" | "v
       counters.set(r.stateId!, n);
       return { ...r, rank: n };
     });
+}
+
+/** Foreign results may be shown: the competition is VERIFIED, or its Antarabangsa judging scope is. */
+export function internationalReleased(c: Pick<CompetitionResult, "judgingStatus" | "verifiedStateIds">): boolean {
+  return c.judgingStatus === "VERIFIED" || c.verifiedStateIds.includes(INTERNATIONAL_SCOPE_ID);
+}
+
+/**
+ * The Antarabangsa ranking: the top `places` of each country — Malaysia's from
+ * the local ranking, each foreign country's from its own — merged and ranked
+ * 1..n by score with the usual tie-break. Shared by the public results board
+ * (Antara Bangsa view) and the MC announcement boards.
+ *
+ * Each part keeps its own release gate: Malaysia's teams take part once the
+ * competition is VERIFIED (as Kebangsaan), the foreign teams once the
+ * Antarabangsa judging scope is VERIFIED (or the whole competition is). With
+ * only one of the two verified, the list ranks just that part — so when
+ * Kebangsaan is verified later, Malaysia's teams join and the ranks shift.
+ * Malaysian entries are tagged with Malaysia as their country for display.
+ */
+export function internationalRankings(
+  c: Pick<CompetitionResult, "judgingStatus" | "verifiedStateIds" | "rankings" | "foreignRankings">,
+  places = 2,
+): RankingEntry[] {
+  if (c.foreignRankings.length === 0) return [];
+  const malaysia = c.judgingStatus === "VERIFIED"
+    ? c.rankings.slice(0, places).map(r => ({ ...r, countryName: "Malaysia", countryCode: HOME_COUNTRY_ISO2 }))
+    : [];
+  const foreign = internationalReleased(c) ? c.foreignRankings.filter(r => r.rank <= places) : [];
+  return [...malaysia, ...foreign].sort(compareEntries).map((r, i) => ({ ...r, rank: i + 1 }));
 }

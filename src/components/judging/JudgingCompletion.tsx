@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
 import { confirmationCode } from "@/lib/confirmationCode";
+import { INTERNATIONAL_SCOPE_ID } from "@/lib/countries";
 
 // "Penghakiman Selesai" on the judge-facing boards, shared by regular judging
 // (/judging/[slug] → /api/judging/[slug]) and walk-in judging
@@ -241,7 +242,9 @@ export function CompleteDialog({
 
 /**
  * Builds the dialog's scopes from the board's units: Kebangsaan first, then
- * each state present, with scored / total counts and whether it's locked.
+ * each state present, then Antarabangsa (every foreign team, one group), with
+ * scored / total counts and whether it's locked. Kebangsaan counts local teams
+ * only, though announcing it locks every team.
  */
 export function completeScopes(
   units: { stateId: string | null; stateName: string | null; scored: boolean }[],
@@ -254,10 +257,12 @@ export function completeScopes(
     cur.total++; if (u.scored) cur.scored++;
     byState.set(u.stateId, cur);
   }
+  const local = units.filter(u => u.stateId !== INTERNATIONAL_SCOPE_ID);
   return [
-    { id: null, name: "Kebangsaan (semua negeri)", total: units.length, scored: units.filter(u => u.scored).length, locked: !!locks?.national.locked },
+    { id: null, name: "Kebangsaan (semua negeri)", total: local.length, scored: local.filter(u => u.scored).length, locked: !!locks?.national.locked },
     ...[...byState.entries()]
-      .sort((a, b) => a[1].name.localeCompare(b[1].name))
+      .sort((a, b) => Number(a[0] === INTERNATIONAL_SCOPE_ID) - Number(b[0] === INTERNATIONAL_SCOPE_ID)
+        || a[1].name.localeCompare(b[1].name))
       .map(([id, s]) => ({ id, ...s, locked: !!lockedFor(locks, id) })),
   ];
 }

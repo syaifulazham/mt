@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   // Locked nationally (task or competition) or for the team's state: no new or changed scores.
   const team = await db.team.findUnique({
     where:  { id: teamId },
-    select: { contingent: { select: { stateId: true, school: { select: { stateId: true } }, higherInstitution: { select: { stateId: true } } } } },
+    select: { contingent: { select: { stateId: true, school: { select: { stateId: true } }, higherInstitution: { select: { stateId: true } }, country: { select: { codeIso2: true } } } } },
   });
   if (!team) return NextResponse.json({ error: "TEAM_NOT_FOUND" }, { status: 404 });
   const locks = await taskLockMap("event", task, task.eventCompetition.id, task.eventCompetition.judgingStatus);

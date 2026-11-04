@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contingentStateId, taskLockMap } from "@/lib/judgingStatus";
+import { INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME, contingentStateId, taskLockMap } from "@/lib/judgingStatus";
 
 // POST /api/walkin-judging/[slug]  body: { passcode }
 // Returns endpoint + event + competition + template info and confirmed walk-in participants
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           state: { select: { name: true } },
           school: { select: { stateId: true, state: { select: { name: true } } } },
           higherInstitution: { select: { stateId: true, state: { select: { name: true } } } },
+          country: { select: { codeIso2: true } },
         },
       },
     },
@@ -93,7 +94,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       contingentShortName: r.contingent.shortName,
       contingentType: r.contingent.contingentType,
       stateId: contingentStateId(r.contingent),
-      stateName: r.contingent.state?.name ?? r.contingent.school?.state?.name ?? r.contingent.higherInstitution?.state?.name ?? null,
+      stateName: contingentStateId(r.contingent) === INTERNATIONAL_SCOPE_ID ? INTERNATIONAL_SCOPE_NAME
+        : r.contingent.state?.name ?? r.contingent.school?.state?.name ?? r.contingent.higherInstitution?.state?.name ?? null,
     })),
   });
 }

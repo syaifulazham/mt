@@ -5,6 +5,7 @@ import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown, SlidersHorizo
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { flagEmoji } from "@/lib/countries";
 
 // ── Scale config (per-item font/element sizes, persisted in cookies) ──────────
 
@@ -65,9 +66,12 @@ type RankEntry = {
   contingentName: string; contingentShortName: string | null;
   contingentLogo: string | null;
   stateId: string | null; stateName: string | null; stateFlag: string | null;
+  /** Foreign teams only (Antara Bangsa view). */
+  countryName?: string | null; countryCode?: string | null;
   totalScore: number; bestTime: number | null;
   members: { id: string; name: string }[];
 };
+
 
 type CompetitionResult = {
   id: string; name: string; code: string; targetGroups: { code: string; name: string }[];
@@ -77,6 +81,12 @@ type CompetitionResult = {
   /** States verified on their own; when not `verified`, rankings hold only these states' teams. */
   verifiedStateIds?: string[];
   rankings: RankEntry[];
+  /** The competition has foreign (non-Malaysian) teams — shows the Antara Bangsa toggle. */
+  hasInternational?: boolean;
+  /** Foreign results verified (Antarabangsa scope, or the whole competition). */
+  internationalReleased?: boolean;
+  /** Top 2 per country; empty until the competition is verified nationally. */
+  internationalRankings?: RankEntry[];
 };
 
 type BoardData = {
@@ -511,6 +521,14 @@ function TeamSpotlight({
             {/* Contingent logo + state flag */}
             <div className="flex items-center gap-6">
               <ContingentLogo logo={entry.contingentLogo} name={entry.contingentName} size="xl" style={{ width: `${scales.contingentLogo * 6}rem`, height: `${scales.contingentLogo * 6}rem` }} />
+              {!entry.stateFlag && entry.countryName && (
+                <div className="flex flex-col items-center gap-2">
+                  <span style={{ fontSize: `${scales.stateFlag * 4}rem`, lineHeight: 1 }}>{flagEmoji(entry.countryCode)}</span>
+                  <p className="text-amber-400 font-black uppercase tracking-widest drop-shadow-lg" style={{ fontSize: `${scales.stateName * 1.125}rem`, WebkitTextStroke: "0.5px rgba(0,0,0,0.5)" }}>
+                    {entry.countryName}
+                  </p>
+                </div>
+              )}
               {entry.stateFlag && (
                 <div className="flex flex-col items-center gap-2">
                   <div className="rounded-lg overflow-hidden shrink-0" style={{ width: `${scales.stateFlag * 8}rem`, height: `${scales.stateFlag * 5}rem` }}>
@@ -653,6 +671,57 @@ function RankingsTable({ rankings, onSelect }: { rankings: RankEntry[]; onSelect
   );
 }
 
+// ── Antara Bangsa: top 2 of each country, ranked together ──────────────────────
+
+function InternationalBoard({ rankings, onSelect }: { rankings: RankEntry[]; onSelect: (e: RankEntry) => void }) {
+  if (rankings.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-3 text-white/30">
+        <Trophy className="h-12 w-12" />
+        <p className="text-sm">Tiada keputusan direkodkan lagi.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-white/10 overflow-hidden backdrop-blur-sm bg-white/5 mx-4 mb-6">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/10">
+            <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider w-12">#</th>
+            <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Negara</th>
+            <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Pasukan</th>
+            <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Kontinjen</th>
+            <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">Markah</th>
+            <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">Masa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rankings.map(r => (
+            <tr key={r.teamId} className="border-b border-white/5 hover:bg-white/10 transition-colors cursor-pointer" onClick={() => onSelect(r)}>
+              <td className="px-4 py-3 font-bold text-lg">
+                {r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : <span className="text-white/50 text-sm">{r.rank}</span>}
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <span className="mr-1.5">{flagEmoji(r.countryCode)}</span>
+                <span className="text-white/80">{r.countryName}</span>
+              </td>
+              <td className="px-4 py-3 text-white font-medium">{r.teamName}</td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <ContingentLogo logo={r.contingentLogo} name={r.contingentName} size="sm" />
+                  <span className="text-white/70 text-sm truncate max-w-[180px]">{r.contingentShortName ?? r.contingentName}</span>
+                </div>
+              </td>
+              <td className="px-4 py-3 text-right font-bold text-rose-300">{r.totalScore.toFixed(1)}</td>
+              <td className="px-4 py-3 text-right font-mono text-sky-300 text-xs">{r.bestTime != null ? fmtTime(r.bestTime) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export function ResultsBoardClient({ slug }: { slug: string }) {
@@ -669,7 +738,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [selectedTargetGroup, setSelectedTargetGroup] = useState<string | null>(null);
   // The viewer's choice; the effective `viewMode` (below) is forced to "state"
   // while only some states of the competition are released.
-  const [viewChoice, setViewMode] = useState<"national" | "state">("national");
+  const [viewChoice, setViewMode] = useState<"national" | "state" | "international">("national");
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
   const [scales, setScales] = useState<ScaleConfig>(() =>
@@ -853,8 +922,15 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
 
   // Only some states released (national not verified): show them in "Negeri" view.
   const nationalReleased = !!activeResult?.verified;
-  const viewMode: "national" | "state" =
-    activeResult && !nationalReleased && partialCount(activeResult) > 0 ? "state" : viewChoice;
+  const hasInternational = !!activeResult?.hasInternational;
+  // Antarabangsa can be verified before Kebangsaan, so it has its own gate.
+  const internationalOpen = hasInternational && (nationalReleased || !!activeResult?.internationalReleased);
+  const viewMode: "national" | "state" | "international" =
+    viewChoice === "international" && internationalOpen ? "international"
+    : activeResult && !nationalReleased && partialCount(activeResult) > 0 ? "state"
+    : viewChoice === "international" ? "national"
+    : viewChoice;
+  const internationalList = activeResult?.internationalRankings ?? [];
 
   // The state shown in "Negeri" view (a state of this competition), and whether its results are released
   const currentStateId = (selectedState && availableStates.some(s => s.id === selectedState))
@@ -865,7 +941,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   // Rankings after applying view filter, re-ranked from 1 within the filtered set
   const filteredRankings: RankEntry[] = (() => {
     if (!activeResult) return [];
-    if (viewMode === "national") return activeResult.rankings;
+    if (viewMode !== "state") return activeResult.rankings;
     const stateId = currentStateId;
     if (!stateId) return activeResult.rankings;
     return activeResult.rankings
@@ -922,7 +998,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
             </>
           )}
           <div className="mt-2 flex justify-center">
-            {activeResult.verified || (viewMode === "state" && stateReleased) ? <GreenLight /> : partialCount(activeResult) > 0 ? (
+            {activeResult.verified || (viewMode === "state" && stateReleased) || viewMode === "international" ? <GreenLight /> : partialCount(activeResult) > 0 ? (
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-300/80">
                 <GreenLight label={false} /> {partialCount(activeResult)} negeri disahkan
               </span>
@@ -1045,8 +1121,8 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
       })()}
 
       {/* National / State toggle */}
-      {activeResult && availableStates.length > 0 && (
-        <div className="max-w-4xl mx-auto px-6 pb-4 flex items-center justify-center gap-2">
+      {activeResult && (availableStates.length > 0 || hasInternational) && (
+        <div className="max-w-4xl mx-auto px-6 pb-4 flex items-center justify-center gap-2 flex-wrap">
           <button
             onClick={() => setViewMode("national")}
             disabled={!nationalReleased}
@@ -1062,6 +1138,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
             {!nationalReleased && <Lock className="h-3 w-3" />}
             Kebangsaan
           </button>
+          {availableStates.length > 0 && (
           <button
             onClick={() => { setViewMode("state"); setShowStateModal(true); }}
             className={cn(
@@ -1079,6 +1156,24 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
             )}
             <ChevronDown className="h-3 w-3 opacity-60" />
           </button>
+          )}
+          {hasInternational && (
+            <button
+              onClick={() => setViewMode("international")}
+              disabled={!internationalOpen}
+              title={internationalOpen ? undefined : "Keputusan antarabangsa belum disahkan"}
+              className={cn(
+                "px-5 py-1.5 rounded-full text-xs font-bold transition-all inline-flex items-center gap-1.5",
+                viewMode === "international"
+                  ? "bg-emerald-500 text-white shadow-lg"
+                  : "text-white/40 hover:text-white/70 bg-white/5 hover:bg-white/10",
+                !internationalOpen && "opacity-40 cursor-not-allowed hover:text-white/40 hover:bg-white/5",
+              )}
+            >
+              {!internationalOpen && <Lock className="h-3 w-3" />}
+              Antara Bangsa
+            </button>
+          )}
         </div>
       )}
 
@@ -1125,7 +1220,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
         </div>
       )}
 
-      {activeResult && !(activeResult.verified || (viewMode === "state" && stateReleased)) ? (
+      {activeResult && !(activeResult.verified || (viewMode === "state" && stateReleased) || viewMode === "international") ? (
         // Not verified for this view yet: the API sends no rankings for it.
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-6">
           <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-400/20 flex items-center justify-center">
@@ -1135,8 +1230,14 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
           <p className="text-sm text-white/40 max-w-sm">
             {partialCount(activeResult) > 0
               ? `Keputusan keseluruhan belum disahkan. Keputusan bagi ${partialCount(activeResult)} negeri telah disahkan — pilih "Negeri" untuk melihatnya.`
+              : internationalOpen
+              ? "Keputusan keseluruhan belum disahkan. Keputusan antarabangsa telah disahkan — pilih \"Antara Bangsa\" untuk melihatnya."
               : "Keputusan pertandingan ini akan dipaparkan sebaik sahaja disahkan oleh penganjur."}
           </p>
+        </div>
+      ) : viewMode === "international" ? (
+        <div className={spotlight ? "hidden" : "max-w-4xl mx-auto pb-12"}>
+          <InternationalBoard rankings={internationalList} onSelect={openSpotlight} />
         </div>
       ) : !activeResult || filteredRankings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3 text-white/30">

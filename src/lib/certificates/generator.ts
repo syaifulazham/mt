@@ -21,7 +21,7 @@
  */
 import { CertTargetType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { computeCompetitionResults } from "@/lib/resultsRankings";
+import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
 import { allocateSerial, newUniqueCode } from "./serial";
 
 export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM"] as const;
@@ -46,8 +46,12 @@ export type GeneratorConfig = {
   attendedOnly?: boolean;              // EVENT_PARTICIPANTS
   rankFrom?: number; rankTo?: number;  // EVENT_WINNERS
   verifiedOnly?: boolean;              // EVENT_WINNERS (default true)
-  /** EVENT_WINNERS: rank across the whole event, or within each state. */
-  resultsBy?: "NATIONAL" | "STATE";
+  /**
+   * EVENT_WINNERS: rank across the whole event (local teams), within each
+   * state, or INTERNATIONAL — the Antarabangsa ranking (top 2 of each country,
+   * Malaysia included, ranked together; see internationalRankings).
+   */
+  resultsBy?: "NATIONAL" | "STATE" | "INTERNATIONAL";
   contingentType?: string;             // ALL_REGISTERED: SCHOOL | HIGHER | INDEPENDENT | INTERNATIONAL
   rows?: CustomRow[];                  // CUSTOM
   /** Printed instead of the event's own name. */
@@ -63,6 +67,8 @@ export type Recipient = {
   name: string; ic: string | null;
   contingentId: string | null; contingentName: string | null;
   schoolName: string | null; stateName: string | null;
+  /** Foreign recipients' country; Malaysia too in INTERNATIONAL results. */
+  countryName?: string | null;
   teamId: string | null; teamName: string | null;
   competitionId: string | null; competitionName: string | null; competitionCode: string | null;
   eventId: string | null; eventName: string | null;
@@ -78,6 +84,7 @@ export function awardTitleForRank(rank: number): string {
 type PersonRow = {
   pid: string; name: string; ic: string | null;
   contingent_id: string | null; contingent_name: string | null; school_name: string | null; state_name: string | null;
+  country_name: string | null;
 };
 
 // Contingent → school / state, resolved the way the rest of MT does (school, institution, own state)
@@ -87,9 +94,12 @@ const PERSON_JOINS = `
   LEFT JOIN states ss            ON ss.id = s."stateId"
   LEFT JOIN higher_institutions hi ON hi.id = ct."higherInstitutionId"
   LEFT JOIN states hs            ON hs.id = hi."stateId"
-  LEFT JOIN states cs            ON cs.id = ct."stateId"`;
+  LEFT JOIN states cs            ON cs.id = ct."stateId"
+  LEFT JOIN countries co         ON co.id = ct."countryId"`;
+/** A foreign contingent's country (none for Malaysian ones). */
+const COUNTRY_COL = `CASE WHEN co."codeIso2" <> 'MY' THEN co.name END AS country_name`;
 const PERSON_COLS = `p.id AS pid, p.name, p.ic, ct.id AS contingent_id, ct.name AS contingent_name,
-  COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name`;
+  COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name, ${COUNTRY_COL}`;
 
 async function eventName(cfg: GeneratorConfig): Promise<string | null> {
   if (cfg.eventNameOverride?.trim()) return cfg.eventNameOverride.trim();
@@ -141,6 +151,7 @@ export async function resolveRecipients(
         key: `part:${cfg.eventId}:${r.comp_id}:${r.pid}`,
         participantId: r.pid, name: r.name, ic: r.ic,
         contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
+        countryName: r.country_name,
         teamId: r.team_id, teamName: r.team_name,
         competitionId: r.comp_id, competitionName: r.comp_name, competitionCode: r.comp_code,
         eventId: cfg.eventId!, eventName: evName, awardTitle: null, rank: null,
@@ -153,6 +164,7 @@ export async function resolveRecipients(
     const from = Math.max(1, cfg.rankFrom ?? 1), to = Math.max(from, cfg.rankTo ?? 3);
     const verifiedOnly = cfg.verifiedOnly !== false;
     const byState = cfg.resultsBy === "STATE";
+    const intl    = cfg.resultsBy === "INTERNATIONAL";
     const results = [
       ...await computeCompetitionResults(cfg.eventId, false, null),
       ...await computeCompetitionResults(cfg.eventId, true, null),
@@ -162,7 +174,14 @@ export async function resolveRecipients(
     // the same order (rankings are already sorted by score, then best time).
     // "Verified only" means the competition — or, by state, that state's own
     // judging row — is VERIFIED.
-    const ranked = results.flatMap(r => {
+    //
+    // International: the Antarabangsa ranking, with its own release rules —
+    // Malaysia's teams once the competition is VERIFIED, foreign teams once its
+    // Antarabangsa scope (or the competition) is. Without "verified only",
+    // both parts are taken as they stand.
+    const ranked = results.flatMap((r): { r: typeof r; e: RankingEntry; rank: number }[] => {
+      if (intl)
+        return internationalRankings(verifiedOnly ? r : { ...r, judgingStatus: "VERIFIED" }).map(e => ({ r, e, rank: e.rank }));
       if (!byState)
         return verifiedOnly && r.judgingStatus !== "VERIFIED" ? [] : r.rankings.map(e => ({ r, e, rank: e.rank }));
       const perState = new Map<string, number>();
@@ -195,10 +214,14 @@ export async function resolveRecipients(
       rows: page.map(({ r, e, pid, rank }) => {
         const p = byId.get(pid);
         return {
-          key: `win:${cfg.eventId}:${r.code}:${pid}`,
+          // International awards are a separate achievement from the national /
+          // state ones, so they get their own key: a Malaysian winner in both
+          // gets two certificates on the same template, never one overwritten.
+          key: `${intl ? "win-intl" : "win"}:${cfg.eventId}:${r.code}:${pid}`,
           participantId: pid, name: p?.name ?? e.members.find(m => m.id === pid)?.name ?? "", ic: p?.ic ?? null,
           contingentId: e.contingentId, contingentName: e.contingentName,
           schoolName: p?.school_name ?? null, stateName: e.stateName ?? p?.state_name ?? null,
+          countryName: e.countryName ?? p?.country_name ?? null,
           teamId: e.teamId, teamName: e.teamName,
           competitionId: compIds.get(r.code) ?? null, competitionName: r.name, competitionCode: r.code,
           eventId: cfg.eventId!, eventName: evName, awardTitle: awardTitleForRank(rank), rank,
@@ -219,6 +242,7 @@ export async function resolveRecipients(
         key: `all:${r.pid}`,
         participantId: r.pid, name: r.name, ic: r.ic,
         contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
+        countryName: r.country_name,
         teamId: null, teamName: null, competitionId: null, competitionName: null, competitionCode: null,
         eventId: cfg.eventId ?? null, eventName: evName, awardTitle: null, rank: null,
       })),
@@ -231,10 +255,10 @@ export async function resolveRecipients(
     // contingent printed). Only the event-name override applies.
     const sql = source === "TRAINERS"
       ? `SELECT tr.id AS pid, tr.name, tr.ic, ct.id AS contingent_id, ct.name AS contingent_name,
-                COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name
+                COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name, ${COUNTRY_COL}
          FROM trainers tr ${PERSON_JOINS.replace("%CT%", `tr."contingentId"`)}`
       : `SELECT mp.id AS pid, mp.name, NULL::text AS ic, ct.id AS contingent_id, ct.name AS contingent_name,
-                COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name
+                COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name, ${COUNTRY_COL}
          FROM manager_profiles mp
          LEFT JOIN LATERAL (
            SELECT cm."contingentId" FROM contingent_managers cm
@@ -252,6 +276,7 @@ export async function resolveRecipients(
         recipientType: trainers ? "TRAINER" as const : "MANAGER" as const,
         participantId: null, name: r.name, ic: r.ic,
         contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
+        countryName: r.country_name,
         teamId: null, teamName: null, competitionId: null, competitionName: null, competitionCode: null,
         eventId: null, eventName: cfg.eventNameOverride?.trim() || null, awardTitle: null, rank: null,
       })),
@@ -281,7 +306,8 @@ export async function resolveRecipients(
 function snapshotOf(r: Recipient) {
   return {
     recipientName: r.name, recipientType: r.recipientType ?? (r.participantId ? "PARTICIPANT" as const : "OTHER" as const), recipientIc: r.ic,
-    contingentName: r.contingentName, schoolName: r.schoolName, stateName: r.stateName, teamName: r.teamName,
+    contingentName: r.contingentName, schoolName: r.schoolName, stateName: r.stateName, countryName: r.countryName ?? null,
+    teamName: r.teamName,
     competitionName: r.competitionName, competitionCode: r.competitionCode, eventName: r.eventName,
     awardTitle: r.awardTitle, rank: r.rank,
     participantId: r.participantId, contingentId: r.contingentId, teamId: r.teamId,

@@ -55,7 +55,7 @@ export async function GET(
       cont."contingentType" AS "contingentType",
       sch."ppdCode" AS ppd,
       t.name    AS "teamName",
-      COALESCE(s.name, sch_state.name, hi_state.name) AS "stateName",
+      COALESCE(s.name, sch_state.name, hi_state.name, ctry.name) AS "stateName",
       c.code    AS "competitionCode",
       c.name    AS "competitionName"
     FROM team_members tm
@@ -69,6 +69,7 @@ export async function GET(
     LEFT JOIN states          sch_state  ON sch_state.id = sch."stateId"
     LEFT JOIN higher_institutions hi     ON hi.id  = cont."higherInstitutionId"
     LEFT JOIN states          hi_state   ON hi_state.id = hi."stateId"
+    LEFT JOIN countries       ctry       ON ctry.id = cont."countryId" AND ctry."codeIso2" <> 'MY'
     WHERE 1=1 ${extraConditions}
     ORDER BY cont.name NULLS LAST, c.code, t.name, p.name
   `;

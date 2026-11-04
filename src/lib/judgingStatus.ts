@@ -1,5 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import {
+  HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME, isForeignCountry,
+} from "@/lib/countries";
 
 // Judging lifecycle of one event-competition (EventCompetition.judgingStatus):
 //
@@ -62,12 +65,31 @@ export type JudgingScope = "event" | "walkin";
 const MSG_STATE      = "Penghakiman bagi negeri ini telah diumumkan selesai dan dikunci.";
 const MSG_TASK_STATE = "Tugas penghakiman ini telah diumumkan selesai bagi negeri ini dan dikunci.";
 
-/** The effective state of a contingent — own state, else its school's / institution's. */
+// Foreign teams (a contingent of any country but Malaysia) are judged as one
+// extra scope, "Antarabangsa", whatever their country. It is stored like a
+// state — JudgingStateStatus / JudgingTaskStateCompletion rows with this id —
+// so it gets the same per-scope lock, verify and reopen as a state. As with
+// states, the national row (Kebangsaan) still locks every team, foreign ones
+// included; Kebangsaan's judged/total counts are local teams only.
+export { INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME };
+
+/** A per-scope id a judging row may use: a state's id or the international scope. */
+export async function isJudgingScopeId(stateId: string): Promise<boolean> {
+  if (stateId === INTERNATIONAL_SCOPE_ID) return true;
+  return !!(await db.state.findUnique({ where: { id: stateId }, select: { id: true } }));
+}
+
+/**
+ * The judging scope of a contingent: INTERNATIONAL_SCOPE_ID for a foreign one,
+ * else its effective state — own state, else its school's / institution's.
+ */
 export function contingentStateId(c: {
   stateId?: string | null;
   school?: { stateId?: string | null } | null;
   higherInstitution?: { stateId?: string | null } | null;
+  country: { codeIso2: string } | null;
 }): string | null {
+  if (isForeignCountry(c.country)) return INTERNATIONAL_SCOPE_ID;
   return c.stateId ?? c.school?.stateId ?? c.higherInstitution?.stateId ?? null;
 }
 
@@ -204,7 +226,7 @@ export async function transitionJudging(
   if (!(await s.find(id, eventId))) return { status: 404, body: { error: "NOT_FOUND" } };
 
   if (stateId) {
-    if (!(await db.state.findUnique({ where: { id: stateId }, select: { id: true } })))
+    if (!(await isJudgingScopeId(stateId)))
       return { status: 400, body: { error: "INVALID_STATE_ID" } };
     if (await updateStateRow(scope, id, stateId, [...t.from], data) === 0) {
       const cur = await stateRow(scope, id, stateId);
@@ -313,6 +335,7 @@ async function buildProgress(scope: JudgingScope, inputs: ProgressInput[]) {
   const stateIds = [...new Set(inputs.flatMap(i => i.units.map(u => u.stateId).filter((x): x is string => !!x)))];
   const names = new Map((stateIds.length ? await db.state.findMany({ where: { id: { in: stateIds } }, select: { id: true, name: true } }) : [])
     .map(s => [s.id, s.name]));
+  names.set(INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME);
   const rowBy  = new Map(stateRows.map(r => [`${r.refId}:${r.stateId}`, r]));
   const doneBy = new Map(taskDone.map(d => [`${d.taskId}:${d.stateId}`, d.completedAt]));
 
@@ -320,7 +343,10 @@ async function buildProgress(scope: JudgingScope, inputs: ProgressInput[]) {
     const active = inp.tasks.filter(t => t.status === "ACTIVE");
     const scoredSet = new Set(inp.scored.map(x => `${x.taskId}:${x.unitId}`));
     const rowFor = (stateId: string | null): JudgingRow => {
-      const units = stateId === null ? inp.units : inp.units.filter(u => u.stateId === stateId);
+      // Kebangsaan counts local teams only (its lock still covers everyone).
+      const units = stateId === null
+        ? inp.units.filter(u => u.stateId !== INTERNATIONAL_SCOPE_ID)
+        : inp.units.filter(u => u.stateId === stateId);
       const unitIds = new Set(units.map(u => u.unitId));
       const lc = stateId === null ? inp.lifecycle : rowBy.get(`${inp.id}:${stateId}`);
       return {
@@ -338,8 +364,10 @@ async function buildProgress(scope: JudgingScope, inputs: ProgressInput[]) {
         })),
       };
     };
+    // States A–Z, then Antarabangsa last.
     const states = [...new Set(inp.units.map(u => u.stateId).filter((x): x is string => !!x))]
-      .sort((a, b) => (names.get(a) ?? "").localeCompare(names.get(b) ?? ""));
+      .sort((a, b) => Number(a === INTERNATIONAL_SCOPE_ID) - Number(b === INTERNATIONAL_SCOPE_ID)
+        || (names.get(a) ?? "").localeCompare(names.get(b) ?? ""));
     const national = rowFor(null);
     return {
       id: inp.id,
@@ -373,12 +401,14 @@ export async function eventJudgingProgress(eventId: string) {
   const taskIds = ecs.flatMap((ec) => ec.judgingTasks.map((t) => t.id));
   const [teams, scored] = await Promise.all([
     db.$queryRaw<{ competitionId: string; teamId: string; stateId: string | null }[]>`
-      SELECT t."competitionId", t.id AS "teamId", COALESCE(c."stateId", s."stateId", h."stateId") AS "stateId"
+      SELECT t."competitionId", t.id AS "teamId", CASE WHEN co."codeIso2" IS NOT NULL AND co."codeIso2" <> ${HOME_COUNTRY_ISO2} THEN ${INTERNATIONAL_SCOPE_ID}
+        ELSE COALESCE(c."stateId", s."stateId", h."stateId") END AS "stateId"
       FROM team_events te
       JOIN teams t ON t.id = te."teamId"
       JOIN contingents c ON c.id = t."contingentId"
       LEFT JOIN schools s ON s.id = c."schoolId"
       LEFT JOIN higher_institutions h ON h.id = c."higherInstitutionId"
+      LEFT JOIN countries co ON co.id = c."countryId"
       WHERE te."eventId" = ${eventId} AND t.status = 'ACTIVE'`,
     taskIds.length === 0 ? Promise.resolve([] as { taskId: string; unitId: string }[]) : db.$queryRaw<{ taskId: string; unitId: string }[]>`
       SELECT DISTINCT "judgingTaskId" AS "taskId", "teamId" AS "unitId"
@@ -409,11 +439,13 @@ export async function walkInJudgingProgress(eventId: string) {
   const endpointIds = wics.flatMap((w) => w.judgingEndpoints.map((e) => e.id));
   const [regs, scored] = await Promise.all([
     wics.length === 0 ? Promise.resolve([] as { wicId: string; regId: string; stateId: string | null }[]) : db.$queryRaw<{ wicId: string; regId: string; stateId: string | null }[]>`
-      SELECT r."walkInCompetitionId" AS "wicId", r.id AS "regId", COALESCE(c."stateId", s."stateId", h."stateId") AS "stateId"
+      SELECT r."walkInCompetitionId" AS "wicId", r.id AS "regId", CASE WHEN co."codeIso2" IS NOT NULL AND co."codeIso2" <> ${HOME_COUNTRY_ISO2} THEN ${INTERNATIONAL_SCOPE_ID}
+        ELSE COALESCE(c."stateId", s."stateId", h."stateId") END AS "stateId"
       FROM walkin_registrations r
       JOIN contingents c ON c.id = r."contingentId"
       LEFT JOIN schools s ON s.id = c."schoolId"
       LEFT JOIN higher_institutions h ON h.id = c."higherInstitutionId"
+      LEFT JOIN countries co ON co.id = c."countryId"
       WHERE r."walkInCompetitionId" IN (${Prisma.join(wics.map(w => w.id))}) AND r.status = 'CONFIRMED'`,
     endpointIds.length === 0 ? Promise.resolve([] as { taskId: string; unitId: string }[]) : db.$queryRaw<{ taskId: string; unitId: string }[]>`
       SELECT DISTINCT "walkInJudgingEndpointId" AS "taskId", "walkInRegistrationId" AS "unitId"
