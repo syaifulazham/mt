@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2, Trophy } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2, Trophy, RotateCcw } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { WalkInFormSection } from "./WalkInFormSection";
 import { Button } from "@/components/ui/button";
@@ -291,6 +291,107 @@ function dateTimeLocalToISO(dtLocal: string): string {
   if (!dtLocal) return "";
   // Treat datetime-local value as UTC by appending 'Z'
   return dtLocal.length >= 16 ? dtLocal.slice(0, 16) + ":00.000Z" : dtLocal;
+}
+
+/** "YYYY-MM-DD" today in Malaysia time. */
+function todayMyt(): string {
+  return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** A slot-schedule "HH:MM" (Malaysia time) on a date, as a UTC datetime-local value. */
+function mytTimeToUtcLocal(dateYmd: string, hhmm: string): string {
+  const [y, m, d] = dateYmd.split("-").map(Number);
+  const [h, mi] = hhmm.split(":").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, h - 8, mi)).toISOString().slice(0, 16);
+}
+
+/** The name the recreated event will get, as the server computes it. */
+function nextVbIdentity(slug: string, currentId: string | null, currentName: string) {
+  const own = currentId?.startsWith(`${slug}_`) ? currentId.slice(slug.length).match(/^_(\d+)$/) : null;
+  const n = (own ? Number(own[1]) : 1) + 1;
+  const base = own ? currentName.trim().replace(/_\d+$/, "") : currentName.trim();
+  return { eventId: `${slug}_${n}`, name: `${base}_${n}` };
+}
+
+type VbRecreateForm = { startsAt: string; endsAt: string; competitionRound: "qualifier" | "final"; runDurationSec: number };
+
+/** Recreate the VibeBlocks event with a new schedule, then re-issue every token. */
+function VbRecreateDialog({ preview, oldEventId, oldClosed, initial, busy, progress, error, onCancel, onConfirm }: {
+  preview: { eventId: string; name: string };
+  oldEventId: string; oldClosed: boolean;
+  initial: VbRecreateForm;
+  busy: boolean;
+  progress: { done: number; total: number } | null;
+  error: string;
+  onCancel: () => void;
+  onConfirm: (f: VbRecreateForm) => void;
+}) {
+  const [f, setF] = useState(initial);
+  const valid = !!f.startsAt && !!f.endsAt && f.endsAt > f.startsAt
+    && f.runDurationSec >= VB_RUN_DURATION_MIN && f.runDurationSec <= VB_RUN_DURATION_MAX;
+  const input = "w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60";
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={() => { if (!busy) onCancel(); }}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <RotateCcw className="h-4 w-4 text-emerald-600" />
+          <p className="text-sm font-semibold text-zinc-900">Cipta Semula Acara VibeBlocks</p>
+        </div>
+        <div className="rounded-md bg-zinc-50 border border-zinc-200 px-3 py-2 text-xs space-y-0.5">
+          <p>Acara baharu: <strong>{preview.name}</strong></p>
+          <p className="text-zinc-500">Event ID: <code className="font-mono">{preview.eventId}</code></p>
+        </div>
+        <ul className="text-[11px] text-zinc-600 list-disc pl-4 space-y-0.5">
+          <li>Setiap peserta berdaftar akan diberi <strong>token baharu</strong>. Sesi dan slot mereka kekal.</li>
+          <li>Token lama tidak lagi sah{oldClosed ? "" : <> — acara <code className="font-mono">{oldEventId}</code> akan <strong>ditutup</strong></>}.</li>
+          <li>Keputusan acara lama tidak dipaparkan di sini selepas ini.</li>
+        </ul>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-zinc-400 block mb-0.5">Start (UTC)</label>
+            <input type="datetime-local" value={f.startsAt} disabled={busy} onChange={e => setF({ ...f, startsAt: e.target.value })} className={input} />
+            <p className="text-[10px] text-zinc-400 mt-0.5">{utcLocalToMyt(f.startsAt)}</p>
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-400 block mb-0.5">End (UTC)</label>
+            <input type="datetime-local" value={f.endsAt} disabled={busy} onChange={e => setF({ ...f, endsAt: e.target.value })} className={input} />
+            <p className="text-[10px] text-zinc-400 mt-0.5">{utcLocalToMyt(f.endsAt)}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-zinc-400 block mb-0.5">Competition round</label>
+            <select value={f.competitionRound} disabled={busy} onChange={e => setF({ ...f, competitionRound: e.target.value as VbRecreateForm["competitionRound"] })} className={`${input} bg-white`}>
+              <option value="qualifier">Qualifier</option>
+              <option value="final">Final</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-zinc-400 block mb-0.5">Run duration (s)</label>
+            <input type="number" min={VB_RUN_DURATION_MIN} max={VB_RUN_DURATION_MAX} step={60} value={f.runDurationSec} disabled={busy}
+              onChange={e => setF({ ...f, runDurationSec: Number(e.target.value) })} className={input} />
+          </div>
+        </div>
+        {progress && (
+          <div className="space-y-1">
+            <p className="text-[11px] text-emerald-700">Menyegerak token peserta… {progress.done}/{progress.total}</p>
+            <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 100}%` }} />
+            </div>
+          </div>
+        )}
+        {error && <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-1.5">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button size="sm" variant="outline" onClick={onCancel} disabled={busy} className="h-8 text-xs">Batal</Button>
+          <Button size="sm" onClick={() => onConfirm(f)} disabled={busy || !valid}
+            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Cipta Semula
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 // ── Slot schedule ────────────────────────────────────────────────────────────
@@ -601,6 +702,12 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
   const [vbRenewNote, setVbRenewNote] = useState("");
   const [vbCloseOpen, setVbCloseOpen] = useState(false);
   const [vbClosing, setVbClosing] = useState(false);
+  const [vbRecreateOpen, setVbRecreateOpen] = useState(false);
+  const [vbRecreating,   setVbRecreating]   = useState(false);
+  const [vbRecreateErr,  setVbRecreateErr]  = useState("");
+  const [vbSyncProgress, setVbSyncProgress] = useState<{ done: number; total: number } | null>(null);
+  const [vbOutOfSync,    setVbOutOfSync]    = useState<number | null>(null);
+  const [vbSyncErr,      setVbSyncErr]      = useState("");
 
   async function safeJson(res: Response): Promise<{ error?: string; message?: string; [k: string]: unknown }> {
     try { return await res.json(); } catch { return { error: `HTTP ${res.status}` }; }
@@ -762,6 +869,9 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`);
       setVbLive({ event: j.event ?? null, entryCount: j.entryCount ?? 0 });
+      const sync = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${wicId}/vibeblocks-sync`)
+        .then(r => (r.ok ? r.json() : null)).catch(() => null);
+      setVbOutOfSync(typeof sync?.outOfSync === "number" ? sync.outOfSync : null);
     } catch (e) {
       setVbLive(null);
       setVbLiveErr(e instanceof Error ? e.message : "Gagal memuatkan status VibeBlocks.");
@@ -833,6 +943,83 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       setVbClosing(false);
       setVbCloseOpen(false);
     }
+  }
+
+  /** Re-issues tokens until every registration has one in the current event. */
+  async function syncVibeBlocksTokens(wicId: string): Promise<string> {
+    let done = 0;
+    let lastError = "";
+    for (let round = 0; round < 50; round++) {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${wicId}/vibeblocks-sync`, { method: "POST" });
+      const j = await safeJson(res);
+      if (!res.ok) return (j.message as string) ?? (j.error as string) ?? "Gagal menyegerak token.";
+      const r = j as unknown as { synced: number; failed: number; remaining: number; error: string | null };
+      done += r.synced;
+      if (r.error) lastError = r.error;
+      setVbSyncProgress({ done, total: done + r.remaining + r.failed });
+      if (r.remaining === 0 || r.synced === 0) break; // done, or every one failing
+    }
+    return lastError ? `Sebahagian token gagal disegerak: ${lastError}. Klik "Segerak token" untuk cuba lagi.` : "";
+  }
+
+  async function recreateVibeBlocksEvent(f: VbRecreateForm) {
+    if (!selectedWic) return;
+    setVbRecreating(true); setVbRecreateErr(""); setVbSyncProgress(null);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/vibeblocks-event`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recreate: true,
+          competitionRound: f.competitionRound,
+          startsAt: dateTimeLocalToISO(f.startsAt),
+          endsAt: dateTimeLocalToISO(f.endsAt),
+          runDurationSec: f.runDurationSec,
+        }),
+      });
+      const j = await safeJson(res);
+      if (!res.ok) { setVbRecreateErr((j.message as string) ?? (j.error as string) ?? "Gagal mencipta semula acara."); return; }
+      updateWic(selectedWic.id, {
+        viblockChallengeId:         j.eventId as string,
+        vibeBlocksEventName:        j.name as string,
+        vibeBlocksCompetitionRound: f.competitionRound,
+        vibeBlocksStartsAt:         dateTimeLocalToISO(f.startsAt),
+        vibeBlocksEndsAt:           dateTimeLocalToISO(f.endsAt),
+        vibeBlocksRunDurationSec:   f.runDurationSec,
+      });
+      const syncErr = await syncVibeBlocksTokens(selectedWic.id);
+      setVbSyncErr(syncErr);
+      setVbUnlocked(false);
+      setVbRecreateOpen(false);
+      setVbSyncProgress(null);
+      await Promise.all([loadVbLive(selectedWic.id), loadRegistrations(selectedWic.id, statusFilter)]);
+    } finally {
+      setVbRecreating(false);
+    }
+  }
+
+  async function manualVibeBlocksSync() {
+    if (!selectedWic) return;
+    setVbRecreating(true); setVbSyncErr(""); setVbSyncProgress({ done: 0, total: vbOutOfSync ?? 0 });
+    try {
+      setVbSyncErr(await syncVibeBlocksTokens(selectedWic.id));
+      await Promise.all([loadVbLive(selectedWic.id), loadRegistrations(selectedWic.id, statusFilter)]);
+    } finally {
+      setVbRecreating(false); setVbSyncProgress(null);
+    }
+  }
+
+  /** Recreate defaults: the slot schedule's hours on today (or the event's first day). */
+  function vbRecreateDefaults(): VbRecreateForm {
+    const today = todayMyt();
+    const first = event.startDate ? new Date(new Date(event.startDate).getTime() + 8 * 3600_000).toISOString().slice(0, 10) : today;
+    const day = first > today ? first : today;
+    const cfg = selectedWic?.walkInSlotSchedule ?? null;
+    return {
+      startsAt: cfg ? mytTimeToUtcLocal(day, cfg.startTime) : isoToDateTimeLocal(new Date().toISOString()),
+      endsAt:   cfg ? mytTimeToUtcLocal(day, cfg.endTime) : isoToDateTimeLocal(selectedWic?.vibeBlocksEndsAt ?? event.endDate),
+      competitionRound: vibeBlocksCreateForm.competitionRound,
+      runDurationSec:   vibeBlocksCreateForm.runDurationSec,
+    };
   }
 
   async function droneRegisterParticipant(regId: string) {
@@ -1688,7 +1875,23 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                             {vbClosed && (
                               <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2.5 py-1.5">
                                 Acara ini telah ditutup di VibeBlocks. Pendaftaran token dan permainan ditolak, dan acara tidak boleh dibuka semula.
+                                {canAdmin && <> Gunakan <span className="font-semibold">Cipta Semula</span> untuk acara baharu.</>}
                               </p>
+                            )}
+                            {!vbClosed && vbEv && (vbOutOfSync ?? 0) > 0 && (
+                              <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 flex items-center gap-2">
+                                <span className="flex-1">{vbOutOfSync} pendaftaran tiada token dalam acara semasa.</span>
+                                {canWrite && (
+                                  <Button size="sm" variant="outline" onClick={manualVibeBlocksSync} disabled={vbRecreating}
+                                    className="h-6 text-[11px] gap-1 border-amber-300 text-amber-800 hover:bg-amber-100">
+                                    {vbRecreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                    {vbSyncProgress ? `${vbSyncProgress.done}/${vbSyncProgress.total}` : "Segerak token"}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                            {vbSyncErr && (
+                              <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-1.5">{vbSyncErr}</p>
                             )}
 
                             {/* Locked notice + unlock flow */}
@@ -1865,6 +2068,17 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                   Update Event
                                 </Button>
                               ) : null}
+                              {canAdmin && selectedWic.viblockChallengeId && selectedWic.vibeBlocksChallengeId && (
+                                <div className="pt-2 mt-1 border-t border-zinc-100 flex items-center justify-between gap-3">
+                                  <p className="text-[10px] text-zinc-400">
+                                    Perlu tarikh baharu atau acara telah ditutup? Cipta acara baharu ({nextVbIdentity(event.slug, selectedWic.viblockChallengeId, vbEv?.name ?? selectedWic.vibeBlocksEventName ?? event.name).name}); semua peserta diberi token baharu.
+                                  </p>
+                                  <Button size="sm" variant="outline" onClick={() => { setVbRecreateErr(""); setVbRecreateOpen(true); }}
+                                    className="h-7 text-xs shrink-0 gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50">
+                                    <RotateCcw className="h-3.5 w-3.5" /> Cipta Semula
+                                  </Button>
+                                </div>
+                              )}
                               {canAdmin && vbEv && !vbClosed && (
                                 <div className="pt-2 mt-1 border-t border-zinc-100 flex items-center justify-between gap-3">
                                   <p className="text-[10px] text-zinc-400">Tutup acara selepas pertandingan selesai. Tindakan ini tidak boleh dibatalkan.</p>
@@ -2331,6 +2545,20 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         loading={!!vibeBlocksActionId}
         onConfirm={() => { if (vbRenewTarget) void vibeBlocksRenewParticipantToken(vbRenewTarget.regId, vbRenewTarget.name); }}
       />
+
+      {vbRecreateOpen && selectedWic?.viblockChallengeId && (
+        <VbRecreateDialog
+          preview={nextVbIdentity(event.slug, selectedWic.viblockChallengeId, vbLive?.event?.name ?? selectedWic.vibeBlocksEventName ?? event.name)}
+          oldEventId={selectedWic.viblockChallengeId}
+          oldClosed={vbLive?.event?.status === "closed"}
+          initial={vbRecreateDefaults()}
+          busy={vbRecreating}
+          progress={vbSyncProgress}
+          error={vbRecreateErr}
+          onCancel={() => setVbRecreateOpen(false)}
+          onConfirm={f => void recreateVibeBlocksEvent(f)}
+        />
+      )}
 
       <ConfirmDialog
         open={vbCloseOpen}

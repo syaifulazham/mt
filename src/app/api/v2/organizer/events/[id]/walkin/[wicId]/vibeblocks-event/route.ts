@@ -3,9 +3,10 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
   vibeBlocksConfigured, vibeBlocksCreateEvent, vibeBlocksUpdateEvent, vibeBlocksGetEvent,
-  vibeBlocksErrorMessage, type VibeBlocksError,
+  vibeBlocksListEvents, vibeBlocksErrorMessage, type VibeBlocksError,
   VB_EVENT_ID_RE, VB_RUN_DURATION_MIN, VB_RUN_DURATION_MAX,
 } from "@/lib/vibeblocks";
+import { freeEventId, nextEventIdentity } from "@/lib/vibeblocks-recreate";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 /** Closing a VibeBlocks event is irreversible. */
@@ -80,6 +81,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 // POST — create the VibeBlocks event, using the event slug as its stable event_id.
+// With { recreate: true }: replace the linked event with a new one (see recreate()).
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -88,6 +90,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const { id, wicId } = await params;
   const body = await req.json() as {
+    recreate?: boolean;
     challengeId?: string;
     name?: string;
     competitionRound?: string;
@@ -95,6 +98,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     endsAt?: string;
     runDurationSec?: number;
   };
+  if (body.recreate) {
+    if (!CLOSE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    return recreate(id, wicId, body);
+  }
   const { challengeId, competitionRound, startsAt, endsAt, runDurationSec } = body;
   const name = body.name?.trim();
 
@@ -115,9 +122,27 @@ export async function POST(req: NextRequest, { params }: Params) {
     loadWic(id, wicId),
   ]);
   if (!event || !wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  const vbEventId = event.slug;
-  if (!VB_EVENT_ID_RE.test(vbEventId))
+  if (!VB_EVENT_ID_RE.test(event.slug))
     return bad("INVALID_EVENT_ID", "Slug acara tidak boleh digunakan sebagai Event ID VibeBlocks (huruf, nombor, _ atau -, maksimum 64).");
+
+  // The slug when free; otherwise <slug>_<n>, since VibeBlocks refuses an
+  // existing event_id with a different configuration.
+  let vbEventId: string;
+  try {
+    const [{ events }, linked] = await Promise.all([
+      vibeBlocksListEvents(),
+      db.eventWalkInCompetition.findMany({
+        where: { viblockChallengeId: { startsWith: event.slug }, id: { not: wicId } },
+        select: { viblockChallengeId: true },
+      }),
+    ]);
+    vbEventId = freeEventId(event.slug, [
+      ...events.map(e => e.event_id),
+      ...linked.flatMap(w => (w.viblockChallengeId ? [w.viblockChallengeId] : [])),
+    ]);
+  } catch (e) {
+    return vbErrorResponse(e, "listEvents");
+  }
 
   try {
     const result = await vibeBlocksCreateEvent({
@@ -239,4 +264,82 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   });
 
   return NextResponse.json({ updated: result.updated, status: result.status });
+}
+
+/**
+ * Recreate: VibeBlocks never reopens a closed event and freezes the schedule
+ * once a token is registered, so a new schedule needs a new event. Creates
+ * `<slug>_<n>` named `<name>_<n>` with the given config, points the walk-in at
+ * it, then closes the old event if it is still open (its tokens are replaced).
+ * The client then runs vibeblocks-sync to give every registration a new token.
+ */
+async function recreate(
+  eventId: string, wicId: string,
+  body: { challengeId?: string; competitionRound?: string; startsAt?: string; endsAt?: string; runDurationSec?: number },
+) {
+  const { competitionRound, startsAt, endsAt, runDurationSec } = body;
+  if (!startsAt || !endsAt || runDurationSec === undefined) return bad("MISSING_FIELDS", "Masa mula, tamat dan tempoh larian diperlukan.");
+  if (competitionRound !== "qualifier" && competitionRound !== "final")
+    return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
+  const invalid = checkConfig({ startsAt, endsAt, runDurationSec });
+  if (invalid) return bad("INVALID_CONFIG", invalid);
+  if (Date.parse(endsAt) <= Date.now()) return bad("INVALID_CONFIG", "Masa tamat mesti pada masa hadapan.");
+  if (!vibeBlocksConfigured()) return bad("VIBEBLOCKS_NOT_CONFIGURED", "VibeBlocks API tidak dikonfigurasi.");
+
+  const [event, wic] = await Promise.all([
+    db.event.findUnique({ where: { id: eventId }, select: { slug: true, name: true } }),
+    db.eventWalkInCompetition.findUnique({
+      where: { id: wicId },
+      select: { eventId: true, viblockChallengeId: true, vibeBlocksChallengeId: true, vibeBlocksEventName: true },
+    }),
+  ]);
+  if (!event || !wic || wic.eventId !== eventId) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (!wic.viblockChallengeId) return bad("NO_EVENT_CREATED", "Acara VibeBlocks belum dicipta.");
+
+  let events: Awaited<ReturnType<typeof vibeBlocksListEvents>>["events"];
+  try {
+    ({ events } = await vibeBlocksListEvents());
+  } catch (e) {
+    return vbErrorResponse(e, "listEvents");
+  }
+  const old = events.find(e => e.event_id === wic.viblockChallengeId) ?? null;
+  const challengeId = body.challengeId || old?.challenge_id || wic.vibeBlocksChallengeId;
+  if (!challengeId) return bad("MISSING_FIELDS", "Challenge diperlukan.");
+  const next = nextEventIdentity(event.slug, old?.name ?? wic.vibeBlocksEventName ?? event.name, events, wic.viblockChallengeId);
+  if (!next.valid) return bad("INVALID_EVENT_ID", "Slug acara tidak boleh digunakan sebagai Event ID VibeBlocks.");
+
+  try {
+    await vibeBlocksCreateEvent({
+      event_id: next.eventId, challenge_id: challengeId, name: next.name,
+      competition_round: competitionRound, starts_at: startsAt, ends_at: endsAt, run_duration_sec: runDurationSec,
+    });
+  } catch (e) {
+    return vbErrorResponse(e, "createEvent (recreate)");
+  }
+
+  await db.eventWalkInCompetition.update({
+    where: { id: wicId },
+    data: {
+      viblockChallengeId:         next.eventId,
+      vibeBlocksChallengeId:      challengeId,
+      vibeBlocksEventName:        next.name,
+      vibeBlocksCompetitionRound: competitionRound,
+      vibeBlocksStartsAt:         new Date(startsAt),
+      vibeBlocksEndsAt:           new Date(endsAt),
+      vibeBlocksRunDurationSec:   runDurationSec,
+    },
+  });
+
+  // The old tokens are about to be replaced; stop them being played.
+  let oldClosed = old?.status === "closed";
+  if (old && !oldClosed) {
+    try {
+      await vibeBlocksUpdateEvent(old.event_id, { status: "closed" });
+      oldClosed = true;
+    } catch (e) {
+      console.error("[vibeblocks] closing old event after recreate failed:", e);
+    }
+  }
+  console.warn(`[vibeblocks] walk-in ${wicId} recreated: ${wic.viblockChallengeId} -> ${next.eventId}`);
+  return NextResponse.json({ eventId: next.eventId, name: next.name, previousEventId: wic.viblockChallengeId, oldClosed });
 }
