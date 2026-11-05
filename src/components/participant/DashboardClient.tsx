@@ -6,6 +6,7 @@ import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Users,
+  User,
   Trophy,
   MapPin,
   Calendar,
@@ -1580,6 +1581,21 @@ export function DashboardClient({
                     <div key={wic.id}>
                       {/* Main row */}
                       <div className="px-4 py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                        {(() => {
+                          const team = wic.competition.participationType === "TEAM";
+                          const Icon = team ? Users : User;
+                          return (
+                            <span
+                              title={team ? "Pertandingan berpasukan" : "Pertandingan individu"}
+                              className={`shrink-0 h-9 w-9 rounded-lg flex items-center justify-center ${
+                                team
+                                  ? "bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300"
+                                  : "bg-sky-100 text-sky-600 dark:bg-sky-950/50 dark:text-sky-300"
+                              }`}>
+                              <Icon className="h-4 w-4" />
+                            </span>
+                          );
+                        })()}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
                             <span className="font-mono text-xs text-zinc-400 mr-1.5">
@@ -1587,8 +1603,12 @@ export function DashboardClient({
                             </span>
                             {wic.competition.name}
                           </p>
-                          <p className="text-xs text-zinc-400 mt-0.5 capitalize">
-                            {wic.competition.participationType.toLowerCase()}
+                          <p className={`text-xs font-medium mt-0.5 ${
+                            wic.competition.participationType === "TEAM"
+                              ? "text-violet-600 dark:text-violet-300"
+                              : "text-sky-600 dark:text-sky-300"
+                          }`}>
+                            {wic.competition.participationType === "TEAM" ? "Berpasukan" : "Individu"}
                           </p>
                           {reg?.team && (
                             <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-0.5 truncate">
