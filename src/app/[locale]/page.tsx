@@ -83,6 +83,8 @@ export default async function LandingPage({
       },
     }),
     db.gallery.findMany({
+      // Empty galleries (no photos yet) are not shown.
+      where: { photos: { some: {} } },
       orderBy: { year: "desc" },
       include: {
         photos: { orderBy: { order: "asc" }, take: 1 },
@@ -110,7 +112,7 @@ export default async function LandingPage({
   const navLinks = pageOrder.flatMap((key): { href: string; label: string }[] => {
     if (key === "fixed:categories") return [{ href: "#categories", label: t("navCompetition") }];
     if (key === "fixed:news") return [{ href: "#news", label: t("navNews") }, { href: "#announcements", label: t("navAnnouncements") }];
-    if (key === "fixed:gallery") return [{ href: "#gallery", label: t("navGallery") }];
+    if (key === "fixed:gallery") return galleries.length > 0 ? [{ href: "#gallery", label: t("navGallery") }] : [];
     const sec = customById.get(key.slice(7));
     return sec?.navLabel ? [{ href: `#s-${sec.id}`, label: sec.navLabel }] : [];
   });
