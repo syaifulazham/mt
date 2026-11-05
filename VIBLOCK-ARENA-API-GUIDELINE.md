@@ -562,6 +562,107 @@ Ordered by `registered_at` ascending. `404` if the challenge is not in this even
 
 ---
 
+### 4.6 Player scores
+
+Scores are built from every run (`challenge_attempts`) on this event's challenges. For each (player, challenge) pair:
+
+- **Best score** is the best **completed** run: highest `score` first, then lowest `elapsed_sec` as the tie-break. It is `null` if the player never completed that challenge.
+- **`total_best_score`** adds up the player's best score on each challenge. **`total_max_score`** adds up the `max_score` of the challenges they completed.
+- Runs of any outcome (`completed`, `failed`, `aborted`, `surrender`, `time-ended`) count toward `attempt_count`.
+
+Each player's `challenges` array is sorted by `best_score` descending. Challenges with no completed run come last.
+
+#### GET `/scores` — Scores grouped by player
+
+Lists every player who has made at least one run in this event, together with their per-challenge scores. Players are ranked by `total_best_score` descending, with ties broken by `challenges_completed`.
+
+**Query params**
+
+| Param | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `challenge_id` | uuid | none | Count only this challenge |
+| `sector` | string | none | Sector `custom_id`; only that sector's members |
+| `limit` | int | `500` | Capped at `1000` |
+| `offset` | int | `0` | Pagination offset (applies to players) |
+
+**Response (`200`)**
+
+```json
+{
+  "event_id": "...",
+  "total": 42,
+  "limit": 500,
+  "offset": 0,
+  "players": [
+    {
+      "rank": 1,
+      "user_id": "...",
+      "userid": "110101105513",
+      "full_name": "Ali Bin Abu",
+      "pilot_handle": "ali-01",
+      "sector_custom_id": "smk-test-01",
+      "total_best_score": 175,
+      "total_max_score": 200,
+      "challenges_attempted": 2,
+      "challenges_completed": 2,
+      "attempt_count": 5,
+      "challenges": [
+        {
+          "challenge_id": "...",
+          "challenge_name": "Delivery Boybot",
+          "attempt_count": 3,
+          "completed_count": 1,
+          "best_score": 95,
+          "max_score": 100,
+          "best_elapsed_seconds": 41.2,
+          "best_completed_at": "2026-09-30T10:12:00.000Z",
+          "last_outcome": "failed",
+          "last_attempted_at": "2026-09-30T10:20:00.000Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `total` is the number of ranked players before pagination. `rank` is the player's overall position, so it keeps counting across pages.
+- `userid` is `null` for players created with a real email.
+- `sector_custom_id` is the player's first sector in this event, or `null`.
+- `404` if the challenge is not in this event, or the sector is not found
+
+#### GET `/users/:userid/scores` — Scores of one player
+
+`:userid` is the synthetic userid (URL-encoded). Returns the same summary as one entry of `GET /scores`, without `rank`. A player with no runs returns `200` with zeros and an empty `challenges` array.
+
+**Query params**
+
+| Param | Type | Notes |
+| --- | --- | --- |
+| `challenge_id` | uuid | Optional, only this challenge |
+
+**Response (`200`)**
+
+```json
+{
+  "event_id": "...",
+  "userid": "110101105513",
+  "user_id": "...",
+  "full_name": "Ali Bin Abu",
+  "pilot_handle": "ali-01",
+  "sector_custom_id": "smk-test-01",
+  "total_best_score": 175,
+  "total_max_score": 200,
+  "challenges_attempted": 2,
+  "challenges_completed": 2,
+  "attempt_count": 5,
+  "challenges": [ /* same shape as in GET /scores */ ]
+}
+```
+
+- `404` if the player does not exist, or the challenge is not in this event
+
+---
+
 ## 5. Rate limiting & safety
 
 - The function does not currently implement rate limiting. Callers should self-throttle and avoid hammering `/auth/token`.
@@ -601,6 +702,12 @@ curl -s "$BASE/sectors/north-01/results" -H "X-API-Key: $KEY"
 
 # Pull event-wide results
 curl -s "$BASE/results?limit=100" -H "X-API-Key: $KEY"
+
+# Scores grouped by player (optionally ?sector=north-01 or ?challenge_id=...)
+curl -s "$BASE/scores?limit=50" -H "X-API-Key: $KEY"
+
+# Scores of one player
+curl -s "$BASE/users/pilot-42/scores" -H "X-API-Key: $KEY"
 ```
 
 ---

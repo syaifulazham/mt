@@ -1,6 +1,6 @@
 # EPTIM Drone API Guide
 
-Third-party REST API for managing users, sectors, authentication, competition endpoints, participant tokens, and retrieving results for drone competition events.
+Third-party REST API for managing users, sectors, authentication, competition endpoints, participant tokens, and retrieving results and per-player scores for drone competition events.
 
 ---
 
@@ -934,6 +934,160 @@ GET /auth/launch/:launch_code
 
 ---
 
+## Player Scores
+
+Both endpoints count each player's **best completed scored run** per challenge (highest score; ties go to the fastest time). Trial (practice) runs never count. Crashed and aborted runs count towards `attempt_count` but never towards scores. Overall totals add up the best score on each challenge. Players are ranked by `total_score` (highest first), then by `total_elapsed_seconds` (fastest first). Tied players share a rank.
+
+### 26. Scores by Players
+
+```
+GET /scores
+```
+
+Returns one row per player with their totals and their best score on each challenge, in ranked order.
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `challenge_id` | Optional - count only this challenge |
+| `sector` | Optional - only players in the sector with this `custom_id` |
+| `include_unscored` | Optional - `true` also lists sector members with no completed run (score 0) |
+| `limit` | Max players to return (default 500, max 1000) |
+| `offset` | Skip this many players for pagination (default 0) |
+
+**Response (200):**
+
+```json
+{
+  "event_id": "uuid-of-event",
+  "challenge_id": null,
+  "sector_custom_id": null,
+  "challenge_count": 3,
+  "total": 42,
+  "limit": 500,
+  "offset": 0,
+  "players": [
+    {
+      "rank": 1,
+      "user_id": "uuid-1",
+      "userid": "STU-001",
+      "full_name": "Ahmad Razif",
+      "email": "STU-001@api.eptim.ai",
+      "pilot_handle": "razif_ace",
+      "sector_custom_id": "SMK-TM-2026",
+      "sector_name": "SMK Taman Melawati",
+      "total_score": 265,
+      "total_max_score": 300,
+      "total_elapsed_seconds": 121.4,
+      "challenges_completed": 3,
+      "attempt_count": 5,
+      "challenges": [
+        {
+          "challenge_id": "uuid-challenge-1",
+          "challenge_name": "Level 1 - Basic Flight",
+          "best_score": 95,
+          "max_score": 100,
+          "elapsed_seconds": 38.2,
+          "completed_at": "2026-06-18T14:30:00.000Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `userid` | The custom user id, or `null` for players created with a real email |
+| `challenges_completed` | Number of challenges with at least one completed run |
+| `attempt_count` | All scored runs (completed, crashed, aborted) |
+| `challenges` | Only challenges the player has completed |
+
+**Errors:** `404` - `challenge_id` not in this event, or `sector` not found
+
+### 27. Score of a Specific Player
+
+```
+GET /users/{user_identifier}/scores
+```
+
+`{user_identifier}` can be a **user UUID**, an **email**, or a **userid** (e.g. `STU-2026-001`).
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `challenge_id` | Optional - return only this challenge |
+
+**Response (200):**
+
+```json
+{
+  "user_id": "uuid-1",
+  "userid": "STU-001",
+  "full_name": "Ahmad Razif",
+  "email": "STU-001@api.eptim.ai",
+  "pilot_handle": "razif_ace",
+  "sector_custom_id": "SMK-TM-2026",
+  "sector_name": "SMK Taman Melawati",
+  "total_score": 180,
+  "total_max_score": 200,
+  "total_elapsed_seconds": 80.7,
+  "challenges_completed": 2,
+  "attempt_count": 4,
+  "overall_rank": 3,
+  "ranked_players": 42,
+  "challenges": [
+    {
+      "challenge_id": "uuid-challenge-1",
+      "challenge_name": "Level 1 - Basic Flight",
+      "challenge_mode": "automation",
+      "is_season": false,
+      "attempted": true,
+      "completed": true,
+      "attempt_count": 2,
+      "completed_count": 1,
+      "max_attempts": 5,
+      "attempts_remaining": 3,
+      "best_score": 95,
+      "max_score": 100,
+      "elapsed_seconds": 38.2,
+      "completed_at": "2026-06-18T14:30:00.000Z",
+      "rank": 2,
+      "ranked_players": 40
+    },
+    {
+      "challenge_id": "uuid-challenge-2",
+      "challenge_name": "Level 2 - Gates",
+      "challenge_mode": "manual",
+      "is_season": true,
+      "attempted": false,
+      "completed": false,
+      "attempt_count": 0,
+      "completed_count": 0,
+      "max_attempts": null,
+      "attempts_remaining": null,
+      "best_score": null,
+      "max_score": null,
+      "elapsed_seconds": null,
+      "completed_at": null,
+      "rank": null,
+      "ranked_players": null
+    }
+  ]
+}
+```
+
+- Every challenge in the event is listed, including ones the player has not tried yet (score fields are `null`).
+- `overall_rank` is the player's place among everyone with at least one completed run, ranked on totals for the same set of challenges. It is `null` if the player has not completed anything.
+- `rank` / `ranked_players` on each challenge are the player's leaderboard position on that challenge.
+- Season challenges (`is_season: true`) can only be completed once. After that, `completed` stays `true` and no further scored runs are accepted.
+
+**Errors:** `403` player not in any sector of this event, `404` player not found or `challenge_id` not in this event
+
+---
+
 ## Error Responses
 
 All errors follow this format:
@@ -1023,6 +1177,18 @@ curl -X GET "$BASE/results" \
 
 # 10. Check results for a specific sector
 curl -X GET "$BASE/sectors/SMK-TM-2026/results" \
+  -H "X-API-Key: $API_KEY"
+
+# 11. Ranked scores for every player (totals across all challenges)
+curl -X GET "$BASE/scores" \
+  -H "X-API-Key: $API_KEY"
+
+# 12. Ranked scores for one sector, including players with no runs yet
+curl -X GET "$BASE/scores?sector=SMK-TM-2026&include_unscored=true" \
+  -H "X-API-Key: $API_KEY"
+
+# 13. Scores of one player
+curl -X GET "$BASE/users/STU-001/scores" \
   -H "X-API-Key: $API_KEY"
 ```
 
