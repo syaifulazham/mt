@@ -3,10 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Loader2, CheckCircle2, ChevronRight, ChevronLeft, MapPin,
-  CalendarDays, ClipboardList, AlertCircle, LayoutGrid, UserCheck, Trophy, User,
+  CalendarDays, ClipboardList, AlertCircle, LayoutGrid, UserCheck, Trophy, User, Home,
+  Plus, X, Users,
 } from "lucide-react";
 import { fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 import { QRCodeCanvas } from "qrcode.react";
+import Link from "next/link";
 
 /* ─── Pink & Black palette ──────────────────────────────────────────────── */
 const B = {
@@ -99,6 +101,7 @@ type Competition = {
   walkInSlotSchedule: SlotScheduleConfig | null;
   competition: {
     id: string; code: string; name: string; participationType: string;
+    minTeamSize?: number; maxTeamSize?: number;
     targetGroups?: { targetGroup: { schoolLevel: string } }[];
   };
   _count: { registrations: number };
@@ -129,6 +132,14 @@ type FormInfo = {
 };
 type SessionSlots = { n: number; start: number; end: number; booked: number[] };
 type SlotChoice = { sessionNumber: number; slotNumber: number };
+type MemberRow = { ic: string; name: string };
+
+const isTeamComp = (c: Competition | null) => c?.competition.participationType === "TEAM";
+/** Member-count bounds for a TEAM competition (the submit route enforces the same). */
+function teamBounds(c: Competition) {
+  const max = Math.max(1, c.competition.maxTeamSize ?? 1);
+  return { min: Math.min(Math.max(1, c.competition.minTeamSize ?? 1), max), max };
+}
 
 const STEPS = [
   { icon: ClipboardList, title: "Isi Borang",
@@ -148,6 +159,9 @@ export function PublicFormClient({ slug }: { slug: string }) {
   const [ic,         setIc]         = useState("");
   const [name,       setName]       = useState("");
   const [schoolName, setSchoolName] = useState("");
+  // TEAM competitions: a temporary team, verified by the organizer later
+  const [teamName,   setTeamName]   = useState("");
+  const [members,    setMembers]    = useState<MemberRow[]>([]);
 
   const [slotSessions,   setSlotSessions]   = useState<SessionSlots[] | null>(null);
   const [slotsLoading,   setSlotsLoading]   = useState(false);
@@ -213,7 +227,8 @@ export function PublicFormClient({ slug }: { slug: string }) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         competitionId: comp.id,
-        ic, name, schoolName,
+        ...(isTeamComp(comp) ? { teamName, members } : { ic, name }),
+        schoolName,
         ...(slotChoice ?? {}),
       }),
     });
@@ -231,6 +246,16 @@ export function PublicFormClient({ slug }: { slug: string }) {
           ? "No. IC tidak sah (6–12 digit, tanpa sengkang)."
           : j.error === "INVALID_NAME"
           ? "Sila isikan nama penuh."
+          : j.error === "ALREADY_REGISTERED"
+          ? (isTeamComp(comp) ? "Salah seorang ahli sudah berdaftar untuk pertandingan ini." : "IC ini sudah berdaftar untuk pertandingan ini.")
+          : j.error === "INVALID_TEAM_NAME"
+          ? "Sila isikan nama pasukan."
+          : j.error === "INVALID_MEMBERS"
+          ? "Setiap ahli perlu No. IC (6–12 digit) dan nama penuh."
+          : j.error === "TEAM_SIZE"
+          ? "Bilangan ahli pasukan tidak menepati syarat pertandingan."
+          : j.error === "DUPLICATE_MEMBER_IC"
+          ? "No. IC ahli pasukan tidak boleh berulang."
           : j.error === "SLOT_REQUIRED"
           ? "Sila pilih sesi dan slot."
           : (j.message ?? "Gagal menghantar borang."),
@@ -239,6 +264,37 @@ export function PublicFormClient({ slug }: { slug: string }) {
       setSuccess(j.data);
     }
     setSubmitting(false);
+  }
+
+  function pickComp(c: Competition) {
+    setComp(c);
+    if (isTeamComp(c)) {
+      const { min } = teamBounds(c);
+      setTeamName("");
+      setMembers(Array.from({ length: Math.max(1, min) }, (_, i) => (i === 0 ? { ic, name } : { ic: "", name: "" })));
+    }
+  }
+
+  function setMember(i: number, patch: Partial<MemberRow>) {
+    setMembers(prev => prev.map((m, j) => (j === i ? { ...m, ...patch } : m)));
+  }
+
+  /** Step-1 validation; returns an error message or "" when the form may continue. */
+  function step1Error(): string {
+    if (!comp) return "";
+    if (!isTeamComp(comp)) {
+      if (ic.length < 6) return "No. IC mestilah sekurang-kurangnya 6 digit.";
+      if (name.trim().length < 3) return "Sila isikan nama penuh anda.";
+      return "";
+    }
+    const { min, max } = teamBounds(comp);
+    if (teamName.trim().length < 2) return "Sila isikan nama pasukan.";
+    if (members.length < min || members.length > max)
+      return min === max ? `Pasukan mesti ${min} orang ahli.` : `Pasukan mesti ${min}–${max} orang ahli.`;
+    const bad = members.findIndex(m => m.ic.length < 6 || m.name.trim().length < 3);
+    if (bad >= 0) return `Ahli ${bad + 1}: isikan No. IC (6–12 digit) dan nama penuh.`;
+    if (new Set(members.map(m => m.ic)).size !== members.length) return "No. IC ahli pasukan tidak boleh berulang.";
+    return "";
   }
 
   const pageBg = {
@@ -289,7 +345,14 @@ export function PublicFormClient({ slug }: { slug: string }) {
               <p className="text-[10px] font-bold tracking-[0.22em] uppercase" style={{ color: B.pink }}>
                 Borang Diterima
               </p>
-              <p className="text-lg font-extrabold text-white mt-1">{name.toUpperCase()}</p>
+              <p className="text-lg font-extrabold text-white mt-1">
+                {isTeamComp(comp) ? teamName.trim().toUpperCase() : name.toUpperCase()}
+              </p>
+              {isTeamComp(comp) && (
+                <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,.45)" }}>
+                  {members.map(m => m.name.trim().toUpperCase()).join(" · ")}
+                </p>
+              )}
               <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,.5)" }}>
                 <span className="font-mono">{comp.competition.code}</span> — {comp.competition.name}
               </p>
@@ -311,7 +374,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
               Rujukan: <span className="font-mono text-white/60">{success.id.slice(-8).toUpperCase()}</span>
             </p>
             <button type="button"
-              onClick={() => { setSuccess(null); setComp(null); setName(""); setSchoolName(""); setSlotChoice(null); checkIc(ic); }}
+              onClick={() => { setSuccess(null); setComp(null); setName(""); setSchoolName(""); setTeamName(""); setMembers([]); setSlotChoice(null); checkIc(ic); }}
               className="w-full rounded-xl py-2.5 text-sm font-bold transition-transform hover:scale-[1.02] active:scale-[.98]"
               style={{ background: `linear-gradient(90deg, ${B.pinkDk}, ${B.pink})`, color: "white" }}>
               Selesai
@@ -329,12 +392,19 @@ export function PublicFormClient({ slug }: { slug: string }) {
       <StemBg />
 
       {/* Top bar */}
-      <header className="relative z-10 w-full max-w-5xl mx-auto px-6 pt-6 flex items-center justify-between">
-        <TechHeader />
-        <span className="text-[10px] font-bold tracking-[0.25em] uppercase px-3 py-1.5 rounded-full border"
-          style={{ color: B.pinkLt, borderColor: "rgba(236,72,153,.35)", background: "rgba(236,72,153,.08)" }}>
-          Walk-in
-        </span>
+      <header className="relative z-10 w-full max-w-5xl mx-auto px-6 pt-6 flex items-center justify-between gap-3">
+        <Link href="/" aria-label="Laman utama Techlympics"><TechHeader /></Link>
+        <div className="flex items-center gap-2">
+          <Link href="/"
+            className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase px-3 py-1.5 rounded-full border transition-colors hover:bg-white/10"
+            style={{ color: "rgba(255,255,255,.75)", borderColor: "rgba(255,255,255,.2)" }}>
+            <Home className="w-3 h-3" /> Laman Utama
+          </Link>
+          <span className="hidden sm:inline text-[10px] font-bold tracking-[0.25em] uppercase px-3 py-1.5 rounded-full border"
+            style={{ color: B.pinkLt, borderColor: "rgba(236,72,153,.35)", background: "rgba(236,72,153,.08)" }}>
+            Walk-in
+          </span>
+        </div>
       </header>
 
       {!comp ? (
@@ -482,7 +552,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
                   const blocked = usedCompIds.has(c.id) || (info.uniqueParticipation && usedCompIds.size > 0);
                   return (
                     <button key={c.id} type="button"
-                      onClick={() => !blocked && setComp(c)}
+                      onClick={() => !blocked && pickComp(c)}
                       disabled={blocked}
                       className={`pk-card-in w-full text-left rounded-2xl border p-4 flex flex-col gap-2.5 transition-all ${
                         blocked
@@ -595,6 +665,71 @@ export function PublicFormClient({ slug }: { slug: string }) {
               {/* ── Step 1: Personal details ── */}
               {formStep === 1 && (
                 <div className="space-y-4 pk-card-in">
+                  {isTeamComp(comp) ? (() => {
+                    const { min, max } = teamBounds(comp);
+                    return (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-bold tracking-[0.18em] uppercase mb-1.5" style={{ color: B.pinkLt }}>
+                            Nama Pasukan
+                          </label>
+                          <input value={teamName} onChange={e => setTeamName(e.target.value)}
+                            placeholder="cth. Pasukan Robotik A"
+                            className={inputCls} style={inputStyle} />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold tracking-[0.18em] uppercase flex items-center gap-1.5" style={{ color: B.pinkLt }}>
+                              <Users className="h-3 w-3" /> Ahli Pasukan
+                            </label>
+                            <span className="text-[10px]" style={{ color: "rgba(255,255,255,.35)" }}>
+                              {members.length} / {max}{min > 1 ? ` · min ${min}` : ""}
+                            </span>
+                          </div>
+                          {members.map((m, i) => (
+                            <div key={i} className="rounded-xl p-3 space-y-2"
+                              style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(236,72,153,.12)" }}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "rgba(255,255,255,.5)" }}>
+                                  Ahli {i + 1}
+                                </span>
+                                {members.length > min && (
+                                  <button type="button" aria-label={`Buang ahli ${i + 1}`}
+                                    onClick={() => setMembers(prev => prev.filter((_, j) => j !== i))}
+                                    className="p-1 rounded hover:bg-white/10" style={{ color: "rgba(255,255,255,.45)" }}>
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                              <input value={m.ic}
+                                onChange={e => setMember(i, { ic: e.target.value.replace(/[^\d]/g, "").slice(0, 12) })}
+                                placeholder="No. Kad Pengenalan" inputMode="numeric"
+                                className={`${inputCls} font-mono`} style={inputStyle} />
+                              <input value={m.name} onChange={e => setMember(i, { name: e.target.value })}
+                                placeholder="Nama penuh seperti dalam kad pengenalan"
+                                className={inputCls} style={inputStyle} />
+                            </div>
+                          ))}
+                          {members.length < max && (
+                            <button type="button"
+                              onClick={() => setMembers(prev => [...prev, { ic: "", name: "" }])}
+                              className="w-full h-10 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-dashed transition-colors hover:bg-white/5"
+                              style={{ color: B.pinkLt, borderColor: "rgba(236,72,153,.3)" }}>
+                              <Plus className="h-3.5 w-3.5" /> Tambah Ahli
+                            </button>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold tracking-[0.18em] uppercase mb-1.5" style={{ color: B.pinkLt }}>
+                            Nama Sekolah <span className="normal-case font-normal text-white/30">(pilihan)</span>
+                          </label>
+                          <input value={schoolName} onChange={e => setSchoolName(e.target.value)}
+                            placeholder="cth. SK Bandar Utama"
+                            className={inputCls} style={inputStyle} />
+                        </div>
+                      </div>
+                    );
+                  })() : (
                   <div className="space-y-3">
                     <div>
                       <label className="block text-[10px] font-bold tracking-[0.18em] uppercase mb-1.5" style={{ color: B.pinkLt }}>
@@ -622,6 +757,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
                         className={inputCls} style={inputStyle} />
                     </div>
                   </div>
+                  )}
 
                   {formErr && (
                     <p className="text-xs flex items-start gap-1.5" style={{ color: B.pinkLt }}>
@@ -631,8 +767,8 @@ export function PublicFormClient({ slug }: { slug: string }) {
 
                   <button type="button"
                     onClick={() => {
-                      if (ic.length < 6) { setFormErr("No. IC mestilah sekurang-kurangnya 6 digit."); return; }
-                      if (name.trim().length < 3) { setFormErr("Sila isikan nama penuh anda."); return; }
+                      const err = step1Error();
+                      if (err) { setFormErr(err); return; }
                       setFormErr("");
                       setFormStep(2);
                       if (cfg && slotSessions && slotSessions.length > 0 && activeSession === null) {
@@ -654,8 +790,19 @@ export function PublicFormClient({ slug }: { slug: string }) {
                     style={{ background: "rgba(236,72,153,.06)", border: "1px solid rgba(236,72,153,.15)" }}>
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: B.pinkLt }}>Maklumat</p>
-                      <p className="text-xs text-white truncate font-mono">{ic}</p>
-                      <p className="text-xs text-white truncate">{name}{schoolName && ` · ${schoolName}`}</p>
+                      {isTeamComp(comp) ? (
+                        <>
+                          <p className="text-xs text-white truncate font-semibold">{teamName.trim()}</p>
+                          <p className="text-xs text-white/70 truncate">
+                            {members.length} ahli{schoolName && ` · ${schoolName}`}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs text-white truncate font-mono">{ic}</p>
+                          <p className="text-xs text-white truncate">{name}{schoolName && ` · ${schoolName}`}</p>
+                        </>
+                      )}
                     </div>
                     <button type="button" onClick={() => setFormStep(1)}
                       className="text-[10px] font-bold uppercase tracking-wide shrink-0 ml-2 hover:underline"

@@ -23,6 +23,12 @@ export async function GET(
     include: {
       participant: { select: { id: true, name: true, ic: true, gender: true, eduLevel: true, classGrade: true } },
       contingent:  { select: { id: true, name: true, shortName: true } },
+      team: {
+        select: {
+          id: true, name: true,
+          members: { select: { participant: { select: { id: true, name: true } } } },
+        },
+      },
     },
   });
 
@@ -39,6 +45,7 @@ export async function GET(
     slotNumber: r.slotNumber,
     participant: r.participant,
     contingent: r.contingent,
+    team: r.team ? { id: r.team.id, name: r.team.name, members: r.team.members.map(m => m.participant) } : null,
   }));
 
   const counts = await db.walkInRegistration.groupBy({

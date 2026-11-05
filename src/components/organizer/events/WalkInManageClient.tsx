@@ -90,6 +90,8 @@ type Registration = {
   slotNumber: number | null;
   participant: { id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null };
   contingent:  { id: string; name: string; shortName: string | null };
+  /** TEAM competitions: the team this registration stands for (participant is its anchor). */
+  team?: { id: string; name: string; members: { id: string; name: string }[] } | null;
 };
 
 type Stats = { PENDING?: number; CONFIRMED?: number; REJECTED?: number; CANCELLED?: number };
@@ -2129,8 +2131,17 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                         <tr key={reg.id} className="hover:bg-zinc-50/60">
                           <td className="px-4 py-3 text-xs text-zinc-400 tabular-nums">{i + 1}</td>
                           <td className="px-4 py-3">
-                            <p className="font-medium text-zinc-900">{reg.participant.name}</p>
-                            <p className="text-[11px] text-zinc-400">{reg.participant.eduLevel}{reg.participant.classGrade ? ` · ${reg.participant.classGrade}` : ""}</p>
+                            {reg.team ? (
+                              <>
+                                <p className="font-medium text-zinc-900">{reg.team.name}</p>
+                                <p className="text-[11px] text-zinc-400">{reg.team.members.map(m => m.name).join(" · ")}</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-medium text-zinc-900">{reg.participant.name}</p>
+                                <p className="text-[11px] text-zinc-400">{reg.participant.eduLevel}{reg.participant.classGrade ? ` · ${reg.participant.classGrade}` : ""}</p>
+                              </>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-xs text-zinc-600">
                             {reg.contingent.shortName ?? reg.contingent.name}

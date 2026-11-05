@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Loader2, Link2, Copy, XCircle, FileText, Search, CheckCircle2,
-  UserX, X, QrCode, Download, FileDown, Trash2,
+  UserX, X, QrCode, Download, FileDown, Trash2, Users, AlertTriangle,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,45 @@ type Submission = {
   createdAt: string | Date; processedAt: string | Date | null;
   walkInCompetition: { id: string; competition: { code: string; name: string } };
   participant: { id: string; name: string } | null;
+  teamName: string | null;
+  teamMembers: { name: string; ic: string }[] | null;
+  team: { id: string; name: string } | null;
 };
+type TeamPreview = {
+  contingent: { id: string; name: string };
+  anchor: { id: string; name: string };
+  teamName: string;
+  members: {
+    ic: string; name: string;
+    status: "MATCHED" | "NOT_FOUND" | "OTHER_CONTINGENT";
+    participant?: { id: string; name: string };
+    otherContingentName?: string;
+  }[];
+  anchorAddedFromSearch: boolean;
+  outcome: "LINK_EXISTING" | "CREATE_TEAM";
+  existingTeam: { id: string; name: string; members: { id: string; name: string }[] } | null;
+  finalMembers: { id: string; name: string }[];
+  error: { code: string; detail?: string } | null;
+};
+
+/** Malay message for a process/preview error code. */
+function processErrorText(code: string, detail?: string): string {
+  const d = detail ? ` (${detail})` : "";
+  switch (code) {
+    case "SLOT_TAKEN":              return "Slot telah diambil oleh pendaftaran lain.";
+    case "ALREADY_REGISTERED":      return `Peserta/pasukan ini sudah berdaftar untuk pertandingan ini${d}.`;
+    case "UNIQUE_PARTICIPATION":    return `Ahli sudah berdaftar untuk pertandingan walk-in lain dalam acara ini${d}.`;
+    case "ALREADY_PROCESSED":       return "Borang ini telah diproses.";
+    case "TEAM_ALREADY_REGISTERED": return "Pasukan sedia ada ini sudah berdaftar untuk pertandingan walk-in ini.";
+    case "TEAM_TOO_SMALL":          return `Ahli yang dijumpai tidak mencukupi saiz minimum pasukan${d}.`;
+    case "TEAM_FULL":               return "Bilangan ahli melebihi saiz maksimum pasukan.";
+    case "MEMBER_NOT_ELIGIBLE":     return `Ahli tidak menepati kumpulan sasaran pertandingan${d}.`;
+    case "PARTICIPANT_IN_SAME_EVENT": return `Ahli sudah menyertai pertandingan lain dalam acara ini${d}.`;
+    case "MEMBER_NOT_IN_CONTINGENT":  return "Ahli bukan daripada kontinjen yang sama.";
+    case "EXISTING_TEAM_EMPTY":     return "Pasukan sedia ada tidak mempunyai ahli.";
+    default:                        return code || "Gagal memproses.";
+  }
+}
 type Counts = { PENDING: number; PROCESSED: number; NO_MATCH: number };
 type ParticipantHit = {
   id: string; name: string; ic: string | null;
@@ -52,6 +90,8 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
   const [procSelected,    setProcSelected]    = useState<ParticipantHit | null>(null);
   const [procBusy,        setProcBusy]        = useState(false);
   const [procErr,         setProcErr]         = useState("");
+  const [teamPreview,     setTeamPreview]     = useState<TeamPreview | null>(null);
+  const [previewLoading,  setPreviewLoading]  = useState(false);
 
   const loadEndpoints = useCallback(async () => {
     const j = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-endpoint`).then(r => r.json());
@@ -96,12 +136,25 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
     setProcessing(sub);
     setProcQ(sub.ic);
     setProcSelected(null);
+    setTeamPreview(null);
     setProcErr("");
     searchParticipants(sub.ic);
   }
 
+  /** Select a search hit; for team entries, load what confirming would do. */
+  async function selectParticipant(p: ParticipantHit | null) {
+    setProcSelected(p); setTeamPreview(null); setProcErr("");
+    if (!p || !processing?.teamName) return;
+    setPreviewLoading(true);
+    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions/${processing.id}/process?participantId=${encodeURIComponent(p.id)}`);
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) setTeamPreview(j.data);
+    else setProcErr(processErrorText(j.error, j.detail));
+    setPreviewLoading(false);
+  }
+
   async function searchParticipants(q: string) {
-    setProcQ(q); setProcSelected(null);
+    setProcQ(q); setProcSelected(null); setTeamPreview(null);
     if (q.trim().length < 2) { setProcResults([]); return; }
     setProcSearching(true);
     const j = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions/search-participants?q=${encodeURIComponent(q)}`).then(r => r.json());
@@ -112,19 +165,14 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
   async function processSubmission(action: "match" | "no_match") {
     if (!processing) return;
     setProcBusy(true); setProcErr("");
+    const apiAction = action === "match" && processing.teamName ? "match_team" : action;
     const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions/${processing.id}/process`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, participantId: procSelected?.id }),
+      body: JSON.stringify({ action: apiAction, participantId: procSelected?.id }),
     });
     const j = await res.json();
     if (!res.ok) {
-      setProcErr(
-        j.error === "SLOT_TAKEN" ? "Slot telah diambil oleh pendaftaran lain."
-        : j.error === "ALREADY_REGISTERED" ? "Peserta ini sudah berdaftar untuk pertandingan ini."
-        : j.error === "UNIQUE_PARTICIPATION" ? "Peserta sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
-        : j.error === "ALREADY_PROCESSED" ? "Borang ini telah diproses."
-        : (j.message ?? j.error ?? "Gagal memproses."),
-      );
+      setProcErr(j.message ?? processErrorText(j.error, j.detail));
     } else {
       setProcessing(null);
       loadSubs();
@@ -238,11 +286,12 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                     s.walkInCompetition.competition.name,
                     s.sessionNumber != null ? `Sesi ${s.sessionNumber}` : "",
                     s.slotNumber != null ? String(s.slotNumber) : "",
-                    s.name,
-                    s.ic,
+                    s.teamName ?? "",
+                    s.teamMembers ? s.teamMembers.map(m => m.name).join("; ") : s.name,
+                    s.teamMembers ? s.teamMembers.map(m => m.ic).join("; ") : s.ic,
                     s.status,
                   ]);
-                  const csv = [["Pertandingan", "Sesi", "Slot", "Nama", "IC", "Status"], ...rows]
+                  const csv = [["Pertandingan", "Sesi", "Slot", "Pasukan", "Nama", "IC", "Status"], ...rows]
                     .map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
                   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
                   const link = document.createElement("a");
@@ -292,7 +341,9 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
             s.ic.toLowerCase().includes(q) ||
             s.walkInCompetition.competition.name.toLowerCase().includes(q) ||
             s.walkInCompetition.competition.code.toLowerCase().includes(q) ||
-            (s.schoolName && s.schoolName.toLowerCase().includes(q))
+            (s.schoolName && s.schoolName.toLowerCase().includes(q)) ||
+            (s.teamName && s.teamName.toLowerCase().includes(q)) ||
+            (s.teamMembers ?? []).some(m => m.name.toLowerCase().includes(q) || m.ic.includes(q))
           ) : subs;
           if (filtered.length === 0) return <p className="text-xs text-zinc-400 italic py-2">Tiada padanan untuk &quot;{searchQ.trim()}&quot;</p>;
           const sorted = [...filtered].sort((a, b) => {
@@ -344,7 +395,18 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                                 {s.slotNumber != null ? s.slotNumber : "—"}
                               </td>
                               <td className="px-3 py-2">
-                                <p className="font-medium text-zinc-800">{s.name}</p>
+                                {s.teamName ? (
+                                  <>
+                                    <p className="font-medium text-zinc-800 flex items-center gap-1">
+                                      <Users className="h-3 w-3 text-indigo-500 shrink-0" />{s.teamName}
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 truncate max-w-[220px]">
+                                      {(s.teamMembers ?? []).map(m => m.name).join(" · ") || s.name}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p className="font-medium text-zinc-800">{s.name}</p>
+                                )}
                                 {s.schoolName && <p className="text-[10px] text-zinc-400 truncate max-w-[160px]">{s.schoolName}</p>}
                               </td>
                               <td className="px-3 py-2 font-mono text-zinc-600">{s.ic}</td>
@@ -352,8 +414,8 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${meta.cls}`}>
                                   {meta.label}
                                 </span>
-                                {s.status === "PROCESSED" && s.participant && (
-                                  <p className="text-[10px] text-zinc-400 mt-0.5 truncate max-w-[140px]">→ {s.participant.name}</p>
+                                {s.status === "PROCESSED" && (s.team || s.participant) && (
+                                  <p className="text-[10px] text-zinc-400 mt-0.5 truncate max-w-[140px]">→ {s.team?.name ?? s.participant?.name}</p>
                                 )}
                               </td>
                               {canWrite && (
@@ -452,10 +514,29 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
             <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
               {/* Submitted details */}
               <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-bold text-zinc-900">{processing.name}</p>
-                  <span className="font-mono text-xs text-zinc-600">{processing.ic}</span>
-                </div>
+                {processing.teamName ? (
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
+                      <Users className="h-4 w-4 text-indigo-500" /> {processing.teamName}
+                      <span className="text-[10px] font-medium text-zinc-400">(pasukan sementara)</span>
+                    </p>
+                    <ol className="space-y-0.5 text-xs">
+                      {(processing.teamMembers ?? []).map((m, i) => (
+                        <li key={m.ic} className="flex items-center justify-between gap-3">
+                          <span className="text-zinc-700 truncate">{i + 1}. {m.name}</span>
+                          <button type="button" title="Cari IC ini"
+                            onClick={() => searchParticipants(m.ic)}
+                            className="font-mono text-zinc-600 hover:text-indigo-600 hover:underline shrink-0">{m.ic}</button>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-zinc-900">{processing.name}</p>
+                    <span className="font-mono text-xs text-zinc-600">{processing.ic}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-zinc-500">
                   {processing.schoolName && <span className="col-span-2">Sekolah: <strong className="text-zinc-700">{processing.schoolName}</strong></span>}
                   <span>Pertandingan: <strong className="text-zinc-700">{processing.walkInCompetition.competition.name}</strong></span>
@@ -468,7 +549,9 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
               {/* IC search */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold tracking-widest uppercase text-zinc-400">
-                  Cari peserta dalam pangkalan data (IC / Nama)
+                  {processing.teamName
+                    ? "Cari salah seorang ahli dalam pangkalan data (IC)"
+                    : "Cari peserta dalam pangkalan data (IC / Nama)"}
                 </p>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
@@ -487,7 +570,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                       const sel = procSelected?.id === p.id;
                       return (
                         <button key={p.id} type="button"
-                          onClick={() => setProcSelected(sel ? null : p)}
+                          onClick={() => selectParticipant(sel ? null : p)}
                           className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${sel ? "bg-indigo-50" : "hover:bg-zinc-50"}`}>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-zinc-800 truncate">{p.name}</p>
@@ -503,12 +586,72 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                 )}
               </div>
 
+              {processing.teamName && previewLoading && (
+                <div className="flex items-center gap-2 text-xs text-zinc-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Menyemak pasukan…
+                </div>
+              )}
+              {processing.teamName && teamPreview && (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3.5 space-y-2.5 text-xs">
+                  <p className="text-zinc-500">
+                    Kontinjen: <strong className="text-zinc-900 text-sm">{teamPreview.contingent.name}</strong>
+                  </p>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-zinc-400">Padanan ahli</p>
+                    {teamPreview.members.map(m => (
+                      <div key={m.ic} className="flex items-start justify-between gap-3">
+                        <span className={m.status === "MATCHED" ? "text-zinc-800" : "text-zinc-400 line-through"}>
+                          {m.participant?.name ?? m.name} <span className="font-mono text-[10px]">{m.ic}</span>
+                        </span>
+                        <span className={`shrink-0 text-[10px] font-semibold ${m.status === "MATCHED" ? "text-emerald-600" : "text-red-500"}`}>
+                          {m.status === "MATCHED" ? "Dijumpai"
+                            : m.status === "OTHER_CONTINGENT" ? `Digugurkan — kontinjen lain${m.otherContingentName ? ` (${m.otherContingentName})` : ""}`
+                            : "Digugurkan — tiada dalam pangkalan data"}
+                        </span>
+                      </div>
+                    ))}
+                    {teamPreview.anchorAddedFromSearch && (
+                      <p className="text-[10px] text-amber-600">
+                        {procSelected?.name} dipilih daripada carian tetapi IC-nya tiada dalam senarai borang — akan dimasukkan.
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-lg bg-white border p-2.5">
+                    {teamPreview.outcome === "LINK_EXISTING" && teamPreview.existingTeam ? (
+                      <>
+                        <p className="font-semibold text-zinc-800">
+                          Pasukan sedia ada: {teamPreview.existingTeam.name} — akan disahkan untuk bertanding
+                        </p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          Ahli kekal: {teamPreview.existingTeam.members.map(m => m.name).join(", ")}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-semibold text-zinc-800">
+                          Pasukan baharu &quot;{teamPreview.teamName}&quot; akan dicipta ({teamPreview.finalMembers.length} ahli)
+                        </p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          {teamPreview.finalMembers.map(m => m.name).join(", ")}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  {teamPreview.error && (
+                    <p className="flex items-start gap-1.5 text-red-600">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                      {processErrorText(teamPreview.error.code, teamPreview.error.detail)}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {procErr && <p className="text-xs text-red-500">{procErr}</p>}
 
               <div className="flex gap-2">
                 <Button
                   onClick={() => processSubmission("match")}
-                  disabled={!procSelected || procBusy}
+                  disabled={!procSelected || procBusy || (!!processing.teamName && (!teamPreview || !!teamPreview.error || previewLoading))}
                   className="flex-1 gap-1.5">
                   {procBusy && procSelected ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Sahkan &amp; Daftar

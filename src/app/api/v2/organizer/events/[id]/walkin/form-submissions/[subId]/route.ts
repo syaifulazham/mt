@@ -15,7 +15,7 @@ export async function DELETE(
   const { id, subId } = await params;
 
   const sub = await db.walkInFormSubmission.findFirst({
-    where: { id: subId, endpoint: { eventId: id } },
+    where: { id: subId, walkInCompetition: { eventId: id } },
     select: { id: true, status: true },
   });
   if (!sub) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });

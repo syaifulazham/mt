@@ -2,11 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { confirmTeamVerification, loadTeamSubmission, previewTeamVerification } from "@/lib/walkin-team-verify";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 
+// GET ?participantId= — TEAM submissions only: what confirming with this
+// participant would do (contingent, member matches, existing or new team).
+// Read-only; POST runs the same check again.
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; subId: string }> },
+) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const { id, subId } = await params;
+
+  const participantId = req.nextUrl.searchParams.get("participantId") ?? "";
+  if (!participantId) return NextResponse.json({ error: "MISSING_PARTICIPANT" }, { status: 400 });
+
+  const sub = await loadTeamSubmission(id, subId);
+  if (!sub) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (!sub.teamName) return NextResponse.json({ error: "NOT_A_TEAM_SUBMISSION" }, { status: 400 });
+
+  const preview = await previewTeamVerification(sub, participantId);
+  if ("notFound" in preview) return NextResponse.json({ error: "PARTICIPANT_NOT_FOUND" }, { status: 404 });
+  return NextResponse.json({ data: preview });
+}
+
 // POST — process a pending form submission
-// body: { action: "match", participantId } | { action: "no_match" }
+// body: { action: "match", participantId }       — individual submissions
+//     | { action: "match_team", participantId }  — team submissions
+//     | { action: "no_match" }
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; subId: string }> },
@@ -20,10 +46,10 @@ export async function POST(
   const action = body.action;
 
   const sub = await db.walkInFormSubmission.findFirst({
-    where: { id: subId, endpoint: { eventId: id } },
+    where: { id: subId, walkInCompetition: { eventId: id } },
     select: {
       id: true, status: true, walkInCompetitionId: true,
-      sessionNumber: true, slotNumber: true,
+      sessionNumber: true, slotNumber: true, teamName: true,
       walkInCompetition: {
         select: { event: { select: { walkInUniqueParticipation: true } } },
       },
@@ -41,8 +67,15 @@ export async function POST(
     return NextResponse.json({ success: true, status: "NO_MATCH" });
   }
 
+  if (action === "match_team") {
+    if (!sub.teamName || !body.participantId)
+      return NextResponse.json({ error: "INVALID_ACTION" }, { status: 400 });
+    return confirmTeam(id, sub.id, String(body.participantId));
+  }
+
   if (action !== "match" || !body.participantId)
     return NextResponse.json({ error: "INVALID_ACTION" }, { status: 400 });
+  if (sub.teamName) return NextResponse.json({ error: "TEAM_SUBMISSION" }, { status: 400 });
 
   const participant = await db.participant.findUnique({
     where: { id: body.participantId },
@@ -119,4 +152,11 @@ export async function POST(
     }
     throw e;
   }
+}
+
+/** Team confirm: the work lives in src/lib/walkin-team-verify.ts. */
+async function confirmTeam(eventId: string, subId: string, participantId: string) {
+  const r = await confirmTeamVerification(eventId, subId, participantId);
+  if ("error" in r) return NextResponse.json({ error: r.error, detail: r.detail }, { status: r.status });
+  return NextResponse.json({ success: true, status: "PROCESSED", ...r });
 }

@@ -14,7 +14,7 @@ export async function GET(
   const status = req.nextUrl.searchParams.get("status");
 
   const where = {
-    endpoint: { eventId: id },
+    walkInCompetition: { eventId: id },
     ...(status ? { status: status as "PENDING" | "PROCESSED" | "NO_MATCH" } : {}),
   };
 
@@ -33,11 +33,13 @@ export async function GET(
           },
         },
         participant: { select: { id: true, name: true } },
+        teamName: true, teamMembers: true,
+        team: { select: { id: true, name: true } },
       },
     }),
-    db.walkInFormSubmission.count({ where: { endpoint: { eventId: id }, status: "PENDING" } }),
-    db.walkInFormSubmission.count({ where: { endpoint: { eventId: id }, status: "PROCESSED" } }),
-    db.walkInFormSubmission.count({ where: { endpoint: { eventId: id }, status: "NO_MATCH" } }),
+    db.walkInFormSubmission.count({ where: { walkInCompetition: { eventId: id }, status: "PENDING" } }),
+    db.walkInFormSubmission.count({ where: { walkInCompetition: { eventId: id }, status: "PROCESSED" } }),
+    db.walkInFormSubmission.count({ where: { walkInCompetition: { eventId: id }, status: "NO_MATCH" } }),
   ]);
 
   return NextResponse.json({

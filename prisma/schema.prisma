@@ -786,7 +786,9 @@ enum WalkInFormSubmissionStatus {
 
 model WalkInFormSubmission {
   id                   String                     @id @default(cuid())
-  endpointId           String
+  /// The public borang it came from; null when submitted from the participant
+  /// portal dashboard.
+  endpointId           String?
   walkInCompetitionId  String
   ic                   String
   name                 String
@@ -796,14 +798,21 @@ model WalkInFormSubmission {
   status               WalkInFormSubmissionStatus @default(PENDING)
   participantId        String?
   walkInRegistrationId String?
+  /// TEAM competitions: the temporary team from the borang. `ic`/`name` hold
+  /// the first member; teamMembers is [{ name, ic }] for all members, in order.
+  teamName             String?
+  teamMembers          Json?
+  /// The main-data team this entry was verified into (set when processed).
+  teamId               String?
   processedAt          DateTime?
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
 
-  endpoint           WalkInFormEndpoint     @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  endpoint           WalkInFormEndpoint?    @relation(fields: [endpointId], references: [id], onDelete: Cascade)
   walkInCompetition  EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
   participant        Participant?           @relation(fields: [participantId], references: [id])
   walkInRegistration WalkInRegistration?    @relation(fields: [walkInRegistrationId], references: [id])
+  team               Team?                  @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   @@index([endpointId, status])
   @@index([ic])
@@ -871,16 +880,21 @@ model WalkInRegistration {
   viblockToken        String?
   sessionNumber       Int?
   slotNumber          Int?
+  /// TEAM competitions: one registration per team, anchored on the member the
+  /// organizer matched (participantId).
+  teamId              String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
   walkInCompetition EventWalkInCompetition @relation(fields: [walkInCompetitionId], references: [id], onDelete: Cascade)
   participant       Participant            @relation(fields: [participantId], references: [id])
   contingent        Contingent             @relation(fields: [contingentId], references: [id])
+  team              Team?                  @relation(fields: [teamId], references: [id], onDelete: SetNull)
   judgingScores     WalkInJudgingScore[]
   formSubmissions   WalkInFormSubmission[]
 
   @@unique([walkInCompetitionId, participantId])
+  @@index([teamId])
   @@map("walkin_registrations")
 }
 
@@ -1004,6 +1018,8 @@ model Team {
   droneChallenges TeamDroneChallenge[]
   csiAccess     TeamCsiAccess?
   judgingScores JudgingScore[]
+  walkInRegistrations   WalkInRegistration[]
+  walkInFormSubmissions WalkInFormSubmission[]
 
   @@map("teams")
 }

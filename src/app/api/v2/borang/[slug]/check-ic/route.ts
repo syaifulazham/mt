@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { registrationHasIc, submissionHasIc } from "@/lib/walkin-team";
 
 // GET /api/v2/borang/[slug]/check-ic?ic=... — check which competitions an IC has already submitted for
 export async function GET(
@@ -21,17 +22,17 @@ export async function GET(
   // Find all active submissions for this IC in this event
   const subs = await db.walkInFormSubmission.findMany({
     where: {
-      ic,
+      ...submissionHasIc(ic),
       status: { in: ["PENDING", "PROCESSED"] },
       walkInCompetition: { eventId: endpoint.eventId },
     },
     select: { walkInCompetitionId: true },
   });
 
-  // Also find registrations where a participant with this IC is registered
+  // Also find registrations held by this IC (directly or through a registered team)
   const regs = await db.walkInRegistration.findMany({
     where: {
-      participant: { ic },
+      ...registrationHasIc(ic),
       status: { in: ["PENDING", "CONFIRMED"] },
       walkInCompetition: { eventId: endpoint.eventId },
     },

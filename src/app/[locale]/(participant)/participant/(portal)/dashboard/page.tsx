@@ -13,6 +13,8 @@ import { fc1 } from "@/lib/eptim-fc1";
 import { droneArena } from "@/lib/eptim-drone";
 import { arenaChallengeViews, type ArenaClient } from "@/lib/arena-client";
 import { eptimEdu, eptimEduConfigured } from "@/lib/eptimedu";
+import { parseVibeBlocksToken } from "@/lib/vibeblocks";
+import { readTeamMembers, registrationHasIc, submissionHasIc } from "@/lib/walkin-team";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -101,14 +103,20 @@ export default async function DashboardPage() {
     where: {
       publishToPortal: true,
       event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
+      // Eligible by target group; a competition with no target groups is open
+      // to everyone (as in checkTeamPeople and the public borang).
       competition: {
-        targetGroups: { some: { targetGroup: targetGroupFilter } },
+        OR: [
+          { targetGroups: { some: { targetGroup: targetGroupFilter } } },
+          { targetGroups: { none: {} } },
+        ],
       },
     },
     select: {
       id: true,
       maxSlots: true,
       useViblockarena: true,
+      useVibeblocks: true,
       walkInSlotSchedule: true,
       _count: { select: { registrations: true } },
       event: {
@@ -122,7 +130,7 @@ export default async function DashboardPage() {
         },
       },
       competition: {
-        select: { id: true, code: true, name: true, participationType: true },
+        select: { id: true, code: true, name: true, participationType: true, minTeamSize: true, maxTeamSize: true },
       },
     },
     orderBy: [{ event: { startDate: "asc" } }, { competition: { code: "asc" } }],
@@ -423,11 +431,33 @@ export default async function DashboardPage() {
     }
   }
 
-  // Existing walk-in registrations for this participant
-  const existingRegs = await db.walkInRegistration.findMany({
-    where: { participantId: session.participantId },
-    select: { id: true, walkInCompetitionId: true, status: true, viblockToken: true, sessionNumber: true, slotNumber: true },
-  });
+  // Existing walk-in registrations: the participant's own, or a team
+  // registration they are a member of (one registration per team, anchored on
+  // one member). Plus team entries still waiting for the organizer's
+  // verification that list this participant's IC.
+  const selfIc = participant.ic?.replace(/[\s-]/g, "") ?? "";
+  const [existingRegs, pendingTeamSubs] = await Promise.all([
+    db.walkInRegistration.findMany({
+      where: {
+        status: { in: ["PENDING", "CONFIRMED"] },
+        OR: [
+          { participantId: session.participantId },
+          { team: { members: { some: { participantId: session.participantId } } } },
+          ...(selfIc ? [registrationHasIc(selfIc)] : []),
+        ],
+      },
+      select: {
+        id: true, walkInCompetitionId: true, status: true, viblockToken: true, sessionNumber: true, slotNumber: true,
+        team: { select: { name: true, members: { select: { participant: { select: { name: true } } } } } },
+      },
+    }),
+    selfIc
+      ? db.walkInFormSubmission.findMany({
+          where: { ...submissionHasIc(selfIc), status: "PENDING", teamName: { not: null } },
+          select: { id: true, walkInCompetitionId: true, sessionNumber: true, slotNumber: true, teamName: true, teamMembers: true },
+        })
+      : Promise.resolve([]),
+  ]);
 
   // Serialize
   const teamsData = teamMemberships.map((m) => ({
@@ -453,6 +483,7 @@ export default async function DashboardPage() {
     id:              wic.id,
     maxSlots:        wic.maxSlots,
     useViblockarena: wic.useViblockarena,
+    useVibeblocks:   wic.useVibeblocks,
     walkInSlotSchedule: (wic.walkInSlotSchedule ?? null) as SlotScheduleConfig | null,
     registrations:   wic._count.registrations,
     event: {
@@ -466,9 +497,29 @@ export default async function DashboardPage() {
     competition: wic.competition,
   }));
 
-  const existingRegistrations: Record<string, { id: string; status: string; viblockToken: string | null; sessionNumber: number | null; slotNumber: number | null }> = {};
+  type RegView = {
+    id: string; status: string; viblockToken: string | null; vibeBlocksToken: string | null;
+    sessionNumber: number | null; slotNumber: number | null;
+    team: { name: string; members: string[] } | null;
+  };
+  const existingRegistrations: Record<string, RegView> = {};
+  // Pending team entries first, so a registration for the same competition wins.
+  for (const s of pendingTeamSubs) {
+    existingRegistrations[s.walkInCompetitionId] = {
+      id: s.id, status: "SUBMITTED", viblockToken: null, vibeBlocksToken: null,
+      sessionNumber: s.sessionNumber, slotNumber: s.slotNumber,
+      team: { name: s.teamName ?? "", members: readTeamMembers(s.teamMembers).map((m) => m.name) },
+    };
+  }
   for (const r of existingRegs) {
-    existingRegistrations[r.walkInCompetitionId] = { id: r.id, status: r.status, viblockToken: r.viblockToken, sessionNumber: r.sessionNumber, slotNumber: r.slotNumber };
+    const vb = r.viblockToken ? parseVibeBlocksToken(r.viblockToken) : null;
+    existingRegistrations[r.walkInCompetitionId] = {
+      id: r.id, status: r.status,
+      viblockToken: vb ? null : r.viblockToken,
+      vibeBlocksToken: vb?.entryToken ?? null,
+      sessionNumber: r.sessionNumber, slotNumber: r.slotNumber,
+      team: r.team ? { name: r.team.name, members: r.team.members.map((m) => m.participant.name) } : null,
+    };
   }
 
   return (
@@ -476,6 +527,7 @@ export default async function DashboardPage() {
       participant={{
         id:         participant.id,
         name:       participant.name,
+        ic:         selfIc || null,
         gender:     participant.gender,
         eduLevel:   participant.eduLevel,
         classGrade: participant.classGrade,

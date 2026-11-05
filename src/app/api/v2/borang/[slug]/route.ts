@@ -23,6 +23,7 @@ export async function GET(
               competition: {
                 select: {
                   id: true, code: true, name: true, participationType: true,
+                  minTeamSize: true, maxTeamSize: true,
                   targetGroups: { select: { targetGroup: { select: { schoolLevel: true } } } },
                 },
               },

@@ -27,13 +27,16 @@ export async function POST(
     return NextResponse.json({ error: "INVALID_PASSCODE" }, { status: 403 });
 
   const sub = await db.walkInFormSubmission.findFirst({
-    where: { id: submissionId, endpoint: { eventId: endpoint.eventId } },
+    where: { id: submissionId, walkInCompetition: { eventId: endpoint.eventId } },
     select: {
       id: true, status: true, walkInCompetitionId: true,
-      sessionNumber: true, slotNumber: true,
+      sessionNumber: true, slotNumber: true, teamName: true,
     },
   });
   if (!sub) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  // Team entries are verified in the organizer's "Proses Borang" dialog, which
+  // builds the team; the counter only registers individuals.
+  if (sub.teamName) return NextResponse.json({ error: "TEAM_SUBMISSION" }, { status: 400 });
   if (sub.status !== "PENDING")
     return NextResponse.json({ error: "ALREADY_PROCESSED" }, { status: 409 });
 

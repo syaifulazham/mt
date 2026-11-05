@@ -24,6 +24,7 @@ import {
   RefreshCw,
   KeyRound,
   BookOpen,
+  Plus,
 } from "lucide-react";
 import { buildSlotSchedule, fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 import type { ArenaChallengeView } from "@/lib/arena-client";
@@ -33,6 +34,8 @@ import type { ArenaChallengeView } from "@/lib/arena-client";
 type Participant = {
   id: string;
   name: string;
+  /** IC without separators; null for participants without one. */
+  ic: string | null;
   gender: string;
   eduLevel: string;
   classGrade: string | null;
@@ -62,6 +65,7 @@ type WalkInEntry = {
   id: string;
   maxSlots: number;
   useViblockarena: boolean;
+  useVibeblocks: boolean;
   walkInSlotSchedule: SlotScheduleConfig | null;
   registrations: number;
   event: {
@@ -72,18 +76,44 @@ type WalkInEntry = {
     startDate: string | null;
     endDate: string | null;
   };
-  competition: { id: string; code: string; name: string; participationType: string };
+  competition: {
+    id: string; code: string; name: string; participationType: string;
+    minTeamSize: number; maxTeamSize: number;
+  };
 };
 
 type WalkInReg = {
   id: string;
+  /** PENDING / CONFIRMED registration, or SUBMITTED: a team entry awaiting the organizer's verification. */
   status: string;
   viblockToken: string | null;
+  /** VibeBlocks entry token (the part a participant types in), when issued. */
+  vibeBlocksToken?: string | null;
   sessionNumber: number | null;
   slotNumber: number | null;
+  team?: { name: string; members: string[] } | null;
 };
 
 type SlotChoice = { sessionNumber: number; slotNumber: number };
+type TeamDraft = { teamName: string; members: { ic: string; name: string }[] };
+
+/** Member-count bounds for a TEAM walk-in competition (the server enforces the same). */
+function teamBounds(c: WalkInEntry["competition"]) {
+  const max = Math.max(1, c.maxTeamSize);
+  return { min: Math.min(Math.max(1, c.minTeamSize), max), max };
+}
+
+/** Problem with a team draft, or "" when it may be sent. */
+function teamDraftError(c: WalkInEntry["competition"], d: TeamDraft): string {
+  const { min, max } = teamBounds(c);
+  if (d.teamName.trim().length < 2) return "Sila isikan nama pasukan.";
+  if (d.members.length < min || d.members.length > max)
+    return min === max ? `Pasukan mesti ${min} orang ahli.` : `Pasukan mesti ${min}–${max} orang ahli.`;
+  const bad = d.members.findIndex((m) => m.ic.length < 6 || m.name.trim().length < 3);
+  if (bad >= 0) return `Ahli ${bad + 1}: isikan No. IC (6–12 digit) dan nama penuh.`;
+  if (new Set(d.members.map((m) => m.ic)).size !== d.members.length) return "No. IC ahli pasukan tidak boleh berulang.";
+  return "";
+}
 
 type QuizzlyToken = {
   token: string;
@@ -318,6 +348,7 @@ type SessionSlots = { n: number; start: number; end: number; booked: number[] };
 
 function RegisterModal({
   target,
+  self,
   registering,
   error,
   refreshKey,
@@ -325,13 +356,26 @@ function RegisterModal({
   onClose,
 }: {
   target: WalkInEntry;
+  /** The logged-in participant: member 1 of a team entry. */
+  self: { name: string; ic: string | null };
   registering: boolean;
   error: string;
   refreshKey: number;
-  onConfirm: (slot: SlotChoice | null) => void;
+  onConfirm: (slot: SlotChoice | null, team: TeamDraft | null) => void;
   onClose: () => void;
 }) {
   const cfg = target.walkInSlotSchedule;
+  const isTeam = target.competition.participationType === "TEAM";
+  const bounds = teamBounds(target.competition);
+  const [team, setTeam] = useState<TeamDraft>(() => ({
+    teamName: "",
+    members: Array.from({ length: Math.max(1, bounds.min) }, (_, i) =>
+      i === 0 ? { ic: self.ic ?? "", name: self.name } : { ic: "", name: "" }),
+  }));
+  const [teamErr, setTeamErr] = useState("");
+  const setMember = (i: number, patch: Partial<TeamDraft["members"][number]>) =>
+    setTeam((t) => ({ ...t, members: t.members.map((m, j) => (j === i ? { ...m, ...patch } : m)) }));
+  const inputCls = "w-full h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 text-sm dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-60";
   const [sessions,     setSessions]     = useState<SessionSlots[] | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsErr,     setSlotsErr]     = useState("");
@@ -378,7 +422,7 @@ function RegisterModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-base font-bold dark:text-zinc-100">
-            {cfg ? "Pilih Sesi & Slot" : "Sahkan Pendaftaran"}
+            {isTeam ? "Daftar Pasukan" : cfg ? "Pilih Sesi & Slot" : "Sahkan Pendaftaran"}
           </h2>
           <button
             type="button"
@@ -403,6 +447,66 @@ function RegisterModal({
             </p>
           )}
         </div>
+
+        {/* Temporary team (TEAM competitions) */}
+        {isTeam && (
+          <div className="space-y-3">
+            {!self.ic ? (
+              <p className="text-xs text-red-600 dark:text-red-400">
+                No. IC anda tiada dalam rekod. Pendaftaran pasukan memerlukan No. IC — sila kemas kini profil anda.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">Nama Pasukan</label>
+                  <input value={team.teamName} disabled={registering}
+                    onChange={(e) => setTeam((t) => ({ ...t, teamName: e.target.value }))}
+                    placeholder="cth. Pasukan Robotik A" className={inputCls} />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">Ahli Pasukan</p>
+                    <span className="text-[11px] text-zinc-400">
+                      {team.members.length} / {bounds.max}{bounds.min > 1 ? ` · min ${bounds.min}` : ""}
+                    </span>
+                  </div>
+                  {team.members.map((m, i) => (
+                    <div key={i} className="rounded-lg border border-zinc-100 dark:border-zinc-700 p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-zinc-500">
+                          Ahli {i + 1}{i === 0 && " (anda)"}
+                        </span>
+                        {i > 0 && team.members.length > bounds.min && (
+                          <button type="button" aria-label={`Buang ahli ${i + 1}`} disabled={registering}
+                            onClick={() => setTeam((t) => ({ ...t, members: t.members.filter((_, j) => j !== i) }))}
+                            className="rounded p-0.5 text-zinc-400 hover:text-red-500">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <input value={m.ic} disabled={i === 0 || registering} inputMode="numeric"
+                        onChange={(e) => setMember(i, { ic: e.target.value.replace(/[^\d]/g, "").slice(0, 12) })}
+                        placeholder="No. Kad Pengenalan" className={`${inputCls} font-mono`} />
+                      <input value={m.name} disabled={i === 0 || registering}
+                        onChange={(e) => setMember(i, { name: e.target.value })}
+                        placeholder="Nama penuh seperti dalam kad pengenalan" className={inputCls} />
+                    </div>
+                  ))}
+                  {team.members.length < bounds.max && (
+                    <button type="button" disabled={registering}
+                      onClick={() => setTeam((t) => ({ ...t, members: [...t.members, { ic: "", name: "" }] }))}
+                      className="w-full h-9 rounded-lg border border-dashed border-teal-300 dark:border-teal-700 text-xs font-medium text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/30 flex items-center justify-center gap-1.5">
+                      <Plus className="h-3.5 w-3.5" /> Tambah Ahli
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Pasukan ini bersifat sementara sehingga disahkan oleh penganjur.
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Slot picker (cinema style) */}
         {cfg && (
@@ -484,8 +588,8 @@ function RegisterModal({
         </p>
 
         {/* Error */}
-        {error && (
-          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+        {(teamErr || error) && (
+          <p className="text-xs text-red-600 dark:text-red-400">{teamErr || error}</p>
         )}
 
         {/* Buttons */}
@@ -500,8 +604,13 @@ function RegisterModal({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(selected)}
-            disabled={registering || (cfg ? !selected || slotsLoading || !!slotsErr : false)}
+            onClick={() => {
+              if (!isTeam) { onConfirm(selected, null); return; }
+              const err = teamDraftError(target.competition, team);
+              setTeamErr(err);
+              if (!err) onConfirm(selected, team);
+            }}
+            disabled={registering || (isTeam && !self.ic) || (cfg ? !selected || slotsLoading || !!slotsErr : false)}
             className="flex-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {registering ? (
@@ -871,7 +980,7 @@ export function DashboardClient({
   const [qrTarget, setQrTarget]           = useState<{ id: string; name: string } | null>(null);
   const [tokenTarget, setTokenTarget]     = useState<string | null>(null);
 
-  const handleRegister = useCallback(async (slot: SlotChoice | null) => {
+  const handleRegister = useCallback(async (slot: SlotChoice | null, team: TeamDraft | null) => {
     if (!registerTarget) return;
     setRegistering(true);
     setRegisterErr("");
@@ -879,14 +988,27 @@ export function DashboardClient({
       const res = await fetch("/api/v2/participant/walkin/register", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ walkInCompetitionId: registerTarget.id, ...(slot ?? {}) }),
+        body:    JSON.stringify({ walkInCompetitionId: registerTarget.id, ...(slot ?? {}), ...(team ?? {}) }),
       });
       const j = await res.json();
       if (!res.ok) {
-        if (j.error === "ALREADY_REGISTERED") {
-          setRegisterErr("Anda sudah berdaftar.");
+        const teamMsg: Record<string, string> = {
+          INVALID_TEAM_NAME:   "Sila isikan nama pasukan.",
+          INVALID_MEMBERS:     "Setiap ahli perlu No. IC (6–12 digit) dan nama penuh.",
+          TEAM_SIZE:           "Bilangan ahli pasukan tidak menepati syarat pertandingan.",
+          DUPLICATE_MEMBER_IC: "No. IC ahli pasukan tidak boleh berulang.",
+          DUPLICATE_SUBMISSION: "Salah seorang ahli sudah didaftarkan dalam pasukan lain untuk pertandingan ini.",
+          SELF_NOT_IN_TEAM:    "Anda mesti menjadi ahli pasukan ini.",
+          NO_IC:               "No. IC anda tiada dalam rekod.",
+        };
+        if (teamMsg[j.error]) {
+          setRegisterErr(teamMsg[j.error]);
+        } else if (j.error === "ALREADY_REGISTERED") {
+          setRegisterErr(team ? "Salah seorang ahli sudah berdaftar untuk pertandingan ini." : "Anda sudah berdaftar.");
         } else if (j.error === "UNIQUE_PARTICIPATION") {
-          setRegisterErr("Anda sudah berdaftar untuk pertandingan walk-in lain dalam acara ini.");
+          setRegisterErr(team
+            ? "Salah seorang ahli sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
+            : "Anda sudah berdaftar untuk pertandingan walk-in lain dalam acara ini.");
         } else if (j.error === "SLOT_TAKEN") {
           setSlotRefreshKey((k) => k + 1); // refresh availability in the picker
           setRegisterErr("Slot baru sahaja ditempah. Sila pilih slot lain.");
@@ -896,7 +1018,14 @@ export function DashboardClient({
           setRegisterErr(j.message ?? "Gagal mendaftar.");
         }
       } else {
-        setRegistrations((prev) => ({ ...prev, [registerTarget.id]: j.data }));
+        const reg: WalkInReg = team
+          ? {
+              id: j.data.id, status: "SUBMITTED", viblockToken: null,
+              sessionNumber: j.data.sessionNumber ?? null, slotNumber: j.data.slotNumber ?? null,
+              team: { name: team.teamName.trim(), members: team.members.map((m) => m.name.trim().toUpperCase()) },
+            }
+          : j.data;
+        setRegistrations((prev) => ({ ...prev, [registerTarget.id]: reg }));
         setRegisterTarget(null);
       }
     } finally {
@@ -1461,6 +1590,15 @@ export function DashboardClient({
                           <p className="text-xs text-zinc-400 mt-0.5 capitalize">
                             {wic.competition.participationType.toLowerCase()}
                           </p>
+                          {reg?.team && (
+                            <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-0.5 truncate">
+                              <Users className="inline h-3 w-3 mr-1 -mt-0.5" />
+                              <span className="font-medium">{reg.team.name}</span>
+                              {reg.team.members.length > 0 && (
+                                <span className="text-zinc-400"> · {reg.team.members.join(", ")}</span>
+                              )}
+                            </p>
+                          )}
                         </div>
 
                         {/* Slot indicator */}
@@ -1493,8 +1631,9 @@ export function DashboardClient({
                                   ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800"
                                   : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
                               }`}>
-                                {reg.status === "CONFIRMED" ? "Terdaftar" : "Pre-daftar"}
+                                {reg.status === "CONFIRMED" ? "Terdaftar" : reg.status === "SUBMITTED" ? "Menunggu pengesahan" : "Pre-daftar"}
                               </span>
+                              {reg.status !== "SUBMITTED" && (
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1505,6 +1644,7 @@ export function DashboardClient({
                               >
                                 <QrCode className="h-3.5 w-3.5" />
                               </button>
+                              )}
                             </div>
                           ) : full ? (
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border bg-red-50 text-red-600 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800">
@@ -1548,9 +1688,28 @@ export function DashboardClient({
                               <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
                                 <PartyPopper className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                                 <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                                  Kehadiran anda telah disahkan. Selamat bersaing — semoga berjaya!
+                                  {reg.team
+                                    ? `Pasukan ${reg.team.name} telah disahkan. Selamat bersaing — semoga berjaya!`
+                                    : "Kehadiran anda telah disahkan. Selamat bersaing — semoga berjaya!"}
                                 </p>
                               </div>
+                              {reg.vibeBlocksToken && wic.useVibeblocks && (
+                                <button
+                                  type="button"
+                                  onClick={() => copyToken(`vb:${reg.id}`, reg.vibeBlocksToken!)}
+                                  className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors w-full text-left"
+                                  title="Salin token"
+                                >
+                                  <Gamepad2 className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                                  <span className="flex-1 text-xs font-medium text-violet-600 dark:text-violet-400">
+                                    Token VibeBlocks{reg.team ? " (pasukan)" : ""}
+                                  </span>
+                                  <span className="text-sm font-bold font-mono tracking-widest text-violet-800 dark:text-violet-200">{reg.vibeBlocksToken}</span>
+                                  {copiedToken === `vb:${reg.id}`
+                                    ? <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                    : <Copy className="h-3.5 w-3.5 text-violet-400 shrink-0" />}
+                                </button>
+                              )}
                               {reg.viblockToken && wic.useViblockarena && (
                                 <button
                                   type="button"
@@ -1563,6 +1722,13 @@ export function DashboardClient({
                                   <Eye className="h-3.5 w-3.5 text-violet-400 shrink-0" />
                                 </button>
                               )}
+                            </div>
+                          ) : reg.status === "SUBMITTED" ? (
+                            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                              <Clock className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+                              <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+                                Pasukan sementara ini menunggu pengesahan penganjur. Hadir ke kaunter pada hari acara bersama ahli pasukan.
+                              </p>
                             </div>
                           ) : (
                             <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
@@ -1594,6 +1760,7 @@ export function DashboardClient({
       {registerTarget && (
         <RegisterModal
           target={registerTarget}
+          self={{ name: participant.name, ic: participant.ic }}
           registering={registering}
           error={registerErr}
           refreshKey={slotRefreshKey}

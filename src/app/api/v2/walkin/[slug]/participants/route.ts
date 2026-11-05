@@ -109,6 +109,7 @@ export async function GET(
     where: {
       endpoint: { eventId: endpoint.event.id, active: true },
       status: "PENDING",
+      teamName: null, // team entries are verified in Proses Borang, not at the counter
       OR: [
         { ic: { contains: q.replace(/[\s-]/g, "") } },
         { name: { contains: q, mode: "insensitive" } },
