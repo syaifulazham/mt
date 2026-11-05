@@ -20,7 +20,7 @@ export async function PATCH(
     useViblockarena, useDronearena, useVibeblocks,
     viblockChallengeId, viblockChallengeLocked, judgingTemplatesLocked,
     vibeBlocksChallengeId, vibeBlocksEventName, vibeBlocksStartsAt, vibeBlocksEndsAt, vibeBlocksRunDurationSec,
-    walkInSlotSchedule,
+    walkInSlotSchedule, vibeBlocksProvider,
   } = await req.json();
 
   // Mutual exclusivity: turning one bot on turns the others off
@@ -30,6 +30,20 @@ export async function PATCH(
   if (viblock    === true) { drone = false; vibeblocks = false; }
   if (drone      === true) { viblock = false; vibeblocks = false; }
   if (vibeblocks === true) { viblock = false; drone = false; }
+
+  // Game platform behind useVibeblocks. Fixed once its event exists: the event,
+  // tokens and results live on that platform.
+  let provider: "vibeblocks" | "techtriathlon" | undefined;
+  if (vibeBlocksProvider !== undefined) {
+    if (vibeBlocksProvider !== "vibeblocks" && vibeBlocksProvider !== "techtriathlon")
+      return NextResponse.json({ error: "INVALID_PROVIDER" }, { status: 400 });
+    const cur = await db.eventWalkInCompetition.findUnique({
+      where: { id: wicId }, select: { useVibeblocks: true, viblockChallengeId: true, vibeBlocksProvider: true },
+    });
+    if (cur && cur.useVibeblocks && cur.viblockChallengeId && cur.vibeBlocksProvider !== vibeBlocksProvider)
+      return NextResponse.json({ error: "PROVIDER_LOCKED", message: "Acara platform sudah dicipta; platform tidak boleh ditukar." }, { status: 409 });
+    provider = vibeBlocksProvider;
+  }
 
   const wic = await db.eventWalkInCompetition.update({
     where: { id: wicId },
@@ -41,6 +55,7 @@ export async function PATCH(
       ...(viblock             !== undefined && { useViblockarena:    viblock }),
       ...(drone               !== undefined && { useDronearena:      drone }),
       ...(vibeblocks          !== undefined && { useVibeblocks:      vibeblocks }),
+      ...(provider            !== undefined && { vibeBlocksProvider: provider }),
       ...(viblockChallengeId       !== undefined && { viblockChallengeId:       viblockChallengeId || null }),
       ...(viblockChallengeLocked   !== undefined && { viblockChallengeLocked:   Boolean(viblockChallengeLocked) }),
       ...(judgingTemplatesLocked   !== undefined && { judgingTemplatesLocked:   Boolean(judgingTemplatesLocked) }),

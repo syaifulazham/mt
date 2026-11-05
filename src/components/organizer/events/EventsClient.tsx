@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin, ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -2437,9 +2437,115 @@ type WalkInComp = {
   useViblockarena: boolean;
   useDronearena: boolean;
   useVibeblocks: boolean;
+  vibeBlocksProvider: string;
+  viblockChallengeId: string | null;
   competition: { id: string; code: string; name: string; participationType: string };
   _count: { registrations: number };
 };
+
+/** The game platform behind a walk-in competition (one at most). */
+type Arena = "none" | "viblock" | "drone" | "vibeblocks" | "techtriathlon";
+
+const ARENAS: Record<Arena, { label: string; dot: string; hint: string }> = {
+  none:          { label: "Tiada platform", dot: "bg-zinc-300",    hint: "Tiada token permainan" },
+  viblock:       { label: "Viblock",        dot: "bg-violet-500",  hint: "Viblock Arena" },
+  drone:         { label: "Drone",          dot: "bg-sky-500",     hint: "Eptim Drone Simulator" },
+  vibeblocks:    { label: "VibeBlocks",     dot: "bg-emerald-500", hint: "Machine Driving" },
+  techtriathlon: { label: "TechTriathlon",  dot: "bg-orange-500",  hint: "Fruit Catcher · Brick Bridge · Maze" },
+};
+
+function arenaOf(w: WalkInComp): Arena {
+  if (w.useViblockarena) return "viblock";
+  if (w.useDronearena) return "drone";
+  if (w.useVibeblocks) return w.vibeBlocksProvider === "techtriathlon" ? "techtriathlon" : "vibeblocks";
+  return "none";
+}
+
+/** Custom dropdown for a walk-in competition's game platform. */
+function ArenaSelect({ value, options, disabled, lockedReason, onChange }: {
+  value: Arena;
+  options: Arena[];
+  disabled?: boolean;
+  /** VibeBlocks ↔ TechTriathlon cannot be switched once an event exists. */
+  lockedReason?: (a: Arena) => string | null;
+  onChange: (a: Arena) => void;
+}) {
+  // The list is portalled to <body> with fixed coordinates: the section cards
+  // clip overflow, which would hide it.
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const open = pos !== null;
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  function toggle() {
+    if (open) { setPos(null); return; }
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const right = window.innerWidth - r.right;
+    const listH = options.length * 46 + 8;
+    // Open upward when the space below is too small.
+    setPos(window.innerHeight - r.bottom < listH + 8 && r.top > listH + 8
+      ? { bottom: window.innerHeight - r.top + 4, right }
+      : { top: r.bottom + 4, right });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!btnRef.current?.contains(t) && !listRef.current?.contains(t)) setPos(null);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setPos(null); };
+    const away = () => setPos(null); // fixed coordinates go stale on scroll/resize
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("resize", away);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+      window.removeEventListener("scroll", away, true);
+      window.removeEventListener("resize", away);
+    };
+  }, [open]);
+  const cur = ARENAS[value];
+  return (
+    <div className="shrink-0">
+      <button ref={btnRef} type="button" disabled={disabled} onClick={toggle}
+        aria-haspopup="listbox" aria-expanded={open}
+        className="h-7 min-w-[9.5rem] inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white pl-2.5 pr-2 text-[11px] font-medium text-zinc-700 hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-emerald-300">
+        <span className={`h-2 w-2 rounded-full shrink-0 ${cur.dot}`} />
+        <span className={`flex-1 text-left ${value === "none" ? "text-zinc-400" : ""}`}>{cur.label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {pos && createPortal(
+        <ul ref={listRef} role="listbox" style={{ position: "fixed", top: pos.top, bottom: pos.bottom, right: pos.right }}
+          className="z-[9999] w-60 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg">
+          {options.map(a => {
+            const locked = lockedReason?.(a) ?? null;
+            const sel = a === value;
+            return (
+              <li key={a}>
+                <button type="button" role="option" aria-selected={sel} disabled={!!locked}
+                  title={locked ?? undefined}
+                  onClick={() => { setPos(null); if (!sel) onChange(a); }}
+                  className={`w-full flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${sel ? "bg-zinc-100" : "hover:bg-zinc-50"}`}>
+                  <span className={`mt-1 h-2 w-2 rounded-full shrink-0 ${ARENAS[a].dot}`} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-medium text-zinc-800">{ARENAS[a].label}</span>
+                    <span className="block text-[10px] text-zinc-400">{locked ?? ARENAS[a].hint}</span>
+                  </span>
+                  {sel && <Check className="h-3.5 w-3.5 text-emerald-600 mt-0.5 shrink-0" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>,
+        document.body,
+      )}
+    </div>
+  );
+}
 
 function WalkInPickerModal({ linkedIds, onAdd, onClose }: {
   linkedIds: Set<string>;
@@ -2558,7 +2664,7 @@ function WalkInPickerModal({ linkedIds, onAdd, onClose }: {
   );
 }
 
-function WalkInCompetitionsSection({ event, canWrite, isSuperAdmin = false, hasViblockKey, hasDroneKey, hasVibeBlocksKey, onSaved }: { event: EventDetail; canWrite: boolean; isSuperAdmin?: boolean; hasViblockKey: boolean; hasDroneKey: boolean; hasVibeBlocksKey: boolean; onSaved: (u: Partial<EventDetail>) => void }) {
+function WalkInCompetitionsSection({ event, canWrite, isSuperAdmin = false, hasViblockKey, hasDroneKey, hasVibeBlocksKey, hasTechTriathlonKey, onSaved }: { event: EventDetail; canWrite: boolean; isSuperAdmin?: boolean; hasViblockKey: boolean; hasDroneKey: boolean; hasVibeBlocksKey: boolean; hasTechTriathlonKey: boolean; onSaved: (u: Partial<EventDetail>) => void }) {
   const eventId = event.id;
   const [links,        setLinks]        = useState<WalkInComp[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -2624,30 +2730,35 @@ function WalkInCompetitionsSection({ event, canWrite, isSuperAdmin = false, hasV
     setDeleteTarget(null);
   }
 
-  const BOT_FIELDS = ["useViblockarena", "useDronearena", "useVibeblocks"] as const;
-  type BotField = typeof BOT_FIELDS[number];
-
-  async function toggleArena(wicId: string, field: BotField, newValue: boolean) {
-    const optimistic = (l: WalkInComp) => l.id !== wicId ? l : {
-      ...l, [field]: newValue,
-      ...(newValue && Object.fromEntries(BOT_FIELDS.filter(f => f !== field).map(f => [f, false]))),
+  /** Sets the game platform; the server keeps at most one on. */
+  async function setArena(wicId: string, arena: Arena) {
+    const body = {
+      useViblockarena: arena === "viblock",
+      useDronearena:   arena === "drone",
+      useVibeblocks:   arena === "vibeblocks" || arena === "techtriathlon",
+      ...((arena === "vibeblocks" || arena === "techtriathlon") && { vibeBlocksProvider: arena }),
     };
-    const revert = (l: WalkInComp) => l.id !== wicId ? l : {
-      ...l, [field]: !newValue,
-      ...(newValue && Object.fromEntries(BOT_FIELDS.filter(f => f !== field).map(f => [f, true]))),
-    };
-    setLinks(prev => prev.map(optimistic));
+    const before = links.find(l => l.id === wicId);
+    setLinks(prev => prev.map(l => l.id !== wicId ? l : { ...l, ...body }));
     try {
       const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wicId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: newValue }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error();
     } catch {
-      setLinks(prev => prev.map(revert));
+      if (before) setLinks(prev => prev.map(l => l.id !== wicId ? l : before));
     }
   }
+
+  const arenaOptions: Arena[] = [
+    "none",
+    ...(hasViblockKey ? ["viblock" as const] : []),
+    ...(hasDroneKey ? ["drone" as const] : []),
+    ...(hasVibeBlocksKey ? ["vibeblocks" as const] : []),
+    ...(hasTechTriathlonKey ? ["techtriathlon" as const] : []),
+  ];
 
   if (loading) return null;
 
@@ -2708,46 +2819,24 @@ function WalkInCompetitionsSection({ event, canWrite, isSuperAdmin = false, hasV
                   <p className="text-sm font-medium text-zinc-900 truncate">{wic.competition.name}</p>
                   <p className="text-[11px] text-zinc-400 font-mono">{wic.competition.code}</p>
                 </div>
-                {(hasViblockKey || hasDroneKey || hasVibeBlocksKey) && (
-                  <div className="flex shrink-0 rounded-md overflow-hidden border border-zinc-200 divide-x divide-zinc-200">
-                    {hasViblockKey && (
-                      <button
-                        type="button"
-                        disabled={!canWrite}
-                        onClick={() => canWrite && toggleArena(wic.id, "useViblockarena", !wic.useViblockarena)}
-                        className={`px-2.5 py-1 text-[10px] font-medium transition-colors disabled:cursor-not-allowed ${
-                          wic.useViblockarena ? "bg-violet-500 text-white" : "bg-white text-zinc-400 hover:bg-zinc-50"
-                        }`}
-                      >
-                        Viblock
-                      </button>
-                    )}
-                    {hasDroneKey && (
-                      <button
-                        type="button"
-                        disabled={!canWrite}
-                        onClick={() => canWrite && toggleArena(wic.id, "useDronearena", !wic.useDronearena)}
-                        className={`px-2.5 py-1 text-[10px] font-medium transition-colors disabled:cursor-not-allowed ${
-                          wic.useDronearena ? "bg-sky-500 text-white" : "bg-white text-zinc-400 hover:bg-zinc-50"
-                        }`}
-                      >
-                        Drone
-                      </button>
-                    )}
-                    {hasVibeBlocksKey && (
-                      <button
-                        type="button"
-                        disabled={!canWrite}
-                        onClick={() => canWrite && toggleArena(wic.id, "useVibeblocks", !wic.useVibeblocks)}
-                        className={`px-2.5 py-1 text-[10px] font-medium transition-colors disabled:cursor-not-allowed ${
-                          wic.useVibeblocks ? "bg-emerald-500 text-white" : "bg-white text-zinc-400 hover:bg-zinc-50"
-                        }`}
-                      >
-                        VibeBlocks / TechTriathlon
-                      </button>
-                    )}
-                  </div>
-                )}
+                {arenaOptions.length > 1 && (() => {
+                  const cur = arenaOf(wic);
+                  // Keep the current platform listed even if its key was removed.
+                  const options = arenaOptions.includes(cur) ? arenaOptions : [...arenaOptions, cur];
+                  const hasEvent = wic.useVibeblocks && !!wic.viblockChallengeId;
+                  return (
+                    <ArenaSelect
+                      value={cur}
+                      options={options}
+                      disabled={!canWrite}
+                      lockedReason={a =>
+                        hasEvent && (a === "vibeblocks" || a === "techtriathlon") && a !== cur
+                          ? `Acara ${ARENAS[cur].label} sudah dicipta`
+                          : null}
+                      onChange={a => void setArena(wic.id, a)}
+                    />
+                  );
+                })()}
                 <span className="text-[10px] text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                   {wic._count.registrations} daftar
                 </span>
@@ -2787,7 +2876,7 @@ function WalkInCompetitionsSection({ event, canWrite, isSuperAdmin = false, hasV
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false, hasVibeBlocksKey = false }: { role: OrganizerRole; hasViblockKey?: boolean; hasDroneKey?: boolean; hasVibeBlocksKey?: boolean }) {
+export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false, hasVibeBlocksKey = false, hasTechTriathlonKey = false }: { role: OrganizerRole; hasViblockKey?: boolean; hasDroneKey?: boolean; hasVibeBlocksKey?: boolean; hasTechTriathlonKey?: boolean }) {
   const canWrite = ["SUPER_ADMIN", "ADMIN"].includes(role);
 
   const [events,  setEvents]  = useState<EventListItem[]>([]);
@@ -3240,7 +3329,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
             <ParticipationModeSection   event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
-            <WalkInCompetitionsSection event={selected} canWrite={canWrite} isSuperAdmin={role === "SUPER_ADMIN"} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} onSaved={handleSectionSaved} />
+            <WalkInCompetitionsSection event={selected} canWrite={canWrite} isSuperAdmin={role === "SUPER_ADMIN"} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} hasTechTriathlonKey={hasTechTriathlonKey} onSaved={handleSectionSaved} />
           </div>
         )}
       </main>

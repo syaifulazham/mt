@@ -2000,16 +2000,18 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                     const p = asGameProvider(e.target.value);
                                     setVibeBlocksCreateForm(f => ({ ...f, provider: p, runDurationSec: GAME_PROVIDERS[p].runDefault }));
                                   }}
-                                  disabled={!!selectedWic.viblockChallengeId}
+                                  disabled
                                   className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
                                 >
                                   {(Object.keys(GAME_PROVIDERS) as GameProvider[]).map(p => (
                                     <option key={p} value={p}>{GAME_PROVIDERS[p].label}</option>
                                   ))}
                                 </select>
-                                {selectedWic.viblockChallengeId && (
-                                  <p className="text-[10px] text-zinc-400 mt-0.5">Platform ditetapkan semasa acara dicipta.</p>
-                                )}
+                                <p className="text-[10px] text-zinc-400 mt-0.5">
+                                  {selectedWic.viblockChallengeId
+                                    ? "Platform ditetapkan semasa acara dicipta."
+                                    : "Tukar platform di senarai Pertandingan Walk-in (halaman Acara)."}
+                                </p>
                               </div>
                               <div>
                                 <label className="text-[11px] text-zinc-400 block mb-0.5">Challenge</label>
