@@ -36,10 +36,126 @@ type WalkInCompSummary = {
   vibeBlocksCompetitionRound: string | null;
   vibeBlocksProvider: string;
   competition: { id: string; code: string; name: string };
-  _count: { registrations: number };
+  _count: { registrations: number; judgingTemplates?: number };
   endpoints: WalkInEndpointItem[];
   walkInSlotSchedule: SlotScheduleConfig | null;
 };
+
+// ── Configuration readiness ──────────────────────────────────────────────────
+
+type ReadyCheck = { key: string; label: string; ok: boolean | null; detail: string; required: boolean };
+
+/**
+ * What a walk-in competition needs before the day: a saved slot schedule, a way
+ * to register (a counter endpoint — its own or the general one — or the
+ * participant portal), its game platform set up (when it uses one) and a
+ * judging template to hold the scores. Publishing to the portal is shown but
+ * not required. `ok: null` = not applicable.
+ */
+function wicReadiness(w: WalkInCompSummary, generalEndpoints: number, templateCount: number) {
+  const platform: ReadyCheck = w.useVibeblocks
+    ? { key: "platform", label: "Platform", required: true, ok: !!w.viblockChallengeId && !!w.vibeBlocksChallengeId,
+        detail: `${gameLabel(w.vibeBlocksProvider)}: ${w.viblockChallengeId ? "acara dicipta" : "acara belum dicipta"}` }
+    : w.useDronearena || w.useViblockarena
+      ? { key: "platform", label: "Platform", required: true, ok: !!w.viblockChallengeId,
+          detail: `${w.useDronearena ? "Eptim Drone" : "Viblock"}: ${w.viblockChallengeId ? "challenge dipilih" : "challenge belum dipilih"}` }
+      : { key: "platform", label: "Platform", required: false, ok: null, detail: "Tiada platform permainan" };
+  const own = w.endpoints.length;
+  const checks: ReadyCheck[] = [
+    { key: "slots", label: "Jadual slot", required: true, ok: !!w.walkInSlotSchedule,
+      detail: w.walkInSlotSchedule ? `${w.walkInSlotSchedule.totalSessions} sesi × ${w.walkInSlotSchedule.slotsPerSession} slot` : "Belum disimpan" },
+    { key: "access", label: "Pendaftaran", required: true, ok: own > 0 || generalEndpoints > 0 || w.publishToPortal,
+      detail: [
+        own > 0 && `${own} kaunter`,
+        own === 0 && generalEndpoints > 0 && "kaunter umum",
+        w.publishToPortal && "portal",
+      ].filter(Boolean).join(" · ") || "Tiada kaunter atau portal" },
+    platform,
+    { key: "judging", label: "Templat penghakiman", required: true, ok: templateCount > 0,
+      detail: templateCount > 0 ? `${templateCount} templat` : "Belum ditetapkan" },
+    { key: "portal", label: "Portal peserta", required: false, ok: w.publishToPortal ? true : null,
+      detail: w.publishToPortal ? "Disiarkan" : "Tidak disiarkan" },
+  ];
+  const missing = checks.filter(c => c.required && c.ok === false);
+  return { checks, ready: missing.length === 0, missing };
+}
+
+function ReadyBadge({ ready, missing }: { ready: boolean; missing: number }) {
+  return ready
+    ? <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">
+        <CheckCircle2 className="h-3 w-3" /> Sedia
+      </span>
+    : <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5"
+        title={`${missing} perkara belum lengkap`}>
+        <Clock className="h-3 w-3" /> Belum lengkap ({missing})
+      </span>;
+}
+
+/** "Semua Pertandingan": configuration completeness of every walk-in competition. */
+function ReadinessSummary({ wics, generalEndpoints, templateCounts, onOpen }: {
+  wics: WalkInCompSummary[]; generalEndpoints: number; templateCounts: Record<string, number>;
+  onOpen: (w: WalkInCompSummary) => void;
+}) {
+  const rows = wics.map(w => ({ w, r: wicReadiness(w, generalEndpoints, templateCounts[w.id] ?? 0) }));
+  const readyCount = rows.filter(x => x.r.ready).length;
+  const cols = rows[0]?.r.checks ?? [];
+  const all = readyCount === rows.length;
+  return (
+    <div className="rounded-xl border bg-white overflow-hidden">
+      <div className={`flex items-center justify-between gap-3 px-4 py-3 border-b ${all ? "bg-emerald-50/60" : "bg-amber-50/50"}`}>
+        <div>
+          <p className="text-sm font-semibold text-zinc-800">Kesediaan Konfigurasi</p>
+          <p className="text-[11px] text-zinc-500 mt-0.5">
+            {all ? "Semua pertandingan walk-in sedia." : `${rows.length - readyCount} pertandingan belum lengkap. Klik untuk melengkapkan.`}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className={`text-lg font-bold leading-none ${all ? "text-emerald-700" : "text-amber-700"}`}>{readyCount}/{rows.length}</p>
+          <p className="text-[10px] text-zinc-400">sedia</p>
+        </div>
+      </div>
+      <div className="h-1 bg-zinc-100">
+        <div className={`h-full ${all ? "bg-emerald-500" : "bg-amber-400"}`} style={{ width: `${rows.length ? (readyCount / rows.length) * 100 : 0}%` }} />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-zinc-50 border-b">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-zinc-500">Pertandingan</th>
+              {cols.map(c => (
+                <th key={c.key} className="px-3 py-2 text-left font-medium text-zinc-500 whitespace-nowrap">
+                  {c.label}{!c.required && <span className="font-normal text-zinc-400"> (pilihan)</span>}
+                </th>
+              ))}
+              <th className="px-3 py-2 text-left font-medium text-zinc-500">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {rows.map(({ w, r }) => (
+              <tr key={w.id} onClick={() => onOpen(w)} className="hover:bg-zinc-50/80 cursor-pointer align-top">
+                <td className="px-3 py-2">
+                  <p className="font-medium text-zinc-800">{w.competition.name}</p>
+                  <p className="text-[10px] text-zinc-400 font-mono">{w.competition.code}</p>
+                </td>
+                {r.checks.map(c => (
+                  <td key={c.key} className="px-3 py-2">
+                    <span className="flex items-start gap-1.5">
+                      {c.ok === true ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-px" />
+                        : c.ok === false ? <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-px" />
+                        : <span className="h-3.5 w-3.5 shrink-0 mt-px rounded-full border border-zinc-200 bg-zinc-50" />}
+                      <span className={c.ok === false ? "text-red-600" : c.ok === null ? "text-zinc-400" : "text-zinc-600"}>{c.detail}</span>
+                    </span>
+                  </td>
+                ))}
+                <td className="px-3 py-2"><ReadyBadge ready={r.ready} missing={r.missing.length} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 type ViblockChallenge = {
   id: string; name: string; description: string | null; challenge_mode: string; status: string; order_index: number;
@@ -686,11 +802,16 @@ function SlotScheduleSection({ eventId, wicId, initial, canWrite, onSaved }: { e
 
 export function WalkInManageClient({ event, canWrite, canAdmin = false }: { event: EventSummary; canWrite: boolean; canAdmin?: boolean }) {
   const [wicList,       setWicList]       = useState<WalkInCompSummary[]>(event.walkInCompetitions);
+  // "Semua Pertandingan" opens first (it is only shown to writers).
   const [selectedWic,   setSelectedWic]   = useState<WalkInCompSummary | null>(
-    event.walkInCompetitions[0] ?? null,
+    canWrite ? null : event.walkInCompetitions[0] ?? null,
   );
   // null = general endpoint panel is active
-  const [showGeneral,   setShowGeneral]   = useState(false);
+  const [showGeneral,   setShowGeneral]   = useState(canWrite);
+  // Judging templates per competition, for the readiness summary and tab badges.
+  const [templateCounts, setTemplateCounts] = useState<Record<string, number>>(
+    () => Object.fromEntries(event.walkInCompetitions.map(w => [w.id, w._count.judgingTemplates ?? 0])),
+  );
   const [generalEps,    setGeneralEps]    = useState<WalkInEndpointItem[]>(event.walkInEndpoints);
 
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -1426,6 +1547,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
           allRes.ok ? allRes.json() : Promise.resolve(null),
         ]);
         setAssignedTemplates(aJson?.data ?? []);
+        if (aJson?.data) setTemplateCounts(prev => ({ ...prev, [selectedWic.id]: aJson.data.length }));
         setAllTemplates(allJson?.templates ?? []);
       }).finally(() => setTemplatesLoading(false));
     }, 0);
@@ -1450,7 +1572,10 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       );
       if (res.ok) {
         const tpl = allTemplates.find(t => t.id === templateId);
-        if (tpl) setAssignedTemplates(prev => [...prev, tpl]);
+        if (tpl) {
+          setAssignedTemplates(prev => [...prev, tpl]);
+          setTemplateCounts(prev => ({ ...prev, [selectedWic.id]: (prev[selectedWic.id] ?? 0) + 1 }));
+        }
         setTemplatePickerOpen(false);
       }
     } finally {
@@ -1526,7 +1651,10 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       if (!aRes.ok && a.error !== "ALREADY_ASSIGNED") { set(3, { status: "error", detail: (a.error as string) ?? "Gagal menetapkan templat." }); return; }
       // Reload the assigned list so the criteria count is right.
       const listed = await fetch(base).then(r => (r.ok ? r.json() : null)).catch(() => null);
-      if (listed?.data) setAssignedTemplates(listed.data);
+      if (listed?.data) {
+        setAssignedTemplates(listed.data);
+        setTemplateCounts(prev => ({ ...prev, [selectedWic.id]: listed.data.length }));
+      }
       set(3, { status: "done", detail: "Templat ditetapkan" });
     } catch {
       const i = steps.findIndex(x => x.status === "running");
@@ -1553,6 +1681,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         { method: "DELETE" }
       );
       setAssignedTemplates(prev => prev.filter(t => t.id !== removeConfirm.template.id));
+      setTemplateCounts(prev => ({ ...prev, [selectedWic.id]: Math.max(0, (prev[selectedWic.id] ?? 1) - 1) }));
     } finally {
       setRemovingTemplateId(null);
     }
@@ -1698,13 +1827,28 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
               >
                 <p className="text-sm font-medium text-zinc-800 truncate">{wic.competition.name}</p>
                 <p className="text-[11px] text-zinc-400 font-mono">{wic.competition.code}</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">{wic._count.registrations} daftar</p>
+                <div className="flex items-center justify-between gap-1 mt-1">
+                  <p className="text-[11px] text-zinc-500">{wic._count.registrations} daftar</p>
+                  {(() => {
+                    const r = wicReadiness(wic, generalEps.length, templateCounts[wic.id] ?? 0);
+                    return <ReadyBadge ready={r.ready} missing={r.missing.length} />;
+                  })()}
+                </div>
               </button>
             ))}
           </div>
 
           {/* Right: registrations / general endpoint management */}
           <div className="flex-1 min-w-0 space-y-4">
+            {showGeneral && canWrite && (
+              <ReadinessSummary
+                wics={wicList}
+                generalEndpoints={generalEps.length}
+                templateCounts={templateCounts}
+                onOpen={w => { setSelectedWic(w); setShowGeneral(false); }}
+              />
+            )}
+
             {/* General endpoint panel */}
             {showGeneral && canWrite && (
               <div className="rounded-xl border bg-white p-4 space-y-3">

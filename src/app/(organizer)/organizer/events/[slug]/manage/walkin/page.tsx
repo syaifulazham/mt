@@ -31,7 +31,7 @@ export default async function WalkInManagePage({
           vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksStartsAt: true, vibeBlocksEndsAt: true, vibeBlocksRunDurationSec: true, vibeBlocksCompetitionRound: true, vibeBlocksProvider: true,
           walkInSlotSchedule: true,
           competition: { select: { id: true, code: true, name: true } },
-          _count: { select: { registrations: true } },
+          _count: { select: { registrations: true, judgingTemplates: true } },
           endpoints: {
             where: { active: true },
             orderBy: { createdAt: "asc" },
