@@ -5,10 +5,12 @@ import { createPortal } from "react-dom";
 import {
   Search, Loader2, CheckCircle2, QrCode, X, ScanLine,
   ChevronRight, Camera, CameraOff, RefreshCcw, AlertCircle,
-  UserCheck, MapPin,
+  UserCheck, MapPin, Users, User,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import type { SlotScheduleConfig } from "@/lib/walkin-slots";
+import { CounterSlotPicker, type SessionSlots, type SlotChoice } from "./CounterSlotPicker";
+import { CounterTeamPanel, type TeamRegResult } from "./CounterTeamPanel";
 
 /* ─── Brand palette ─────────────────────────────────────────────────────── */
 const B = {
@@ -22,10 +24,14 @@ const B = {
 };
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
+type Competition = {
+  id: string; code: string; name: string; participationType: string;
+  minTeamSize: number; maxTeamSize: number;
+};
 type WicSummary = {
   id: string; maxSlots: number;
   walkInSlotSchedule: SlotScheduleConfig | null;
-  competition: { id: string; code: string; name: string; participationType: string };
+  competition: Competition;
   _count: { registrations: number };
 };
 type WicInfo =
@@ -35,11 +41,9 @@ type WicInfo =
   | { isGeneral: false; endpointId: string; label: string | null;
       id: string; maxSlots: number; walkInSlotSchedule: SlotScheduleConfig | null;
       event: { id: string; name: string; slug: string; venue: string | null; startDate: string | null };
-      competition: { id: string; code: string; name: string; participationType: string };
+      competition: Competition;
       _count: { registrations: number }; };
 
-type SessionSlots = { n: number; start: number; end: number; booked: number[] };
-type SlotChoice = { sessionNumber: number; slotNumber: number };
 
 type ParticipantResult = {
   id: string; name: string; ic: string | null; gender: string;
@@ -72,6 +76,8 @@ type ScanResult = {
   viblockToken?: string | null;
   vibeBlocksToken?: string | null;
   droneToken?: DroneTokenData | null;
+  teamName?: string | null;
+  teamMembers?: string[] | null;
 };
 
 const EDU_LABEL: Record<string, string> = {
@@ -302,12 +308,18 @@ function ConfirmCard({ result, onReset }: { result: ScanResult; onReset: () => v
               {result.alreadyConfirmed ? "✓ Sudah Disahkan" : "✓ Selamat Datang!"}
             </p>
             <p className="text-[22px] font-extrabold text-white leading-tight tracking-tight px-2">
-              {result.participantName}
+              {result.teamName ?? result.participantName}
             </p>
             <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,.55)" }}>
               {result.contingentName}
             </p>
-            <div className="flex items-center justify-center gap-1.5 flex-wrap pt-1">
+            {result.teamMembers && (
+              <p className="text-xs pt-1 flex items-center justify-center gap-1.5" style={{ color: "rgba(255,255,255,.7)" }}>
+                <Users className="h-3.5 w-3.5 shrink-0" style={{ color: "#c4b5fd" }} />
+                {result.teamMembers.join(" · ")}
+              </p>
+            )}
+            {!result.teamMembers && <div className="flex items-center justify-center gap-1.5 flex-wrap pt-1">
               <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full"
                 style={{ background: "rgba(255,255,255,.1)", color: "rgba(255,255,255,.7)" }}>
                 {edu}
@@ -324,7 +336,7 @@ function ConfirmCard({ result, onReset }: { result: ScanResult; onReset: () => v
                   {result.ic}
                 </span>
               )}
-            </div>
+            </div>}
           </div>
         </div>
 
@@ -529,10 +541,12 @@ function CameraQrScanner({ onScan, onError }: {
 }
 
 /* ─── QR modal (after successful register) ──────────────────────────────── */
-function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, onClose }: {
+function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, team, onClose }: {
   regId: string; name: string;
   viblockToken?: string | null; vibeBlocksToken?: string | null;
   droneToken?: DroneTokenData | null;
+  /** TEAM competitions: the registered team. */
+  team?: { contingentName: string; members: string[]; sessionNumber: number | null; slotNumber: number | null };
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -550,6 +564,18 @@ function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, onClo
         </div>
         <CheckCircle2 className="h-8 w-8" style={{ color: B.gold }} />
         <p className="text-sm font-bold" style={{ color: B.gold }}>Pendaftaran berjaya!</p>
+        {team && (
+          <div className="w-full rounded-xl px-4 py-3 border space-y-1.5"
+            style={{ background: "rgba(8,87,130,.25)", borderColor: `${B.navy}80` }}>
+            <p className="text-[11px]" style={{ color: "rgba(255,255,255,.55)" }}>{team.contingentName}</p>
+            <ol className="text-xs text-white/85 list-decimal list-inside space-y-0.5">
+              {team.members.map((m, i) => <li key={i}>{m}</li>)}
+            </ol>
+            {team.sessionNumber != null && (
+              <p className="text-[11px] font-bold" style={{ color: B.gold }}>Sesi {team.sessionNumber} · Slot {team.slotNumber}</p>
+            )}
+          </div>
+        )}
         <div className="rounded-xl bg-white p-3">
           <QRCodeSVG value={regId} size={180} level="M" />
         </div>
@@ -632,6 +658,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
   const [registering,  setRegistering]  = useState(false);
   const [regResult,    setRegResult]    = useState<RegisteredResult | null>(null);
   const [regErr,       setRegErr]       = useState("");
+  const [teamReg,      setTeamReg]      = useState<TeamRegResult | null>(null);
   const [tab,        setTab]        = useState<"register" | "scan">("register");
   const [scanPhase,  setScanPhase]  = useState<"idle" | "confirming" | "result" | "error">("idle");
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
@@ -672,10 +699,6 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       .finally(() => { if (!cancelled) setSlotsLoading(false); });
     return () => { cancelled = true; };
   }, [authed, activeWicId, activeCfg, slotRefreshKey, slug, passcode]);
-
-  const selectedSlotSession = slotChoice && slotSessions
-    ? slotSessions.find(s => s.n === slotChoice.sessionNumber)
-    : null;
 
   async function handleSearch(value: string) {
     setQ(value); setSelected(null);
@@ -903,8 +926,11 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                 <span className="font-mono text-xs mr-1.5" style={{ color: "rgba(255,255,255,.35)" }}>{w.competition.code}</span>
                 {w.competition.name}
               </p>
-              <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,.4)" }}>
-                {w._count.registrations} daftar{w.maxSlots > 0 ? ` / ${w.maxSlots}` : ""}
+              <p className="text-[11px] mt-0.5 flex items-center gap-1.5" style={{ color: "rgba(255,255,255,.4)" }}>
+                {w.competition.participationType === "TEAM"
+                  ? <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#c4b5fd" }}><Users className="h-3 w-3" />Berpasukan</span>
+                  : <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#7dd3fc" }}><User className="h-3 w-3" />Individu</span>}
+                <span>· {w._count.registrations} daftar{w.maxSlots > 0 ? ` / ${w.maxSlots}` : ""}</span>
               </p>
             </div>
             <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "rgba(255,255,255,.3)" }} />
@@ -915,6 +941,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
   );
 
   const activeCompetition = wic.isGeneral ? selectedWic!.competition : wic.competition;
+  const isTeam = activeCompetition.participationType === "TEAM";
 
   /* ── Main registration screen ──────────────────────────────────────── */
   return (
@@ -949,7 +976,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       {/* Tab bar */}
       <div className="relative z-10 flex border-b border-white/10"
         style={{ background: "rgba(0,0,0,.25)", backdropFilter: "blur(8px)" }}>
-        {([["register", "Daftar Peserta", Search], ["scan", "Imbas QR", ScanLine]] as const).map(([t, label, Icon]) => (
+        {([["register", isTeam ? "Daftar Pasukan" : "Daftar Peserta", Search], ["scan", "Imbas QR", ScanLine]] as const).map(([t, label, Icon]) => (
           <button key={t} type="button"
             onClick={() => { setTab(t); setScanPhase("idle"); setScanResult(null); setScanErr(""); }}
             className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold transition-colors border-b-2"
@@ -964,7 +991,16 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
 
       {/* Content */}
       <div className={`relative z-10 mx-auto p-5 space-y-4 ${tab === "register" ? "max-w-4xl" : "max-w-lg"}`}>
-        {tab === "register" && (
+        {tab === "register" && isTeam && activeWicId && (
+          <CounterTeamPanel key={activeWicId}
+            slug={slug} passcode={passcode} competitionId={activeWicId}
+            cfg={activeCfg} sessions={slotSessions} slotsLoading={slotsLoading}
+            minSize={Math.min(Math.max(1, activeCompetition.minTeamSize), Math.max(1, activeCompetition.maxTeamSize))}
+            maxSize={Math.max(1, activeCompetition.maxTeamSize)}
+            onRegistered={r => { setTeamReg(r); setSlotRefreshKey(k => k + 1); }} />
+        )}
+
+        {tab === "register" && !isTeam && (
           <div className="grid gap-4 md:grid-cols-2 items-start">
           {/* ── Left: search + results ── */}
           <div className="space-y-3">
@@ -1161,77 +1197,8 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
 
                 {/* Slot picker */}
                 {!selected.viaSubmissionOnly && activeCfg && (
-                  <div className="space-y-2.5 pt-3 border-t border-white/10">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: B.gold }}>
-                        Pilih Slot
-                      </p>
-                      {/* Legend */}
-                      <div className="flex items-center gap-2.5 text-[9px]" style={{ color: "rgba(255,255,255,.4)" }}>
-                        <span className="flex items-center gap-1">
-                          <span className="inline-block h-2.5 w-2.5 rounded" style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.2)" }} /> Tersedia
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="inline-block h-2.5 w-2.5 rounded" style={{ background: "rgba(255,255,255,.04)" }} /> Ditempah
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="inline-block h-2.5 w-2.5 rounded" style={{ background: B.gold }} /> Pilihan
-                        </span>
-                      </div>
-                    </div>
-
-                    {slotsLoading ? (
-                      <div className="flex items-center justify-center gap-2 py-6" style={{ color: "rgba(255,255,255,.4)" }}>
-                        <Loader2 className="h-4 w-4 animate-spin" style={{ color: B.gold }} />
-                        <span className="text-xs">Memuatkan slot…</span>
-                      </div>
-                    ) : slotSessions && (
-                      <div className="max-h-72 overflow-y-auto pr-1 space-y-3">
-                        {slotSessions.map(s => (
-                          <div key={s.n} className="space-y-1">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[11px] font-bold" style={{ color: "rgba(255,255,255,.75)" }}>
-                                Sesi {s.n}
-                                <span className="ml-1.5 font-normal" style={{ color: "rgba(255,255,255,.3)" }}>
-                                  {activeCfg.slotsPerSession - s.booked.length}/{activeCfg.slotsPerSession}
-                                </span>
-                              </p>
-                              <p className="text-[10px] font-mono" style={{ color: "rgba(255,255,255,.3)" }}>
-                                {fmtSlotMin(s.start)} – {fmtSlotMin(s.end)}
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-5 gap-1">
-                              {Array.from({ length: activeCfg.slotsPerSession }, (_, i) => i + 1).map(slot => {
-                                const isBooked = s.booked.includes(slot);
-                                const isSel = slotChoice?.sessionNumber === s.n && slotChoice?.slotNumber === slot;
-                                return (
-                                  <button key={slot} type="button"
-                                    disabled={isBooked || registering}
-                                    onClick={() => setSlotChoice({ sessionNumber: s.n, slotNumber: slot })}
-                                    className="h-7 rounded-md text-[10px] font-bold transition-all"
-                                    style={isBooked
-                                      ? { background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.2)", cursor: "not-allowed", textDecoration: "line-through" }
-                                      : isSel
-                                        ? { background: B.gold, color: "#000", boxShadow: `0 0 10px ${B.gold}50` }
-                                        : { background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.75)", border: "1px solid rgba(255,255,255,.15)" }}
-                                  >
-                                    {slot}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {slotChoice && selectedSlotSession && (
-                      <p className="text-[11px] font-semibold rounded-lg px-3 py-2"
-                        style={{ background: "rgba(242,220,12,.1)", color: B.gold, border: "1px solid rgba(242,220,12,.3)" }}>
-                        Pilihan: Sesi {slotChoice.sessionNumber} · Slot {slotChoice.slotNumber} ({fmtSlotMin(selectedSlotSession.start)} – {fmtSlotMin(selectedSlotSession.end)})
-                      </p>
-                    )}
-                  </div>
+                  <CounterSlotPicker cfg={activeCfg} sessions={slotSessions} loading={slotsLoading}
+                    choice={slotChoice} onChoose={setSlotChoice} disabled={registering} />
                 )}
 
                 {regErr && <p className="text-xs text-red-400">{regErr}</p>}
@@ -1300,6 +1267,11 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
 
       {regResult && (
         <QrModal regId={regResult.id} name={selected?.name ?? "Peserta"} viblockToken={regResult.viblockToken} vibeBlocksToken={regResult.vibeBlocksToken} droneToken={regResult.droneToken} onClose={() => setRegResult(null)} />
+      )}
+      {teamReg && (
+        <QrModal regId={teamReg.registrationId} name={teamReg.teamName} vibeBlocksToken={teamReg.vibeBlocksToken}
+          team={{ contingentName: teamReg.contingentName, members: teamReg.members, sessionNumber: teamReg.sessionNumber, slotNumber: teamReg.slotNumber }}
+          onClose={() => setTeamReg(null)} />
       )}
     </div>
   );

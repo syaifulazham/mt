@@ -46,6 +46,7 @@ export async function POST(
         },
       },
       contingent: { select: { name: true, shortName: true, logoUrl: true } },
+      team: { select: { name: true, members: { select: { participant: { select: { name: true } } }, orderBy: { createdAt: "asc" } } } },
       walkInCompetition: {
         select: {
           eventId: true,
@@ -168,6 +169,9 @@ export async function POST(
       competitionCode: reg.walkInCompetition?.competition.code ?? "",
       competitionName: reg.walkInCompetition?.competition.name ?? "",
       eventName:       reg.walkInCompetition?.event.name ?? "",
+      // TEAM competitions: one registration per team; any member's QR resolves to it.
+      teamName:        reg.team?.name ?? null,
+      teamMembers:     reg.team?.members.map(m => m.participant.name) ?? null,
     },
   });
 }
