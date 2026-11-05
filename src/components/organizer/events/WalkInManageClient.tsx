@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2, Trophy, RotateCcw } from "lucide-react";
+import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2, Trophy, RotateCcw, Sparkles } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { WalkInFormSection } from "./WalkInFormSection";
 import { Button } from "@/components/ui/button";
@@ -409,6 +409,45 @@ function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, b
   );
 }
 
+type ScoreTplStep = { label: string; status: "pending" | "running" | "done" | "skipped" | "error"; detail?: string };
+
+/** Progress of "Cari templat skor": one row per step. */
+function ScoreTemplateProgress({ steps, busy, onClose }: { steps: ScoreTplStep[]; busy: boolean; onClose: () => void }) {
+  const failed = steps.some(s => s.status === "error");
+  const done = !busy && !failed;
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 space-y-2 ${failed ? "border-red-200 bg-red-50/50" : done ? "border-emerald-200 bg-emerald-50/50" : "border-violet-200 bg-violet-50/50"}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-zinc-700 flex items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5 text-violet-500" /> Templat skor platform
+        </p>
+        {!busy && (
+          <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-600" aria-label="Tutup">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <ol className="space-y-1.5">
+        {steps.map((s, i) => (
+          <li key={i} className="flex items-start gap-2 text-xs">
+            <span className="mt-0.5 shrink-0">
+              {s.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+                : s.status === "done" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                : s.status === "error" ? <XCircle className="h-3.5 w-3.5 text-red-500" />
+                : s.status === "skipped" ? <span className="block h-3.5 w-3.5 rounded-full border border-zinc-300 bg-zinc-100" />
+                : <span className="block h-3.5 w-3.5 rounded-full border border-zinc-300" />}
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className={s.status === "pending" || s.status === "skipped" ? "text-zinc-400" : "text-zinc-800"}>{s.label}</span>
+              {s.detail && <span className={`block text-[11px] ${s.status === "error" ? "text-red-600" : "text-zinc-500"}`}>{s.detail}</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 // ── Slot schedule ────────────────────────────────────────────────────────────
 
 function genUnlockCode(): string {
@@ -677,6 +716,9 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
   const [allTemplates,        setAllTemplates]        = useState<JudgingTemplateSummary[]>([]);
   const [templatesLoading,    setTemplatesLoading]    = useState(false);
   const [templatePickerOpen,  setTemplatePickerOpen]  = useState(false);
+  // "Cari templat skor" — find or create a template for the platform's scores.
+  const [scoreTplSteps, setScoreTplSteps] = useState<ScoreTplStep[] | null>(null);
+  const [scoreTplBusy,  setScoreTplBusy]  = useState(false);
   const [assigningTemplateId, setAssigningTemplateId] = useState<string | null>(null);
   const [removingTemplateId,  setRemovingTemplateId]  = useState<string | null>(null);
   const [removeConfirm, setRemoveConfirm] = useState<{ template: JudgingTemplateSummary; code: string } | null>(null);
@@ -1373,6 +1415,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
     const id = setTimeout(() => {
       setAssignedTemplates([]);
       setAllTemplates([]);
+      setScoreTplSteps(null);
       setTemplatesLoading(true);
       Promise.all([
         fetch(`/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates`),
@@ -1412,6 +1455,84 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       }
     } finally {
       setAssigningTemplateId(null);
+    }
+  }
+
+  /**
+   * Find (or create) a judging template that can hold the scores captured from
+   * this competition's game platform, then assign it — shown step by step.
+   */
+  async function findScoreTemplate() {
+    if (!selectedWic) return;
+    const base = `/api/v2/organizer/events/${event.id}/walkin/${selectedWic.id}/judging-templates`;
+    const steps: ScoreTplStep[] = [
+      { label: "Semak platform dan data skor", status: "running" },
+      { label: "Cari templat yang sepadan", status: "pending" },
+      { label: "Cipta templat baharu", status: "pending" },
+      { label: "Tetapkan pada pertandingan ini", status: "pending" },
+    ];
+    const show = () => setScoreTplSteps(steps.map(x => ({ ...x })));
+    const set = (i: number, patch: Partial<ScoreTplStep>) => { Object.assign(steps[i], patch); show(); };
+    const pause = () => new Promise(r => setTimeout(r, 350)); // lets each step be seen
+    setTemplatePickerOpen(false);
+    setScoreTplBusy(true);
+    show();
+    try {
+      // 1 + 2: platform fields, then scan templates (one request)
+      const res = await fetch(`${base}/suggest`);
+      const j = await safeJson(res);
+      if (!res.ok) { set(0, { status: "error", detail: (j.message as string) ?? (j.error as string) ?? "Gagal menyemak." }); return; }
+      type Field = { name: string; type: string; maxScore?: number; maxTime?: number };
+      const fields = (j.fields as Field[]).map(f =>
+        f.type === "TIME" ? `${f.name} (masa)` : f.maxScore != null ? `${f.name} (/${f.maxScore})` : f.name);
+      set(0, { status: "done", detail: `${j.platform as string}: ${fields.join(", ")}` });
+      await pause();
+      set(1, { status: "running" });
+      await pause();
+      const match = j.match as { id: string; name: string; code: string; criteria: number; assigned: boolean } | null;
+      const closest = j.closest as { name: string; code: string; reason: string } | null;
+      let templateId: string;
+      if (match) {
+        set(1, { status: "done", detail: `Dijumpai: ${match.name} (${match.code})` });
+        set(2, { status: "skipped", detail: "Tidak perlu — templat sedia ada sesuai" });
+        templateId = match.id;
+        if (match.assigned) {
+          set(3, { status: "skipped", detail: "Sudah ditetapkan pada pertandingan ini" });
+          return;
+        }
+      } else {
+        set(1, {
+          status: "done",
+          detail: `Tiada yang sesuai daripada ${j.scanned as number} templat${closest ? ` — ${closest.code}: ${closest.reason}` : ""}`,
+        });
+        await pause();
+        // 3: create
+        set(2, { status: "running" });
+        const cRes = await fetch(`${base}/suggest`, { method: "POST" });
+        const c = await safeJson(cRes);
+        if (!cRes.ok) { set(2, { status: "error", detail: (c.message as string) ?? (c.error as string) ?? "Gagal mencipta templat." }); return; }
+        const tpl = c.template as JudgingTemplateSummary;
+        setAllTemplates(prev => [...prev, tpl]);
+        set(2, { status: "done", detail: `${tpl.name} (${tpl.code}) · ${tpl._count.criterions} kriteria` });
+        templateId = tpl.id;
+      }
+      await pause();
+      // 4: assign
+      set(3, { status: "running" });
+      const aRes = await fetch(base, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ judgingTemplateId: templateId }),
+      });
+      const a = await safeJson(aRes);
+      if (!aRes.ok && a.error !== "ALREADY_ASSIGNED") { set(3, { status: "error", detail: (a.error as string) ?? "Gagal menetapkan templat." }); return; }
+      // Reload the assigned list so the criteria count is right.
+      const listed = await fetch(base).then(r => (r.ok ? r.json() : null)).catch(() => null);
+      if (listed?.data) setAssignedTemplates(listed.data);
+      set(3, { status: "done", detail: "Templat ditetapkan" });
+    } catch {
+      const i = steps.findIndex(x => x.status === "running");
+      if (i >= 0) set(i, { status: "error", detail: "Ralat rangkaian. Cuba lagi." });
+    } finally {
+      setScoreTplBusy(false);
     }
   }
 
@@ -2243,6 +2364,26 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                 <div className="px-3 py-2 border-b text-xs font-semibold text-zinc-500 bg-zinc-50">
                                   Available Templates
                                 </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); void findScoreTemplate(); }}
+                                  disabled={scoreTplBusy}
+                                  className="w-full text-left px-3 py-2.5 border-b bg-violet-50/60 hover:bg-violet-100/70 flex items-center gap-2 disabled:opacity-60"
+                                >
+                                  <Sparkles className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-violet-800">Cari templat skor platform</p>
+                                    <p className="text-[10px] text-violet-500">
+                                      {selectedWic.useVibeblocks
+                                        ? `Untuk skor ${gameLabel(selectedWic.vibeBlocksProvider)}; cipta jika tiada`
+                                        : selectedWic.useDronearena
+                                          ? "Untuk skor Eptim Drone; cipta jika tiada"
+                                          : selectedWic.useViblockarena
+                                            ? "Untuk skor Viblock Arena; cipta jika tiada"
+                                            : "Perlu platform permainan dahulu"}
+                                    </p>
+                                  </div>
+                                </button>
                                 <div className="max-h-56 overflow-y-auto">
                                   {allTemplates.filter(t => !assignedTemplates.some(a => a.id === t.id)).length === 0 ? (
                                     <p className="px-3 py-4 text-xs text-zinc-400 text-center">All templates already assigned.</p>
@@ -2275,6 +2416,9 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                         )}
                         </div>
                       </div>
+                      {scoreTplSteps && (
+                        <ScoreTemplateProgress steps={scoreTplSteps} busy={scoreTplBusy} onClose={() => setScoreTplSteps(null)} />
+                      )}
                       {templatesLoading ? (
                         <div className="flex items-center gap-2 py-3 text-xs text-zinc-400">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading templates…

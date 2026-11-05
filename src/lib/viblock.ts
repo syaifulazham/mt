@@ -109,6 +109,39 @@ export async function viblockGetChallenges(status?: string): Promise<{
 }
 
 /**
+ * A challenge's maximum score, from player scores (GET /scores?challenge_id=,
+ * VIBLOCK-ARENA-API-GUIDELINE.md §4.6). Null when nobody has completed it yet.
+ */
+export async function viblockChallengeMaxScore(challengeId: string): Promise<number | null> {
+  const r = await req(`/scores?challenge_id=${encodeURIComponent(challengeId)}&limit=20`) as {
+    players?: { challenges?: { challenge_id: string; max_score?: number | null }[] }[];
+  };
+  for (const p of r.players ?? [])
+    for (const c of p.challenges ?? [])
+      if (c.challenge_id === challengeId && typeof c.max_score === "number" && c.max_score > 0) return c.max_score;
+  return null;
+}
+
+export type ViblockPlayerScore = {
+  user_id: string; userid: string | null; full_name: string;
+  challenges: { challenge_id: string; best_score: number | null; max_score: number | null; best_elapsed_seconds: number | null; best_completed_at: string | null }[];
+};
+
+/**
+ * Every player's best completed run on one challenge (GET /scores, §4.6), all
+ * pages. Players are matched to registrations by user_id (from the token).
+ */
+export async function viblockChallengeScores(challengeId: string): Promise<ViblockPlayerScore[]> {
+  const out: ViblockPlayerScore[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const r = await req(`/scores?challenge_id=${encodeURIComponent(challengeId)}&limit=1000&offset=${offset}`) as
+      { total: number; players: ViblockPlayerScore[] };
+    out.push(...(r.players ?? []));
+    if ((r.players ?? []).length < 1000 || out.length >= r.total) return out;
+  }
+}
+
+/**
  * Look up a competition token's info. Public endpoint (no X-API-Key).
  */
 export async function viblockGetToken(token: string): Promise<{

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Gavel, Plus, Trash2, Loader2, Copy, Check,
   Eye, EyeOff, Tag, Users, Lock, LockOpen, Search, X,
+  RefreshCw, CheckCircle2, XCircle, CloudDownload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,154 @@ type WicBlock = JudgingState & {
 };
 
 type EventInfo = { id: string; name: string; slug: string; walkInCompetitions: WicBlock[] };
+
+// ── Platform results sync ──────────────────────────────────────────────────────
+
+type SyncStep = { label: string; status: "pending" | "running" | "done" | "error"; detail?: string };
+type SyncInfo = {
+  platform: string; syncLabel: string;
+  template: { id: string; name: string; code: string } | null;
+  notReady: string | null; judgingLocked: boolean;
+};
+
+/**
+ * Copies the full results from the competition's game platform into walk-in
+ * judging scores (through its "Segerak <platform>" endpoint). Shown only when a
+ * suitable score template is assigned.
+ */
+function PlatformSyncCard({ eventId, wicId, canWrite, onEndpoint }: {
+  eventId: string; wicId: string; canWrite: boolean;
+  onEndpoint: (e: EndpointItem) => void;
+}) {
+  const base = `/api/v2/organizer/events/${eventId}/walkin/${wicId}/judging-sync`;
+  const [info, setInfo] = useState<SyncInfo | null>(null);
+  const [steps, setSteps] = useState<SyncStep[] | null>(null);
+  const [progress, setProgress] = useState<{ processed: number; total: number; saved: number; noResult: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [lastRun, setLastRun] = useState<Date | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetch(base, { cache: "no-store" }).catch(() => null);
+    const j = res?.ok ? await res.json() as SyncInfo : null;
+    setInfo(j);
+    return j;
+  }, [base]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { setInfo(null); setSteps(null); setProgress(null); setLastRun(null); void load(); }, 0);
+    return () => clearTimeout(t);
+  }, [load]);
+
+  if (!info?.template) return null;
+  const blocked = !canWrite ? "Tiada kebenaran." : info.notReady ?? (info.judgingLocked ? "Penghakiman telah diumumkan selesai; buka semula untuk menyegerak." : null);
+
+  async function run() {
+    const list: SyncStep[] = [
+      { label: "Semak templat dan platform", status: "running" },
+      { label: `Sediakan endpoint "${info!.syncLabel}"`, status: "pending" },
+      { label: `Ambil dan simpan keputusan ${info!.platform}`, status: "pending" },
+    ];
+    const show = () => setSteps(list.map(x => ({ ...x })));
+    const set = (i: number, patch: Partial<SyncStep>) => { Object.assign(list[i], patch); show(); };
+    const msg = async (r: Response) => { const j = await r.json().catch(() => ({})); return (j.message ?? j.error ?? `HTTP ${r.status}`) as string; };
+    setBusy(true); setProgress(null); show();
+    try {
+      const fresh = await load();
+      if (!fresh?.template) { set(0, { status: "error", detail: "Templat skor yang sesuai tidak lagi ditetapkan." }); return; }
+      const why = fresh.notReady ?? (fresh.judgingLocked ? "Penghakiman telah diumumkan selesai." : null);
+      if (why) { set(0, { status: "error", detail: why }); return; }
+      set(0, { status: "done", detail: `${fresh.template.name} (${fresh.template.code})` });
+
+      set(1, { status: "running" });
+      const pRes = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "prepare" }) });
+      if (!pRes.ok) { set(1, { status: "error", detail: await msg(pRes) }); return; }
+      const p = await pRes.json() as { endpoint: EndpointItem; created: boolean };
+      onEndpoint(p.endpoint);
+      set(1, { status: "done", detail: p.created ? "Endpoint baharu dicipta" : "Endpoint sedia ada digunakan" });
+
+      set(2, { status: "running", detail: "Menghubungi platform…" });
+      let offset: number | null = 0;
+      const sum = { processed: 0, total: 0, saved: 0, noResult: 0 };
+      while (offset !== null) {
+        const sRes = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sync", offset }) });
+        if (!sRes.ok) { set(2, { status: "error", detail: await msg(sRes) }); return; }
+        const b = await sRes.json() as { total: number; processed: number; saved: number; noResult: number; nextOffset: number | null };
+        Object.assign(sum, { processed: b.processed, total: b.total, saved: sum.saved + b.saved, noResult: sum.noResult + b.noResult });
+        setProgress({ ...sum });
+        set(2, { status: "running", detail: `${sum.processed}/${sum.total} pendaftaran diproses` });
+        offset = b.nextOffset;
+      }
+      set(2, {
+        status: "done",
+        detail: sum.total === 0
+          ? "Tiada peserta disahkan untuk disegerak."
+          : `${sum.saved} keputusan disimpan · ${sum.noResult} belum ada keputusan muktamad`,
+      });
+      setLastRun(new Date());
+    } catch {
+      const i = list.findIndex(x => x.status === "running");
+      if (i >= 0) set(i, { status: "error", detail: "Ralat rangkaian. Cuba lagi." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const pct = progress && progress.total ? Math.round((progress.processed / progress.total) * 100) : 0;
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-5 py-3 bg-emerald-50/60 border-b border-emerald-100">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-emerald-800 flex items-center gap-1.5">
+            <CloudDownload className="h-4 w-4" /> Segerak keputusan {info.platform}
+          </p>
+          <p className="text-[11px] text-emerald-700/70 mt-0.5">
+            Salin keputusan penuh daripada {info.platform} ke templat <span className="font-mono">{info.template.code}</span> melalui endpoint &quot;{info.syncLabel}&quot;. Boleh diulang; nilai dikemas kini.
+          </p>
+        </div>
+        <Button size="sm" onClick={run} disabled={busy || !!blocked}
+          title={blocked ?? undefined}
+          className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          {busy ? "Menyegerak…" : "Segerak sekarang"}
+        </Button>
+      </div>
+      {(blocked || steps) && (
+        <div className="px-5 py-3 space-y-2.5">
+          {blocked && !steps && <p className="text-xs text-amber-700">{blocked}</p>}
+          {steps && (
+            <ol className="space-y-1.5">
+              {steps.map((s, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs">
+                  <span className="mt-0.5 shrink-0">
+                    {s.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                      : s.status === "done" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      : s.status === "error" ? <XCircle className="h-3.5 w-3.5 text-red-500" />
+                      : <span className="block h-3.5 w-3.5 rounded-full border border-zinc-300" />}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className={s.status === "pending" ? "text-zinc-400" : "text-zinc-800"}>{s.label}</span>
+                    {s.detail && <span className={`block text-[11px] ${s.status === "error" ? "text-red-600" : "text-zinc-500"}`}>{s.detail}</span>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {progress && progress.total > 0 && (
+            <div className="space-y-1">
+              <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="text-[10px] text-zinc-400">
+                {pct}% · {progress.saved} disimpan · {progress.noResult} tiada keputusan
+                {lastRun && ` · selesai ${lastRun.toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit" })}`}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Endpoint row ───────────────────────────────────────────────────────────────
 
@@ -442,6 +591,15 @@ export function WalkInJudgingManageClient({ event, canWrite, isSuperAdmin = fals
                 <div className="rounded-md bg-violet-50 border border-violet-100 px-3 py-2 text-[11px] text-violet-700">
                   URL penghakiman dan passcode dijana untuk setiap endpoint. Papan penghakiman peserta akan tersedia kemudian.
                 </div>
+
+                <PlatformSyncCard
+                  key={selectedWic.id}
+                  eventId={event.id}
+                  wicId={selectedWic.id}
+                  canWrite={canWrite}
+                  onEndpoint={ep => setWicList(prev => prev.map(w => w.id !== selectedWic.id || w.judgingEndpoints.some(e => e.id === ep.id) ? w
+                    : { ...w, judgingEndpoints: [...w.judgingEndpoints, ep] }))}
+                />
 
                 {selectedWic.judgingTemplates.map(({ judgingTemplate: tpl }) => {
                   const endpoints = selectedWic.judgingEndpoints.filter(e => e.judgingTemplate.id === tpl.id);

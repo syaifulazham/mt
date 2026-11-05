@@ -217,6 +217,39 @@ export async function droneListChallenges(): Promise<{
   );
 }
 
+/**
+ * A challenge's maximum score, from its leaderboard (GET /challenges/{id}/results).
+ * Challenges differ (e.g. 115), so templates must not assume 100. Null when
+ * nobody has a scored run yet.
+ */
+export async function droneChallengeMaxScore(challengeId: string): Promise<number | null> {
+  const r = await req<{ results?: Array<{ max_score?: number | null }> }>(
+    "GET", `/challenges/${encodeURIComponent(challengeId)}/results?limit=1`,
+  );
+  const max = r.results?.[0]?.max_score;
+  return typeof max === "number" && max > 0 ? max : null;
+}
+
+export type DronePlayerScore = {
+  user_id: string; userid: string | null; full_name: string;
+  challenges: { challenge_id: string; best_score: number | null; max_score: number | null; elapsed_seconds: number | null; completed_at: string | null }[];
+};
+
+/**
+ * Every player's best completed run on one challenge (GET /scores, guide §26),
+ * all pages. Crashed/aborted runs never count.
+ */
+export async function droneChallengeScores(challengeId: string): Promise<DronePlayerScore[]> {
+  const out: DronePlayerScore[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const r = await req<{ total: number; players: DronePlayerScore[] }>(
+      "GET", `/scores?challenge_id=${encodeURIComponent(challengeId)}&limit=1000&offset=${offset}`,
+    );
+    out.push(...(r.players ?? []));
+    if ((r.players ?? []).length < 1000 || out.length >= r.total) return out;
+  }
+}
+
 export async function droneListEndpoints(): Promise<{
   event_id: string;
   endpoints: Array<{ id: string; name: string; is_active: boolean; passcode_prefix: string; challenge_id?: string }>;
