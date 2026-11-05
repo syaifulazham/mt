@@ -14,6 +14,7 @@ import { droneArena } from "@/lib/eptim-drone";
 import { arenaChallengeViews, type ArenaClient } from "@/lib/arena-client";
 import { eptimEdu, eptimEduConfigured } from "@/lib/eptimedu";
 import { parseVibeBlocksToken } from "@/lib/vibeblocks";
+import { gameLabel } from "@/lib/game-provider";
 import { readTeamMembers, registrationHasIc, submissionHasIc } from "@/lib/walkin-team";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -117,6 +118,7 @@ export default async function DashboardPage() {
       maxSlots: true,
       useViblockarena: true,
       useVibeblocks: true,
+      vibeBlocksProvider: true,
       walkInSlotSchedule: true,
       _count: { select: { registrations: true } },
       event: {
@@ -484,6 +486,7 @@ export default async function DashboardPage() {
     maxSlots:        wic.maxSlots,
     useViblockarena: wic.useViblockarena,
     useVibeblocks:   wic.useVibeblocks,
+    gameName:        gameLabel(wic.vibeBlocksProvider),
     walkInSlotSchedule: (wic.walkInSlotSchedule ?? null) as SlotScheduleConfig | null,
     registrations:   wic._count.registrations,
     event: {

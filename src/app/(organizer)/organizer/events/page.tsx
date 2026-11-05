@@ -12,7 +12,8 @@ export default async function EventsPage() {
 
   const hasViblockKey     = !!process.env.WALKIN_EPTIM_VIBLOCK_API_KEY;
   const hasDroneKey       = !!process.env.WALKIN_EPTIM_DRONE_API_KEY;
-  const hasVibeBlocksKey  = !!process.env.WALKIN_VIBEBLOCKS_API_KEY;
+  // The "VibeBlocks" arena toggle also covers TechTriathlon (same partner API).
+  const hasVibeBlocksKey  = !!process.env.WALKIN_VIBEBLOCKS_API_KEY || !!process.env.WALKIN_TECHTRIATHLON_API_KEY;
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>

@@ -723,6 +723,9 @@ model EventWalkInCompetition {
   vibeBlocksEndsAt           DateTime?
   vibeBlocksRunDurationSec   Int?
   vibeBlocksCompetitionRound String?
+  /// Game platform behind the vibeBlocks* fields: "vibeblocks" or "techtriathlon"
+  /// (same partner-API shape; see src/lib/vibeblocks.ts).
+  vibeBlocksProvider         String    @default("vibeblocks")
   viblockChallengeLocked     Boolean   @default(false)
   judgingTemplatesLocked     Boolean   @default(false)
   walkInSlotSchedule         Json?

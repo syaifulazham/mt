@@ -7,6 +7,7 @@ import { cleanIc, IC_RE, readTeamMembers, teamSizeBounds } from "@/lib/walkin-te
 import {
   vibeBlocksConfigured, vibeBlocksRegisterFreshEntry, encodeVibeBlocksToken, parseVibeBlocksToken,
 } from "@/lib/vibeblocks";
+import { asGameProvider, gameLabel } from "@/lib/game-provider";
 
 /**
  * Team competitions at the walk-in counter (/walkin/<slug>). The counter can:
@@ -26,7 +27,7 @@ export async function loadCounterWic(eventId: string, wicId: string) {
   return db.eventWalkInCompetition.findUnique({
     where: { id: wicId, eventId },
     select: {
-      id: true, maxSlots: true, walkInSlotSchedule: true, useVibeblocks: true, viblockChallengeId: true,
+      id: true, maxSlots: true, walkInSlotSchedule: true, useVibeblocks: true, vibeBlocksProvider: true, viblockChallengeId: true,
       event: { select: { walkInUniqueParticipation: true } },
       competition: { select: { id: true, participationType: true, minTeamSize: true, maxTeamSize: true } },
       _count: { select: { registrations: true } },
@@ -42,10 +43,11 @@ function shownToken(wic: { useVibeblocks: boolean }, stored: string | null) {
 
 /** Registers the team's entry with VibeBlocks when the competition is linked. Never throws. */
 async function issueVibeBlocks(wic: CounterWic, regId: string): Promise<string | null> {
-  if (!wic.useVibeblocks || !wic.viblockChallengeId || !vibeBlocksConfigured()) return null;
+  const gp = asGameProvider(wic.vibeBlocksProvider);
+  if (!wic.useVibeblocks || !wic.viblockChallengeId || !vibeBlocksConfigured(gp)) return null;
   try {
     const v = await vibeBlocksRegisterFreshEntry(wic.viblockChallengeId, {
-      walkInCompetitionId: wic.id, partnerReference: regId,
+      walkInCompetitionId: wic.id, partnerReference: regId, provider: gp,
     });
     await db.walkInRegistration.update({
       where: { id: regId }, data: { viblockToken: encodeVibeBlocksToken(v.entryToken, v.entry_id) },
@@ -53,7 +55,7 @@ async function issueVibeBlocks(wic: CounterWic, regId: string): Promise<string |
     return v.entryToken;
   } catch (e) {
     // The registration stands; the organizer can register the token later.
-    console.error("[vibeblocks] counter team entry failed:", e);
+    console.error(`[${gp}] counter team entry failed:`, e);
     return null;
   }
 }
@@ -143,6 +145,7 @@ export type TeamRegResult = {
   registrationId: string; teamName: string; contingentName: string;
   members: string[]; sessionNumber: number | null; slotNumber: number | null;
   vibeBlocksToken: string | null;
+  gameName: string | null;
 };
 
 async function teamRegResult(regId: string, vibeBlocksToken: string | null): Promise<TeamRegResult> {
@@ -150,6 +153,7 @@ async function teamRegResult(regId: string, vibeBlocksToken: string | null): Pro
     where: { id: regId },
     select: {
       sessionNumber: true, slotNumber: true,
+      walkInCompetition: { select: { useVibeblocks: true, vibeBlocksProvider: true } },
       contingent: { select: { name: true } },
       team: { select: { name: true, members: { select: { participant: { select: { name: true } } }, orderBy: { createdAt: "asc" } } } },
     },
@@ -161,6 +165,7 @@ async function teamRegResult(regId: string, vibeBlocksToken: string | null): Pro
     members: reg.team?.members.map((m) => m.participant.name) ?? [],
     sessionNumber: reg.sessionNumber, slotNumber: reg.slotNumber,
     vibeBlocksToken,
+    gameName: reg.walkInCompetition.useVibeblocks ? gameLabel(reg.walkInCompetition.vibeBlocksProvider) : null,
   };
 }
 

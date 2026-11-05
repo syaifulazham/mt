@@ -10,6 +10,7 @@ import {
   droneListEndpoints, droneGetOrCreateCompetitionToken, deriveDroneUserId,
 } from "@/lib/drone";
 import { isValidSlotScheduleConfig } from "@/lib/walkin-slots";
+import { asGameProvider, gameLabel } from "@/lib/game-provider";
 
 export async function POST(
   req: NextRequest,
@@ -36,9 +37,10 @@ export async function POST(
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId, eventId: endpoint.eventId },
-    select: { id: true, maxSlots: true, useViblockarena: true, useVibeblocks: true, useDronearena: true, viblockChallengeId: true, walkInSlotSchedule: true, _count: { select: { registrations: true } } },
+    select: { id: true, maxSlots: true, useViblockarena: true, useVibeblocks: true, vibeBlocksProvider: true, useDronearena: true, viblockChallengeId: true, walkInSlotSchedule: true, _count: { select: { registrations: true } } },
   });
   if (!wic) return NextResponse.json({ error: "COMPETITION_NOT_FOUND" }, { status: 404 });
+  const gp = asGameProvider(wic.vibeBlocksProvider);
   if (wic.maxSlots > 0 && wic._count.registrations >= wic.maxSlots)
     return NextResponse.json({ error: "SLOTS_FULL" }, { status: 409 });
 
@@ -114,7 +116,7 @@ export async function POST(
     } catch (e) {
       console.error("[viblock] competition register failed:", e);
     }
-  } else if (wic.useVibeblocks && vibeBlocksConfigured() && wic.viblockChallengeId) {
+  } else if (wic.useVibeblocks && vibeBlocksConfigured(gp) && wic.viblockChallengeId) {
     // Registered with VibeBlocks after the row exists, so that its id can be
     // sent as partner_reference (contract §10.5).
   } else if (wic.useDronearena && droneConfigured()) {
@@ -167,11 +169,12 @@ export async function POST(
       },
       select: { id: true, status: true, sessionNumber: true, slotNumber: true },
     });
-    if (wic.useVibeblocks && vibeBlocksConfigured() && wic.viblockChallengeId) {
+    if (wic.useVibeblocks && vibeBlocksConfigured(gp) && wic.viblockChallengeId) {
       try {
         const vRes = await vibeBlocksRegisterFreshEntry(wic.viblockChallengeId, {
           walkInCompetitionId: wic.id,
           partnerReference: reg.id,
+          provider: gp,
         });
         viblockToken = encodeVibeBlocksToken(vRes.entryToken, vRes.entry_id);
         await db.walkInRegistration.update({ where: { id: reg.id }, data: { viblockToken } });
@@ -181,7 +184,7 @@ export async function POST(
         console.error("[vibeblocks] register entry failed:", e);
       }
     }
-    return NextResponse.json({ data: { ...reg, viblockToken, vibeBlocksToken, droneToken } }, { status: 201 });
+    return NextResponse.json({ data: { ...reg, viblockToken, vibeBlocksToken, droneToken, gameName: wic.useVibeblocks ? gameLabel(gp) : null } }, { status: 201 });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       const target = (e.meta?.target as string[] | undefined) ?? [];

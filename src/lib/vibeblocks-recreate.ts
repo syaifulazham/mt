@@ -1,41 +1,44 @@
 import { db } from "@/lib/db";
 import {
-  VB_EVENT_ID_RE, encodeVibeBlocksToken, parseVibeBlocksToken,
+  encodeVibeBlocksToken, parseVibeBlocksToken,
   vibeBlocksQueryResults, vibeBlocksRegisterFreshEntry, vibeBlocksErrorMessage,
   type VibeBlocksEvent,
 } from "@/lib/vibeblocks";
+import { GAME_PROVIDERS, type GameProvider } from "@/lib/game-provider";
 
 /**
- * Recreating a walk-in competition's VibeBlocks event.
+ * Recreating a walk-in competition's game-platform event (VibeBlocks or TechTriathlon).
  *
  * VibeBlocks freezes an event's schedule once a token is registered and never
  * reopens a closed event, so the way to change either is a new event. The new
- * one is `<slug>_<n>` / `<name>_<n>` (n = next free number, from 2). The walk-in
+ * one is `<slug><sep><n>` / `<name>_<n>` (n = next free number, from 2; sep is
+ * "_" on VibeBlocks, "-" on TechTriathlon, whose ids allow no "_"). The walk-in
  * then points at it, and `syncVibeBlocksEntries` gives every registration a new
  * token there — registrations keep their session and slot.
  */
 
-const SUFFIX = /_(\d+)$/;
+const NAME_SUFFIX = /_(\d+)$/;
 
-/** Next free `<slug>_<n>` event id and `<name>_<n>` name. */
+/** Next free `<slug><sep><n>` event id and `<name>_<n>` name. */
 export function nextEventIdentity(
   slug: string, currentName: string, liveEvents: Pick<VibeBlocksEvent, "event_id">[], currentId: string | null,
+  sep = "_",
 ) {
   const taken = new Set(liveEvents.map((e) => e.event_id));
   if (currentId) taken.add(currentId);
   const numberOf = (id: string) => {
-    const m = id.startsWith(`${slug}_`) ? id.slice(slug.length).match(SUFFIX) : null;
-    return m && m.index === 0 ? Number(m[1]) : null;
+    const m = id.startsWith(`${slug}${sep}`) ? id.slice(slug.length + sep.length).match(/^(\d+)$/) : null;
+    return m ? Number(m[1]) : null;
   };
   let n = 1;
   for (const id of taken) n = Math.max(n, numberOf(id) ?? 1);
   n += 1;
-  const suffix = `_${n}`;
-  const eventId = slug.slice(0, 64 - suffix.length) + suffix;
+  const idSuffix = `${sep}${n}`;
+  const eventId = slug.slice(0, 64 - idSuffix.length) + idSuffix;
   // Only strip a suffix this feature added (the current event is itself a recreate).
-  const baseName = currentId && numberOf(currentId) ? currentName.trim().replace(SUFFIX, "") : currentName.trim();
-  const name = baseName.slice(0, 120 - suffix.length) + suffix;
-  return { eventId, name, n, valid: VB_EVENT_ID_RE.test(eventId) };
+  const baseName = currentId && numberOf(currentId) ? currentName.trim().replace(NAME_SUFFIX, "") : currentName.trim();
+  const name = `${baseName.slice(0, 120 - String(n).length - 1)}_${n}`;
+  return { eventId, name, n };
 }
 
 /** Registrations that should hold a token: confirmed ones, and any that already have one. */
@@ -51,7 +54,7 @@ async function tokenHolders(wicId: string) {
 }
 
 /** Registrations whose token is not an entry of `eventId` (or who have none). */
-export async function registrationsToSync(wicId: string, eventId: string) {
+export async function registrationsToSync(wicId: string, eventId: string, provider: GameProvider = "vibeblocks") {
   const regs = await tokenHolders(wicId);
   const byEntry = new Map<string, string>(); // entryId -> regId
   for (const r of regs) {
@@ -60,8 +63,9 @@ export async function registrationsToSync(wicId: string, eventId: string) {
   }
   const inEvent = new Set<string>();
   const ids = [...byEntry.keys()];
-  for (let i = 0; i < ids.length; i += 1000) {
-    const res = await vibeBlocksQueryResults(eventId, ids.slice(i, i + 1000));
+  const max = GAME_PROVIDERS[provider].maxResultIds;
+  for (let i = 0; i < ids.length; i += max) {
+    const res = await vibeBlocksQueryResults(eventId, ids.slice(i, i + max), provider);
     for (const r of res.results) inEvent.add(r.entry_id);
   }
   return {
@@ -77,21 +81,21 @@ export async function registrationsToSync(wicId: string, eventId: string) {
  * Registers up to `limit` out-of-date registrations in the current event.
  * Safe to re-run; the caller repeats it while `remaining > 0`.
  */
-export async function syncVibeBlocksEntries(wicId: string, eventId: string, limit = 40) {
-  const { total, pending } = await registrationsToSync(wicId, eventId);
+export async function syncVibeBlocksEntries(wicId: string, eventId: string, provider: GameProvider = "vibeblocks", limit = 40) {
+  const { total, pending } = await registrationsToSync(wicId, eventId, provider);
   const batch = pending.slice(0, limit);
   let synced = 0;
   const errors: string[] = [];
   for (const regId of batch) {
     try {
-      const v = await vibeBlocksRegisterFreshEntry(eventId, { walkInCompetitionId: wicId, partnerReference: regId });
+      const v = await vibeBlocksRegisterFreshEntry(eventId, { walkInCompetitionId: wicId, partnerReference: regId, provider });
       await db.walkInRegistration.update({
         where: { id: regId }, data: { viblockToken: encodeVibeBlocksToken(v.entryToken, v.entry_id) },
       });
       synced++;
     } catch (e) {
-      console.error(`[vibeblocks] sync ${regId} to ${eventId} failed:`, e);
-      errors.push(vibeBlocksErrorMessage(e));
+      console.error(`[${provider}] sync ${regId} to ${eventId} failed:`, e);
+      errors.push(vibeBlocksErrorMessage(e, provider));
     }
   }
   const failed = batch.length - synced;
@@ -104,12 +108,12 @@ export async function syncVibeBlocksEntries(wicId: string, eventId: string, limi
 }
 
 /**
- * Event ID for a new VibeBlocks event: the slug when it is free, otherwise the
- * next `<slug>_<n>`. `taken` = ids on VibeBlocks plus ids linked here (several
- * walk-in competitions of one event each need their own VibeBlocks event).
+ * Event ID for a new event: the slug when it is free, otherwise the next
+ * `<slug><sep><n>`. `taken` = ids on the platform plus ids linked here (several
+ * walk-in competitions of one event each need their own event).
  */
-export function freeEventId(slug: string, taken: Iterable<string>) {
+export function freeEventId(slug: string, taken: Iterable<string>, sep = "_") {
   const ids = new Set(taken);
   if (!ids.has(slug)) return slug;
-  return nextEventIdentity(slug, "", [...ids].map((event_id) => ({ event_id })), null).eventId;
+  return nextEventIdentity(slug, "", [...ids].map((event_id) => ({ event_id })), null, sep).eventId;
 }

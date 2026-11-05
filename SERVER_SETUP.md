@@ -179,5 +179,7 @@ sudo tail -30 /var/log/nginx/error.log
 | `WALKIN_EPTIM_VIBLOCK_API_KEY` | Viblock Arena API key |
 | `WALKIN_VIBEBLOCKS_URL` | VibeBlocks base URL |
 | `WALKIN_VIBEBLOCKS_API_KEY` | VibeBlocks API key |
+| `WALKIN_TECHTRIATHLON_URL` | TechTriathlon base URL, without `/v1/partner` (`https://techtriathlon-my.vercel.app/api`) |
+| `WALKIN_TECHTRIATHLON_API_KEY` | TechTriathlon partner API key (production key) |
 | `WALKIN_EPTIM_DRONE_URL` | Eptim Drone API base URL |
 | `WALKIN_EPTIM_DRONE_API_KEY` | Eptim Drone API key (event-scoped) |

@@ -1,16 +1,29 @@
 import { randomInt } from "crypto";
 import { db } from "@/lib/db";
 
-// VibeBlocks Competition Partner API v1.8 (see WALKIN-PARTNER-API-GUIDE.md and
-// the TECHLYMPICS-API-INTEGRATION contract). Server-side only: the API key
-// must never reach a browser or participant device.
+import { GAME_PROVIDERS, type GameProvider } from "@/lib/game-provider";
 
-const BASE_URL   = process.env.WALKIN_VIBEBLOCKS_URL ?? "";
-const API_KEY    = process.env.WALKIN_VIBEBLOCKS_API_KEY ?? "";
+// Walk-in game partner APIs. VibeBlocks Competition Partner API v1.8 (see
+// WALKIN-PARTNER-API-GUIDE.md) and TechTriathlon Partner API v2 (PARTNER_GUIDE.md)
+// share one shape — same paths under /v1/partner, X-API-Key, { error: { code,
+// message } } — so every call takes the walk-in's provider (default VibeBlocks).
+// Server-side only: the API keys must never reach a browser or participant device.
+//
+// Env: WALKIN_VIBEBLOCKS_URL / WALKIN_VIBEBLOCKS_API_KEY,
+//      WALKIN_TECHTRIATHLON_URL / WALKIN_TECHTRIATHLON_API_KEY
+//      (URL without /v1/partner, e.g. https://techtriathlon-my.vercel.app/api).
+
 const TIMEOUT_MS = 10_000;
 
-export function vibeBlocksConfigured() {
-  return !!API_KEY && !!BASE_URL;
+function creds(p: GameProvider) {
+  return p === "techtriathlon"
+    ? { url: process.env.WALKIN_TECHTRIATHLON_URL ?? "", key: process.env.WALKIN_TECHTRIATHLON_API_KEY ?? "", env: "WALKIN_TECHTRIATHLON" }
+    : { url: process.env.WALKIN_VIBEBLOCKS_URL ?? "", key: process.env.WALKIN_VIBEBLOCKS_API_KEY ?? "", env: "WALKIN_VIBEBLOCKS" };
+}
+
+export function vibeBlocksConfigured(p: GameProvider = "vibeblocks") {
+  const c = creds(p);
+  return !!c.key && !!c.url;
 }
 
 /** Contract limits. */
@@ -18,7 +31,6 @@ export const VB_EVENT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const VB_RUN_DURATION_MIN = 60;
 export const VB_RUN_DURATION_MAX = 3600;
 export const VB_RUN_DURATION_DEFAULT = 900;
-const VB_RESULTS_MAX_IDS = 5000;
 
 /** Generate a random 8-character uppercase alphanumeric entry token (A-Z 0-9). */
 export function generateEntryToken(): string {
@@ -49,9 +61,10 @@ export function parseVibeBlocksToken(
   return { entryToken, entryId };
 }
 
-async function req<T = unknown>(path: string, options?: RequestInit): Promise<T> {
-  if (!BASE_URL) throw new Error("WALKIN_VIBEBLOCKS_URL not configured");
-  if (!API_KEY) throw new Error("WALKIN_VIBEBLOCKS_API_KEY not configured");
+async function req<T = unknown>(path: string, options?: RequestInit, p: GameProvider = "vibeblocks"): Promise<T> {
+  const { url: BASE_URL, key: API_KEY, env } = creds(p);
+  if (!BASE_URL) throw new Error(`${env}_URL not configured`);
+  if (!API_KEY) throw new Error(`${env}_API_KEY not configured`);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -69,7 +82,7 @@ async function req<T = unknown>(path: string, options?: RequestInit): Promise<T>
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       const e = json?.error;
-      const message = typeof e === "string" ? e : (e?.message ?? `VibeBlocks API error (HTTP ${res.status})`);
+      const message = typeof e === "string" ? e : (e?.message ?? `${GAME_PROVIDERS[p].label} API error (HTTP ${res.status})`);
       const code = typeof e === "object" && e ? (e.code as string | undefined) : undefined;
       throw Object.assign(new Error(message), { status: res.status, code, body: json });
     }
@@ -105,10 +118,19 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
   }
 }
 
-/** Error codes from VibeBlocks, as Malay messages for organizers. */
-export function vibeBlocksErrorMessage(e: unknown): string {
+/** Error codes from the game platform, as Malay messages for organizers. */
+export function vibeBlocksErrorMessage(e: unknown, p: GameProvider = "vibeblocks"): string {
   const err = e as VibeBlocksError;
+  const name = GAME_PROVIDERS[p].label;
   switch (err.code) {
+    case "EVENT_ID_CONFLICT":
+      return `Event ID ini sudah digunakan di ${name} untuk challenge atau persekitaran lain.`;
+    case "TOKEN_IN_USE":
+      return "Token ini sudah digunakan oleh entri lain dalam acara ini.";
+    case "EVENT_CLOSED":
+      return "Acara telah ditutup.";
+    case "RATE_LIMITED":
+      return `Terlalu banyak permintaan ke ${name}. Cuba lagi sebentar.`;
     case "EVENT_TIMING_LOCKED":
       return "Masa mula/tamat tidak boleh diubah selepas token pertama didaftarkan.";
     case "EVENT_ALREADY_EXISTS":
@@ -118,11 +140,11 @@ export function vibeBlocksErrorMessage(e: unknown): string {
     case "ENTRY_TOKEN_ALREADY_USED":
       return "Token telah digunakan pada peranti lain.";
   }
-  if (err.status === 401) return "Kunci API VibeBlocks tidak sah. Sila maklumkan pentadbir sistem.";
-  if (err.status === 404) return "Acara atau entri tidak dijumpai di VibeBlocks.";
-  if (err.status === 410) return "Acara atau token VibeBlocks telah tamat tempoh.";
-  if (err.status === undefined) return "Tiada sambungan ke VibeBlocks. Cuba lagi.";
-  return err.message || "Ralat VibeBlocks.";
+  if (err.status === 401) return `Kunci API ${name} tidak sah. Sila maklumkan pentadbir sistem.`;
+  if (err.status === 404) return `Acara atau entri tidak dijumpai di ${name}.`;
+  if (err.status === 410) return `Acara atau token ${name} telah tamat tempoh atau ditutup.`;
+  if (err.status === undefined) return `Tiada sambungan ke ${name}. Cuba lagi.`;
+  return err.message || `Ralat ${name}.`;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -178,6 +200,9 @@ export type VibeBlocksResultEntry = {
   token_expires_at: string;
   consumed_at: string | null;
   is_used: boolean;
+  /** TechTriathlon: total out of max_score (provisional while in_progress). */
+  score?: number | null;
+  max_score?: number;
 };
 
 export type VibeBlocksResultsQueryResponse = {
@@ -193,22 +218,23 @@ export type VibeBlocksResultsQueryResponse = {
 
 // ── API functions ──────────────────────────────────────────────────────────────
 
-export async function vibeBlocksHealth() {
-  return req<{ status: string; service: string; version: string }>("/v1/partner/health");
+export async function vibeBlocksHealth(p: GameProvider = "vibeblocks") {
+  return req<{ status: string; service: string; version: string }>("/v1/partner/health", undefined, p);
 }
 
-export async function vibeBlocksListEvents() {
-  return req<{ events: VibeBlocksEvent[] }>("/v1/partner/events");
+export async function vibeBlocksListEvents(p: GameProvider = "vibeblocks") {
+  return req<{ events: VibeBlocksEvent[] }>("/v1/partner/events", undefined, p);
 }
 
-export async function vibeBlocksListChallenges(status?: string) {
+export async function vibeBlocksListChallenges(status?: string, p: GameProvider = "vibeblocks") {
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
-  return req<{ challenges: VibeBlocksChallenge[] }>(`/v1/partner/challenges${qs}`);
+  return req<{ challenges: VibeBlocksChallenge[] }>(`/v1/partner/challenges${qs}`, undefined, p);
 }
 
 export async function vibeBlocksRegisterEntry(
   eventId: string,
   opts: { entryToken: string; partnerReference?: string },
+  p: GameProvider = "vibeblocks",
 ) {
   // expires_at is omitted so VibeBlocks applies the event end time.
   const body = JSON.stringify({
@@ -217,7 +243,7 @@ export async function vibeBlocksRegisterEntry(
   });
   return withRetry(() => req<VibeBlocksEntryRegistrationResponse>(
     `/v1/partner/events/${encodeURIComponent(eventId)}/entries`,
-    { method: "POST", body },
+    { method: "POST", body }, p,
   ));
 }
 
@@ -225,46 +251,56 @@ export async function vibeBlocksReplaceToken(
   eventId: string,
   entryId: string,
   entryToken: string,
+  p: GameProvider = "vibeblocks",
 ) {
   const body = JSON.stringify({ entry_token: entryToken });
   return withRetry(() => req<VibeBlocksEntryTokenReplacementResponse>(
     `/v1/partner/events/${encodeURIComponent(eventId)}/entries/${encodeURIComponent(entryId)}/token`,
-    { method: "PUT", body },
+    { method: "PUT", body }, p,
   ));
 }
 
-export async function vibeBlocksQueryResults(eventId: string, entryIds: string[]) {
+export async function vibeBlocksQueryResults(eventId: string, entryIds: string[], p: GameProvider = "vibeblocks") {
   const body = JSON.stringify({ entry_ids: entryIds });
   return withRetry(() => req<VibeBlocksResultsQueryResponse>(
     `/v1/partner/events/${encodeURIComponent(eventId)}/results:query`,
-    { method: "POST", body },
+    { method: "POST", body }, p,
   ));
 }
 
-/** Better first: more completed stages, then lower official elapsed time. */
-function compareResults(a: VibeBlocksResultEntry, b: VibeBlocksResultEntry) {
-  return b.completed_stage_count - a.completed_stage_count ||
+/**
+ * Better first. VibeBlocks: more completed stages, then lower official elapsed
+ * time. TechTriathlon: higher score, then lower elapsed time.
+ */
+function compareResults(p: GameProvider) {
+  return (a: VibeBlocksResultEntry, b: VibeBlocksResultEntry) =>
+    (GAME_PROVIDERS[p].rankBy === "score"
+      ? (b.score ?? -Infinity) - (a.score ?? -Infinity)
+      : b.completed_stage_count - a.completed_stage_count) ||
     (a.official_elapsed_ms ?? Infinity) - (b.official_elapsed_ms ?? Infinity);
 }
 
 /**
- * Full-event ranking. VibeBlocks ranks only within the entry_ids of one
- * request, so every ID goes in one request (up to 5,000). Beyond that the
- * requests are split and the ranks recomputed here with the same rules.
+ * Full-event ranking. The platform ranks only within the entry_ids of one
+ * request, so every ID goes in one request while it fits (VibeBlocks 5,000,
+ * TechTriathlon 500). Beyond that the requests are split and the ranks
+ * recomputed here with the platform's rules.
  */
-export async function vibeBlocksQueryAllResults(eventId: string, entryIds: string[]) {
-  if (entryIds.length <= VB_RESULTS_MAX_IDS) return vibeBlocksQueryResults(eventId, entryIds);
+export async function vibeBlocksQueryAllResults(eventId: string, entryIds: string[], p: GameProvider = "vibeblocks") {
+  const max = GAME_PROVIDERS[p].maxResultIds;
+  if (entryIds.length <= max) return vibeBlocksQueryResults(eventId, entryIds, p);
 
   const parts: VibeBlocksResultsQueryResponse[] = [];
-  for (let i = 0; i < entryIds.length; i += VB_RESULTS_MAX_IDS)
-    parts.push(await vibeBlocksQueryResults(eventId, entryIds.slice(i, i + VB_RESULTS_MAX_IDS)));
+  for (let i = 0; i < entryIds.length; i += max)
+    parts.push(await vibeBlocksQueryResults(eventId, entryIds.slice(i, i + max), p));
 
-  const results = parts.flatMap((p) => p.results);
-  // Entries without an accepted stage stay unranked; ties share a rank.
-  const ranked = results.filter((r) => r.rank != null).sort(compareResults);
+  const results = parts.flatMap((x) => x.results);
+  // Unfinished entries stay unranked; ties share a rank.
+  const cmp = compareResults(p);
+  const ranked = results.filter((r) => r.rank != null).sort(cmp);
   ranked.forEach((r, i) => {
     const prev = ranked[i - 1];
-    r.rank = prev && compareResults(prev, r) === 0 ? prev.rank : i + 1;
+    r.rank = prev && cmp(prev, r) === 0 ? prev.rank : i + 1;
   });
   return {
     event_id: eventId,
@@ -272,9 +308,9 @@ export async function vibeBlocksQueryAllResults(eventId: string, entryIds: strin
     requested_count: entryIds.length,
     ranked_count: ranked.length,
     results,
-    missing_entry_ids: parts.flatMap((p) => p.missing_entry_ids),
-    invalid_entry_ids: parts.flatMap((p) => p.invalid_entry_ids),
-    duplicate_entry_ids: parts.flatMap((p) => p.duplicate_entry_ids),
+    missing_entry_ids: parts.flatMap((x) => x.missing_entry_ids),
+    invalid_entry_ids: parts.flatMap((x) => x.invalid_entry_ids),
+    duplicate_entry_ids: parts.flatMap((x) => x.duplicate_entry_ids),
   };
 }
 
@@ -306,12 +342,18 @@ function isTokenConflict(e: unknown) {
  */
 export async function vibeBlocksRegisterFreshEntry(
   eventId: string,
-  opts: { walkInCompetitionId: string; partnerReference: string },
+  opts: { walkInCompetitionId: string; partnerReference: string; provider?: GameProvider },
 ) {
+  const p = opts.provider ?? "vibeblocks";
   for (let attempt = 1; ; attempt++) {
     const entryToken = await freshToken(opts.walkInCompetitionId);
     try {
-      const res = await vibeBlocksRegisterEntry(eventId, { entryToken, partnerReference: opts.partnerReference });
+      const res = await vibeBlocksRegisterEntry(eventId, { entryToken, partnerReference: opts.partnerReference }, p);
+      // TechTriathlon returns the existing entry, with its old code, for a
+      // partner_reference it already has; set the code we are about to store.
+      // (Its token replace keeps the run, unlike VibeBlocks'.)
+      if (res.already_registered && p === "techtriathlon")
+        await vibeBlocksReplaceToken(eventId, res.entry_id, entryToken, p);
       return { entryToken, ...res };
     } catch (e) {
       if (attempt >= 3 || !isTokenConflict(e)) throw e;
@@ -326,12 +368,12 @@ export async function vibeBlocksRegisterFreshEntry(
 export async function vibeBlocksRenewEntry(
   eventId: string,
   entryId: string,
-  opts: { walkInCompetitionId: string },
+  opts: { walkInCompetitionId: string; provider?: GameProvider },
 ) {
   for (let attempt = 1; ; attempt++) {
     const entryToken = await freshToken(opts.walkInCompetitionId);
     try {
-      const res = await vibeBlocksReplaceToken(eventId, entryId, entryToken);
+      const res = await vibeBlocksReplaceToken(eventId, entryId, entryToken, opts.provider ?? "vibeblocks");
       return { entryToken, ...res };
     } catch (e) {
       if (attempt >= 3 || !isTokenConflict(e)) throw e;
@@ -340,8 +382,8 @@ export async function vibeBlocksRenewEntry(
 }
 
 /** The live event from VibeBlocks, or null when it does not exist there. */
-export async function vibeBlocksGetEvent(eventId: string) {
-  const { events } = await vibeBlocksListEvents();
+export async function vibeBlocksGetEvent(eventId: string, p: GameProvider = "vibeblocks") {
+  const { events } = await vibeBlocksListEvents(p);
   return events.find((e) => e.event_id === eventId) ?? null;
 }
 
@@ -359,19 +401,20 @@ export type VibeBlocksCreateEventResponse = VibeBlocksEvent & { already_exists: 
 
 export type VibeBlocksUpdateEventResponse = VibeBlocksEvent & { updated: boolean };
 
-export async function vibeBlocksCreateEvent(opts: VibeBlocksCreateEventRequest) {
+export async function vibeBlocksCreateEvent(opts: VibeBlocksCreateEventRequest, p: GameProvider = "vibeblocks") {
   const body = JSON.stringify(opts);
-  return withRetry(() => req<VibeBlocksCreateEventResponse>("/v1/partner/events", { method: "POST", body }));
+  return withRetry(() => req<VibeBlocksCreateEventResponse>("/v1/partner/events", { method: "POST", body }, p));
 }
 
 export async function vibeBlocksUpdateEvent(
   eventId: string,
   patch: Partial<Pick<VibeBlocksCreateEventRequest, "name" | "competition_round" | "starts_at" | "ends_at" | "run_duration_sec">> & { status?: "open" | "closed" },
+  p: GameProvider = "vibeblocks",
 ) {
   return req<VibeBlocksUpdateEventResponse>(`/v1/partner/events/${encodeURIComponent(eventId)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
-  });
+  }, p);
 }
 
 export const vibeBlocks = {

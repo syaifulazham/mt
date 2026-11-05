@@ -10,12 +10,13 @@ import {
   parseVibeBlocksToken,
   type VibeBlocksError,
 } from "@/lib/vibeblocks";
+import { asGameProvider, type GameProvider } from "@/lib/game-provider";
 
-function vbErrorResponse(e: unknown, fallback: string) {
+function vbErrorResponse(e: unknown, fallback: string, p: GameProvider) {
   const err = e as VibeBlocksError;
-  console.error(`[vibeblocks] ${fallback}:`, err.message, "status:", err.status, "code:", err.code);
+  console.error(`[${p}] ${fallback}:`, err.message, "status:", err.status, "code:", err.code);
   return NextResponse.json(
-    { error: err.code ?? "VIBEBLOCKS_ERROR", message: vibeBlocksErrorMessage(e) || fallback },
+    { error: err.code ?? "VIBEBLOCKS_ERROR", message: vibeBlocksErrorMessage(e, p) || fallback },
     // A 401 from VibeBlocks is our key, not the organizer's session.
     { status: err.status && err.status !== 401 && err.status < 500 ? err.status : 502 },
   );
@@ -53,13 +54,14 @@ export async function POST(
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-  if (!vibeBlocksConfigured()) return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED" }, { status: 400 });
   const { wicId, regId } = await params;
 
   const reg = await db.walkInRegistration.findUnique({
     where: { id: regId },
-    include: { walkInCompetition: { select: { viblockChallengeId: true } } },
+    include: { walkInCompetition: { select: { viblockChallengeId: true, vibeBlocksProvider: true } } },
   });
+  const gp = asGameProvider(reg?.walkInCompetition?.vibeBlocksProvider);
+  if (!vibeBlocksConfigured(gp)) return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED" }, { status: 400 });
   if (!reg || reg.walkInCompetitionId !== wicId) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (reg.viblockToken) return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });
 
@@ -70,6 +72,7 @@ export async function POST(
     const result = await vibeBlocksRegisterFreshEntry(eventId, {
       walkInCompetitionId: reg.walkInCompetitionId,
       partnerReference: regId,
+      provider: gp,
     });
     await db.walkInRegistration.update({
       where: { id: regId },
@@ -77,7 +80,7 @@ export async function POST(
     });
     return NextResponse.json({ entryToken: result.entryToken, entryId: result.entry_id });
   } catch (e: unknown) {
-    return vbErrorResponse(e, "Gagal mendaftar peserta ke VibeBlocks");
+    return vbErrorResponse(e, "Gagal mendaftar token peserta", gp);
   }
 }
 
@@ -91,13 +94,14 @@ export async function PATCH(
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-  if (!vibeBlocksConfigured()) return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED" }, { status: 400 });
   const { wicId, regId } = await params;
 
   const reg = await db.walkInRegistration.findUnique({
     where: { id: regId },
-    include: { walkInCompetition: { select: { viblockChallengeId: true } } },
+    include: { walkInCompetition: { select: { viblockChallengeId: true, vibeBlocksProvider: true } } },
   });
+  const gp = asGameProvider(reg?.walkInCompetition?.vibeBlocksProvider);
+  if (!vibeBlocksConfigured(gp)) return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED" }, { status: 400 });
   if (!reg || reg.walkInCompetitionId !== wicId) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (!reg.viblockToken) return NextResponse.json({ error: "NO_TOKEN" }, { status: 400 });
 
@@ -112,7 +116,7 @@ export async function PATCH(
     let entryId: string;
     let reregistered = false;
     try {
-      const result = await vibeBlocksRenewEntry(eventId, parsed.entryId, { walkInCompetitionId: reg.walkInCompetitionId });
+      const result = await vibeBlocksRenewEntry(eventId, parsed.entryId, { walkInCompetitionId: reg.walkInCompetitionId, provider: gp });
       entryToken = result.entryToken;
       entryId = result.entry_id;
     } catch (renewErr) {
@@ -123,6 +127,7 @@ export async function PATCH(
       const result = await vibeBlocksRegisterFreshEntry(eventId, {
         walkInCompetitionId: reg.walkInCompetitionId,
         partnerReference: regId,
+        provider: gp,
       });
       entryToken = result.entryToken;
       entryId = result.entry_id;
@@ -134,6 +139,6 @@ export async function PATCH(
     });
     return NextResponse.json({ entryToken, entryId, reregistered });
   } catch (e: unknown) {
-    return vbErrorResponse(e, "Gagal memperbaharui token");
+    return vbErrorResponse(e, "Gagal memperbaharui token", gp);
   }
 }

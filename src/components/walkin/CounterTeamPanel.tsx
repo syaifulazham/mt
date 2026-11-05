@@ -37,6 +37,7 @@ export type TeamRegResult = {
   registrationId: string; teamName: string; contingentName: string;
   members: string[]; sessionNumber: number | null; slotNumber: number | null;
   vibeBlocksToken: string | null;
+  gameName: string | null;
 };
 type Selection =
   | { kind: "sub"; sub: SubHit }
@@ -100,9 +101,9 @@ const primaryBtn = "w-full h-11 rounded-xl text-sm font-bold flex items-center j
 const primaryStyle = { background: `linear-gradient(90deg, ${B.navy}, ${B.purple})`, color: "white" };
 
 export function CounterTeamPanel({
-  slug, passcode, competitionId, cfg, sessions, slotsLoading, minSize, maxSize, onRegistered,
+  slug, passcode, competitionId, cfg, sessions, slotsLoading, minSize, maxSize, onRegistered, gameName,
 }: {
-  slug: string; passcode: string; competitionId: string;
+  slug: string; passcode: string; competitionId: string; gameName?: string | null;
   cfg: SlotScheduleConfig | null; sessions: SessionSlots[] | null; slotsLoading: boolean;
   minSize: number; maxSize: number;
   onRegistered: (r: TeamRegResult) => void;
@@ -267,7 +268,7 @@ export function CounterTeamPanel({
             {reg.vibeBlocksToken && (
               <div className="rounded-xl px-4 py-3 border text-center"
                 style={{ background: "rgba(5,150,105,.15)", borderColor: "rgba(16,185,129,.4)" }}>
-                <p className="text-[9px] font-bold tracking-[0.2em] uppercase" style={{ color: "#6ee7b7" }}>VibeBlocks Token</p>
+                <p className="text-[9px] font-bold tracking-[0.2em] uppercase" style={{ color: "#6ee7b7" }}>{gameName ?? "VibeBlocks"} Token</p>
                 <p className="text-xl font-extrabold font-mono tracking-[0.3em] text-white">{reg.vibeBlocksToken}</p>
               </div>
             )}

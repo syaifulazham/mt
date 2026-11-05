@@ -20,7 +20,7 @@ export async function GET(
           startDate: true, endDate: true, venue: true,
           walkInCompetitions: {
             select: {
-              id: true, maxSlots: true, walkInSlotSchedule: true,
+              id: true, maxSlots: true, walkInSlotSchedule: true, useVibeblocks: true, vibeBlocksProvider: true,
               competition: {
                 select: {
                   id: true, code: true, name: true,
@@ -60,7 +60,7 @@ export async function GET(
   const specificWic = await db.eventWalkInCompetition.findUnique({
     where: { id: endpoint.walkInCompetitionId! },
     select: {
-      id: true, maxSlots: true, publishToPortal: true, walkInSlotSchedule: true,
+      id: true, maxSlots: true, publishToPortal: true, walkInSlotSchedule: true, useVibeblocks: true, vibeBlocksProvider: true,
       competition: {
         select: {
           id: true, code: true, name: true,
@@ -85,6 +85,8 @@ export async function GET(
       maxSlots: specificWic.maxSlots,
       publishToPortal: specificWic.publishToPortal,
       walkInSlotSchedule: specificWic.walkInSlotSchedule,
+      useVibeblocks: specificWic.useVibeblocks,
+      vibeBlocksProvider: specificWic.vibeBlocksProvider,
       event: { ...endpoint.event, walkInCompetitions: undefined },
       competition: specificWic.competition,
       _count: specificWic._count,

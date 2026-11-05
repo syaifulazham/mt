@@ -11,6 +11,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { SlotScheduleConfig } from "@/lib/walkin-slots";
 import { CounterSlotPicker, type SessionSlots, type SlotChoice } from "./CounterSlotPicker";
 import { CounterTeamPanel, type TeamRegResult } from "./CounterTeamPanel";
+import { gameLabel } from "@/lib/game-provider";
 
 /* ─── Brand palette ─────────────────────────────────────────────────────── */
 const B = {
@@ -30,6 +31,7 @@ type Competition = {
 };
 type WicSummary = {
   id: string; maxSlots: number;
+  useVibeblocks?: boolean; vibeBlocksProvider?: string;
   walkInSlotSchedule: SlotScheduleConfig | null;
   competition: Competition;
   _count: { registrations: number };
@@ -40,6 +42,7 @@ type WicInfo =
       walkInCompetitions: WicSummary[]; }
   | { isGeneral: false; endpointId: string; label: string | null;
       id: string; maxSlots: number; walkInSlotSchedule: SlotScheduleConfig | null;
+      useVibeblocks?: boolean; vibeBlocksProvider?: string;
       event: { id: string; name: string; slug: string; venue: string | null; startDate: string | null };
       competition: Competition;
       _count: { registrations: number }; };
@@ -54,7 +57,7 @@ type ParticipantResult = {
   viaSubmissionOnly?: boolean;
 };
 type DroneTokenData = { userid: string; password: string; accessToken: string; competitionToken?: string | null };
-type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null; droneToken?: DroneTokenData | null };
+type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null; droneToken?: DroneTokenData | null; gameName?: string | null };
 type FormSubmissionHit = {
   id: string; ic: string; name: string; schoolName: string | null;
   sessionNumber: number | null; slotNumber: number | null;
@@ -76,6 +79,7 @@ type ScanResult = {
   viblockToken?: string | null;
   vibeBlocksToken?: string | null;
   droneToken?: DroneTokenData | null;
+  gameName?: string | null;
   teamName?: string | null;
   teamMembers?: string[] | null;
 };
@@ -373,7 +377,7 @@ function ConfirmCard({ result, onReset }: { result: ScanResult; onReset: () => v
           <div className="rounded-xl px-4 py-3.5 border space-y-1.5"
             style={{ background: "rgba(5,150,105,.15)", borderColor: "rgba(16,185,129,.4)" }}>
             <p className="text-[9px] font-bold tracking-[0.25em] uppercase" style={{ color: "#6ee7b7" }}>
-              VibeBlocks Token
+              {result.gameName ?? "VibeBlocks"} Token
             </p>
             <p className="text-center text-2xl font-extrabold font-mono tracking-[0.35em] text-white">
               {result.vibeBlocksToken}
@@ -541,8 +545,8 @@ function CameraQrScanner({ onScan, onError }: {
 }
 
 /* ─── QR modal (after successful register) ──────────────────────────────── */
-function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, team, onClose }: {
-  regId: string; name: string;
+function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, team, gameName, onClose }: {
+  regId: string; name: string; gameName?: string | null;
   viblockToken?: string | null; vibeBlocksToken?: string | null;
   droneToken?: DroneTokenData | null;
   /** TEAM competitions: the registered team. */
@@ -595,7 +599,7 @@ function QrModal({ regId, name, viblockToken, vibeBlocksToken, droneToken, team,
           <div className="w-full rounded-xl px-4 py-3 border space-y-1"
             style={{ background: "rgba(5,150,105,.15)", borderColor: "rgba(16,185,129,.4)" }}>
             <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-center" style={{ color: "#6ee7b7" }}>
-              VibeBlocks Token
+              {gameName ?? "VibeBlocks"} Token
             </p>
             <p className="text-center text-2xl font-extrabold font-mono tracking-[0.35em] text-white">
               {vibeBlocksToken}
@@ -942,6 +946,8 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
 
   const activeCompetition = wic.isGeneral ? selectedWic!.competition : wic.competition;
   const isTeam = activeCompetition.participationType === "TEAM";
+  const activeGame = wic.isGeneral ? selectedWic : wic;
+  const gameName = activeGame?.useVibeblocks ? gameLabel(activeGame.vibeBlocksProvider) : null;
 
   /* ── Main registration screen ──────────────────────────────────────── */
   return (
@@ -997,6 +1003,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
             cfg={activeCfg} sessions={slotSessions} slotsLoading={slotsLoading}
             minSize={Math.min(Math.max(1, activeCompetition.minTeamSize), Math.max(1, activeCompetition.maxTeamSize))}
             maxSize={Math.max(1, activeCompetition.maxTeamSize)}
+            gameName={gameName}
             onRegistered={r => { setTeamReg(r); setSlotRefreshKey(k => k + 1); }} />
         )}
 
@@ -1266,10 +1273,10 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
       </div>
 
       {regResult && (
-        <QrModal regId={regResult.id} name={selected?.name ?? "Peserta"} viblockToken={regResult.viblockToken} vibeBlocksToken={regResult.vibeBlocksToken} droneToken={regResult.droneToken} onClose={() => setRegResult(null)} />
+        <QrModal regId={regResult.id} name={selected?.name ?? "Peserta"} viblockToken={regResult.viblockToken} vibeBlocksToken={regResult.vibeBlocksToken} droneToken={regResult.droneToken} gameName={regResult.gameName} onClose={() => setRegResult(null)} />
       )}
       {teamReg && (
-        <QrModal regId={teamReg.registrationId} name={teamReg.teamName} vibeBlocksToken={teamReg.vibeBlocksToken}
+        <QrModal regId={teamReg.registrationId} name={teamReg.teamName} vibeBlocksToken={teamReg.vibeBlocksToken} gameName={teamReg.gameName}
           team={{ contingentName: teamReg.contingentName, members: teamReg.members, sessionNumber: teamReg.sessionNumber, slotNumber: teamReg.slotNumber }}
           onClose={() => setTeamReg(null)} />
       )}

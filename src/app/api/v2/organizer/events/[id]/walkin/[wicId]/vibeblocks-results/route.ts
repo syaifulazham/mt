@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { vibeBlocksConfigured, vibeBlocksQueryAllResults, vibeBlocksErrorMessage, parseVibeBlocksToken, type VibeBlocksError } from "@/lib/vibeblocks";
+import { asGameProvider, gameLabel } from "@/lib/game-provider";
 
 // GET /api/v2/organizer/events/[id]/walkin/[wicId]/vibeblocks-results
 // Queries VibeBlocks for results of all registered entries in this walk-in competition.
@@ -11,9 +12,6 @@ export async function GET(
 ) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  if (!vibeBlocksConfigured())
-    return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED", message: "VibeBlocks API tidak dikonfigurasi." }, { status: 400 });
-
   const { id, wicId } = await params;
 
   const wic = await db.eventWalkInCompetition.findUnique({
@@ -21,6 +19,7 @@ export async function GET(
     select: {
       eventId: true,
       viblockChallengeId: true,
+      vibeBlocksProvider: true,
       registrations: {
         where: { viblockToken: { not: null } },
         select: {
@@ -32,6 +31,9 @@ export async function GET(
     },
   });
   if (!wic || wic.eventId !== id) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const gp = asGameProvider(wic.vibeBlocksProvider);
+  if (!vibeBlocksConfigured(gp))
+    return NextResponse.json({ error: "VIBEBLOCKS_NOT_CONFIGURED", message: `${gameLabel(gp)} API tidak dikonfigurasi.` }, { status: 400 });
   if (!wic.viblockChallengeId)
     return NextResponse.json({ error: "NO_EVENT_CREATED", message: "Acara VibeBlocks belum dicipta." }, { status: 400 });
 
@@ -47,7 +49,7 @@ export async function GET(
   try {
     // One query for every entry: VibeBlocks ranks only within the IDs sent
     // together, so splitting them would restart the ranking in each batch.
-    const res = await vibeBlocksQueryAllResults(wic.viblockChallengeId, entryIds);
+    const res = await vibeBlocksQueryAllResults(wic.viblockChallengeId, entryIds, gp);
     const results = res.results;
     const missing = res.missing_entry_ids;
 
@@ -60,6 +62,8 @@ export async function GET(
           status:              r.status,
           completedStageCount: r.completed_stage_count,
           officialElapsedMs:   r.official_elapsed_ms,
+          score:               r.score ?? null,
+          maxScore:            r.max_score ?? null,
           isUsed:              r.is_used,
           consumedAt:          r.consumed_at,
           registrationId:      reg?.id ?? null,
@@ -76,10 +80,10 @@ export async function GET(
         return (a.participant?.name ?? "").localeCompare(b.participant?.name ?? "");
       });
 
-    return NextResponse.json({ data, missing: missing.map(id => byEntryId.get(id)?.participant.name ?? id) });
+    return NextResponse.json({ provider: gp, data, missing: missing.map(id => byEntryId.get(id)?.participant.name ?? id) });
   } catch (e: unknown) {
     const err = e as VibeBlocksError;
-    console.error("[vibeblocks] results query failed:", err.message, "status:", err.status, "code:", err.code);
-    return NextResponse.json({ error: err.code ?? "VIBEBLOCKS_ERROR", message: vibeBlocksErrorMessage(e) }, { status: 502 });
+    console.error(`[${gp}] results query failed:`, err.message, "status:", err.status, "code:", err.code);
+    return NextResponse.json({ error: err.code ?? "VIBEBLOCKS_ERROR", message: vibeBlocksErrorMessage(e, gp) }, { status: 502 });
   }
 }

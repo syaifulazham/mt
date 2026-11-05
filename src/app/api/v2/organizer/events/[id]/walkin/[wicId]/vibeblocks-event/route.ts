@@ -4,12 +4,15 @@ import { db } from "@/lib/db";
 import {
   vibeBlocksConfigured, vibeBlocksCreateEvent, vibeBlocksUpdateEvent, vibeBlocksGetEvent,
   vibeBlocksListEvents, vibeBlocksErrorMessage, type VibeBlocksError,
-  VB_EVENT_ID_RE, VB_RUN_DURATION_MIN, VB_RUN_DURATION_MAX,
 } from "@/lib/vibeblocks";
+import { GAME_PROVIDERS, asGameProvider, type GameProvider } from "@/lib/game-provider";
 import { freeEventId, nextEventIdentity } from "@/lib/vibeblocks-recreate";
 
+// The walk-in competition's game-platform event (VibeBlocks or TechTriathlon,
+// per `vibeBlocksProvider`; rules in src/lib/game-provider.ts).
+
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
-/** Closing a VibeBlocks event is irreversible. */
+/** Closing (irreversible on VibeBlocks), reopening and recreating. */
 const CLOSE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
 type Params = { params: Promise<{ id: string; wicId: string }> };
@@ -18,27 +21,31 @@ function bad(error: string, message: string, status = 400) {
   return NextResponse.json({ error, message }, { status });
 }
 
-function vbErrorResponse(e: unknown, what: string) {
+function vbErrorResponse(e: unknown, what: string, p: GameProvider) {
   const err = e as VibeBlocksError;
-  console.error(`[vibeblocks] ${what} failed:`, err.message, "status:", err.status, "code:", err.code, "body:", err.body);
+  console.error(`[${p}] ${what} failed:`, err.message, "status:", err.status, "code:", err.code, "body:", err.body);
   return NextResponse.json(
-    { error: err.code ?? "VIBEBLOCKS_ERROR", message: vibeBlocksErrorMessage(e) },
-    // A 401 from VibeBlocks is our API key, not the organizer's session.
+    { error: err.code ?? "VIBEBLOCKS_ERROR", message: vibeBlocksErrorMessage(e, p) },
+    // A 401 from the platform is our API key, not the organizer's session.
     { status: err.status && err.status !== 401 && err.status < 500 ? err.status : 502 },
   );
 }
 
+const notConfigured = (p: GameProvider) =>
+  bad("VIBEBLOCKS_NOT_CONFIGURED", `${GAME_PROVIDERS[p].label} API tidak dikonfigurasi.`);
+
 const isUtcIso = (s: string) => /Z$/.test(s) && !Number.isNaN(Date.parse(s));
 
-/** Checks a schedule and run duration against the v1.8 contract. */
-function checkConfig(c: { startsAt?: string; endsAt?: string; runDurationSec?: number }): string | null {
+/** Checks a schedule and run duration against the platform's contract. */
+function checkConfig(p: GameProvider, c: { startsAt?: string; endsAt?: string; runDurationSec?: number }): string | null {
+  const { runMin, runMax } = GAME_PROVIDERS[p];
   if (c.startsAt !== undefined && !isUtcIso(c.startsAt)) return "Masa mula mesti dalam UTC.";
   if (c.endsAt !== undefined && !isUtcIso(c.endsAt)) return "Masa tamat mesti dalam UTC.";
   if (c.startsAt && c.endsAt && Date.parse(c.endsAt) <= Date.parse(c.startsAt))
     return "Masa tamat mesti selepas masa mula.";
   if (c.runDurationSec !== undefined) {
-    if (!Number.isInteger(c.runDurationSec) || c.runDurationSec < VB_RUN_DURATION_MIN || c.runDurationSec > VB_RUN_DURATION_MAX)
-      return `Tempoh larian mesti antara ${VB_RUN_DURATION_MIN} dan ${VB_RUN_DURATION_MAX} saat.`;
+    if (!Number.isInteger(c.runDurationSec) || c.runDurationSec < runMin || c.runDurationSec > runMax)
+      return `Tempoh larian mesti antara ${runMin} dan ${runMax} saat.`;
     if (c.startsAt && c.endsAt && c.runDurationSec * 1000 > Date.parse(c.endsAt) - Date.parse(c.startsAt))
       return "Tempoh larian tidak boleh melebihi tempoh acara.";
   }
@@ -54,13 +61,18 @@ async function entryCount(wicId: string) {
 async function loadWic(eventId: string, wicId: string) {
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId },
-    select: { eventId: true, viblockChallengeId: true },
+    select: { eventId: true, viblockChallengeId: true, vibeBlocksProvider: true },
   });
-  return wic && wic.eventId === eventId ? wic : null;
+  return wic && wic.eventId === eventId ? { ...wic, provider: asGameProvider(wic.vibeBlocksProvider) } : null;
 }
 
-// GET — the event as VibeBlocks currently has it, plus how many entries are
-// registered here (the schedule is locked once there is one).
+/** Event-id base for a platform: TechTriathlon takes lowercase a-z, 0-9, - only. */
+function idBase(slug: string, p: GameProvider) {
+  return p === "techtriathlon" ? slug.toLowerCase().replace(/[^a-z0-9-]/g, "-") : slug;
+}
+
+// GET — the event as the platform currently has it, plus how many entries are
+// registered here (VibeBlocks locks the schedule once there is one).
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -68,20 +80,22 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const wic = await loadWic(id, wicId);
   if (!wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const p = wic.provider;
   const entries = await entryCount(wicId);
-  if (!wic.viblockChallengeId) return NextResponse.json({ event: null, entryCount: entries });
-  if (!vibeBlocksConfigured()) return bad("VIBEBLOCKS_NOT_CONFIGURED", "VibeBlocks API tidak dikonfigurasi.");
+  if (!wic.viblockChallengeId) return NextResponse.json({ event: null, entryCount: entries, provider: p });
+  if (!vibeBlocksConfigured(p)) return notConfigured(p);
 
   try {
-    const event = await vibeBlocksGetEvent(wic.viblockChallengeId);
-    return NextResponse.json({ event, entryCount: entries });
+    const event = await vibeBlocksGetEvent(wic.viblockChallengeId, p);
+    return NextResponse.json({ event, entryCount: entries, provider: p });
   } catch (e) {
-    return vbErrorResponse(e, "getEvent");
+    return vbErrorResponse(e, "getEvent", p);
   }
 }
 
-// POST — create the VibeBlocks event, using the event slug as its stable event_id.
-// With { recreate: true }: replace the linked event with a new one (see recreate()).
+// POST — create the event, using the event slug as its event_id (or the next
+// free <slug><sep><n>). Body `provider` picks the platform; it is fixed once
+// the event exists. With { recreate: true }: replace the linked event (see recreate()).
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -91,6 +105,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id, wicId } = await params;
   const body = await req.json() as {
     recreate?: boolean;
+    provider?: string;
     challengeId?: string;
     name?: string;
     competitionRound?: string;
@@ -102,46 +117,50 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!CLOSE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     return recreate(id, wicId, body);
   }
-  const { challengeId, competitionRound, startsAt, endsAt, runDurationSec } = body;
-  const name = body.name?.trim();
-
-  if (!challengeId || !name || runDurationSec === undefined)
-    return bad("MISSING_FIELDS", "Challenge, nama dan tempoh larian diperlukan.");
-  if (name.length > 120) return bad("INVALID_NAME", "Nama acara maksimum 120 aksara.");
-  if (!startsAt || !endsAt) return bad("MISSING_DATES", "Masa mula dan tamat diperlukan.");
-  if (competitionRound !== "qualifier" && competitionRound !== "final")
-    return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
-  const invalid = checkConfig({ startsAt, endsAt, runDurationSec });
-  if (invalid) return bad("INVALID_CONFIG", invalid);
-  if (Date.parse(endsAt) <= Date.now()) return bad("INVALID_CONFIG", "Masa tamat mesti pada masa hadapan.");
-
-  if (!vibeBlocksConfigured()) return bad("VIBEBLOCKS_NOT_CONFIGURED", "VibeBlocks API tidak dikonfigurasi.");
 
   const [event, wic] = await Promise.all([
     db.event.findUnique({ where: { id }, select: { slug: true } }),
     loadWic(id, wicId),
   ]);
   if (!event || !wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  if (!VB_EVENT_ID_RE.test(event.slug))
-    return bad("INVALID_EVENT_ID", "Slug acara tidak boleh digunakan sebagai Event ID VibeBlocks (huruf, nombor, _ atau -, maksimum 64).");
+  // The platform is chosen with the first event and kept after that.
+  const p = wic.viblockChallengeId ? wic.provider : asGameProvider(body.provider);
+  const rules = GAME_PROVIDERS[p];
 
-  // The slug when free; otherwise <slug>_<n>, since VibeBlocks refuses an
+  const { challengeId, competitionRound, startsAt, endsAt, runDurationSec } = body;
+  const name = body.name?.trim();
+  if (!challengeId || !name || runDurationSec === undefined)
+    return bad("MISSING_FIELDS", "Challenge, nama dan tempoh larian diperlukan.");
+  if (name.length > rules.nameMax) return bad("INVALID_NAME", `Nama acara maksimum ${rules.nameMax} aksara.`);
+  if (!startsAt || !endsAt) return bad("MISSING_DATES", "Masa mula dan tamat diperlukan.");
+  if (competitionRound !== "qualifier" && competitionRound !== "final")
+    return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
+  const invalid = checkConfig(p, { startsAt, endsAt, runDurationSec });
+  if (invalid) return bad("INVALID_CONFIG", invalid);
+  if (Date.parse(endsAt) <= Date.now()) return bad("INVALID_CONFIG", "Masa tamat mesti pada masa hadapan.");
+  if (!vibeBlocksConfigured(p)) return notConfigured(p);
+
+  const base = idBase(event.slug, p);
+  if (!rules.eventIdRe.test(base))
+    return bad("INVALID_EVENT_ID", `Slug acara tidak boleh digunakan sebagai Event ID ${rules.label}.`);
+
+  // The slug when free; otherwise <slug><sep><n>, since the platform refuses an
   // existing event_id with a different configuration.
   let vbEventId: string;
   try {
     const [{ events }, linked] = await Promise.all([
-      vibeBlocksListEvents(),
+      vibeBlocksListEvents(p),
       db.eventWalkInCompetition.findMany({
-        where: { viblockChallengeId: { startsWith: event.slug }, id: { not: wicId } },
+        where: { viblockChallengeId: { startsWith: base }, id: { not: wicId } },
         select: { viblockChallengeId: true },
       }),
     ]);
-    vbEventId = freeEventId(event.slug, [
+    vbEventId = freeEventId(base, [
       ...events.map(e => e.event_id),
       ...linked.flatMap(w => (w.viblockChallengeId ? [w.viblockChallengeId] : [])),
-    ]);
+    ], rules.idSep);
   } catch (e) {
-    return vbErrorResponse(e, "listEvents");
+    return vbErrorResponse(e, "listEvents", p);
   }
 
   try {
@@ -153,12 +172,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       starts_at: startsAt,
       ends_at: endsAt,
       run_duration_sec: runDurationSec,
-    });
+    }, p);
 
     await db.eventWalkInCompetition.update({
       where: { id: wicId },
       data: {
         viblockChallengeId:         vbEventId,
+        vibeBlocksProvider:         p,
         vibeBlocksChallengeId:      challengeId,
         vibeBlocksEventName:        name,
         vibeBlocksCompetitionRound: competitionRound,
@@ -168,16 +188,17 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
     });
 
-    return NextResponse.json({ eventId: vbEventId, alreadyExists: result.already_exists, event: result });
+    return NextResponse.json({ eventId: vbEventId, provider: p, alreadyExists: result.already_exists, event: result });
   } catch (e: unknown) {
-    return vbErrorResponse(e, "createEvent");
+    return vbErrorResponse(e, "createEvent", p);
   }
 }
 
 // PATCH — update the event. Only fields that differ from what is stored are
 // sent: VibeBlocks locks starts_at/ends_at once an entry is registered, so
 // resending an unchanged schedule must not be what fails a rename.
-// { status: "closed" } closes the event for good (admins only).
+// { status: "closed" } closes the event (admins; for good on VibeBlocks).
+// { status: "open" } reopens a closed TechTriathlon event (admins).
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -187,8 +208,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id, wicId } = await params;
   const wic = await loadWic(id, wicId);
   if (!wic) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const p = wic.provider;
+  const rules = GAME_PROVIDERS[p];
   if (!wic.viblockChallengeId)
-    return bad("NO_EVENT_CREATED", "Acara VibeBlocks belum dicipta.");
+    return bad("NO_EVENT_CREATED", `Acara ${rules.label} belum dicipta.`);
 
   const body = await req.json() as {
     name?: string;
@@ -196,30 +219,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     startsAt?: string;
     endsAt?: string;
     runDurationSec?: number;
-    status?: "closed";
+    status?: "open" | "closed";
   };
   const { competitionRound, startsAt, endsAt, runDurationSec, status } = body;
   const name = body.name?.trim();
 
   if (status !== undefined) {
-    if (status !== "closed") return bad("INVALID_STATUS", "Hanya status \"closed\" boleh dihantar.");
+    if (status !== "closed" && !(status === "open" && rules.canReopen))
+      return bad("INVALID_STATUS", rules.canReopen ? "Status mesti \"open\" atau \"closed\"." : "Hanya status \"closed\" boleh dihantar.");
     if (!CLOSE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
-  if (name !== undefined && (!name || name.length > 120)) return bad("INVALID_NAME", "Nama acara 1–120 aksara.");
+  if (name !== undefined && (!name || name.length > rules.nameMax)) return bad("INVALID_NAME", `Nama acara 1–${rules.nameMax} aksara.`);
   if (competitionRound !== undefined && competitionRound !== "qualifier" && competitionRound !== "final")
     return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
 
-  if (!vibeBlocksConfigured()) return bad("VIBEBLOCKS_NOT_CONFIGURED", "VibeBlocks API tidak dikonfigurasi.");
+  if (!vibeBlocksConfigured(p)) return notConfigured(p);
   // Diff against the live event, which is the source of truth (older linked
   // competitions have no stored schedule).
   let live: Awaited<ReturnType<typeof vibeBlocksGetEvent>>;
   try {
-    live = await vibeBlocksGetEvent(wic.viblockChallengeId);
+    live = await vibeBlocksGetEvent(wic.viblockChallengeId, p);
   } catch (e) {
-    return vbErrorResponse(e, "getEvent");
+    return vbErrorResponse(e, "getEvent", p);
   }
-  if (!live) return bad("EVENT_NOT_FOUND", "Acara tidak dijumpai di VibeBlocks.", 404);
-  if (live.status === "closed") return bad("EVENT_CLOSED", "Acara VibeBlocks telah ditutup dan tidak boleh diubah.", 409);
+  if (!live) return bad("EVENT_NOT_FOUND", `Acara tidak dijumpai di ${rules.label}.`, 404);
+  if (live.status === "closed" && status !== "open")
+    return bad("EVENT_CLOSED", rules.canReopen
+      ? `Acara ${rules.label} ditutup. Buka semula dahulu untuk mengubahnya.`
+      : `Acara ${rules.label} telah ditutup dan tidak boleh diubah.`, 409);
 
   const sameTime = (a: string | undefined, b: string) => a === undefined || Date.parse(a) === Date.parse(b);
   const vbPatch: Parameters<typeof vibeBlocksUpdateEvent>[1] = {};
@@ -228,29 +255,29 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!sameTime(startsAt, live.starts_at)) vbPatch.starts_at = startsAt;
   if (!sameTime(endsAt, live.ends_at)) vbPatch.ends_at = endsAt;
   if (runDurationSec !== undefined && runDurationSec !== live.run_duration_sec) vbPatch.run_duration_sec = runDurationSec;
-  if (status) vbPatch.status = status;
+  if (status && status !== live.status) vbPatch.status = status;
 
   // Validate against the schedule the event will have after this patch.
-  const invalid = checkConfig({
+  const invalid = checkConfig(p, {
     startsAt: vbPatch.starts_at ?? live.starts_at,
     endsAt: vbPatch.ends_at ?? live.ends_at,
     runDurationSec: vbPatch.run_duration_sec,
   });
   if (invalid) return bad("INVALID_CONFIG", invalid);
 
-  if ((vbPatch.starts_at || vbPatch.ends_at) && (await entryCount(wicId)) > 0)
+  if (rules.timingLocksAfterEntry && (vbPatch.starts_at || vbPatch.ends_at) && (await entryCount(wicId)) > 0)
     return bad("EVENT_TIMING_LOCKED", "Masa mula/tamat tidak boleh diubah selepas token pertama didaftarkan.", 409);
 
   let result: { updated: boolean; status?: string } = { updated: false, status: live.status };
   if (Object.keys(vbPatch).length > 0) {
     try {
-      result = await vibeBlocksUpdateEvent(wic.viblockChallengeId, vbPatch);
+      result = await vibeBlocksUpdateEvent(wic.viblockChallengeId, vbPatch, p);
     } catch (e: unknown) {
-      return vbErrorResponse(e, "updateEvent");
+      return vbErrorResponse(e, "updateEvent", p);
     }
   }
 
-  // Keep the stored copy in step with VibeBlocks.
+  // Keep the stored copy in step with the platform.
   const after = { ...live, ...vbPatch };
   await db.eventWalkInCompetition.update({
     where: { id: wicId },
@@ -263,58 +290,64 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     },
   });
 
-  return NextResponse.json({ updated: result.updated, status: result.status });
+  return NextResponse.json({ updated: result.updated, status: vbPatch.status ?? result.status ?? live.status });
 }
 
 /**
  * Recreate: VibeBlocks never reopens a closed event and freezes the schedule
- * once a token is registered, so a new schedule needs a new event. Creates
- * `<slug>_<n>` named `<name>_<n>` with the given config, points the walk-in at
- * it, then closes the old event if it is still open (its tokens are replaced).
- * The client then runs vibeblocks-sync to give every registration a new token.
+ * once a token is registered, so a new schedule needs a new event (also
+ * available for TechTriathlon). Creates `<slug><sep><n>` named `<name>_<n>`
+ * with the given config, points the walk-in at it, then closes the old event if
+ * it is still open (its tokens are replaced). The client then runs
+ * vibeblocks-sync to give every registration a new token.
  */
 async function recreate(
   eventId: string, wicId: string,
   body: { challengeId?: string; competitionRound?: string; startsAt?: string; endsAt?: string; runDurationSec?: number },
 ) {
   const { competitionRound, startsAt, endsAt, runDurationSec } = body;
-  if (!startsAt || !endsAt || runDurationSec === undefined) return bad("MISSING_FIELDS", "Masa mula, tamat dan tempoh larian diperlukan.");
-  if (competitionRound !== "qualifier" && competitionRound !== "final")
-    return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
-  const invalid = checkConfig({ startsAt, endsAt, runDurationSec });
-  if (invalid) return bad("INVALID_CONFIG", invalid);
-  if (Date.parse(endsAt) <= Date.now()) return bad("INVALID_CONFIG", "Masa tamat mesti pada masa hadapan.");
-  if (!vibeBlocksConfigured()) return bad("VIBEBLOCKS_NOT_CONFIGURED", "VibeBlocks API tidak dikonfigurasi.");
-
   const [event, wic] = await Promise.all([
     db.event.findUnique({ where: { id: eventId }, select: { slug: true, name: true } }),
     db.eventWalkInCompetition.findUnique({
       where: { id: wicId },
-      select: { eventId: true, viblockChallengeId: true, vibeBlocksChallengeId: true, vibeBlocksEventName: true },
+      select: { eventId: true, viblockChallengeId: true, vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksProvider: true },
     }),
   ]);
   if (!event || !wic || wic.eventId !== eventId) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  if (!wic.viblockChallengeId) return bad("NO_EVENT_CREATED", "Acara VibeBlocks belum dicipta.");
+  const p = asGameProvider(wic.vibeBlocksProvider);
+  const rules = GAME_PROVIDERS[p];
+  if (!wic.viblockChallengeId) return bad("NO_EVENT_CREATED", `Acara ${rules.label} belum dicipta.`);
+
+  if (!startsAt || !endsAt || runDurationSec === undefined) return bad("MISSING_FIELDS", "Masa mula, tamat dan tempoh larian diperlukan.");
+  if (competitionRound !== "qualifier" && competitionRound !== "final")
+    return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
+  const invalid = checkConfig(p, { startsAt, endsAt, runDurationSec });
+  if (invalid) return bad("INVALID_CONFIG", invalid);
+  if (Date.parse(endsAt) <= Date.now()) return bad("INVALID_CONFIG", "Masa tamat mesti pada masa hadapan.");
+  if (!vibeBlocksConfigured(p)) return notConfigured(p);
 
   let events: Awaited<ReturnType<typeof vibeBlocksListEvents>>["events"];
   try {
-    ({ events } = await vibeBlocksListEvents());
+    ({ events } = await vibeBlocksListEvents(p));
   } catch (e) {
-    return vbErrorResponse(e, "listEvents");
+    return vbErrorResponse(e, "listEvents", p);
   }
   const old = events.find(e => e.event_id === wic.viblockChallengeId) ?? null;
   const challengeId = body.challengeId || old?.challenge_id || wic.vibeBlocksChallengeId;
   if (!challengeId) return bad("MISSING_FIELDS", "Challenge diperlukan.");
-  const next = nextEventIdentity(event.slug, old?.name ?? wic.vibeBlocksEventName ?? event.name, events, wic.viblockChallengeId);
-  if (!next.valid) return bad("INVALID_EVENT_ID", "Slug acara tidak boleh digunakan sebagai Event ID VibeBlocks.");
+  const next = nextEventIdentity(
+    idBase(event.slug, p), old?.name ?? wic.vibeBlocksEventName ?? event.name, events, wic.viblockChallengeId, rules.idSep,
+  );
+  if (!rules.eventIdRe.test(next.eventId)) return bad("INVALID_EVENT_ID", `Slug acara tidak boleh digunakan sebagai Event ID ${rules.label}.`);
+  const name = next.name.slice(0, rules.nameMax);
 
   try {
     await vibeBlocksCreateEvent({
-      event_id: next.eventId, challenge_id: challengeId, name: next.name,
+      event_id: next.eventId, challenge_id: challengeId, name,
       competition_round: competitionRound, starts_at: startsAt, ends_at: endsAt, run_duration_sec: runDurationSec,
-    });
+    }, p);
   } catch (e) {
-    return vbErrorResponse(e, "createEvent (recreate)");
+    return vbErrorResponse(e, "createEvent (recreate)", p);
   }
 
   await db.eventWalkInCompetition.update({
@@ -322,7 +355,7 @@ async function recreate(
     data: {
       viblockChallengeId:         next.eventId,
       vibeBlocksChallengeId:      challengeId,
-      vibeBlocksEventName:        next.name,
+      vibeBlocksEventName:        name,
       vibeBlocksCompetitionRound: competitionRound,
       vibeBlocksStartsAt:         new Date(startsAt),
       vibeBlocksEndsAt:           new Date(endsAt),
@@ -334,12 +367,12 @@ async function recreate(
   let oldClosed = old?.status === "closed";
   if (old && !oldClosed) {
     try {
-      await vibeBlocksUpdateEvent(old.event_id, { status: "closed" });
+      await vibeBlocksUpdateEvent(old.event_id, { status: "closed" }, p);
       oldClosed = true;
     } catch (e) {
-      console.error("[vibeblocks] closing old event after recreate failed:", e);
+      console.error(`[${p}] closing old event after recreate failed:`, e);
     }
   }
-  console.warn(`[vibeblocks] walk-in ${wicId} recreated: ${wic.viblockChallengeId} -> ${next.eventId}`);
-  return NextResponse.json({ eventId: next.eventId, name: next.name, previousEventId: wic.viblockChallengeId, oldClosed });
+  console.warn(`[${p}] walk-in ${wicId} recreated: ${wic.viblockChallengeId} -> ${next.eventId}`);
+  return NextResponse.json({ eventId: next.eventId, name, previousEventId: wic.viblockChallengeId, oldClosed });
 }

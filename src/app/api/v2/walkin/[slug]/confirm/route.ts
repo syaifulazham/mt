@@ -9,6 +9,7 @@ import {
   droneConfigured, droneRegisterParticipant, encodeDroneToken, parseDroneToken,
   droneListEndpoints, droneGetOrCreateCompetitionToken, deriveDroneUserId,
 } from "@/lib/drone";
+import { asGameProvider, gameLabel } from "@/lib/game-provider";
 
 // POST — confirm a PENDING portal registration by scanning QR at the counter
 export async function POST(
@@ -52,6 +53,7 @@ export async function POST(
           eventId: true,
           useViblockarena: true,
           useVibeblocks: true,
+          vibeBlocksProvider: true,
           useDronearena: true,
           viblockChallengeId: true,
           competition: { select: { code: true, name: true } },
@@ -73,6 +75,7 @@ export async function POST(
   }
 
   const alreadyConfirmed = reg.status === "CONFIRMED";
+  const gp = asGameProvider(reg.walkInCompetition?.vibeBlocksProvider);
   let viblockToken: string | null = reg.viblockToken;
   let vibeBlocksToken: string | null = null; // entry_token shown to participant on confirm
   let droneToken: { userid: string; password: string; accessToken: string; competitionToken?: string | null } | null = null;
@@ -93,11 +96,12 @@ export async function POST(
       } catch (e) {
         console.error("[viblock] competition register on confirm failed:", e);
       }
-    } else if (!viblockToken && reg.walkInCompetition?.useVibeblocks && vibeBlocksConfigured() && reg.walkInCompetition.viblockChallengeId) {
+    } else if (!viblockToken && reg.walkInCompetition?.useVibeblocks && vibeBlocksConfigured(gp) && reg.walkInCompetition.viblockChallengeId) {
       try {
         const vRes = await vibeBlocksRegisterFreshEntry(reg.walkInCompetition.viblockChallengeId, {
           walkInCompetitionId: reg.walkInCompetitionId,
           partnerReference: registrationId,
+          provider: gp,
         });
         viblockToken = encodeVibeBlocksToken(vRes.entryToken, vRes.entry_id);
         vibeBlocksToken = vRes.entryToken;
@@ -158,6 +162,7 @@ export async function POST(
       alreadyConfirmed,
       viblockToken:     reg.walkInCompetition?.useViblockarena ? viblockToken : undefined,
       vibeBlocksToken:  reg.walkInCompetition?.useVibeblocks  ? vibeBlocksToken : undefined,
+      gameName:         reg.walkInCompetition?.useVibeblocks  ? gameLabel(gp) : undefined,
       droneToken:       reg.walkInCompetition?.useDronearena   ? droneToken : undefined,
       participantName: reg.participant.name,
       ic:              reg.participant.ic ? `••••••-••-${reg.participant.ic.slice(-4)}` : null,

@@ -2743,7 +2743,7 @@ function WalkInCompetitionsSection({ event, canWrite, isSuperAdmin = false, hasV
                           wic.useVibeblocks ? "bg-emerald-500 text-white" : "bg-white text-zinc-400 hover:bg-zinc-50"
                         }`}
                       >
-                        VibeBlocks
+                        VibeBlocks / TechTriathlon
                       </button>
                     )}
                   </div>

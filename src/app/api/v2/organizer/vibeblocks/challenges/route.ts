@@ -1,28 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { vibeBlocksListChallenges } from "@/lib/vibeblocks";
+import { GAME_PROVIDERS, asGameProvider } from "@/lib/game-provider";
 
-const FALLBACK_CHALLENGES = [
-  {
-    id: "machine-driving-five-stage",
-    name: "Machine Driving – Five Stage Challenge",
-    description: "Complete five machine-driving stages; more completed stages rank first, then lower official elapsed time.",
-    challenge_mode: "ranked",
-    status: "active",
-    order_index: 1,
-    created_at: "2026-08-12T00:00:00.000Z",
-  },
-];
-
-// GET /api/v2/organizer/vibeblocks/challenges
-export async function GET() {
+// GET /api/v2/organizer/vibeblocks/challenges?provider=vibeblocks|techtriathlon
+export async function GET(req: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const p = asGameProvider(req.nextUrl.searchParams.get("provider"));
 
   try {
-    const data = await vibeBlocksListChallenges();
+    const data = await vibeBlocksListChallenges(undefined, p);
     return NextResponse.json({ challenges: data.challenges });
   } catch {
-    return NextResponse.json({ challenges: FALLBACK_CHALLENGES });
+    const c = GAME_PROVIDERS[p].defaultChallenge;
+    return NextResponse.json({
+      challenges: [{ ...c, description: null, status: "active", order_index: 1, created_at: "2026-01-01T00:00:00.000Z" }],
+    });
   }
 }

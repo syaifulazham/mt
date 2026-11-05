@@ -67,6 +67,8 @@ type WalkInEntry = {
   maxSlots: number;
   useViblockarena: boolean;
   useVibeblocks: boolean;
+  /** "VibeBlocks" or "TechTriathlon" — the platform the token is for. */
+  gameName?: string;
   walkInSlotSchedule: SlotScheduleConfig | null;
   registrations: number;
   event: {
@@ -1722,7 +1724,7 @@ export function DashboardClient({
                                 >
                                   <Gamepad2 className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                                   <span className="flex-1 text-xs font-medium text-violet-600 dark:text-violet-400">
-                                    Token VibeBlocks{reg.team ? " (pasukan)" : ""}
+                                    Token {wic.gameName ?? "VibeBlocks"}{reg.team ? " (pasukan)" : ""}
                                   </span>
                                   <span className="text-sm font-bold font-mono tracking-widest text-violet-800 dark:text-violet-200">{reg.vibeBlocksToken}</span>
                                   {copiedToken === `vb:${reg.id}`
