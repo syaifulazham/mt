@@ -67,7 +67,7 @@ type SyncInfo = {
 
 /**
  * Copies the full results from the competition's game platform into walk-in
- * judging scores (through its "Segerak <platform>" endpoint). Shown only when a
+ * judging scores (through its "Selaraskan <platform>" endpoint). Shown only when a
  * suitable score template is assigned.
  */
 function PlatformSyncCard({ eventId, wicId, canWrite, onEndpoint }: {
@@ -94,7 +94,7 @@ function PlatformSyncCard({ eventId, wicId, canWrite, onEndpoint }: {
   }, [load]);
 
   if (!info?.template) return null;
-  const blocked = !canWrite ? "Tiada kebenaran." : info.notReady ?? (info.judgingLocked ? "Penghakiman telah diumumkan selesai; buka semula untuk menyegerak." : null);
+  const blocked = !canWrite ? "Tiada kebenaran." : info.notReady ?? (info.judgingLocked ? "Penghakiman telah diumumkan selesai; buka semula untuk menyelaraskan." : null);
 
   async function run() {
     const list: SyncStep[] = [
@@ -135,7 +135,7 @@ function PlatformSyncCard({ eventId, wicId, canWrite, onEndpoint }: {
       set(2, {
         status: "done",
         detail: sum.total === 0
-          ? "Tiada peserta disahkan untuk disegerak."
+          ? "Tiada peserta disahkan untuk diselaraskan."
           : `${sum.saved} keputusan disimpan · ${sum.noResult} belum ada keputusan muktamad`,
       });
       setLastRun(new Date());
@@ -153,7 +153,7 @@ function PlatformSyncCard({ eventId, wicId, canWrite, onEndpoint }: {
       <div className="flex items-center justify-between gap-3 px-5 py-3 bg-emerald-50/60 border-b border-emerald-100">
         <div className="min-w-0">
           <p className="text-sm font-medium text-emerald-800 flex items-center gap-1.5">
-            <CloudDownload className="h-4 w-4" /> Segerak keputusan {info.platform}
+            <CloudDownload className="h-4 w-4" /> Selaraskan keputusan {info.platform}
           </p>
           <p className="text-[11px] text-emerald-700/70 mt-0.5">
             Salin keputusan penuh daripada {info.platform} ke templat <span className="font-mono">{info.template.code}</span> melalui endpoint &quot;{info.syncLabel}&quot;. Boleh diulang; nilai dikemas kini.
@@ -163,7 +163,7 @@ function PlatformSyncCard({ eventId, wicId, canWrite, onEndpoint }: {
           title={blocked ?? undefined}
           className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          {busy ? "Menyegerak…" : "Segerak sekarang"}
+          {busy ? "Menyelaraskan…" : "Selaraskan sekarang"}
         </Button>
       </div>
       {(blocked || steps) && (

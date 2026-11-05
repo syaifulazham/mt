@@ -14,7 +14,7 @@ import {
  * judging scores, so they appear in "Walk-in Penghakiman" like a judge's.
  *
  * Scores are stored per judging endpoint, so the sync writes through its own
- * endpoint on the platform's score template (label "Segerak <platform>"),
+ * endpoint on the platform's score template (label "Selaraskan <platform>"),
  * created on first use. Each run rewrites the stored values from the platform;
  * a registration with no finished result is left as it is.
  *
@@ -22,7 +22,9 @@ import {
  * timed out; Drone/Viblock players' best completed run on the challenge.
  */
 
-export const syncLabel = (p: ScorePlatform) => `Segerak ${scorePlatformLabel(p)}`;
+export const syncLabel = (p: ScorePlatform) => `Selaraskan ${scorePlatformLabel(p)}`;
+/** The label used before the rename, still recognised so no second endpoint is made. */
+const oldSyncLabel = (p: ScorePlatform) => `Segerak ${scorePlatformLabel(p)}`;
 
 /** The walk-in's scoring platform and its template spec, or why it has none. */
 export async function resolveScorePlatform(eventId: string, wicId: string) {
@@ -95,7 +97,7 @@ const ENDPOINT_SELECT = {
 export async function ensureSyncEndpoint(eventId: string, r: Resolved, templateId: string) {
   const label = syncLabel(r.provider);
   const found = await db.walkInJudgingEndpoint.findFirst({
-    where: { walkInCompetitionId: r.wic.id, judgingTemplateId: templateId, label },
+    where: { walkInCompetitionId: r.wic.id, judgingTemplateId: templateId, label: { in: [label, oldSyncLabel(r.provider)] } },
     select: ENDPOINT_SELECT,
   });
   if (found) return { endpoint: found, created: false };

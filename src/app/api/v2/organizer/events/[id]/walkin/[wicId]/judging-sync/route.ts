@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!template)
     return NextResponse.json({ error: "NO_SUITABLE_TEMPLATE", message: "Tiada templat skor yang sesuai ditetapkan. Gunakan \"Cari templat skor platform\" di halaman walk-in." }, { status: 409 });
   if (r.wic.judgingStatus !== "OPEN")
-    return NextResponse.json({ error: "JUDGING_LOCKED", message: "Penghakiman telah diumumkan selesai; buka semula untuk menyegerak." }, { status: 423 });
+    return NextResponse.json({ error: "JUDGING_LOCKED", message: "Penghakiman telah diumumkan selesai; buka semula untuk menyelaraskan." }, { status: 423 });
   const notReady = platformReady(r);
   if (notReady) return NextResponse.json({ error: "PLATFORM_NOT_READY", message: notReady }, { status: 409 });
 
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (body.action !== "sync") return NextResponse.json({ error: "INVALID_ACTION" }, { status: 400 });
   if (endpoint.completedAt)
-    return NextResponse.json({ error: "ENDPOINT_COMPLETED", message: `Endpoint "${endpoint.label}" telah diumumkan selesai; buka semula untuk menyegerak.` }, { status: 423 });
+    return NextResponse.json({ error: "ENDPOINT_COMPLETED", message: `Endpoint "${endpoint.label}" telah diumumkan selesai; buka semula untuk menyelaraskan.` }, { status: 423 });
   try {
     const out = await syncBatch(r, r.spec, endpoint.id, template, Math.max(0, Number(body.offset) || 0));
     return NextResponse.json(out);
