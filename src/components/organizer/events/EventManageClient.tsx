@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
   LayoutDashboard, Scale, Award, Globe, Globe2, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles, Medal,
+  Camera, Images, Swords,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -92,6 +93,7 @@ const MAIN_MODULES: Module[] = [
     description: "Uruskan panel hakim, kriteria penilaian, dan markah.",
     color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100",
     href: "judging",
+    actions: [{ label: "Scoreboard", href: "scoreboard", icon: Swords }],
     pos: { x: COL[2], y: ROW[1] },
   },
   {
@@ -237,6 +239,18 @@ const QUIZZLY_MODULE: Module = {
   description: "Peserta mengikut kuiz Asia Spark Quizzly, berserta kemajuan, markah dan kedudukan.",
   color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100",
   href: "asia-spark-quizzes",
+  pos: { x: COL[0], y: 0 },
+};
+
+// ─── Media Hub ───────────────────────────────────────────────────────────────
+// SUPER_ADMIN only: links for the media team to build photo galleries.
+const MEDIA_ROLES = ["SUPER_ADMIN"];
+const MEDIA_MODULE: Module = {
+  icon: Camera,
+  title: "Media",
+  description: "Pautan berpasscode untuk pasukan media mencipta galeri dan memuat naik foto dari telefon.",
+  color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-100",
+  href: "media",
   pos: { x: COL[0], y: 0 },
 };
 
@@ -628,6 +642,24 @@ export function EventManageClient({
               {monitorModules.map((mod, i) => (
                 <ModuleCard key={mod.title} mod={{ ...mod, pos: { x: COL[i % 3], y: 0 } }} eventSlug={event.slug} />
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Media Hub ── */}
+      {MEDIA_ROLES.includes(role) && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-zinc-200" />
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+              <Images className="h-3.5 w-3.5" /> Media Hub
+            </span>
+            <div className="h-px flex-1 bg-zinc-200" />
+          </div>
+          <div className="overflow-x-auto">
+            <div style={{ position: "relative", width: CANVAS_W, height: CARD_H + 24 }}>
+              <ModuleCard mod={MEDIA_MODULE} eventSlug={event.slug} />
             </div>
           </div>
         </div>

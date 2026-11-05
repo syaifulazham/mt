@@ -181,5 +181,6 @@ sudo tail -30 /var/log/nginx/error.log
 | `WALKIN_VIBEBLOCKS_API_KEY` | VibeBlocks API key |
 | `WALKIN_TECHTRIATHLON_URL` | TechTriathlon base URL, without `/v1/partner` (`https://techtriathlon-my.vercel.app/api`) |
 | `WALKIN_TECHTRIATHLON_API_KEY` | TechTriathlon partner API key (production key) |
+| `CLOUDFLARE_STREAM_API_TOKEN` | Cloudflare API token with **Stream: Edit** on the R2 account (`R2_ACCOUNT_ID`) — duel live video from the media page and session replays |
 | `WALKIN_EPTIM_DRONE_URL` | Eptim Drone API base URL |
 | `WALKIN_EPTIM_DRONE_API_KEY` | Eptim Drone API key (event-scoped) |

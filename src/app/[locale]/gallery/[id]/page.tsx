@@ -7,17 +7,43 @@ import { Link } from "@/i18n/navigation";
 import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 
-type Props = { params: Promise<{ locale: string; id: string }> };
+type Props = {
+  params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ photo?: string }>;
+};
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { id } = await params;
-  const g = await db.gallery.findUnique({ where: { id }, select: { title: true, description: true } });
+/**
+ * Link previews for shared galleries (Facebook, WhatsApp, X…): the shared
+ * photo (?photo=<id>), else the cover, else the first photo.
+ */
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const [{ id }, { photo }] = await Promise.all([params, searchParams]);
+  const g = await db.gallery.findUnique({
+    where: { id },
+    select: { title: true, description: true, coverUrl: true, photos: { orderBy: { order: "asc" }, take: 1, select: { fullUrl: true } } },
+  });
   if (!g) return { title: "Galeri — Techlympics" };
-  return { title: `${g.title} — Techlympics`, description: g.description ?? undefined };
+  const shared = photo
+    ? await db.galleryPhoto.findFirst({ where: { id: photo, galleryId: id }, select: { fullUrl: true, description: true } })
+    : null;
+  const image = shared?.fullUrl ?? g.coverUrl ?? g.photos[0]?.fullUrl;
+  const title = `${g.title} — Techlympics`;
+  const description = shared?.description ?? g.description ?? "Galeri foto Malaysia Techlympics";
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+  return {
+    title, description,
+    ...(base && { metadataBase: new URL(base) }),
+    openGraph: {
+      title, description, type: "article", siteName: "Malaysia Techlympics",
+      url: `/gallery/${id}${shared ? `?photo=${photo}` : ""}`,
+      ...(image && { images: [{ url: image }] }),
+    },
+    twitter: { card: image ? "summary_large_image" : "summary", title, description, ...(image && { images: [image] }) },
+  };
 }
 
-export default async function GalleryDetailPage({ params }: Props) {
-  const { locale, id } = await params;
+export default async function GalleryDetailPage({ params, searchParams }: Props) {
+  const [{ locale, id }, { photo: sharedPhotoId }] = await Promise.all([params, searchParams]);
 
   const [gallery, t] = await Promise.all([
     db.gallery.findUnique({
@@ -72,6 +98,7 @@ export default async function GalleryDetailPage({ params }: Props) {
           <GalleryPhotoGrid
             photos={gallery.photos.map((p) => ({ id: p.id, thumbUrl: p.thumbUrl, fullUrl: p.fullUrl, description: p.description ?? null }))}
             galleryTitle={gallery.title}
+            initialPhotoId={sharedPhotoId}
           />
         </div>
       </main>

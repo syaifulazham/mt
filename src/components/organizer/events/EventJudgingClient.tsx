@@ -14,6 +14,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { cn } from "@/lib/utils";
 import type { EventJudgingProgress, JudgingRow } from "@/lib/judgingStatus";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
+import { JudgingSetupPanel } from "@/components/organizer/judging/JudgingSetupPanel";
+import type { DuelConfig } from "@/lib/duel";
 import { JudgingStatusTable, STATUS_CHIP, applyRowChange, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
 
 /** Event scopes whose national row reads "Kebangsaan" and whose state rows start hidden. */
@@ -52,6 +54,9 @@ type CompetitionBlock = JudgingState & {
   };
   judgingTemplates: AssignedTemplate[];
   judgingTasks: TaskItem[];
+  /** "SCORE" or "DUEL" (src/lib/duel.ts). */
+  judgingMethod: string;
+  duelConfig: unknown;
   /** ACTIVE teams entered in the event for this competition. */
   teamCount: number;
   /** Judging table rows: "Semua" + each state with teams. */
@@ -254,7 +259,7 @@ function TaskRow({
 
 function CompetitionCard({
   ec, isExpanded, event, canWrite: canWriteRole, isSuperAdmin, showStates,
-  onToggle, onCreateTask, onTaskDeleted, onStatusChange, onJudgingChanged, onTaskReopened,
+  onToggle, onCreateTask, onTaskDeleted, onStatusChange, onJudgingChanged, onTaskReopened, onSetupChanged,
 }: {
   ec: CompetitionBlock;
   /** Per-state rows in the judging table (always on except when toggled off for NATIONAL events). */
@@ -269,6 +274,7 @@ function CompetitionCard({
   onStatusChange: (ecId: string, taskId: string, status: "ACTIVE" | "CLOSED") => void;
   onJudgingChanged: (ecId: string, stateId: string | null, judging: JudgingState) => void;
   onTaskReopened: (ecId: string, taskId: string) => void;
+  onSetupChanged: (ecId: string, patch: Partial<CompetitionBlock>) => void;
 }) {
   // Tasks are frozen once judging is announced complete (the API refuses too).
   const locked   = ec.judgingStatus !== "OPEN";
@@ -297,7 +303,9 @@ function CompetitionCard({
           </p>
           <p className="text-xs text-zinc-400 mt-0.5">
             {ec.competition.participationType}
-            {" · "}{ec.judgingTemplates.length} template · {ec.judgingTasks.length} tugas
+            {ec.judgingMethod === "DUEL"
+              ? <> · <span className="font-semibold text-rose-600">Duel</span></>
+              : <>{" · "}{ec.judgingTemplates.length} template · {ec.judgingTasks.length} tugas</>}
           </p>
         </div>
         {isExpanded
@@ -308,13 +316,24 @@ function CompetitionCard({
 
       {isExpanded && (
         <div className="border-t divide-y">
+          <JudgingSetupPanel
+            eventId={event.id}
+            eventSlug={event.slug}
+            ecId={ec.id}
+            canWrite={canWrite}
+            method={ec.judgingMethod}
+            duelConfig={ec.duelConfig}
+            templates={ec.judgingTemplates.map(t => t.judgingTemplate)}
+            templateTaskCount={Object.fromEntries(tasksByTemplate.map(({ template, tasks }) => [template.id, tasks.length]))}
+            onTemplatesChange={templates => onSetupChanged(ec.id, { judgingTemplates: templates.map(judgingTemplate => ({ judgingTemplate })) })}
+            onMethodChange={(judgingMethod: string, duelConfig: DuelConfig) => onSetupChanged(ec.id, { judgingMethod, duelConfig })}
+          />
           {ec.judgingTemplates.length === 0 ? (
-            <div className="px-5 py-6 text-center text-sm text-zinc-400">
-              Tiada template penghakiman ditetapkan.{" "}
-              <Link href="/organizer/events" className="text-violet-500 hover:underline">
-                Tetapkan template
-              </Link>
-            </div>
+            ec.judgingMethod !== "DUEL" && (
+              <div className="px-5 py-5 text-center text-sm text-zinc-400">
+                Tiada template penghakiman ditetapkan. Tambah templat di atas untuk mencipta tugas.
+              </div>
+            )
           ) : (
             tasksByTemplate.map(({ template, tasks }) => (
               <div key={template.id}>
@@ -553,8 +572,13 @@ export function EventJudgingClient({
     }));
   }
 
+  function handleSetupChanged(ecId: string, patch: Partial<CompetitionBlock>) {
+    setCompetitions(prev => prev.map(ec => ec.id === ecId ? { ...ec, ...patch } : ec));
+  }
+
   const cardProps = {
     event, canWrite, isSuperAdmin, showStates,
+    onSetupChanged: handleSetupChanged,
     onJudgingChanged: handleJudgingChanged,
     onTaskReopened: handleTaskReopened,
     onToggle: toggleExpand,

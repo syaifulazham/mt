@@ -436,12 +436,12 @@ model Participant {
  * upstream via ?upsert=true.
  */
 model ParticipantQuizzlyAccess {
-  id                 String   @id @default(cuid())
-  participantId      String   @unique
+  id                   String   @id @default(cuid())
+  participantId        String   @unique
   quizzlyParticipantId String
-  personalId         String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  personalId           String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
@@ -555,32 +555,32 @@ enum ParticipationPolicy {
 }
 
 model Event {
-  id                        String              @id @default(cuid())
-  name                      String
-  slug                      String              @unique
-  description               String?
-  scope                     EventScope          @default(NATIONAL)
-  stateId                   String?
-  zoneId                    String?
-  venue                     String?
-  address                   String?
-  city                      String?
-  latitude                  Float?
-  longitude                 Float?
-  startDate                 DateTime?
-  endDate                   DateTime?
-  registrationStart         DateTime?
-  registrationEnd           DateTime?
-  status                    EventStatus         @default(DRAFT)
-  needManagerAcceptance     Boolean             @default(false)
-  walkInUniqueParticipation Boolean             @default(false)
+  id                         String              @id @default(cuid())
+  name                       String
+  slug                       String              @unique
+  description                String?
+  scope                      EventScope          @default(NATIONAL)
+  stateId                    String?
+  zoneId                     String?
+  venue                      String?
+  address                    String?
+  city                       String?
+  latitude                   Float?
+  longitude                  Float?
+  startDate                  DateTime?
+  endDate                    DateTime?
+  registrationStart          DateTime?
+  registrationEnd            DateTime?
+  status                     EventStatus         @default(DRAFT)
+  needManagerAcceptance      Boolean             @default(false)
+  walkInUniqueParticipation  Boolean             @default(false)
   // Pre-registered path: may one participant enter several competitions of this
   // event? false = "Penyertaan Tunggal Sahaja" (the long-standing rule).
-  allowMultipleParticipation Boolean            @default(false)
-  participationPolicy       ParticipationPolicy @default(ALL)
-  winnerExclusionRank       Int?
-  createdAt                 DateTime            @default(now())
-  updatedAt                 DateTime            @updatedAt
+  allowMultipleParticipation Boolean             @default(false)
+  participationPolicy        ParticipationPolicy @default(ALL)
+  winnerExclusionRank        Int?
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
 
   state                  State?                   @relation(fields: [stateId], references: [id])
   zone                   Zone?                    @relation(fields: [zoneId], references: [id])
@@ -589,15 +589,17 @@ model Event {
   eventCompetitions      EventCompetition[]
   walkInCompetitions     EventWalkInCompetition[]
   walkInEndpoints        WalkInEndpoint[]
+  mediaEndpoints         MediaEndpoint[]
   walkInFormEndpoints    WalkInFormEndpoint[]
   walkInJudgingEndpoints WalkInJudgingEndpoint[]
   teamEvents             TeamEvent[]
   resultsEndpoints       ResultsEndpoint[]
+  duelDisplayEndpoints   DuelDisplayEndpoint[]
   medalTallyEndpoints    MedalTallyEndpoint[]
   announcementEndpoints  AnnouncementEndpoint[]
   announcementEntries    AnnouncementEntry[]
   /// How many places the MC boards announce per result (5 = ranks 1–5).
-  announcementMaxPlaces  Int                 @default(3)
+  announcementMaxPlaces  Int                      @default(3)
   attendanceEndpoints    AttendanceEndpoint[]
 
   @@map("events")
@@ -667,39 +669,43 @@ model CompetitionDoc {
 }
 
 model EventCompetition {
-  id                  String   @id @default(cuid())
-  eventId             String
-  competitionId       String
-  picName             String?
-  picContact          String?
-  maxTeams            Int      @default(0)
-  eptimEduCourseId    String?
-  eptimEduCourseTitle String?
+  id                      String    @id @default(cuid())
+  eventId                 String
+  competitionId           String
+  picName                 String?
+  picContact              String?
+  maxTeams                Int       @default(0)
+  eptimEduCourseId        String?
+  eptimEduCourseTitle     String?
   eptimCsiCompetitionId   String?
   eptimCsiCompetitionName String?
   eptimCsiCases           Json? // [{ id, slug, title }] — cases picked from the CSI competition
-  quizzlySessionId    String?
-  quizzlySessionTitle String?
-  quizzlyAssignBy     String? // "target_group" | "grade" — how quizzes are matched to participants
-  quizzlyQuizMap      Json? // [{ targetGroupId, targetGroupName, grade, quizId, quizTitle }] — grade is null in target_group mode
-  fc1EventId          String? // Viblock event the picks came from — EPTIMFC1_API_KEY decides it, so a rotated key is detectable
-  fc1Challenges       Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim FC-1 event
-  droneEventId        String? // Eptim Drone event the picks came from — EPTIMDRONE_API_KEY decides it
-  droneChallenges     Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim Drone event
+  quizzlySessionId        String?
+  quizzlySessionTitle     String?
+  quizzlyAssignBy         String? // "target_group" | "grade" — how quizzes are matched to participants
+  quizzlyQuizMap          Json? // [{ targetGroupId, targetGroupName, grade, quizId, quizTitle }] — grade is null in target_group mode
+  fc1EventId              String? // Viblock event the picks came from — EPTIMFC1_API_KEY decides it, so a rotated key is detectable
+  fc1Challenges           Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim FC-1 event
+  droneEventId            String? // Eptim Drone event the picks came from — EPTIMDRONE_API_KEY decides it
+  droneChallenges         Json? // [{ id, name, challenge_mode, status }] — challenges picked from the Eptim Drone event
   // Judging lifecycle: OPEN → COMPLETED (announced complete; judge forms locked)
   // → VERIFIED (results confirmed by a Super Admin). Only a Super Admin reopens.
-  judgingStatus       String    @default("OPEN")
-  judgingCompletedAt  DateTime?
-  judgingCompletedBy  String?
-  judgingVerifiedAt   DateTime?
-  judgingVerifiedBy   String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  judgingStatus           String    @default("OPEN")
+  judgingCompletedAt      DateTime?
+  judgingCompletedBy      String?
+  judgingVerifiedAt       DateTime?
+  judgingVerifiedBy       String?
+  // "SCORE" (judging templates) or "DUEL" (drawn sessions ranked round by round, src/lib/duel.ts)
+  judgingMethod           String    @default("SCORE")
+  duelConfig              Json? // { perSession, advance, arenas, durationSec, breakSec }
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   event            Event                             @relation(fields: [eventId], references: [id], onDelete: Cascade)
   competition      Competition                       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   judgingTemplates EventCompetitionJudgingTemplate[]
   judgingTasks     JudgingTask[]
+  duelRounds       DuelRound[]
 
   @@unique([eventId, competitionId])
   @@map("event_competitions")
@@ -1012,17 +1018,18 @@ model Team {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  competition   Competition      @relation(fields: [competitionId], references: [id])
-  contingent    Contingent       @relation(fields: [contingentId], references: [id])
-  members       TeamMember[]
-  trainers      TeamTrainer[]
-  teamEvents    TeamEvent[]
-  droneAccess   TeamDroneAccess?
-  droneChallenges TeamDroneChallenge[]
-  csiAccess     TeamCsiAccess?
-  judgingScores JudgingScore[]
+  competition           Competition            @relation(fields: [competitionId], references: [id])
+  contingent            Contingent             @relation(fields: [contingentId], references: [id])
+  members               TeamMember[]
+  trainers              TeamTrainer[]
+  teamEvents            TeamEvent[]
+  droneAccess           TeamDroneAccess?
+  droneChallenges       TeamDroneChallenge[]
+  csiAccess             TeamCsiAccess?
+  judgingScores         JudgingScore[]
   walkInRegistrations   WalkInRegistration[]
   walkInFormSubmissions WalkInFormSubmission[]
+  duelEntries           DuelEntry[]
 
   @@map("teams")
 }
@@ -1364,16 +1371,43 @@ model KnowledgeBase {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Gallery {
-  id          String         @id @default(cuid())
-  title       String
-  year        Int
-  description String?        @db.Text
-  coverUrl    String?
-  photos      GalleryPhoto[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  title           String
+  year            Int
+  description     String?        @db.Text
+  coverUrl        String?
+  /// Set when the gallery was created by the media team through a media
+  /// endpoint (/media/<slug>); they see and add to only their own galleries.
+  mediaEndpointId String?
+  photos          GalleryPhoto[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
+  mediaEndpoint MediaEndpoint? @relation(fields: [mediaEndpointId], references: [id], onDelete: SetNull)
+
+  @@index([mediaEndpointId])
   @@map("galleries")
+}
+
+/// A passcode-protected page (/media/<routeSlug>) for an event's media team to
+/// create galleries and upload photos. Created by SUPER_ADMIN.
+model MediaEndpoint {
+  id         String    @id @default(cuid())
+  eventId    String
+  routeSlug  String    @unique
+  passcode   String
+  label      String?
+  active     Boolean   @default(true)
+  createdBy  String?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  galleries Gallery[]
+
+  @@index([eventId])
+  @@map("media_endpoints")
 }
 
 model GalleryPhoto {
@@ -1484,7 +1518,7 @@ model Announcement {
 model ParticipantFc1Access {
   id            String   @id @default(cuid())
   participantId String   @unique
-  fc1UserId     String   // the `userid` sent to FC-1 (IC digits)
+  fc1UserId     String // the `userid` sent to FC-1 (IC digits)
   fc1Password   String
   createdAt     DateTime @default(now())
 
@@ -1918,4 +1952,102 @@ enum CertRecipientType {
   CONTINGENT
   MANAGER
   OTHER
+}
+
+// ── Duel competitions (Robot Tempur, Robot Sumo…) ─────────────────────────────
+// Teams are drawn into sessions; each session is ranked and the top ranks
+// advance to the next round until a single final. Points per session:
+// 1st = n, …, last = 1 (n = teams in the session). See src/lib/duel.ts.
+
+model DuelRound {
+  id                 String    @id @default(cuid())
+  eventCompetitionId String
+  // "" for a national bracket; the state id when the duel scope is STATE
+  // (each state runs its own rounds and standings).
+  groupKey           String    @default("")
+  number             Int
+  isFinal            Boolean   @default(false)
+  status             String    @default("DRAFT") // DRAFT | CONFIRMED | DONE
+  split              String    @default("even") // even | fill
+  noSameContingent   Boolean   @default(false)
+  noSameState        Boolean   @default(false)
+  startAt            DateTime?
+  confirmedAt        DateTime?
+  confirmedBy        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+  sessions         DuelSession[]
+
+  @@unique([eventCompetitionId, groupKey, number])
+  @@map("duel_rounds")
+}
+
+model DuelSession {
+  id          String    @id @default(cuid())
+  roundId     String
+  number      Int
+  label       String
+  arena       Int       @default(1)
+  wave        Int       @default(0)
+  scheduledAt DateTime?
+  status      String    @default("PENDING") // PENDING | RUNNING | PAUSED | DONE
+  startedAt   DateTime?
+  pausedAt    DateTime?
+  pausedMs    Int       @default(0)
+  endedAt     DateTime?
+  // Live video from the media team's phone (Cloudflare Stream, WebRTC). The
+  // publish URL holds a secret: it only goes to the media endpoint.
+  streamInputId     String?
+  streamPublishUrl  String?
+  streamPlaybackUrl String?
+  streamHeartbeatAt DateTime? // the camera page pings while broadcasting
+  // Replay recorded on the phone and uploaded to Cloudflare Stream.
+  replayVideoId     String?
+  replayStatus      String? // UPLOADING | READY | FAILED
+  replayUrl         String? // Stream watch page
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  round   DuelRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  entries DuelEntry[]
+
+  @@index([roundId])
+  @@map("duel_sessions")
+}
+
+model DuelEntry {
+  id        String  @id @default(cuid())
+  sessionId String
+  teamId    String
+  slot      Int     @default(0)
+  rank      Int?
+  points    Int?
+  advanced  Boolean @default(false)
+
+  session DuelSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  team    Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, teamId])
+  @@index([teamId])
+  @@map("duel_entries")
+}
+
+model DuelDisplayEndpoint {
+  id             String   @id @default(cuid())
+  eventId        String
+  routeSlug      String   @unique
+  passcode       String?
+  label          String?
+  kind           String   @default("SCHEDULE") // SCHEDULE | LIVE
+  competitionIds String[] // event competition ids; empty = every duel competition
+  status         String   @default("ACTIVE") // ACTIVE | CLOSED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("duel_display_endpoints")
 }

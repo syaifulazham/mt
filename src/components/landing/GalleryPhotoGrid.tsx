@@ -6,9 +6,16 @@ import { Images, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 type Photo = { id: string; thumbUrl: string; fullUrl: string; description: string | null };
 
-export function GalleryPhotoGrid({ photos, galleryTitle }: { photos: Photo[]; galleryTitle: string }) {
+export function GalleryPhotoGrid({ photos, galleryTitle, initialPhotoId }: {
+  photos: Photo[]; galleryTitle: string;
+  /** A shared photo link (?photo=<id>) opens straight to that photo. */
+  initialPhotoId?: string;
+}) {
   const t = useTranslations("gallery");
-  const [idx, setIdx] = useState<number | null>(null);
+  const [idx, setIdx] = useState<number | null>(() => {
+    const i = initialPhotoId ? photos.findIndex((p) => p.id === initialPhotoId) : -1;
+    return i >= 0 ? i : null;
+  });
 
   const open  = (i: number) => setIdx(i);
   const close = () => setIdx(null);

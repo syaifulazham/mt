@@ -26,7 +26,9 @@ const isAnnounceRoute = createRouteMatcher(["/announce(.*)"]);
 const isMedalsRoute   = createRouteMatcher(["/medals(.*)"]);
 const isWalkInRoute       = createRouteMatcher(["/walkin(.*)"]);
 const isBorangRoute       = createRouteMatcher(["/borang(.*)"]);
+const isMediaRoute        = createRouteMatcher(["/media(.*)"]);
 const isAttendanceRoute   = createRouteMatcher(["/attendance(.*)"]);
+const isDuelRoute         = createRouteMatcher(["/duel(.*)"]);
 // Auth.js uses /api/auth/* internally — must be fully public
 const isAuthJsInternalRoute = createRouteMatcher(["/api/auth(.*)"]);
 
@@ -122,14 +124,16 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
   // Skip API routes — no locale handling needed
   if (pathname.startsWith("/api/")) return NextResponse.next();
 
-  // Public judging board / results / announcer board / medal tally / walk-in counter / public form — no auth, no locale rewrite
+  // Public judging board / results / announcer board / medal tally / walk-in counter / public form / media team — no auth, no locale rewrite
   if (isJudgingRoute(req))    return NextResponse.next();
   if (isResultsRoute(req))    return NextResponse.next();
   if (isAnnounceRoute(req))   return NextResponse.next();
   if (isMedalsRoute(req))     return NextResponse.next();
   if (isWalkInRoute(req))     return NextResponse.next();
   if (isBorangRoute(req))     return NextResponse.next();
+  if (isMediaRoute(req))      return NextResponse.next();
   if (isAttendanceRoute(req)) return NextResponse.next();
+  if (isDuelRoute(req))       return NextResponse.next();
 
   // Run next-intl locale routing (handles locale prefix redirects + detection)
   return handleI18nRouting(req);

@@ -13,7 +13,7 @@ export default async function GalleriesPage() {
   return (
     <OrganizerShell userName={session.name} role={session.role}>
       <div className="p-6 max-w-6xl mx-auto">
-        <GalleriesClient />
+        <GalleriesClient canShare={session.role === "SUPER_ADMIN"} />
       </div>
     </OrganizerShell>
   );

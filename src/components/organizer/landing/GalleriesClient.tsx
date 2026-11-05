@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { ShareMenu } from "./ShareMenu";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -329,7 +330,9 @@ function GalleryDetail({
   gallery: initial,
   onBack,
   onUpdated,
+  canShare,
 }: {
+  canShare: boolean;
   gallery: Gallery;
   onBack: () => void;
   onUpdated: (g: Gallery) => void;
@@ -410,6 +413,10 @@ function GalleryDetail({
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
+          {canShare && photos.length > 0 && (
+            <ShareMenu path={`/gallery/${gallery.id}`} title={gallery.title} label="Kongsi galeri"
+              imageUrl={(gallery.coverUrl && photos.find(p => p.thumbUrl === gallery.coverUrl)?.fullUrl) || photos[0]?.fullUrl} />
+          )}
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit Info
           </Button>
@@ -467,6 +474,12 @@ function GalleryDetail({
                         ? <StarOff className="h-4 w-4 text-amber-500" />
                         : <Star    className="h-4 w-4 text-amber-500" />}
                     </button>
+                    {canShare && photo.id && !dirty && (
+                      <ShareMenu iconOnly path={`/gallery/${gallery.id}?photo=${photo.id}`}
+                        title={photo.description ? `${photo.description} — ${gallery.title}` : gallery.title}
+                        imageUrl={photo.fullUrl}
+                        className="h-8 w-8 rounded-full bg-white/90 hover:bg-white flex items-center justify-center transition-colors text-sky-600" />
+                    )}
                     <button
                       type="button"
                       title="Remove photo"
@@ -523,7 +536,8 @@ function GalleryDetail({
 
 // ── Gallery list ──────────────────────────────────────────────────────────────
 
-export function GalleriesClient() {
+/** `canShare`: SUPER_ADMIN may share galleries and photos to social media. */
+export function GalleriesClient({ canShare = false }: { canShare?: boolean }) {
   const [galleries, setGalleries]   = useState<Gallery[]>([]);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState<Gallery | null>(null);
@@ -535,7 +549,12 @@ export function GalleriesClient() {
     setLoading(true);
     const res  = await fetch("/api/v2/organizer/landing/galleries");
     const data = await res.json();
-    setGalleries(Array.isArray(data) ? data : []);
+    const list: Gallery[] = Array.isArray(data) ? data : [];
+    setGalleries(list);
+    // ?gallery=<id> opens that gallery (linked from Event → Media).
+    const want = new URLSearchParams(window.location.search).get("gallery");
+    const hit = want ? list.find((g) => g.id === want) : undefined;
+    if (hit) setSelected(hit);
     setLoading(false);
   }, []);
 
@@ -567,6 +586,7 @@ export function GalleriesClient() {
   if (selected) {
     return (
       <GalleryDetail
+        canShare={canShare}
         gallery={selected}
         onBack={() => setSelected(null)}
         onUpdated={handleUpdated}
