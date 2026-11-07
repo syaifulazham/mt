@@ -166,7 +166,7 @@ function GreetingOverlay({
       <style>{GLOBAL_CSS}</style>
       <TechBg />
 
-      <div className="relative z-10 flex flex-col items-center gap-6 px-8 text-center at-pop-in">
+      <div className="relative z-10 flex w-full max-w-2xl flex-col items-center gap-5 px-4 text-center sm:gap-6 sm:px-8 at-pop-in">
         {/* Logo */}
         <TechLogo />
 
@@ -179,7 +179,7 @@ function GreetingOverlay({
           <img
             src={result.logoUrl}
             alt={result.contingentName}
-            className="h-20 w-20 rounded-full object-contain bg-white/10 p-1.5 shadow-xl at-glow"
+            className="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-contain bg-white/10 p-1.5 shadow-xl at-glow"
           />
         )}
 
@@ -189,7 +189,7 @@ function GreetingOverlay({
             Selamat Datang
           </p>
           <h1
-            className="text-white font-extrabold text-4xl md:text-5xl leading-tight drop-shadow-2xl max-w-2xl"
+            className="text-white font-extrabold text-3xl sm:text-4xl md:text-5xl leading-tight drop-shadow-2xl max-w-2xl break-words"
             style={{ textShadow: "0 2px 40px rgba(2,136,209,.5)" }}
           >
             {result.contingentName}
@@ -204,7 +204,7 @@ function GreetingOverlay({
         </div>
 
         {/* Stats */}
-        <div className="flex items-stretch gap-3 mt-1">
+        <div className="grid w-full max-w-md grid-cols-3 gap-2 sm:gap-3 mt-1">
           {[
             { label: "Pasukan",   value: result.teams },
             { label: "Peserta",   value: result.participants },
@@ -212,21 +212,21 @@ function GreetingOverlay({
           ].map(({ label, value }) => (
             <div
               key={label}
-              className="flex flex-col items-center justify-center gap-1 rounded-2xl px-7 py-5 min-w-[100px]"
+              className="flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-4 sm:px-7 sm:py-5"
               style={{
                 background: "rgba(255,255,255,0.08)",
                 border: "1px solid rgba(255,255,255,0.12)",
                 backdropFilter: "blur(12px)",
               }}
             >
-              <span className="text-white font-extrabold text-5xl tabular-nums leading-none">{value}</span>
+              <span className="text-white font-extrabold text-4xl sm:text-5xl tabular-nums leading-none">{value}</span>
               <span className="text-white/55 text-xs font-semibold mt-0.5">{label}</span>
             </div>
           ))}
         </div>
 
         {/* Countdown */}
-        <div className="w-64 space-y-2 mt-2">
+        <div className="w-full max-w-xs space-y-2 mt-2">
           <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.12)" }}>
             <div
               className="h-full rounded-full"
@@ -240,7 +240,7 @@ function GreetingOverlay({
           <button
             type="button"
             onClick={onDone}
-            className="w-full flex items-center justify-center gap-1.5 text-white/40 hover:text-white/70 text-xs transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-white/50 hover:text-white/70 text-sm transition-colors"
           >
             <X className="h-3 w-3" /> Tutup ({secs}s)
           </button>
@@ -308,7 +308,7 @@ function CameraScanner({ onScan, onError, hint = "Imbas QR Kontingen" }: {
         <div id={QR_DIV_ID} />
         {/* Scan frame overlay */}
         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-3">
-          <div className="relative w-52 h-52" style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)" }}>
+          <div className="relative aspect-square w-[62%] max-w-[13rem]" style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)" }}>
             <span className="absolute top-0 left-0 block w-10 h-10 border-t-[3px] border-l-[3px] rounded-tl"
               style={{ borderColor: B.gold }} />
             <span className="absolute top-0 right-0 block w-10 h-10 border-t-[3px] border-r-[3px] rounded-tr"
@@ -337,8 +337,8 @@ function CameraScanner({ onScan, onError, hint = "Imbas QR Kontingen" }: {
         <button
           type="button"
           onClick={() => { setManuallyOff(true); stopScanner(); }}
-          className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold"
-          style={{ background: "rgba(255,255,255,.07)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.12)" }}
+          className="w-full flex items-center justify-center gap-2 rounded-xl h-12 text-sm font-semibold"
+          style={{ background: "rgba(255,255,255,.07)", color: "rgba(255,255,255,.5)", border: "1px solid rgba(255,255,255,.12)" }}
         >
           <CameraOff className="h-4 w-4" /> Hentikan kamera
         </button>
@@ -346,7 +346,7 @@ function CameraScanner({ onScan, onError, hint = "Imbas QR Kontingen" }: {
         <button
           type="button"
           onClick={() => { setManuallyOff(false); startScanner(); }}
-          className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all hover:scale-[1.02] active:scale-[.98]"
+          className="w-full flex items-center justify-center gap-2 rounded-xl h-12 text-base font-bold transition-all hover:scale-[1.02] active:scale-[.98]"
           style={{ background: `linear-gradient(90deg, ${B.navy}, #1565c0)`, color: "white" }}
         >
           <Camera className="h-4 w-4" />
@@ -470,7 +470,8 @@ function Pill({
     <button
       type="button"
       onClick={onClick}
-      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition-all"
+      aria-pressed={active}
+      className="min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 rounded-xl px-1 py-2 sm:px-4 sm:py-2.5 text-[11px] leading-tight sm:text-sm sm:whitespace-nowrap font-semibold text-center transition-all"
       style={
         active
           ? { background: activeBackground ?? "rgba(255,255,255,0.14)", color: "white", border: "1px solid rgba(255,255,255,.2)" }
@@ -573,7 +574,8 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
           value={q}
           onChange={(e) => { setQ(e.target.value); search(e.target.value); }}
           placeholder="Cari kontingen atau pasukan…"
-          className="w-full h-11 rounded-xl pl-10 pr-10 text-sm text-white placeholder-white/20 focus:outline-none"
+          enterKeyHint="search"
+          className="w-full h-12 rounded-xl pl-10 pr-10 text-base sm:text-sm text-white placeholder-white/25 focus:outline-none"
           style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.12)" }}
         />
         {loading && (
@@ -606,21 +608,21 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
               }}
             >
               {/* Contingent row */}
-              <div className="flex items-center gap-3 px-4 py-3">
+              <div className="flex flex-col gap-2.5 px-3.5 py-3 sm:flex-row sm:items-center sm:gap-3 sm:px-4">
                 <button
                   type="button"
                   onClick={() => setExpanded(open ? null : c.id)}
-                  className="flex-1 flex items-center gap-3 text-left min-w-0"
+                  className="flex-1 flex items-start sm:items-center gap-2.5 sm:gap-3 text-left min-w-0"
                 >
                   <ChevronRight
-                    className={`h-4 w-4 shrink-0 transition-transform`}
+                    className={`h-4 w-4 shrink-0 mt-0.5 sm:mt-0 transition-transform`}
                     style={{
                       color: "rgba(255,255,255,.3)",
                       transform: open ? "rotate(90deg)" : "rotate(0deg)",
                     }}
                   />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">
+                    <p className="text-sm font-semibold text-white line-clamp-2 sm:truncate">
                       {c.name}
                     </p>
                     {c.shortName && (
@@ -633,19 +635,20 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
                 </button>
 
                 {attended ? (
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center justify-between gap-2 shrink-0 pl-6 sm:pl-0 sm:justify-start">
                     <div className="flex items-center gap-1 text-xs font-semibold" style={{ color: "#34d399" }}>
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      {fmtTime(c.attendedAt!)}
+                      Hadir · {fmtTime(c.attendedAt!)}
                     </div>
                     <button
                       type="button"
                       onClick={() => undoContingent(c.id)}
                       disabled={!!logging}
-                      className="text-xs px-2 py-1 rounded-lg disabled:opacity-50 transition-all"
-                      style={{ background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.1)" }}
+                      aria-label="Batal kehadiran kontingen"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-50 transition-all"
+                      style={{ background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.5)", border: "1px solid rgba(255,255,255,.1)" }}
                     >
-                      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                     </button>
                   </div>
                 ) : (
@@ -653,7 +656,7 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
                     type="button"
                     onClick={() => logContingent(c.id)}
                     disabled={!!logging}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
+                    className="shrink-0 flex items-center justify-center gap-1.5 h-11 sm:h-auto px-3 sm:py-1.5 rounded-xl text-sm sm:text-xs font-bold disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
                     style={{ background: `linear-gradient(90deg, ${B.navy}, #1565c0)`, color: "white" }}
                   >
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users2 className="h-3.5 w-3.5" />}
@@ -671,11 +674,11 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
                     return (
                       <div
                         key={t.id}
-                        className="flex items-center gap-3 px-6 py-2.5"
+                        className="flex items-center gap-3 pl-9 pr-3.5 sm:px-6 py-2.5"
                         style={{ background: tAttended ? "rgba(16,185,129,.05)" : "rgba(0,0,0,.1)" }}
                       >
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white/80 truncate">{t.name}</p>
+                          <p className="text-sm text-white/80 line-clamp-2 sm:truncate">{t.name}</p>
                           <p className="text-[10px]" style={{ color: "rgba(255,255,255,.3)" }}>{t.members} ahli</p>
                         </div>
                         {tAttended ? (
@@ -687,10 +690,11 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
                               type="button"
                               onClick={() => undoTeam(t.id)}
                               disabled={!!logging}
-                              className="p-1 rounded disabled:opacity-50"
-                              style={{ color: "rgba(255,255,255,.3)" }}
+                              aria-label="Batal kehadiran pasukan"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-50"
+                              style={{ color: "rgba(255,255,255,.45)" }}
                             >
-                              {tBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                              {tBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                             </button>
                           </div>
                         ) : (
@@ -698,7 +702,7 @@ function ManualTab({ code, passcode }: { code: string; passcode: string }) {
                             type="button"
                             onClick={() => logTeam(t.id)}
                             disabled={!!logging}
-                            className="shrink-0 text-xs px-2.5 py-1 rounded-lg font-semibold disabled:opacity-50 transition-all"
+                            className="shrink-0 text-xs px-3 h-9 rounded-lg font-semibold disabled:opacity-50 transition-all"
                             style={{ background: "rgba(2,136,209,.2)", color: "#7dd3fc", border: "1px solid rgba(2,136,209,.3)" }}
                           >
                             {tBusy ? <Loader2 className="h-3 w-3 animate-spin inline" /> : "Daftar Pasukan"}
@@ -747,6 +751,14 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
   const [err, setErr]         = useState("");
   const [undoing, setUndoing] = useState(false);
   const [scanKey, setScanKey] = useState(0);
+  // Camera scanning or manual search; remembered on this device.
+  const [mode, setModeState] = useState<"camera" | "manual">(() => {
+    try { return localStorage.getItem("at_comp_mode") === "manual" ? "manual" : "camera"; } catch { return "camera"; }
+  });
+  const setMode = (m: "camera" | "manual") => {
+    setModeState(m);
+    try { localStorage.setItem("at_comp_mode", m); } catch { /* storage blocked */ }
+  };
 
   const finish = useCallback(() => {
     setResult(null); setMulti(null); setErr(""); setScanKey(k => k + 1);
@@ -813,8 +825,36 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
   const fmtTime = (iso: string) =>
     new Date(iso).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
+  const toggle = (
+    <div className="grid grid-cols-2 gap-1 rounded-xl p-1" style={{ background: "rgba(0,0,0,.25)", border: "1px solid rgba(255,255,255,.08)" }}>
+      {([["camera", "Imbas kamera", Camera], ["manual", "Carian manual", Search]] as const).map(([m, label, Icon]) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={mode === m}
+          onClick={() => { if (mode !== m) { finish(); setMode(m); } }}
+          className="flex items-center justify-center gap-1.5 h-10 rounded-lg text-sm font-semibold transition-all"
+          style={mode === m
+            ? { background: "rgba(16,100,50,.6)", color: "white", border: "1px solid rgba(52,211,153,.3)" }
+            : { color: "rgba(255,255,255,.45)", border: "1px solid transparent" }}
+        >
+          <Icon className="h-4 w-4" /> {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === "manual") return (
+    <div className="space-y-3">
+      {toggle}
+      <ParticipantSearch code={code} passcode={passcode} />
+    </div>
+  );
+
+  let content: React.ReactNode;
+
   /* ── Recording in progress ── */
-  if (busy) return (
+  if (busy) content = (
     <div className="flex flex-col items-center gap-3 py-10">
       <Loader2 className="h-8 w-8 animate-spin" style={{ color: B.gold }} />
       <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,.5)" }}>
@@ -824,7 +864,7 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
   );
 
   /* ── Error ── */
-  if (err) return (
+  else if (err) content = (
     <div
       className="rounded-2xl px-5 py-5 text-center space-y-4 border"
       style={{ background: "rgba(220,38,38,.1)", borderColor: "rgba(220,38,38,.25)" }}
@@ -843,7 +883,7 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
   );
 
   /* ── Multi-competition selection ── */
-  if (multi) return (
+  else if (multi) content = (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-white">
         {multi.participantName} mendaftar dalam <span style={{ color: B.gold }}>{multi.teamEvents.length} pertandingan</span>.
@@ -854,7 +894,7 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
           key={t.teamEventId}
           type="button"
           onClick={() => submit(multi.participantId, t.teamEventId)}
-          className="w-full text-left rounded-2xl px-4 py-3 border transition-all hover:scale-[1.01] active:scale-[.99]"
+          className="w-full text-left rounded-2xl px-4 py-3.5 border transition-all hover:scale-[1.01] active:scale-[.99]"
           style={{ background: "rgba(255,255,255,.05)", borderColor: "rgba(255,255,255,.12)" }}
         >
           <p className="text-[11px] font-bold tracking-widest uppercase" style={{ color: B.gold }}>
@@ -867,8 +907,8 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
       <button
         type="button"
         onClick={finish}
-        className="w-full py-2 rounded-xl text-xs font-semibold"
-        style={{ background: "rgba(255,255,255,.06)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.1)" }}
+        className="w-full h-11 rounded-xl text-sm font-semibold"
+        style={{ background: "rgba(255,255,255,.06)", color: "rgba(255,255,255,.5)", border: "1px solid rgba(255,255,255,.1)" }}
       >
         Batal
       </button>
@@ -876,7 +916,7 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
   );
 
   /* ── Result card ── */
-  if (result) return (
+  else if (result) content = (
     <div
       className="rounded-2xl border overflow-hidden at-pop-in"
       style={{
@@ -884,7 +924,7 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
         borderColor: result.alreadyAttended ? "rgba(245,158,11,.3)" : "rgba(16,185,129,.3)",
       }}
     >
-      <div className="p-5 space-y-4">
+      <div className="p-4 sm:p-5 space-y-4">
         {/* Participant */}
         <div className="flex items-start gap-3">
           <div
@@ -919,11 +959,11 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
                 ? result.teammates.join(", ")
                 : "Tiada (individu)" },
           ].map(({ label, value }) => (
-            <div key={label} className="flex gap-3 text-xs">
-              <span className="w-28 shrink-0 font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,.35)" }}>
+            <div key={label} className="flex flex-col gap-0.5 text-xs sm:flex-row sm:gap-3">
+              <span className="sm:w-28 shrink-0 text-[10px] sm:text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,.35)" }}>
                 {label}
               </span>
-              <span className="text-white/85 font-medium">{value}</span>
+              <span className="text-sm sm:text-xs text-white/85 font-medium break-words">{value}</span>
             </div>
           ))}
         </div>
@@ -934,7 +974,7 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
             type="button"
             onClick={undo}
             disabled={undoing}
-            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 h-12 rounded-xl text-xs font-semibold disabled:opacity-50"
             style={{ background: "rgba(255,255,255,.07)", color: "rgba(255,255,255,.45)", border: "1px solid rgba(255,255,255,.12)" }}
           >
             {undoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
@@ -943,7 +983,7 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
           <button
             type="button"
             onClick={finish}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[.98]"
+            className="flex-1 flex items-center justify-center gap-2 px-3 h-12 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[.98]"
             style={{ background: `linear-gradient(90deg, ${B.navy}, #1565c0)`, color: "white" }}
           >
             <Camera className="h-4 w-4" /> Peserta Seterusnya
@@ -954,13 +994,168 @@ function CompetitionTab({ code, passcode }: { code: string; passcode: string }) 
   );
 
   /* ── Idle: camera ── */
-  return (
+  else content = (
     <CameraScanner
       key={scanKey}
       hint="Imbas QR Peserta"
       onScan={(text) => submit(text.trim())}
       onError={(msg) => setErr(msg)}
     />
+  );
+
+  return <div className="space-y-3">{toggle}{content}</div>;
+}
+
+/* ─── Competition counter: manual participant search ─────────────────────── */
+
+type ParticipantRow = {
+  teamEventId: string; participantId: string; name: string; icTail: string | null;
+  teamName: string; competitionCode: string; competitionName: string;
+  contingentName: string; contingentShortName: string | null; state: string | null;
+  attendedAt: string | null;
+};
+
+function ParticipantSearch({ code, passcode }: { code: string; passcode: string }) {
+  const [q, setQ]               = useState("");
+  const [rows, setRows]         = useState<ParticipantRow[]>([]);
+  const [state, setState]       = useState<"idle" | "loading" | "done" | "short">("idle");
+  const [truncated, setTrunc]   = useState(false);
+  const [busy, setBusy]         = useState<string | null>(null);
+  const [err, setErr]           = useState("");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seq = useRef(0);
+  const key = (r: ParticipantRow) => `${r.teamEventId}:${r.participantId}`;
+
+  const search = useCallback((query: string) => {
+    if (timer.current) clearTimeout(timer.current);
+    if (!query.trim()) { setRows([]); setState("idle"); return; }
+    timer.current = setTimeout(async () => {
+      const n = ++seq.current;
+      setState("loading");
+      try {
+        const sp = new URLSearchParams({ passcode, q: query });
+        const res = await fetch(`/api/v2/attendance/${code}/participants?${sp}`);
+        const j = await res.json();
+        if (n !== seq.current) return;
+        setRows(j.rows ?? []); setTrunc(!!j.truncated);
+        setState(j.tooShort ? "short" : "done");
+      } catch { if (n === seq.current) setState("done"); }
+    }, 300);
+  }, [code, passcode]);
+
+  async function mark(r: ParticipantRow, present: boolean) {
+    setBusy(key(r)); setErr("");
+    try {
+      const res = await fetch(`/api/v2/attendance/${code}/participant`, {
+        method: present ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode, participantId: r.participantId, teamEventId: r.teamEventId }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr("Gagal merekod. Sila cuba lagi."); return; }
+      const at = present ? (j.attendedAt ?? new Date().toISOString()) : null;
+      setRows(prev => prev.map(x => (key(x) === key(r) ? { ...x, attendedAt: at } : x)));
+    } catch {
+      setErr("Ralat sambungan. Sila cuba lagi.");
+    } finally { setBusy(null); }
+  }
+
+  const fmtTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" style={{ color: "rgba(255,255,255,.3)" }} />
+        <input
+          type="text"
+          value={q}
+          autoFocus
+          onChange={(e) => { setQ(e.target.value); search(e.target.value); }}
+          placeholder="Nama, IC, pasukan atau kontingen…"
+          enterKeyHint="search"
+          autoComplete="off"
+          className="w-full h-12 rounded-xl pl-10 pr-10 text-base sm:text-sm text-white placeholder-white/25 focus:outline-none"
+          style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.12)" }}
+        />
+        {state === "loading" && (
+          <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" style={{ color: "rgba(255,255,255,.35)" }} />
+        )}
+      </div>
+      <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,.35)" }}>
+        Gunakan <b className="text-white/60">*</b> untuk sebarang aksara dan <b className="text-white/60">?</b> untuk satu aksara,
+        cth. <span className="font-mono text-white/55">*ahmad*</span> atau <span className="font-mono text-white/55">0105??*</span>.
+      </p>
+
+      {err && <p className="text-sm text-red-300">{err}</p>}
+      {state === "short" && <p className="text-center text-sm py-6" style={{ color: "rgba(255,255,255,.35)" }}>Masukkan sekurang-kurangnya 2 aksara.</p>}
+      {state === "done" && rows.length === 0 && (
+        <p className="text-center text-sm py-6" style={{ color: "rgba(255,255,255,.35)" }}>Tiada peserta ditemui.</p>
+      )}
+
+      <div className="space-y-2">
+        {rows.map((r) => {
+          const present = !!r.attendedAt;
+          const isBusy = busy === key(r);
+          return (
+            <div
+              key={key(r)}
+              className="rounded-2xl border px-3.5 py-3 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"
+              style={{
+                borderColor: present ? "rgba(16,185,129,.3)" : "rgba(255,255,255,.1)",
+                background:  present ? "rgba(16,185,129,.08)" : "rgba(255,255,255,.05)",
+              }}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white leading-snug break-words">
+                  {r.name}
+                  {r.icTail && <span className="ml-2 font-mono text-[11px] font-normal text-white/40">IC …{r.icTail}</span>}
+                </p>
+                <p className="text-xs text-white/60 break-words">
+                  <span className="font-semibold" style={{ color: B.gold }}>{r.competitionCode}</span> · {r.teamName}
+                </p>
+                <p className="text-[11px] break-words" style={{ color: "rgba(255,255,255,.38)" }}>
+                  {r.contingentShortName || r.contingentName}{r.state ? ` · ${r.state}` : ""}
+                </p>
+              </div>
+              {present ? (
+                <div className="flex items-center justify-between gap-2 shrink-0 sm:justify-start">
+                  <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: "#34d399" }}>
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Hadir · {fmtTime(r.attendedAt!)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => mark(r, false)}
+                    disabled={!!busy}
+                    aria-label="Batal rekod kehadiran"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-50"
+                    style={{ background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.5)", border: "1px solid rgba(255,255,255,.1)" }}
+                  >
+                    {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => mark(r, true)}
+                  disabled={!!busy}
+                  className="shrink-0 flex items-center justify-center gap-1.5 h-11 sm:h-9 px-4 rounded-xl text-sm sm:text-xs font-bold disabled:opacity-50 transition-all active:scale-95"
+                  style={{ background: "linear-gradient(90deg, #0f5132, #15803d)", color: "white" }}
+                >
+                  {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                  Rekod hadir
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {truncated && (
+        <p className="text-center text-[11px] py-2" style={{ color: "rgba(255,255,255,.35)" }}>
+          Hanya 100 padanan pertama dipaparkan — perincikan carian.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1067,12 +1262,12 @@ export function AttendanceCounterClient({ code }: { code: string }) {
 
   /* Page background style — green theme for the competition counter */
   const pageBg: React.CSSProperties = {
-    minHeight: "100vh",
+    minHeight: "100dvh",
     background: tab === "competition"
       ? "linear-gradient(150deg, #04140b 0%, #0a2b16 55%, #0f4423 100%)"
       : "linear-gradient(150deg, #050e1f 0%, #0a1e40 55%, #0a3064 100%)",
     position: "relative",
-    overflow: "hidden",
+    overflowX: "clip",
     transition: "background .4s ease",
   };
 
@@ -1105,7 +1300,7 @@ export function AttendanceCounterClient({ code }: { code: string }) {
 
   /* ── Passcode gate ── */
   if (!authed) return (
-    <div style={pageBg} className="flex flex-col items-center justify-center p-6 gap-8">
+    <div style={pageBg} className="flex flex-col items-center justify-center px-4 py-8 sm:p-6 gap-8">
       <style>{GLOBAL_CSS}</style>
       <TechBg />
       <div className="relative z-10 flex flex-col items-center gap-8 w-full max-w-sm">
@@ -1119,7 +1314,7 @@ export function AttendanceCounterClient({ code }: { code: string }) {
           style={{ background: "rgba(255,255,255,.06)", backdropFilter: "blur(20px)" }}
         >
           <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${B.navy}, ${B.gold}, ${B.blue})` }} />
-          <div className="p-7 space-y-5">
+          <div className="p-5 sm:p-7 space-y-5">
             <div className="text-center space-y-1.5">
               <div
                 className="inline-flex items-center justify-center w-11 h-11 rounded-xl mb-1"
@@ -1147,14 +1342,16 @@ export function AttendanceCounterClient({ code }: { code: string }) {
                 onChange={(e) => setPasscode(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleGate()}
                 placeholder="••••••"
-                className="w-full h-11 rounded-xl px-4 text-sm text-white placeholder-white/20 focus:outline-none"
+                autoComplete="off"
+                enterKeyHint="go"
+                className="w-full h-12 rounded-xl px-4 text-base text-center tracking-[0.3em] text-white placeholder-white/20 focus:outline-none"
                 style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.15)" }}
               />
               {gateErr && <p className="text-xs text-red-400">{gateErr}</p>}
               <button
                 type="button"
                 onClick={handleGate}
-                className="w-full h-11 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[.98]"
+                className="w-full h-12 rounded-xl text-base font-bold transition-all hover:scale-[1.02] active:scale-[.98]"
                 style={{ background: `linear-gradient(90deg, ${B.navy}, #1565c0)`, color: "white" }}
               >
                 Masuk
@@ -1181,11 +1378,9 @@ export function AttendanceCounterClient({ code }: { code: string }) {
         />
       )}
 
-      {/* Header */}
-      <div
-        className="relative z-10 border-b border-white/10 px-5 py-3.5 flex items-center gap-3"
-        style={{ background: "rgba(0,0,0,.35)", backdropFilter: "blur(12px)" }}
-      >
+      {/* Header + tabs stay at the top while the list scrolls */}
+      <div className="sticky top-0 z-20 border-b border-white/[.06]" style={{ background: "rgba(0,0,0,.32)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}>
+      <div className="border-b border-white/10 px-4 sm:px-5 py-3 flex items-center gap-3">
         <TechLogo compact />
         <div className="w-px h-5 bg-white/20" />
         <div className="flex-1 min-w-0">
@@ -1201,23 +1396,25 @@ export function AttendanceCounterClient({ code }: { code: string }) {
       </div>
 
       {/* Tab switcher */}
-      <div className="relative z-10 px-5 pt-5 flex gap-2">
+      <div className="mx-auto grid max-w-lg grid-cols-4 gap-1.5 px-4 py-3 sm:flex sm:max-w-none sm:flex-wrap sm:justify-center sm:gap-2 sm:px-5">
         <Pill active={tab === "manual"} onClick={() => { setTab("manual"); resetScan(); }}>
-          <Search className="h-4 w-4" /> Manual
+          <Search className="h-4 w-4 shrink-0" /> Manual
         </Pill>
         <Pill active={tab === "camera"} onClick={() => { setTab("camera"); resetScan(); }}>
-          <Camera className="h-4 w-4" /> Kamera QR
+          <Camera className="h-4 w-4 shrink-0" /> Kamera QR
         </Pill>
         <Pill active={tab === "scanner"} onClick={() => { setTab("scanner"); resetScan(); }}>
-          <Scan className="h-4 w-4" /> Pengimbas 2D
+          <Scan className="h-4 w-4 shrink-0" /> Pengimbas 2D
         </Pill>
         <Pill active={tab === "competition"} onClick={() => { setTab("competition"); resetScan(); }} activeBackground="rgba(16,100,50,.55)">
-          <Trophy className="h-4 w-4" /> Kaunter Pertandingan
+          <Trophy className="h-4 w-4 shrink-0" />
+          <span><span className="hidden sm:inline">Kaunter </span>Pertandingan</span>
         </Pill>
+      </div>
       </div>
 
       {/* Content */}
-      <div className="relative z-10 max-w-lg mx-auto p-5 space-y-4">
+      <div className="relative z-10 max-w-lg mx-auto px-4 pt-4 sm:px-5 sm:pt-5 space-y-4" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
         {/* Manual tab — no scan phase applies */}
         {tab === "manual" ? (
           <ManualTab code={code} passcode={passcode} />
