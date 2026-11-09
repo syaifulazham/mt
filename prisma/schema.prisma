@@ -729,6 +729,8 @@ model EventWalkInCompetition {
   vibeBlocksEndsAt           DateTime?
   vibeBlocksRunDurationSec   Int?
   vibeBlocksCompetitionRound String?
+  /// VibeBlocks event school level: "primary" | "secondary" (null = legacy event, or TechTriathlon).
+  vibeBlocksSchoolLevel      String?
   /// Game platform behind the vibeBlocks* fields: "vibeblocks" or "techtriathlon"
   /// (same partner-API shape; see src/lib/vibeblocks.ts).
   vibeBlocksProvider         String    @default("vibeblocks")

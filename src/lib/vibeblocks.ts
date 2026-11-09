@@ -1,7 +1,7 @@
 import { randomInt } from "crypto";
 import { db } from "@/lib/db";
 
-import { GAME_PROVIDERS, type GameProvider } from "@/lib/game-provider";
+import { GAME_PROVIDERS, type GameProvider, type GameSchoolLevel } from "@/lib/game-provider";
 
 // Walk-in game partner APIs. VibeBlocks Competition Partner API v1.8 (see
 // WALKIN-PARTNER-API-GUIDE.md) and TechTriathlon Partner API v2 (PARTNER_GUIDE.md)
@@ -139,6 +139,10 @@ export function vibeBlocksErrorMessage(e: unknown, p: GameProvider = "vibeblocks
       return "Token ini telah dibatalkan.";
     case "ENTRY_TOKEN_ALREADY_USED":
       return "Token telah digunakan pada peranti lain.";
+    case "INVALID_SCHOOL_LEVEL":
+      return "Peringkat sekolah mesti Rendah (primary) atau Menengah (secondary).";
+    case "EVENT_SCHOOL_LEVEL_LOCKED":
+      return "Peringkat sekolah tidak boleh diubah selepas token pertama didaftarkan. Cipta acara baharu untuk peringkat lain.";
   }
   if (err.status === 401) return `Kunci API ${name} tidak sah. Sila maklumkan pentadbir sistem.`;
   if (err.status === 404) return `Acara atau entri tidak dijumpai di ${name}.`;
@@ -156,6 +160,8 @@ export type VibeBlocksEvent = {
   challenge_id: string;
   name: string;
   competition_round: VibeBlocksCompetitionRound;
+  /** VibeBlocks: primary / secondary; null for events created before school levels (API 1.8). Absent on TechTriathlon. */
+  school_level?: GameSchoolLevel | null;
   status: "draft" | "open" | "closed";
   starts_at: string;
   ends_at: string;
@@ -392,6 +398,8 @@ export type VibeBlocksCreateEventRequest = {
   challenge_id: string;
   name: string;
   competition_round: VibeBlocksCompetitionRound;
+  /** Required by VibeBlocks; not sent to TechTriathlon. */
+  school_level?: GameSchoolLevel;
   starts_at: string;
   ends_at: string;
   run_duration_sec: number;
@@ -408,7 +416,7 @@ export async function vibeBlocksCreateEvent(opts: VibeBlocksCreateEventRequest, 
 
 export async function vibeBlocksUpdateEvent(
   eventId: string,
-  patch: Partial<Pick<VibeBlocksCreateEventRequest, "name" | "competition_round" | "starts_at" | "ends_at" | "run_duration_sec">> & { status?: "open" | "closed" },
+  patch: Partial<Pick<VibeBlocksCreateEventRequest, "name" | "competition_round" | "school_level" | "starts_at" | "ends_at" | "run_duration_sec">> & { status?: "open" | "closed" },
   p: GameProvider = "vibeblocks",
 ) {
   return req<VibeBlocksUpdateEventResponse>(`/v1/partner/events/${encodeURIComponent(eventId)}`, {

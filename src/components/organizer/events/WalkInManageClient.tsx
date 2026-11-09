@@ -9,7 +9,7 @@ import { WalkInFormSection } from "./WalkInFormSection";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { GAME_PROVIDERS, asGameProvider, gameLabel, type GameProvider } from "@/lib/game-provider";
+import { GAME_PROVIDERS, asGameProvider, gameLabel, isGameSchoolLevel, schoolLevelFromTargetGroups, vibeBlocksStages, type GameProvider, type GameSchoolLevel } from "@/lib/game-provider";
 import { DEFAULT_SLOT_SCHEDULE, buildSlotSchedule, eventSlotDates, fmtSlotDate, fmtSlotMin, slotTimeToMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 export type { SlotScheduleConfig } from "@/lib/walkin-slots";
@@ -34,8 +34,9 @@ type WalkInCompSummary = {
   vibeBlocksEndsAt: string | null;
   vibeBlocksRunDurationSec: number | null;
   vibeBlocksCompetitionRound: string | null;
+  vibeBlocksSchoolLevel: string | null;
   vibeBlocksProvider: string;
-  competition: { id: string; code: string; name: string };
+  competition: { id: string; code: string; name: string; targetGroups?: { targetGroup: { schoolLevel: string } }[] };
   _count: { registrations: number; judgingTemplates?: number };
   endpoints: WalkInEndpointItem[];
   walkInSlotSchedule: SlotScheduleConfig | null;
@@ -167,6 +168,7 @@ type VibeBlocksChallenge = {
 
 type VibeBlocksLiveEvent = {
   event_id: string; name: string; competition_round: "qualifier" | "final";
+  school_level?: GameSchoolLevel | null;
   status: "draft" | "open" | "closed"; starts_at: string; ends_at: string; run_duration_sec: number;
 };
 
@@ -442,7 +444,21 @@ function nextVbIdentity(slug: string, currentId: string | null, currentName: str
   return { eventId: `${base0}${sep}${n}`, name: `${base}_${n}` };
 }
 
-type VbRecreateForm = { startsAt: string; endsAt: string; competitionRound: "qualifier" | "final"; runDurationSec: number };
+type VbRecreateForm = { startsAt: string; endsAt: string; competitionRound: "qualifier" | "final"; schoolLevel: GameSchoolLevel | ""; runDurationSec: number };
+
+const SCHOOL_LEVEL_LABEL: Record<GameSchoolLevel, string> = { primary: "Sekolah Rendah (primary)", secondary: "Sekolah Menengah (secondary)" };
+
+/** "Final: C1–C3 (3 peringkat)" — what the participant plays on VibeBlocks. */
+function vbStagesNote(round: "qualifier" | "final", level: GameSchoolLevel | "" | null) {
+  const n = vibeBlocksStages(round, level || null);
+  return n === 1 ? "Qualifier: C1 sahaja" : `Final: C1–C${n} (${n} peringkat)`;
+}
+
+/** Default school level for a competition: its target groups when they agree. */
+function wicDefaultSchoolLevel(w: WalkInCompSummary): GameSchoolLevel | "" {
+  if (isGameSchoolLevel(w.vibeBlocksSchoolLevel)) return w.vibeBlocksSchoolLevel;
+  return schoolLevelFromTargetGroups((w.competition.targetGroups ?? []).map(t => t.targetGroup.schoolLevel)) ?? "";
+}
 
 /** Recreate the VibeBlocks event with a new schedule, then re-issue every token. */
 function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, busy, progress, error, onCancel, onConfirm }: {
@@ -458,8 +474,9 @@ function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, b
 }) {
   const [f, setF] = useState(initial);
   const { runMin, runMax, label } = GAME_PROVIDERS[provider];
+  const needLevel = GAME_PROVIDERS[provider].schoolLevel;
   const valid = !!f.startsAt && !!f.endsAt && f.endsAt > f.startsAt
-    && f.runDurationSec >= runMin && f.runDurationSec <= runMax;
+    && f.runDurationSec >= runMin && f.runDurationSec <= runMax && (!needLevel || !!f.schoolLevel);
   const input = "w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60";
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={() => { if (!busy) onCancel(); }}>
@@ -503,6 +520,17 @@ function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, b
               onChange={e => setF({ ...f, runDurationSec: Number(e.target.value) })} className={input} />
           </div>
         </div>
+        {needLevel && (
+          <div>
+            <label className="text-[11px] text-zinc-400 block mb-0.5">School level</label>
+            <select value={f.schoolLevel} disabled={busy} onChange={e => setF({ ...f, schoolLevel: e.target.value as VbRecreateForm["schoolLevel"] })} className={`${input} bg-white`}>
+              {!f.schoolLevel && <option value="">Pilih peringkat…</option>}
+              <option value="primary">{SCHOOL_LEVEL_LABEL.primary}</option>
+              <option value="secondary">{SCHOOL_LEVEL_LABEL.secondary}</option>
+            </select>
+            {f.schoolLevel && <p className="text-[10px] text-zinc-400 mt-0.5">{vbStagesNote(f.competitionRound, f.schoolLevel)}</p>}
+          </div>
+        )}
         {progress && (
           <div className="space-y-1">
             <p className="text-[11px] text-emerald-700">Menyegerak token peserta… {progress.done}/{progress.total}</p>
@@ -898,6 +926,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
   const [vibeBlocksActionId,           setVibeBlocksActionId]           = useState<string | null>(null);
   const [vibeBlocksCreateForm, setVibeBlocksCreateForm] = useState({
     challengeId: "", name: "", competitionRound: "qualifier" as "qualifier" | "final",
+    schoolLevel: "" as GameSchoolLevel | "",
     startsAt: "", endsAt: "", runDurationSec: VB_RUN_DURATION_DEFAULT,
     provider: "vibeblocks" as GameProvider,
   });
@@ -1143,6 +1172,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       ...f,
       name:             ev.name,
       competitionRound: ev.competition_round,
+      ...(isGameSchoolLevel(ev.school_level) && { schoolLevel: ev.school_level }),
       startsAt:         isoToDateTimeLocal(ev.starts_at),
       endsAt:           isoToDateTimeLocal(ev.ends_at),
       runDurationSec:   ev.run_duration_sec,
@@ -1208,6 +1238,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         body: JSON.stringify({
           recreate: true,
           competitionRound: f.competitionRound,
+          ...(f.schoolLevel && { schoolLevel: f.schoolLevel }),
           startsAt: dateTimeLocalToISO(f.startsAt),
           endsAt: dateTimeLocalToISO(f.endsAt),
           runDurationSec: f.runDurationSec,
@@ -1219,6 +1250,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         viblockChallengeId:         j.eventId as string,
         vibeBlocksEventName:        j.name as string,
         vibeBlocksCompetitionRound: f.competitionRound,
+        vibeBlocksSchoolLevel:      (j.schoolLevel as string | null) ?? null,
         vibeBlocksStartsAt:         dateTimeLocalToISO(f.startsAt),
         vibeBlocksEndsAt:           dateTimeLocalToISO(f.endsAt),
         vibeBlocksRunDurationSec:   f.runDurationSec,
@@ -1255,6 +1287,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       startsAt: cfg ? mytTimeToUtcLocal(day, cfg.startTime) : isoToDateTimeLocal(new Date().toISOString()),
       endsAt:   cfg ? mytTimeToUtcLocal(day, cfg.endTime) : isoToDateTimeLocal(selectedWic?.vibeBlocksEndsAt ?? event.endDate),
       competitionRound: vibeBlocksCreateForm.competitionRound,
+      schoolLevel:      vibeBlocksCreateForm.schoolLevel,
       runDurationSec:   vibeBlocksCreateForm.runDurationSec,
     };
   }
@@ -1384,6 +1417,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         challengeId:      selectedWic.vibeBlocksChallengeId ?? "",
         name:             selectedWic.vibeBlocksEventName ?? event.name,
         competitionRound: (selectedWic.vibeBlocksCompetitionRound === "final" ? "final" : "qualifier") as "qualifier" | "final",
+        schoolLevel:      wicDefaultSchoolLevel(selectedWic),
         startsAt:         isoToDateTimeLocal(selectedWic.vibeBlocksStartsAt ?? event.startDate),
         endsAt:           isoToDateTimeLocal(selectedWic.vibeBlocksEndsAt ?? event.endDate),
         runDurationSec:   selectedWic.vibeBlocksRunDurationSec ?? GAME_PROVIDERS[asGameProvider(selectedWic.vibeBlocksProvider)].runDefault,
@@ -1424,6 +1458,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
             challengeId:       vibeBlocksCreateForm.challengeId,
             name:              vibeBlocksCreateForm.name,
             competitionRound:  vibeBlocksCreateForm.competitionRound,
+            ...(vibeBlocksCreateForm.schoolLevel && { schoolLevel: vibeBlocksCreateForm.schoolLevel }),
             startsAt:          dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
             endsAt:            dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
             runDurationSec:    vibeBlocksCreateForm.runDurationSec,
@@ -1438,6 +1473,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
           vibeBlocksChallengeId:      vibeBlocksCreateForm.challengeId,
           vibeBlocksEventName:        vibeBlocksCreateForm.name,
           vibeBlocksCompetitionRound: vibeBlocksCreateForm.competitionRound,
+          vibeBlocksSchoolLevel:      vibeBlocksCreateForm.schoolLevel || null,
           vibeBlocksStartsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
           vibeBlocksEndsAt:           dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
           vibeBlocksRunDurationSec:   vibeBlocksCreateForm.runDurationSec,
@@ -1464,6 +1500,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
           body: JSON.stringify({
             name:              vibeBlocksCreateForm.name,
             competitionRound:  vibeBlocksCreateForm.competitionRound,
+            ...(vibeBlocksCreateForm.schoolLevel && (vbLive?.entryCount ?? 0) === 0 && { schoolLevel: vibeBlocksCreateForm.schoolLevel }),
             startsAt:          dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
             endsAt:            dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
             runDurationSec:    vibeBlocksCreateForm.runDurationSec,
@@ -1475,6 +1512,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         updateWic(selectedWic.id, {
           vibeBlocksEventName:        vibeBlocksCreateForm.name,
           vibeBlocksCompetitionRound: vibeBlocksCreateForm.competitionRound,
+          vibeBlocksSchoolLevel:      vibeBlocksCreateForm.schoolLevel || null,
           vibeBlocksStartsAt:         dateTimeLocalToISO(vibeBlocksCreateForm.startsAt),
           vibeBlocksEndsAt:           dateTimeLocalToISO(vibeBlocksCreateForm.endsAt),
           vibeBlocksRunDurationSec:   vibeBlocksCreateForm.runDurationSec,
@@ -2162,6 +2200,8 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                       const vbClosed = vbEv?.status === "closed";
                       // VibeBlocks locks the schedule once the first token is registered.
                       const vbTimingLocked = vbRules.timingLocksAfterEntry && (vbLive?.entryCount ?? 0) > 0;
+                      // ...and the school level (API 1.8).
+                      const vbLevelLocked = vbRules.schoolLevel && (vbLive?.entryCount ?? 0) > 0;
                       return (
                       <div className="rounded-xl border bg-white p-4 space-y-3">
                         {/* Header: title + status + expand toggle */}
@@ -2390,6 +2430,29 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                   <option value="final">Final</option>
                                 </select>
                               </div>
+                              {vbRules.schoolLevel && (
+                                <div>
+                                  <label className="text-[11px] text-zinc-400 block mb-0.5">School level</label>
+                                  <select
+                                    value={vibeBlocksCreateForm.schoolLevel}
+                                    onChange={e => setVibeBlocksCreateForm(f => ({ ...f, schoolLevel: e.target.value as GameSchoolLevel | "" }))}
+                                    disabled={vbLocked || vbLevelLocked}
+                                    className={`w-full text-sm border rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50 ${vibeBlocksCreateForm.schoolLevel ? "border-zinc-200" : "border-amber-300"}`}
+                                  >
+                                    {!vibeBlocksCreateForm.schoolLevel && <option value="">Pilih peringkat sekolah…</option>}
+                                    <option value="primary">{SCHOOL_LEVEL_LABEL.primary}</option>
+                                    <option value="secondary">{SCHOOL_LEVEL_LABEL.secondary}</option>
+                                  </select>
+                                  <p className="text-[10px] text-zinc-400 mt-0.5">
+                                    {vibeBlocksCreateForm.schoolLevel
+                                      ? `${vbStagesNote(vibeBlocksCreateForm.competitionRound, vibeBlocksCreateForm.schoolLevel)}.`
+                                      : vbEv && !vbEv.school_level
+                                        ? "Acara lama tanpa peringkat sekolah (final: C1–C5). Tetapkan sebelum token pertama didaftarkan."
+                                        : "Diperlukan oleh VibeBlocks. Peserta rendah dan menengah perlu acara berasingan."}
+                                    {vbLevelLocked && " Dikunci selepas token pertama didaftarkan — cipta semula acara untuk peringkat lain."}
+                                  </p>
+                                </div>
+                              )}
                               <div>
                                 <label className="text-[11px] text-zinc-400 block mb-0.5">
                                   Run duration (seconds, {vbRules.runMin}–{vbRules.runMax})
@@ -2417,7 +2480,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                 <Button
                                   size="sm"
                                   onClick={createVibeBlocksEvent}
-                                  disabled={vibeBlocksCreating || !vibeBlocksCreateForm.challengeId || !vibeBlocksCreateForm.name || !vibeBlocksCreateForm.startsAt || !vibeBlocksCreateForm.endsAt}
+                                  disabled={vibeBlocksCreating || !vibeBlocksCreateForm.challengeId || !vibeBlocksCreateForm.name || !vibeBlocksCreateForm.startsAt || !vibeBlocksCreateForm.endsAt || (vbRules.schoolLevel && !vibeBlocksCreateForm.schoolLevel)}
                                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
                                 >
                                   {vibeBlocksCreating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

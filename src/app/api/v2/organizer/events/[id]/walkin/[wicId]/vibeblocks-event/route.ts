@@ -5,7 +5,7 @@ import {
   vibeBlocksConfigured, vibeBlocksCreateEvent, vibeBlocksUpdateEvent, vibeBlocksGetEvent,
   vibeBlocksListEvents, vibeBlocksErrorMessage, type VibeBlocksError,
 } from "@/lib/vibeblocks";
-import { GAME_PROVIDERS, asGameProvider, type GameProvider } from "@/lib/game-provider";
+import { GAME_PROVIDERS, asGameProvider, isGameSchoolLevel, type GameProvider } from "@/lib/game-provider";
 import { freeEventId, nextEventIdentity } from "@/lib/vibeblocks-recreate";
 
 // The walk-in competition's game-platform event (VibeBlocks or TechTriathlon,
@@ -33,6 +33,8 @@ function vbErrorResponse(e: unknown, what: string, p: GameProvider) {
 
 const notConfigured = (p: GameProvider) =>
   bad("VIBEBLOCKS_NOT_CONFIGURED", `${GAME_PROVIDERS[p].label} API tidak dikonfigurasi.`);
+
+const SCHOOL_LEVEL_MSG = "Peringkat sekolah diperlukan: Rendah (primary) atau Menengah (secondary).";
 
 const isUtcIso = (s: string) => /Z$/.test(s) && !Number.isNaN(Date.parse(s));
 
@@ -109,6 +111,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     challengeId?: string;
     name?: string;
     competitionRound?: string;
+    schoolLevel?: string;
     startsAt?: string;
     endsAt?: string;
     runDurationSec?: number;
@@ -127,7 +130,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const p = wic.viblockChallengeId ? wic.provider : asGameProvider(body.provider);
   const rules = GAME_PROVIDERS[p];
 
-  const { challengeId, competitionRound, startsAt, endsAt, runDurationSec } = body;
+  const { challengeId, competitionRound, schoolLevel, startsAt, endsAt, runDurationSec } = body;
   const name = body.name?.trim();
   if (!challengeId || !name || runDurationSec === undefined)
     return bad("MISSING_FIELDS", "Challenge, nama dan tempoh larian diperlukan.");
@@ -135,10 +138,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!startsAt || !endsAt) return bad("MISSING_DATES", "Masa mula dan tamat diperlukan.");
   if (competitionRound !== "qualifier" && competitionRound !== "final")
     return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
+  if (rules.schoolLevel && !isGameSchoolLevel(schoolLevel)) return bad("INVALID_SCHOOL_LEVEL", SCHOOL_LEVEL_MSG);
   const invalid = checkConfig(p, { startsAt, endsAt, runDurationSec });
   if (invalid) return bad("INVALID_CONFIG", invalid);
   if (Date.parse(endsAt) <= Date.now()) return bad("INVALID_CONFIG", "Masa tamat mesti pada masa hadapan.");
   if (!vibeBlocksConfigured(p)) return notConfigured(p);
+  const level = rules.schoolLevel && isGameSchoolLevel(schoolLevel) ? schoolLevel : null;
 
   const base = idBase(event.slug, p);
   if (!rules.eventIdRe.test(base))
@@ -169,6 +174,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       challenge_id: challengeId,
       name,
       competition_round: competitionRound,
+      ...(level && { school_level: level }),
       starts_at: startsAt,
       ends_at: endsAt,
       run_duration_sec: runDurationSec,
@@ -182,6 +188,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         vibeBlocksChallengeId:      challengeId,
         vibeBlocksEventName:        name,
         vibeBlocksCompetitionRound: competitionRound,
+        vibeBlocksSchoolLevel:      level,
         vibeBlocksStartsAt:         new Date(startsAt),
         vibeBlocksEndsAt:           new Date(endsAt),
         vibeBlocksRunDurationSec:   runDurationSec,
@@ -216,12 +223,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const body = await req.json() as {
     name?: string;
     competitionRound?: "qualifier" | "final";
+    schoolLevel?: string;
     startsAt?: string;
     endsAt?: string;
     runDurationSec?: number;
     status?: "open" | "closed";
   };
-  const { competitionRound, startsAt, endsAt, runDurationSec, status } = body;
+  const { competitionRound, schoolLevel, startsAt, endsAt, runDurationSec, status } = body;
   const name = body.name?.trim();
 
   if (status !== undefined) {
@@ -232,6 +240,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (name !== undefined && (!name || name.length > rules.nameMax)) return bad("INVALID_NAME", `Nama acara 1–${rules.nameMax} aksara.`);
   if (competitionRound !== undefined && competitionRound !== "qualifier" && competitionRound !== "final")
     return bad("INVALID_ROUND", "competitionRound mesti \"qualifier\" atau \"final\".");
+  if (schoolLevel !== undefined && (!rules.schoolLevel || !isGameSchoolLevel(schoolLevel)))
+    return bad("INVALID_SCHOOL_LEVEL", SCHOOL_LEVEL_MSG);
 
   if (!vibeBlocksConfigured(p)) return notConfigured(p);
   // Diff against the live event, which is the source of truth (older linked
@@ -252,6 +262,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const vbPatch: Parameters<typeof vibeBlocksUpdateEvent>[1] = {};
   if (name !== undefined && name !== live.name) vbPatch.name = name;
   if (competitionRound !== undefined && competitionRound !== live.competition_round) vbPatch.competition_round = competitionRound;
+  if (isGameSchoolLevel(schoolLevel) && schoolLevel !== live.school_level) vbPatch.school_level = schoolLevel;
   if (!sameTime(startsAt, live.starts_at)) vbPatch.starts_at = startsAt;
   if (!sameTime(endsAt, live.ends_at)) vbPatch.ends_at = endsAt;
   if (runDurationSec !== undefined && runDurationSec !== live.run_duration_sec) vbPatch.run_duration_sec = runDurationSec;
@@ -265,8 +276,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   });
   if (invalid) return bad("INVALID_CONFIG", invalid);
 
-  if (rules.timingLocksAfterEntry && (vbPatch.starts_at || vbPatch.ends_at) && (await entryCount(wicId)) > 0)
+  const entries = (rules.timingLocksAfterEntry && (vbPatch.starts_at || vbPatch.ends_at)) || vbPatch.school_level
+    ? await entryCount(wicId) : 0;
+  if (rules.timingLocksAfterEntry && (vbPatch.starts_at || vbPatch.ends_at) && entries > 0)
     return bad("EVENT_TIMING_LOCKED", "Masa mula/tamat tidak boleh diubah selepas token pertama didaftarkan.", 409);
+  // VibeBlocks locks the school level at the first entry registration.
+  if (vbPatch.school_level && entries > 0)
+    return bad("EVENT_SCHOOL_LEVEL_LOCKED", "Peringkat sekolah tidak boleh diubah selepas token pertama didaftarkan. Cipta acara baharu untuk peringkat lain.", 409);
 
   let result: { updated: boolean; status?: string } = { updated: false, status: live.status };
   if (Object.keys(vbPatch).length > 0) {
@@ -284,6 +300,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     data: {
       vibeBlocksEventName:        after.name,
       vibeBlocksCompetitionRound: after.competition_round,
+      vibeBlocksSchoolLevel:      rules.schoolLevel ? after.school_level ?? null : null,
       vibeBlocksStartsAt:         new Date(after.starts_at),
       vibeBlocksEndsAt:           new Date(after.ends_at),
       vibeBlocksRunDurationSec:   after.run_duration_sec,
@@ -303,14 +320,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
  */
 async function recreate(
   eventId: string, wicId: string,
-  body: { challengeId?: string; competitionRound?: string; startsAt?: string; endsAt?: string; runDurationSec?: number },
+  body: { challengeId?: string; competitionRound?: string; schoolLevel?: string; startsAt?: string; endsAt?: string; runDurationSec?: number },
 ) {
   const { competitionRound, startsAt, endsAt, runDurationSec } = body;
   const [event, wic] = await Promise.all([
     db.event.findUnique({ where: { id: eventId }, select: { slug: true, name: true } }),
     db.eventWalkInCompetition.findUnique({
       where: { id: wicId },
-      select: { eventId: true, viblockChallengeId: true, vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksProvider: true },
+      select: { eventId: true, viblockChallengeId: true, vibeBlocksChallengeId: true, vibeBlocksEventName: true, vibeBlocksProvider: true, vibeBlocksSchoolLevel: true },
     }),
   ]);
   if (!event || !wic || wic.eventId !== eventId) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -333,6 +350,10 @@ async function recreate(
     return vbErrorResponse(e, "listEvents", p);
   }
   const old = events.find(e => e.event_id === wic.viblockChallengeId) ?? null;
+  // The new event keeps the school level unless another is chosen.
+  const levelIn = body.schoolLevel ?? wic.vibeBlocksSchoolLevel ?? old?.school_level ?? undefined;
+  if (rules.schoolLevel && !isGameSchoolLevel(levelIn)) return bad("INVALID_SCHOOL_LEVEL", SCHOOL_LEVEL_MSG);
+  const level = rules.schoolLevel && isGameSchoolLevel(levelIn) ? levelIn : null;
   const challengeId = body.challengeId || old?.challenge_id || wic.vibeBlocksChallengeId;
   if (!challengeId) return bad("MISSING_FIELDS", "Challenge diperlukan.");
   const next = nextEventIdentity(
@@ -344,7 +365,8 @@ async function recreate(
   try {
     await vibeBlocksCreateEvent({
       event_id: next.eventId, challenge_id: challengeId, name,
-      competition_round: competitionRound, starts_at: startsAt, ends_at: endsAt, run_duration_sec: runDurationSec,
+      competition_round: competitionRound, ...(level && { school_level: level }),
+      starts_at: startsAt, ends_at: endsAt, run_duration_sec: runDurationSec,
     }, p);
   } catch (e) {
     return vbErrorResponse(e, "createEvent (recreate)", p);
@@ -357,6 +379,7 @@ async function recreate(
       vibeBlocksChallengeId:      challengeId,
       vibeBlocksEventName:        name,
       vibeBlocksCompetitionRound: competitionRound,
+      vibeBlocksSchoolLevel:      level,
       vibeBlocksStartsAt:         new Date(startsAt),
       vibeBlocksEndsAt:           new Date(endsAt),
       vibeBlocksRunDurationSec:   runDurationSec,
@@ -374,5 +397,5 @@ async function recreate(
     }
   }
   console.warn(`[${p}] walk-in ${wicId} recreated: ${wic.viblockChallengeId} -> ${next.eventId}`);
-  return NextResponse.json({ eventId: next.eventId, name, previousEventId: wic.viblockChallengeId, oldClosed });
+  return NextResponse.json({ eventId: next.eventId, name, schoolLevel: level, previousEventId: wic.viblockChallengeId, oldClosed });
 }
