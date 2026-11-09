@@ -27,6 +27,7 @@ import {
   KeyRound,
   BookOpen,
   Plus,
+  UserPlus,
 } from "lucide-react";
 import { buildSlotSchedule, fmtSlotDate, fmtSlotMin, slotDateChoices, type SlotScheduleConfig } from "@/lib/walkin-slots";
 import type { ArenaChallengeView } from "@/lib/arena-client";
@@ -1119,6 +1120,28 @@ export function DashboardClient({
   const [qrTarget, setQrTarget]           = useState<{ id: string; name: string } | null>(null);
   const [tokenTarget, setTokenTarget]     = useState<string | null>(null);
   const [addMemberTarget, setAddMemberTarget] = useState<WalkInEntry | null>(null);
+  const [datePicking, setDatePicking] = useState<string | null>(null);
+  const [datePickErr, setDatePickErr] = useState<Record<string, string>>({});
+
+  /** Dates an entry booked before the event had a date step. */
+  async function pickEntryDate(wicId: string, slotDate: string) {
+    setDatePicking(wicId);
+    setDatePickErr((e) => ({ ...e, [wicId]: "" }));
+    const res = await fetch("/api/v2/participant/walkin/slot-date", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walkInCompetitionId: wicId, slotDate }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setDatePicking(null);
+    if (!res.ok) {
+      setDatePickErr((e) => ({ ...e, [wicId]: j.error === "SLOT_TAKEN"
+        ? "Slot anda sudah ditempah orang lain pada tarikh ini. Sila pilih tarikh lain atau hubungi penganjur."
+        : j.error === "DATE_ALREADY_SET" ? "Tarikh telah ditetapkan. Muat semula halaman."
+        : "Gagal menetapkan tarikh." }));
+      return;
+    }
+    setRegistrations((prev) => ({ ...prev, [wicId]: { ...prev[wicId], slotDate } }));
+  }
 
   const handleRegister = useCallback(async (slot: SlotChoice | null, team: TeamDraft | null) => {
     if (!registerTarget) return;
@@ -1760,16 +1783,6 @@ export function DashboardClient({
                               )}
                             </p>
                           )}
-                          {reg?.team && (
-                            reg.team.members.length < Math.max(1, wic.competition.maxTeamSize) ? (
-                              <button type="button" onClick={() => setAddMemberTarget(wic)}
-                                className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-teal-700 dark:text-teal-300 hover:underline">
-                                <Plus className="h-3 w-3" /> Tambah ahli ({reg.team.members.length}/{Math.max(1, wic.competition.maxTeamSize)})
-                              </button>
-                            ) : (
-                              <p className="mt-1 text-[11px] text-zinc-400">Pasukan penuh ({reg.team.members.length}/{Math.max(1, wic.competition.maxTeamSize)})</p>
-                            )
-                          )}
                         </div>
 
                         {/* Slot indicator */}
@@ -1839,6 +1852,33 @@ export function DashboardClient({
                       {/* Status message */}
                       {reg && (
                         <div className="px-4 pb-3 space-y-2">
+                          {/* Entry booked before the event had a date step: ask for a date */}
+                          {(() => {
+                            const dates = wic.walkInSlotSchedule
+                              ? slotDateChoices(wic.event.startDate, wic.event.endDate, wic.walkInSlotSchedule) : [];
+                            if (dates.length === 0 || reg.slotDate) return null;
+                            return (
+                              <div className="rounded-xl px-3 py-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 space-y-2">
+                                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                                  <CalendarDays className="h-4 w-4 shrink-0" /> Sila pilih tarikh penyertaan anda
+                                </p>
+                                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                  Acara ini berlangsung lebih dari sehari. {reg.sessionNumber != null && `Sesi ${reg.sessionNumber} · Slot ${reg.slotNumber} anda kekal — `}pilih hari anda akan hadir.
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {dates.map((d) => (
+                                    <button key={d} type="button" disabled={datePicking === wic.id}
+                                      onClick={() => pickEntryDate(wic.id, d)}
+                                      className="rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-200 hover:border-teal-400 hover:text-teal-700 disabled:opacity-50 transition-colors">
+                                      {fmtSlotDate(d)}
+                                    </button>
+                                  ))}
+                                  {datePicking === wic.id && <Loader2 className="h-4 w-4 animate-spin text-amber-500 self-center" />}
+                                </div>
+                                {datePickErr[wic.id] && <p className="text-[11px] text-red-600 dark:text-red-400">{datePickErr[wic.id]}</p>}
+                              </div>
+                            );
+                          })()}
                           {reg.sessionNumber != null && reg.slotNumber != null && (
                             <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800">
                               <Clock className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
@@ -1917,6 +1957,38 @@ export function DashboardClient({
                               </div>
                             </div>
                           )}
+
+                          {/* Team members: add more at any time */}
+                          {reg.team && (() => {
+                            const max = Math.max(1, wic.competition.maxTeamSize);
+                            const n = reg.team.members.length;
+                            return (
+                              <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 px-3 py-2.5 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 flex items-center gap-1.5">
+                                    <Users className="h-3.5 w-3.5 text-violet-500" /> Ahli pasukan
+                                    <span className="font-normal text-zinc-400">{n}/{max}</span>
+                                  </p>
+                                  {n < max ? (
+                                    <button type="button" onClick={() => setAddMemberTarget(wic)}
+                                      className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white px-3 py-1.5 text-xs font-medium transition-colors">
+                                      <UserPlus className="h-3.5 w-3.5" /> Tambah Ahli
+                                    </button>
+                                  ) : (
+                                    <span className="text-[11px] font-medium text-zinc-400">Pasukan penuh</span>
+                                  )}
+                                </div>
+                                <ul className="text-[11px] text-zinc-500 dark:text-zinc-400 list-disc list-inside space-y-0.5">
+                                  <li>Ahli boleh ditambah pada bila-bila masa selepas pendaftaran, sehingga {max} orang.</li>
+                                  {reg.status === "SUBMITTED"
+                                    ? <li>Masukkan No. IC dan nama penuh ahli; mereka akan disemak bersama pasukan oleh penganjur.</li>
+                                    : <li>Ahli mesti peserta berdaftar daripada kontinjen yang sama dan layak untuk pertandingan ini.</li>}
+                                  <li>Ahli yang sudah ditambah tidak boleh dibuang di sini — hubungi penganjur jika perlu.</li>
+                                  <li>Semua ahli perlu hadir ke kaunter pada hari acara.</li>
+                                </ul>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>

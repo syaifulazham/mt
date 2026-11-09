@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Loader2, Link2, Copy, XCircle, FileText, Search, CheckCircle2,
-  UserX, X, QrCode, Download, FileDown, Trash2, Users, AlertTriangle,
+  UserX, X, QrCode, Download, FileDown, Trash2, Users, AlertTriangle, Sparkles,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -87,6 +87,42 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
   const [searchQ,     setSearchQ]     = useState("");
   // Date tab (multi-day events): "" = entries without a date; null = the first tab
   const [dateTab,     setDateTab]     = useState<string | null>(null);
+  // Open slot dates per walk-in competition (multi-day events), from the list API
+  const [subDates,    setSubDates]    = useState<Record<string, string[]>>({});
+  const [dateSaving,  setDateSaving]  = useState<string | null>(null);
+  const [dateErr,     setDateErr]     = useState("");
+  const [datePlan,    setDatePlan]    = useState<{ loading: boolean; applying: boolean; items: { id: string; slotDate: string | null }[]; done?: { updated: number; skipped: number } } | null>(null);
+
+  async function setSubmissionDate(s: Submission, slotDate: string) {
+    setDateSaving(s.id); setDateErr("");
+    const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions/${s.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slotDate }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setDateSaving(null);
+    if (!res.ok) {
+      setDateErr(j.error === "SLOT_TAKEN"
+        ? `${s.teamName ?? s.name}: Sesi ${s.sessionNumber} · Slot ${s.slotNumber} sudah ditempah pada ${fmtSlotDate(slotDate)}.`
+        : `Gagal menetapkan tarikh (${j.error ?? res.status}).`);
+      return;
+    }
+    setSubs(prev => prev.map(x => (x.id === s.id ? { ...x, slotDate } : x)));
+  }
+
+  async function openDatePlan() {
+    setDatePlan({ loading: true, applying: false, items: [] });
+    const j = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions/assign-dates`, { method: "POST" }).then(r => r.json()).catch(() => ({}));
+    setDatePlan({ loading: false, applying: false, items: j.data ?? [] });
+  }
+
+  async function applyDatePlan() {
+    setDatePlan(p => p && { ...p, applying: true });
+    const j = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions/assign-dates`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apply: true }),
+    }).then(r => r.json()).catch(() => ({}));
+    setDatePlan(p => p && { ...p, applying: false, done: j.data ?? { updated: 0, skipped: 0 } });
+    loadSubs();
+  }
 
   const [processing,      setProcessing]      = useState<Submission | null>(null);
   const [procQ,           setProcQ]           = useState("");
@@ -108,6 +144,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
     const j = await fetch(`/api/v2/organizer/events/${eventId}/walkin/form-submissions?status=${filter}`).then(r => r.json());
     setSubs(j.data ?? []);
     if (j.counts) setCounts(j.counts);
+    setSubDates(j.dates ?? {});
     setSubsLoading(false);
   }, [eventId, filter]);
 
@@ -357,7 +394,8 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
           const dateCounts = new Map<string, number>();
           for (const s of filtered) dateCounts.set(s.slotDate ?? "", (dateCounts.get(s.slotDate ?? "") ?? 0) + 1);
           const dateKeys = [...dateCounts.keys()].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
-          const showTabs = dateKeys.some(k => k !== "");
+          const multiDay = Object.values(subDates).some(d => d.length > 0);
+          const showTabs = dateKeys.some(k => k !== "") || (multiDay && dateCounts.has(""));
           const activeDate = dateTab !== null && dateCounts.has(dateTab) ? dateTab : dateKeys[0];
           const inTab = showTabs ? filtered.filter(s => (s.slotDate ?? "") === activeDate) : filtered;
           const sorted = [...inTab].sort((a, b) => {
@@ -388,6 +426,19 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                   ))}
                 </div>
               )}
+              {showTabs && activeDate === "" && filter === "PENDING" && canWrite && multiDay && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-indigo-900">
+                    <span className="font-semibold">{dateCounts.get("")} borang</span> belum ada tarikh (dihantar sebelum acara ini mempunyai pilihan tarikh).
+                    Pilih tarikh pada setiap baris, atau gunakan pembantu untuk menetapkannya sekali gus.
+                  </p>
+                  <Button size="sm" onClick={openDatePlan}
+                    className="h-7 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white">
+                    <Sparkles className="h-3.5 w-3.5" /> Tetapkan tarikh automatik
+                  </Button>
+                </div>
+              )}
+              {dateErr && <p className="text-xs text-red-600">{dateErr}</p>}
               {Object.entries(grouped).map(([key, g]) => (
                 <div key={key} className="space-y-1.5">
                   <div className="flex items-center gap-2">
@@ -399,6 +450,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                     <table className="w-full text-xs">
                       <thead className="bg-zinc-50 border-b">
                         <tr>
+                          {multiDay && <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Tarikh</th>}
                           <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Sesi</th>
                           <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Slot</th>
                           <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Nama</th>
@@ -415,6 +467,23 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                             <tr key={s.id}
                               onClick={() => clickable && openProcess(s)}
                               className={`${clickable ? "cursor-pointer hover:bg-amber-50/40" : ""}`}>
+                              {multiDay && (
+                                <td className="px-3 py-2 text-zinc-600 whitespace-nowrap" onClick={e => clickable && e.stopPropagation()}>
+                                  {clickable && (subDates[s.walkInCompetition.id]?.length ?? 0) > 0 ? (
+                                    <span className="inline-flex items-center gap-1">
+                                      <select value={s.slotDate ?? ""} disabled={dateSaving === s.id}
+                                        onChange={e => e.target.value && setSubmissionDate(s, e.target.value)}
+                                        className={`h-7 rounded-md border px-1.5 text-[11px] bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 ${s.slotDate ? "border-zinc-200 text-zinc-700" : "border-amber-300 text-amber-700"}`}>
+                                        {!s.slotDate && <option value="">Pilih tarikh…</option>}
+                                        {subDates[s.walkInCompetition.id].map(d => (
+                                          <option key={d} value={d}>{fmtSlotDate(d, { weekday: "short", day: "numeric", month: "short" })}</option>
+                                        ))}
+                                      </select>
+                                      {dateSaving === s.id && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
+                                    </span>
+                                  ) : s.slotDate ? fmtSlotDate(s.slotDate, { weekday: "short", day: "numeric", month: "short" }) : "—"}
+                                </td>
+                              )}
                               <td className="px-3 py-2 text-zinc-600 whitespace-nowrap">
                                 {s.sessionNumber != null ? `Sesi ${s.sessionNumber}` : "—"}
                               </td>
@@ -466,6 +535,82 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
           );
         })()}
       </div>
+
+      {/* ── Date helper dialog ────────────────────────────────────────── */}
+      {datePlan && (() => {
+        const byId = new Map(subs.map(s => [s.id, s]));
+        const assigned = datePlan.items.filter(p => p.slotDate);
+        const unassigned = datePlan.items.filter(p => !p.slotDate);
+        const perDate = new Map<string, number>();
+        for (const p of assigned) perDate.set(p.slotDate!, (perDate.get(p.slotDate!) ?? 0) + 1);
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !datePlan.applying && setDatePlan(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b">
+                <p className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-indigo-600" /> Tetapkan tarikh automatik
+                </p>
+                <button type="button" onClick={() => setDatePlan(null)} disabled={datePlan.applying} className="text-zinc-400 hover:text-zinc-700">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-5 space-y-3 text-xs text-zinc-600">
+                {datePlan.loading ? (
+                  <div className="flex items-center gap-2 py-4 justify-center text-zinc-400">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Menyediakan cadangan…
+                  </div>
+                ) : datePlan.done ? (
+                  <p className="text-emerald-700 font-medium">
+                    {datePlan.done.updated} borang telah diberi tarikh.
+                    {datePlan.done.skipped > 0 && ` ${datePlan.done.skipped} tidak dapat ditetapkan — sila pilih secara manual.`}
+                  </p>
+                ) : datePlan.items.length === 0 ? (
+                  <p>Tiada borang tanpa tarikh.</p>
+                ) : (
+                  <>
+                    <p>
+                      Setiap borang kekal pada sesi dan slot yang sama, dan diletakkan pada tarikh terawal yang slotnya masih kosong.
+                      Borang yang lebih awal dihantar mendapat tarikh yang lebih awal. Borang tanpa slot diagihkan sama rata.
+                    </p>
+                    <div className="rounded-lg border divide-y">
+                      {[...perDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([d, n]) => (
+                        <div key={d} className="flex items-center justify-between px-3 py-1.5">
+                          <span className="text-zinc-700">{fmtSlotDate(d)}</span>
+                          <span className="font-semibold text-zinc-900">{n} borang</span>
+                        </div>
+                      ))}
+                    </div>
+                    {unassigned.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
+                        <p className="font-semibold text-amber-800">{unassigned.length} borang tidak dapat ditetapkan (slot sudah penuh pada semua tarikh):</p>
+                        <ul className="list-disc list-inside text-amber-800">
+                          {unassigned.slice(0, 8).map(p => {
+                            const s = byId.get(p.id);
+                            return <li key={p.id}>{s ? `${s.teamName ?? s.name} — Sesi ${s.sessionNumber} · Slot ${s.slotNumber}` : p.id}</li>;
+                          })}
+                          {unassigned.length > 8 && <li>…dan {unassigned.length - 8} lagi</li>}
+                        </ul>
+                      </div>
+                    )}
+                    <p className="text-zinc-400">Anda masih boleh menukar tarikh mana-mana borang selepas ini.</p>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-2 px-5 pb-5">
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => setDatePlan(null)} disabled={datePlan.applying}>
+                  {datePlan.done ? "Tutup" : "Batal"}
+                </Button>
+                {!datePlan.done && !datePlan.loading && assigned.length > 0 && (
+                  <Button size="sm" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5" onClick={applyDatePlan} disabled={datePlan.applying}>
+                    {datePlan.applying && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Tetapkan {assigned.length} tarikh
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── QR Code dialog ────────────────────────────────────────────── */}
       {qrEndpoint && (

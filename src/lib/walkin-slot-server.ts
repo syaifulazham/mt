@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { buildSlotSchedule, slotDateChoices, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import { buildSlotSchedule, isValidSlotScheduleConfig, slotDateChoices, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 /**
  * Server side of walk-in slot booking. A slot is (date, session, slot): the
@@ -83,6 +83,70 @@ export async function slotAvailabilityResponse(
   const dates = slotDatesOf(event, cfg);
   if (dates.length > 0 && (!date || !dates.includes(date))) return { config: cfg, dates, sessions: null };
   return { config: cfg, dates, sessions: await slotAvailability(wicId, cfg, dates.length > 0 ? date! : "") };
+}
+
+/** Open slot dates of every walk-in competition of an event that has a schedule, keyed by its id. */
+export async function eventSlotDatesByWic(eventId: string): Promise<Record<string, string[]>> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { startDate: true, endDate: true, walkInCompetitions: { select: { id: true, walkInSlotSchedule: true } } },
+  });
+  if (!event) return {};
+  const out: Record<string, string[]> = {};
+  for (const w of event.walkInCompetitions) {
+    if (isValidSlotScheduleConfig(w.walkInSlotSchedule)) out[w.id] = slotDatesOf(event, w.walkInSlotSchedule);
+  }
+  return out;
+}
+
+export type DatePlanItem = { id: string; slotDate: string | null; reason?: "NO_FREE_DATE" };
+
+/**
+ * Proposes a date for each pending borang entry of the event that has none
+ * (booked before the event had a date step). Entries keep their session and
+ * slot and go to the earliest open date where that slot is still free; entries
+ * without a slot go to the open date with the fewest entries. Entries are taken
+ * oldest first, so earlier bookings get the earlier days.
+ */
+export async function planUndatedSubmissions(eventId: string): Promise<DatePlanItem[]> {
+  const datesByWic = await eventSlotDatesByWic(eventId);
+  const wicIds = Object.keys(datesByWic).filter((id) => datesByWic[id].length > 0);
+  if (wicIds.length === 0) return [];
+  const [undated, subs, regs] = await Promise.all([
+    db.walkInFormSubmission.findMany({
+      where: { walkInCompetitionId: { in: wicIds }, status: "PENDING", slotDate: "" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, walkInCompetitionId: true, sessionNumber: true, slotNumber: true },
+    }),
+    db.walkInFormSubmission.findMany({
+      where: { walkInCompetitionId: { in: wicIds }, status: "PENDING", slotDate: { not: "" } },
+      select: { walkInCompetitionId: true, slotDate: true, sessionNumber: true, slotNumber: true },
+    }),
+    db.walkInRegistration.findMany({
+      where: { walkInCompetitionId: { in: wicIds }, status: ACTIVE_REG, slotDate: { not: "" } },
+      select: { walkInCompetitionId: true, slotDate: true, sessionNumber: true, slotNumber: true },
+    }),
+  ]);
+  const key = (w: string, d: string, s: number, n: number) => `${w}|${d}|${s}|${n}`;
+  const taken = new Set<string>();
+  const perDay = new Map<string, number>();
+  for (const r of [...subs, ...regs]) {
+    perDay.set(`${r.walkInCompetitionId}|${r.slotDate}`, (perDay.get(`${r.walkInCompetitionId}|${r.slotDate}`) ?? 0) + 1);
+    if (r.sessionNumber != null && r.slotNumber != null) taken.add(key(r.walkInCompetitionId, r.slotDate, r.sessionNumber, r.slotNumber));
+  }
+  return undated.map((s) => {
+    const dates = datesByWic[s.walkInCompetitionId];
+    let date: string | undefined;
+    if (s.sessionNumber != null && s.slotNumber != null) {
+      date = dates.find((d) => !taken.has(key(s.walkInCompetitionId, d, s.sessionNumber!, s.slotNumber!)));
+      if (date) taken.add(key(s.walkInCompetitionId, date, s.sessionNumber, s.slotNumber));
+    } else {
+      date = [...dates].sort((a, b) => (perDay.get(`${s.walkInCompetitionId}|${a}`) ?? 0) - (perDay.get(`${s.walkInCompetitionId}|${b}`) ?? 0))[0];
+    }
+    if (!date) return { id: s.id, slotDate: null, reason: "NO_FREE_DATE" as const };
+    perDay.set(`${s.walkInCompetitionId}|${date}`, (perDay.get(`${s.walkInCompetitionId}|${date}`) ?? 0) + 1);
+    return { id: s.id, slotDate: date };
+  });
 }
 
 /** A unique violation on the slot index (rather than on participant/competition). */

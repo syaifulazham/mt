@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { eventSlotDatesByWic } from "@/lib/walkin-slot-server";
 
 // GET — list form submissions for the event (optional ?status=PENDING|PROCESSED|NO_MATCH)
 export async function GET(
@@ -18,7 +19,7 @@ export async function GET(
     ...(status ? { status: status as "PENDING" | "PROCESSED" | "NO_MATCH" } : {}),
   };
 
-  const [submissions, pending, processed, noMatch] = await Promise.all([
+  const [submissions, pending, processed, noMatch, datesByWic] = await Promise.all([
     db.walkInFormSubmission.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -40,10 +41,13 @@ export async function GET(
     db.walkInFormSubmission.count({ where: { walkInCompetition: { eventId: id }, status: "PENDING" } }),
     db.walkInFormSubmission.count({ where: { walkInCompetition: { eventId: id }, status: "PROCESSED" } }),
     db.walkInFormSubmission.count({ where: { walkInCompetition: { eventId: id }, status: "NO_MATCH" } }),
+    eventSlotDatesByWic(id),
   ]);
 
   return NextResponse.json({
     data: submissions,
     counts: { PENDING: pending, PROCESSED: processed, NO_MATCH: noMatch },
+    /** Open slot dates per walk-in competition (empty for one-day events). */
+    dates: datesByWic,
   });
 }
