@@ -24,7 +24,7 @@ export async function GET(
       orderBy: { createdAt: "desc" },
       select: {
         id: true, ic: true, name: true, schoolName: true,
-        sessionNumber: true, slotNumber: true, status: true,
+        slotDate: true, sessionNumber: true, slotNumber: true, status: true,
         createdAt: true, processedAt: true,
         walkInCompetition: {
           select: {

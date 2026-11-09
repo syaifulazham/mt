@@ -118,7 +118,7 @@ export async function GET(
     take: 10,
     select: {
       id: true, ic: true, name: true, schoolName: true,
-      sessionNumber: true, slotNumber: true,
+      slotDate: true, sessionNumber: true, slotNumber: true,
       walkInCompetitionId: true,
       walkInCompetition: { select: { competition: { select: { code: true, name: true } } } },
     },
@@ -187,14 +187,14 @@ export async function GET(
     take: 10,
     orderBy: { createdAt: "desc" },
     select: {
-      id: true, status: true, sessionNumber: true, slotNumber: true,
+      id: true, status: true, slotDate: true, sessionNumber: true, slotNumber: true,
       participant: { select: { name: true, ic: true } },
       walkInCompetition: { select: { competition: { select: { code: true, name: true } } } },
     },
   });
   const registrations = regs.map(r => ({
     id: r.id, status: r.status,
-    sessionNumber: r.sessionNumber, slotNumber: r.slotNumber,
+    slotDate: r.slotDate, sessionNumber: r.sessionNumber, slotNumber: r.slotNumber,
     participantName: r.participant.name,
     ic: r.participant.ic ? `****${r.participant.ic.slice(-4)}` : null,
     competition: r.walkInCompetition.competition,

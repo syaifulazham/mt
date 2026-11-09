@@ -10,6 +10,7 @@ import {
   Trophy,
   MapPin,
   Calendar,
+  CalendarDays,
   ArrowRight,
   ArrowUpRight,
   X,
@@ -27,7 +28,7 @@ import {
   BookOpen,
   Plus,
 } from "lucide-react";
-import { buildSlotSchedule, fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import { buildSlotSchedule, fmtSlotDate, fmtSlotMin, slotDateChoices, type SlotScheduleConfig } from "@/lib/walkin-slots";
 import type { ArenaChallengeView } from "@/lib/arena-client";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
@@ -92,12 +93,13 @@ type WalkInReg = {
   viblockToken: string | null;
   /** VibeBlocks entry token (the part a participant types in), when issued. */
   vibeBlocksToken?: string | null;
+  slotDate?: string;
   sessionNumber: number | null;
   slotNumber: number | null;
   team?: { name: string; members: string[] } | null;
 };
 
-type SlotChoice = { sessionNumber: number; slotNumber: number };
+type SlotChoice = { sessionNumber: number; slotNumber: number; slotDate?: string };
 type TeamDraft = { teamName: string; members: { ic: string; name: string }[] };
 
 /** Member-count bounds for a TEAM walk-in competition (the server enforces the same). */
@@ -383,6 +385,10 @@ function RegisterModal({
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsErr,     setSlotsErr]     = useState("");
   const [selected,     setSelected]     = useState<SlotChoice | null>(null);
+  // Multi-day events: a date is picked first; the sessions are the same each day.
+  const dates = cfg ? slotDateChoices(target.event.startDate, target.event.endDate, cfg) : [];
+  const [slotDate, setSlotDate] = useState<string | null>(null);
+  const needDate = dates.length > 0 && !slotDate;
 
   // Close on Escape
   useEffect(() => {
@@ -395,11 +401,12 @@ function RegisterModal({
 
   // Load live slot availability (re-fetches when refreshKey changes, e.g. after SLOT_TAKEN)
   useEffect(() => {
-    if (!cfg) return;
+    if (!cfg || needDate) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSlotsLoading(true); setSlotsErr(""); setSelected(null);
-    fetch(`/api/v2/participant/walkin/slots?walkInCompetitionId=${target.id}`)
+    const sp = new URLSearchParams({ walkInCompetitionId: target.id, ...(slotDate && { date: slotDate }) });
+    fetch(`/api/v2/participant/walkin/slots?${sp}`)
       .then(async (r) => {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? "Ralat");
@@ -409,7 +416,7 @@ function RegisterModal({
       .catch(() => { if (!cancelled) setSlotsErr("Gagal memuatkan slot. Tutup dan buka semula."); })
       .finally(() => { if (!cancelled) setSlotsLoading(false); });
     return () => { cancelled = true; };
-  }, [cfg, target.id, refreshKey]);
+  }, [cfg, target.id, refreshKey, needDate, slotDate]);
 
   const selectedSession = selected && sessions
     ? sessions.find((s) => s.n === selected.sessionNumber)
@@ -511,9 +518,44 @@ function RegisterModal({
           </div>
         )}
 
+        {/* Date step (multi-day events) */}
+        {cfg && dates.length > 0 && (
+          needDate ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 flex items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5 text-teal-600" /> Langkah 1: Pilih Tarikh
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {dates.map((d) => (
+                  <button key={d} type="button" disabled={registering}
+                    onClick={() => setSlotDate(d)}
+                    className="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2.5 text-left hover:border-teal-400 transition-colors">
+                    <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-100">{fmtSlotDate(d, { weekday: "long" })}</p>
+                    <p className="text-[11px] text-zinc-500">{fmtSlotDate(d, { day: "numeric", month: "long", year: "numeric" })}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 px-3 py-2">
+              <p className="text-xs font-medium text-teal-700 dark:text-teal-300 flex items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5" /> {fmtSlotDate(slotDate!)}
+              </p>
+              <button type="button" disabled={registering}
+                onClick={() => { setSlotDate(null); setSelected(null); setSessions(null); }}
+                className="text-[11px] font-semibold text-teal-700 dark:text-teal-300 hover:underline">
+                Tukar tarikh
+              </button>
+            </div>
+          )
+        )}
+
         {/* Slot picker (cinema style) */}
-        {cfg && (
+        {cfg && !needDate && (
           <div className="space-y-3">
+            {dates.length > 0 && (
+              <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-200">Langkah 2: Pilih Sesi &amp; Slot</p>
+            )}
             {/* Legend */}
             <div className="flex items-center gap-4 text-[11px] text-zinc-500 dark:text-zinc-400">
               <span className="flex items-center gap-1.5">
@@ -608,12 +650,13 @@ function RegisterModal({
           <button
             type="button"
             onClick={() => {
-              if (!isTeam) { onConfirm(selected, null); return; }
+              const slot = selected && { ...selected, ...(slotDate && { slotDate }) };
+              if (!isTeam) { onConfirm(slot, null); return; }
               const err = teamDraftError(target.competition, team);
               setTeamErr(err);
-              if (!err) onConfirm(selected, team);
+              if (!err) onConfirm(slot, team);
             }}
-            disabled={registering || (isTeam && !self.ic) || (cfg ? !selected || slotsLoading || !!slotsErr : false)}
+            disabled={registering || (isTeam && !self.ic) || (cfg ? needDate || !selected || slotsLoading || !!slotsErr : false)}
             className="flex-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {registering ? (
@@ -688,6 +731,99 @@ function QrModal({
         >
           Tutup
         </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/* ── AddMemberModal ────────────────────────────────────────────────────── */
+
+const ADD_MEMBER_ERR: Record<string, string> = {
+  INVALID_IC:               "No. IC tidak sah (6–12 digit, tanpa sengkang).",
+  INVALID_NAME:             "Sila isikan nama penuh.",
+  ALREADY_IN_TEAM:          "Peserta ini sudah menjadi ahli pasukan.",
+  TEAM_FULL:                "Pasukan sudah mencapai bilangan ahli maksimum.",
+  MEMBER_NOT_FOUND:         "No. IC tiada dalam rekod peserta. Peserta perlu mendaftar dahulu.",
+  MEMBER_NOT_IN_CONTINGENT: "Ahli mesti daripada kontinjen yang sama dengan pasukan.",
+  MEMBER_NOT_ELIGIBLE:      "Peserta tidak menepati kumpulan sasaran pertandingan ini.",
+  PARTICIPANT_IN_SAME_EVENT: "Peserta sudah menyertai pertandingan lain dalam acara ini.",
+  ALREADY_REGISTERED:       "Peserta ini sudah berdaftar untuk pertandingan walk-in ini (atau lain dalam acara ini).",
+  NOT_REGISTERED:           "Penyertaan pasukan tidak dijumpai.",
+  CHANGED:                  "Pasukan baru sahaja dikemas kini. Sila cuba lagi.",
+};
+
+/** Adds a member to a team walk-in entry, pending (IC + name) or verified (IC of a registered participant). */
+function AddMemberModal({ wic, pending, onAdded, onClose }: {
+  wic: WalkInEntry;
+  /** Entry still awaiting verification: the member's name is typed in. */
+  pending: boolean;
+  onAdded: (members: string[]) => void;
+  onClose: () => void;
+}) {
+  const [ic, setIc] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const inputCls = "w-full h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 text-sm dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-60";
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit() {
+    setBusy(true); setErr("");
+    const res = await fetch("/api/v2/participant/walkin/team-member", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walkInCompetitionId: wic.id, ic, name }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) { setErr((ADD_MEMBER_ERR[j.error] ?? j.error ?? "Gagal menambah ahli.") + (j.detail && j.error !== "ALREADY_REGISTERED" ? ` (${j.detail})` : "")); return; }
+    onAdded(j.data.members);
+  }
+
+  const ok = /^\d{6,12}$/.test(ic) && (!pending || name.trim().length >= 3);
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-2xl p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-base font-bold dark:text-zinc-100">Tambah Ahli Pasukan</h2>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="font-mono mr-1.5">{wic.competition.code}</span>{wic.competition.name}
+        </p>
+        <div className="space-y-2">
+          <input value={ic} disabled={busy} inputMode="numeric" autoFocus
+            onChange={(e) => setIc(e.target.value.replace(/[^\d]/g, "").slice(0, 12))}
+            placeholder="No. Kad Pengenalan" className={`${inputCls} font-mono`} />
+          {pending && (
+            <input value={name} disabled={busy} onChange={(e) => setName(e.target.value)}
+              placeholder="Nama penuh seperti dalam kad pengenalan" className={inputCls} />
+          )}
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            {pending
+              ? "Ahli akan disemak bersama pasukan semasa pengesahan oleh penganjur."
+              : "Ahli mesti peserta berdaftar daripada kontinjen yang sama dan layak untuk pertandingan ini."}
+          </p>
+        </div>
+        {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} disabled={busy}
+            className="flex-1 rounded-lg border border-zinc-200 dark:border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-50">
+            Batal
+          </button>
+          <button type="button" onClick={submit} disabled={busy || !ok}
+            className="flex-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Tambah
+          </button>
+        </div>
       </div>
     </div>,
     document.body,
@@ -982,6 +1118,7 @@ export function DashboardClient({
   const [slotRefreshKey, setSlotRefreshKey] = useState(0);
   const [qrTarget, setQrTarget]           = useState<{ id: string; name: string } | null>(null);
   const [tokenTarget, setTokenTarget]     = useState<string | null>(null);
+  const [addMemberTarget, setAddMemberTarget] = useState<WalkInEntry | null>(null);
 
   const handleRegister = useCallback(async (slot: SlotChoice | null, team: TeamDraft | null) => {
     if (!registerTarget) return;
@@ -1017,6 +1154,8 @@ export function DashboardClient({
           setRegisterErr("Slot baru sahaja ditempah. Sila pilih slot lain.");
         } else if (j.error === "SLOT_REQUIRED") {
           setRegisterErr("Sila pilih sesi dan slot.");
+        } else if (j.error === "DATE_REQUIRED") {
+          setRegisterErr("Sila pilih tarikh.");
         } else {
           setRegisterErr(j.message ?? "Gagal mendaftar.");
         }
@@ -1024,7 +1163,7 @@ export function DashboardClient({
         const reg: WalkInReg = team
           ? {
               id: j.data.id, status: "SUBMITTED", viblockToken: null,
-              sessionNumber: j.data.sessionNumber ?? null, slotNumber: j.data.slotNumber ?? null,
+              slotDate: j.data.slotDate ?? "", sessionNumber: j.data.sessionNumber ?? null, slotNumber: j.data.slotNumber ?? null,
               team: { name: team.teamName.trim(), members: team.members.map((m) => m.name.trim().toUpperCase()) },
             }
           : j.data;
@@ -1621,6 +1760,16 @@ export function DashboardClient({
                               )}
                             </p>
                           )}
+                          {reg?.team && (
+                            reg.team.members.length < Math.max(1, wic.competition.maxTeamSize) ? (
+                              <button type="button" onClick={() => setAddMemberTarget(wic)}
+                                className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-teal-700 dark:text-teal-300 hover:underline">
+                                <Plus className="h-3 w-3" /> Tambah ahli ({reg.team.members.length}/{Math.max(1, wic.competition.maxTeamSize)})
+                              </button>
+                            ) : (
+                              <p className="mt-1 text-[11px] text-zinc-400">Pasukan penuh ({reg.team.members.length}/{Math.max(1, wic.competition.maxTeamSize)})</p>
+                            )
+                          )}
                         </div>
 
                         {/* Slot indicator */}
@@ -1694,6 +1843,7 @@ export function DashboardClient({
                             <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800">
                               <Clock className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
                               <p className="text-xs font-medium text-teal-700 dark:text-teal-300">
+                                {reg.slotDate && `${fmtSlotDate(reg.slotDate)} · `}
                                 Sesi {reg.sessionNumber} · Slot {reg.slotNumber}
                                 {(() => {
                                   if (!wic.walkInSlotSchedule) return null;
@@ -1795,6 +1945,18 @@ export function DashboardClient({
           registrationId={qrTarget.id}
           competitionName={qrTarget.name}
           onClose={() => setQrTarget(null)}
+        />
+      )}
+      {addMemberTarget && registrations[addMemberTarget.id]?.team && (
+        <AddMemberModal
+          wic={addMemberTarget}
+          pending={registrations[addMemberTarget.id].status === "SUBMITTED"}
+          onAdded={(members) => {
+            const id = addMemberTarget.id;
+            setRegistrations((prev) => ({ ...prev, [id]: { ...prev[id], team: { ...prev[id].team!, members } } }));
+            setAddMemberTarget(null);
+          }}
+          onClose={() => setAddMemberTarget(null)}
         />
       )}
       {tokenTarget && (

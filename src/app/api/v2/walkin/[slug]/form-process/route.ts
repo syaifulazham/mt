@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { heldSlot, isSlotConflict, slotTaken } from "@/lib/walkin-slot-server";
 
 // POST /api/v2/walkin/[slug]/form-process — counter processes a pending public-form submission
 // body: { submissionId, participantId, passcode }
@@ -30,7 +31,7 @@ export async function POST(
     where: { id: submissionId, walkInCompetition: { eventId: endpoint.eventId } },
     select: {
       id: true, status: true, walkInCompetitionId: true,
-      sessionNumber: true, slotNumber: true, teamName: true,
+      slotDate: true, sessionNumber: true, slotNumber: true, teamName: true,
     },
   });
   if (!sub) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -60,18 +61,9 @@ export async function POST(
   }
 
   // Slot must still be free (submission's own reservation is excluded as it becomes PROCESSED)
-  if (sub.sessionNumber != null && sub.slotNumber != null) {
-    const taken = await db.walkInRegistration.findFirst({
-      where: {
-        walkInCompetitionId: sub.walkInCompetitionId,
-        sessionNumber: sub.sessionNumber,
-        slotNumber: sub.slotNumber,
-        status: { in: ["PENDING", "CONFIRMED"] },
-      },
-      select: { id: true },
-    });
-    if (taken) return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
-  }
+  const slot = heldSlot(sub);
+  if (slot && await slotTaken(sub.walkInCompetitionId, slot, { includeSubmissions: false }))
+    return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
 
   try {
     const reg = await db.walkInRegistration.create({
@@ -82,10 +74,7 @@ export async function POST(
         status: "CONFIRMED",
         method: "COUNTER",
         confirmedAt: new Date(),
-        ...(sub.sessionNumber != null && sub.slotNumber != null && {
-          sessionNumber: sub.sessionNumber,
-          slotNumber: sub.slotNumber,
-        }),
+        ...slot,
       },
       select: { id: true, status: true },
     });
@@ -101,8 +90,7 @@ export async function POST(
     return NextResponse.json({ data: { registrationId: reg.id, status: reg.status } }, { status: 201 });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined) ?? [];
-      if (target.includes("sessionNumber"))
+      if (isSlotConflict(e))
         return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
       return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });
     }

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (body.action === "confirm_submission" && typeof body.submissionId === "string")
     r = await confirmCounterSubmission(eventId, wic, body.submissionId);
   else if (body.action === "register_team" && typeof body.teamId === "string")
-    r = await registerExistingTeam(eventId, wic, body.teamId, body.sessionNumber, body.slotNumber);
+    r = await registerExistingTeam(eventId, wic, body.teamId, body);
   else if (body.action === "new_team")
     r = await registerNewTeam(eventId, wic, body);
   else return NextResponse.json({ error: "INVALID_ACTION" }, { status: 400 });

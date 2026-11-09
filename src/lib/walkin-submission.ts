@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isValidSlotScheduleConfig } from "@/lib/walkin-slots";
+import { claimSlot, isSlotConflict, slotDatesOf } from "@/lib/walkin-slot-server";
 import {
   cleanIc, IC_RE, parseTeamMembers, registrationHasIc, submissionHasIc, teamSizeBounds,
   type WalkInTeamMember,
@@ -32,6 +33,7 @@ export async function createWalkInSubmission(input: {
     where: { id: input.walkInCompetitionId, eventId },
     select: {
       id: true, walkInSlotSchedule: true,
+      event: { select: { startDate: true, endDate: true } },
       competition: { select: { participationType: true, minTeamSize: true, maxTeamSize: true } },
     },
   });
@@ -101,29 +103,11 @@ export async function createWalkInSubmission(input: {
     if (existingSub || existingReg) return fail(409, "UNIQUE_PARTICIPATION");
   }
 
-  // Slot selection required when a slot schedule is configured
-  const { sessionNumber, slotNumber } = body as { sessionNumber?: unknown; slotNumber?: unknown };
+  // Slot selection (and, on multi-day events, a date) required when a slot schedule is configured
   const scheduleCfg = isValidSlotScheduleConfig(wic.walkInSlotSchedule) ? wic.walkInSlotSchedule : null;
-  let slot: { sessionNumber: number; slotNumber: number } | null = null;
-  if (scheduleCfg) {
-    const s = Number.isInteger(sessionNumber) ? (sessionNumber as number) : 0;
-    const n = Number.isInteger(slotNumber) ? (slotNumber as number) : 0;
-    if (s < 1 || s > scheduleCfg.totalSessions || n < 1 || n > scheduleCfg.slotsPerSession)
-      return fail(400, "SLOT_REQUIRED");
-    slot = { sessionNumber: s, slotNumber: n };
-
-    const [takenReg, takenSub] = await Promise.all([
-      db.walkInRegistration.findFirst({
-        where: { walkInCompetitionId: wic.id, ...slot, status: { in: ["PENDING", "CONFIRMED"] } },
-        select: { id: true },
-      }),
-      db.walkInFormSubmission.findFirst({
-        where: { walkInCompetitionId: wic.id, ...slot, status: "PENDING" },
-        select: { id: true },
-      }),
-    ]);
-    if (takenReg || takenSub) return fail(409, "SLOT_TAKEN");
-  }
+  const claimed = await claimSlot(wic.id, scheduleCfg, slotDatesOf(wic.event, scheduleCfg), body);
+  if ("error" in claimed) return fail(claimed.status, claimed.error);
+  const slot = claimed.slot;
 
   const schoolName = typeof body.schoolName === "string" && body.schoolName.trim() ? body.schoolName.trim() : null;
   try {
@@ -137,14 +121,12 @@ export async function createWalkInSubmission(input: {
         schoolName,
         ...slot,
       },
-      select: { id: true, status: true, sessionNumber: true, slotNumber: true },
+      select: { id: true, status: true, slotDate: true, sessionNumber: true, slotNumber: true },
     });
     return { status: 201, json: { data: sub } };
   } catch (e: unknown) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined) ?? [];
-      return fail(409, target.includes("sessionNumber") ? "SLOT_TAKEN" : "DUPLICATE_SUBMISSION");
-    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+      return fail(409, isSlotConflict(e) ? "SLOT_TAKEN" : "DUPLICATE_SUBMISSION");
     throw e;
   }
 }

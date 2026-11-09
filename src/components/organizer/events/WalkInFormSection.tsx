@@ -7,12 +7,15 @@ import {
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
+import { fmtSlotDate } from "@/lib/walkin-slots";
 
 type FormEndpoint = {
   id: string; routeSlug: string; label: string | null; active: boolean; createdAt: string | Date;
 };
 type Submission = {
   id: string; ic: string; name: string; schoolName: string | null;
+  /** "YYYY-MM-DD" on multi-day events, "" otherwise. */
+  slotDate: string;
   sessionNumber: number | null; slotNumber: number | null;
   status: "PENDING" | "PROCESSED" | "NO_MATCH";
   createdAt: string | Date; processedAt: string | Date | null;
@@ -82,6 +85,8 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
   const [filter,      setFilter]      = useState<Submission["status"]>("PENDING");
   const [subsLoading, setSubsLoading] = useState(false);
   const [searchQ,     setSearchQ]     = useState("");
+  // Date tab (multi-day events): "" = entries without a date; null = the first tab
+  const [dateTab,     setDateTab]     = useState<string | null>(null);
 
   const [processing,      setProcessing]      = useState<Submission | null>(null);
   const [procQ,           setProcQ]           = useState("");
@@ -279,11 +284,13 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                     const cA = a.walkInCompetition.competition.name;
                     const cB = b.walkInCompetition.competition.name;
                     if (cA !== cB) return cA.localeCompare(cB);
+                    if ((a.slotDate ?? "") !== (b.slotDate ?? "")) return (a.slotDate ?? "").localeCompare(b.slotDate ?? "");
                     if ((a.sessionNumber ?? 0) !== (b.sessionNumber ?? 0)) return (a.sessionNumber ?? 0) - (b.sessionNumber ?? 0);
                     return (a.slotNumber ?? 0) - (b.slotNumber ?? 0);
                   });
                   const rows = sorted.map(s => [
                     s.walkInCompetition.competition.name,
+                    s.slotDate ?? "",
                     s.sessionNumber != null ? `Sesi ${s.sessionNumber}` : "",
                     s.slotNumber != null ? String(s.slotNumber) : "",
                     s.teamName ?? "",
@@ -291,7 +298,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                     s.teamMembers ? s.teamMembers.map(m => m.ic).join("; ") : s.ic,
                     s.status,
                   ]);
-                  const csv = [["Pertandingan", "Sesi", "Slot", "Pasukan", "Nama", "IC", "Status"], ...rows]
+                  const csv = [["Pertandingan", "Tarikh", "Sesi", "Slot", "Pasukan", "Nama", "IC", "Status"], ...rows]
                     .map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
                   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
                   const link = document.createElement("a");
@@ -346,7 +353,14 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
             (s.teamMembers ?? []).some(m => m.name.toLowerCase().includes(q) || m.ic.includes(q))
           ) : subs;
           if (filtered.length === 0) return <p className="text-xs text-zinc-400 italic py-2">Tiada padanan untuk &quot;{searchQ.trim()}&quot;</p>;
-          const sorted = [...filtered].sort((a, b) => {
+          // Date tabs: one per slot date (earliest first), entries without a date last
+          const dateCounts = new Map<string, number>();
+          for (const s of filtered) dateCounts.set(s.slotDate ?? "", (dateCounts.get(s.slotDate ?? "") ?? 0) + 1);
+          const dateKeys = [...dateCounts.keys()].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
+          const showTabs = dateKeys.some(k => k !== "");
+          const activeDate = dateTab !== null && dateCounts.has(dateTab) ? dateTab : dateKeys[0];
+          const inTab = showTabs ? filtered.filter(s => (s.slotDate ?? "") === activeDate) : filtered;
+          const sorted = [...inTab].sort((a, b) => {
             const cA = a.walkInCompetition.competition.name;
             const cB = b.walkInCompetition.competition.name;
             if (cA !== cB) return cA.localeCompare(cB);
@@ -361,6 +375,19 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
           }
           return (
             <div className="space-y-4">
+              {showTabs && (
+                <div className="flex flex-wrap gap-1 border-b border-zinc-200">
+                  {dateKeys.map(k => (
+                    <button key={k || "none"} type="button" onClick={() => setDateTab(k)}
+                      className={`-mb-px px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                        k === activeDate ? "border-indigo-500 text-indigo-700" : "border-transparent text-zinc-500 hover:text-zinc-700"
+                      }`}>
+                      {k ? fmtSlotDate(k, { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "Tiada tarikh"}
+                      <span className="ml-1 text-[10px] text-zinc-400">({dateCounts.get(k)})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {Object.entries(grouped).map(([key, g]) => (
                 <div key={key} className="space-y-1.5">
                   <div className="flex items-center gap-2">
@@ -541,7 +568,7 @@ export function WalkInFormSection({ eventId, canWrite }: { eventId: string; canW
                   {processing.schoolName && <span className="col-span-2">Sekolah: <strong className="text-zinc-700">{processing.schoolName}</strong></span>}
                   <span>Pertandingan: <strong className="text-zinc-700">{processing.walkInCompetition.competition.name}</strong></span>
                   {processing.sessionNumber != null && (
-                    <span>Slot: <strong className="text-zinc-700">Sesi {processing.sessionNumber} · Slot {processing.slotNumber}</strong></span>
+                    <span>Slot: <strong className="text-zinc-700">{processing.slotDate && `${fmtSlotDate(processing.slotDate)} · `}Sesi {processing.sessionNumber} · Slot {processing.slotNumber}</strong></span>
                   )}
                 </div>
               </div>

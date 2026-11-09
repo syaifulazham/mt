@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { heldSlot, isSlotConflict, slotTaken } from "@/lib/walkin-slot-server";
 import { confirmTeamVerification, loadTeamSubmission, previewTeamVerification } from "@/lib/walkin-team-verify";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
@@ -49,7 +50,7 @@ export async function POST(
     where: { id: subId, walkInCompetition: { eventId: id } },
     select: {
       id: true, status: true, walkInCompetitionId: true,
-      sessionNumber: true, slotNumber: true, teamName: true,
+      slotDate: true, sessionNumber: true, slotNumber: true, teamName: true,
       walkInCompetition: {
         select: { event: { select: { walkInUniqueParticipation: true } } },
       },
@@ -97,18 +98,9 @@ export async function POST(
   }
 
   // Slot must still be free (the submission's own PENDING reservation is excluded by status change)
-  if (sub.sessionNumber != null && sub.slotNumber != null) {
-    const taken = await db.walkInRegistration.findFirst({
-      where: {
-        walkInCompetitionId: sub.walkInCompetitionId,
-        sessionNumber: sub.sessionNumber,
-        slotNumber: sub.slotNumber,
-        status: { in: ["PENDING", "CONFIRMED"] },
-      },
-      select: { id: true },
-    });
-    if (taken) return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
-  }
+  const slot = heldSlot(sub);
+  if (slot && await slotTaken(sub.walkInCompetitionId, slot, { includeSubmissions: false }))
+    return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
 
   try {
     const [reg] = await db.$transaction([
@@ -120,10 +112,7 @@ export async function POST(
           status: "CONFIRMED",
           method: "COUNTER",
           confirmedAt: new Date(),
-          ...(sub.sessionNumber != null && sub.slotNumber != null && {
-            sessionNumber: sub.sessionNumber,
-            slotNumber: sub.slotNumber,
-          }),
+          ...slot,
         },
         select: { id: true, status: true },
       }),
@@ -145,8 +134,7 @@ export async function POST(
     return NextResponse.json({ success: true, status: "PROCESSED", registrationId: reg.id });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined) ?? [];
-      if (target.includes("sessionNumber"))
+      if (isSlotConflict(e))
         return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
       return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });
     }

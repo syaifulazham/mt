@@ -8,7 +8,7 @@ import {
   UserCheck, MapPin, Users, User,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import type { SlotScheduleConfig } from "@/lib/walkin-slots";
+import { fmtSlotDate, type SlotScheduleConfig } from "@/lib/walkin-slots";
 import { CounterSlotPicker, type SessionSlots, type SlotChoice } from "./CounterSlotPicker";
 import { CounterTeamPanel, type TeamRegResult } from "./CounterTeamPanel";
 import { gameLabel } from "@/lib/game-provider";
@@ -60,13 +60,13 @@ type DroneTokenData = { userid: string; password: string; accessToken: string; c
 type RegisteredResult = { id: string; status: string; viblockToken?: string | null; vibeBlocksToken?: string | null; droneToken?: DroneTokenData | null; gameName?: string | null };
 type FormSubmissionHit = {
   id: string; ic: string; name: string; schoolName: string | null;
-  sessionNumber: number | null; slotNumber: number | null;
+  slotDate?: string; sessionNumber: number | null; slotNumber: number | null;
   walkInCompetitionId: string;
   walkInCompetition: { competition: { code: string; name: string } };
 };
 type RegistrationHit = {
   id: string; status: string;
-  sessionNumber: number | null; slotNumber: number | null;
+  slotDate?: string; sessionNumber: number | null; slotNumber: number | null;
   participantName: string; ic: string | null;
   competition: { code: string; name: string };
 };
@@ -659,6 +659,8 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotChoice,   setSlotChoice]   = useState<SlotChoice | null>(null);
   const [slotRefreshKey, setSlotRefreshKey] = useState(0);
+  const [slotDates,    setSlotDates]    = useState<string[]>([]);
+  const [pickedDate,   setPickedDate]   = useState<{ wicId: string; date: string } | null>(null);
   const [registering,  setRegistering]  = useState(false);
   const [regResult,    setRegResult]    = useState<RegisteredResult | null>(null);
   const [regErr,       setRegErr]       = useState("");
@@ -689,20 +691,25 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
     ? (wic.isGeneral ? selectedWic?.walkInSlotSchedule ?? null : wic.walkInSlotSchedule)
     : null;
 
-  // Load slot availability for the active competition (when a schedule is configured)
+  // Multi-day events: the date picked for the active competition (reset when the competition changes)
+  const slotDate = pickedDate && pickedDate.wicId === activeWicId ? pickedDate.date : null;
+  const setSlotDate = (d: string | null) => { setPickedDate(d && activeWicId ? { wicId: activeWicId, date: d } : null); setSlotChoice(null); };
+
+  // Load slot availability for the active competition (when a schedule is configured).
+  // The response lists the event's dates; sessions come once a date is picked.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!authed || !activeWicId || !activeCfg) { setSlotSessions(null); return; }
+    if (!authed || !activeWicId || !activeCfg) { setSlotSessions(null); setSlotDates([]); return; }
     let cancelled = false;
     setSlotsLoading(true); setSlotChoice(null);
-    const sp = new URLSearchParams({ passcode, competitionId: activeWicId });
+    const sp = new URLSearchParams({ passcode, competitionId: activeWicId, ...(slotDate && { date: slotDate }) });
     fetch(`/api/v2/walkin/${slug}/slots?${sp}`)
       .then(r => r.json())
-      .then(j => { if (!cancelled) setSlotSessions(j.sessions ?? null); })
+      .then(j => { if (!cancelled) { setSlotSessions(j.sessions ?? null); setSlotDates(j.dates ?? []); } })
       .catch(() => { if (!cancelled) setSlotSessions(null); })
       .finally(() => { if (!cancelled) setSlotsLoading(false); });
     return () => { cancelled = true; };
-  }, [authed, activeWicId, activeCfg, slotRefreshKey, slug, passcode]);
+  }, [authed, activeWicId, activeCfg, slotRefreshKey, slug, passcode, slotDate]);
 
   async function handleSearch(value: string) {
     setQ(value); setSelected(null);
@@ -763,6 +770,8 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
           ? "Peserta sudah berdaftar untuk pertandingan walk-in lain dalam acara ini."
           : j.error === "SLOT_REQUIRED"
           ? "Sila pilih sesi dan slot."
+          : j.error === "DATE_REQUIRED"
+          ? "Sila pilih tarikh."
           : (j.message ?? j.error ?? "Gagal mendaftar."),
       );
     } else {
@@ -1001,6 +1010,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
           <CounterTeamPanel key={activeWicId}
             slug={slug} passcode={passcode} competitionId={activeWicId}
             cfg={activeCfg} sessions={slotSessions} slotsLoading={slotsLoading}
+            slotDates={slotDates} slotDate={slotDate} onSlotDate={setSlotDate}
             minSize={Math.min(Math.max(1, activeCompetition.minTeamSize), Math.max(1, activeCompetition.maxTeamSize))}
             maxSize={Math.max(1, activeCompetition.maxTeamSize)}
             gameName={gameName}
@@ -1036,7 +1046,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                       {s.sessionNumber != null && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                           style={{ background: "rgba(242,220,12,.15)", color: B.gold, border: "1px solid rgba(242,220,12,.3)" }}>
-                          Sesi {s.sessionNumber} · Slot {s.slotNumber}
+                          {s.slotDate && `${fmtSlotDate(s.slotDate, { day: "numeric", month: "short" })} · `}Sesi {s.sessionNumber} · Slot {s.slotNumber}
                         </span>
                       )}
                     </div>
@@ -1088,7 +1098,7 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                       <p className="text-sm font-bold text-white">{r.participantName}</p>
                       <p className="text-[11px]" style={{ color: "rgba(255,255,255,.45)" }}>
                         {r.ic && <span className="font-mono">{r.ic}</span>}
-                        {r.sessionNumber != null && <> · Sesi {r.sessionNumber} · Slot {r.slotNumber}</>}
+                        {r.sessionNumber != null && <> · {r.slotDate && `${fmtSlotDate(r.slotDate, { day: "numeric", month: "short" })} · `}Sesi {r.sessionNumber} · Slot {r.slotNumber}</>}
                       </p>
                       <p className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,.35)" }}>
                         <span className="font-mono">{r.competition.code}</span> {r.competition.name}
@@ -1205,7 +1215,8 @@ export function CounterRegistrationClient({ slug }: { slug: string }) {
                 {/* Slot picker */}
                 {!selected.viaSubmissionOnly && activeCfg && (
                   <CounterSlotPicker cfg={activeCfg} sessions={slotSessions} loading={slotsLoading}
-                    choice={slotChoice} onChoose={setSlotChoice} disabled={registering} />
+                    choice={slotChoice} onChoose={setSlotChoice} disabled={registering}
+                    dates={slotDates} date={slotDate} onDate={setSlotDate} />
                 )}
 
                 {regErr && <p className="text-xs text-red-400">{regErr}</p>}

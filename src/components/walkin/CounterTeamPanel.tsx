@@ -49,6 +49,7 @@ function errorText(code: string, detail?: string): string {
   switch (code) {
     case "SLOT_TAKEN":              return "Slot baru sahaja ditempah. Sila pilih slot lain.";
     case "SLOT_REQUIRED":           return "Sila pilih sesi dan slot.";
+    case "DATE_REQUIRED":           return "Sila pilih tarikh.";
     case "SLOTS_FULL":              return "Pertandingan ini sudah penuh.";
     case "ALREADY_REGISTERED":      return `Ahli/pasukan sudah berdaftar untuk pertandingan ini${d}.`;
     case "UNIQUE_PARTICIPATION":    return `Ahli sudah berdaftar untuk pertandingan walk-in lain dalam acara ini${d}.`;
@@ -102,9 +103,11 @@ const primaryStyle = { background: `linear-gradient(90deg, ${B.navy}, ${B.purple
 
 export function CounterTeamPanel({
   slug, passcode, competitionId, cfg, sessions, slotsLoading, minSize, maxSize, onRegistered, gameName,
+  slotDates, slotDate, onSlotDate,
 }: {
   slug: string; passcode: string; competitionId: string; gameName?: string | null;
   cfg: SlotScheduleConfig | null; sessions: SessionSlots[] | null; slotsLoading: boolean;
+  slotDates: string[]; slotDate: string | null; onSlotDate: (d: string | null) => void;
   minSize: number; maxSize: number;
   onRegistered: (r: TeamRegResult) => void;
 }) {
@@ -173,10 +176,11 @@ export function CounterTeamPanel({
     setNewName(""); setNewIcs(Array(Math.max(1, minSize)).fill(""));
   }
 
-  const slotOk = !cfg || (!!slot && !slotsLoading && !!sessions);
+  const slotOk = !cfg || (!!slot && !slotsLoading && !!sessions && (slotDates.length === 0 || slot.slotDate === slotDate));
   const picker = cfg && (
     <CounterSlotPicker cfg={cfg} sessions={sessions} loading={slotsLoading}
-      choice={slot} onChoose={setSlot} disabled={busy} />
+      choice={slot} onChoose={setSlot} disabled={busy}
+      dates={slotDates} date={slotDate} onDate={(d) => { setSlot(null); onSlotDate(d); }} />
   );
 
   /* ── Right column ── */

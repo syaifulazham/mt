@@ -802,6 +802,8 @@ model WalkInFormSubmission {
   ic                   String
   name                 String
   schoolName           String?
+  /// "YYYY-MM-DD" (MYT) the slot is on for multi-day events; "" otherwise.
+  slotDate             String                     @default("")
   sessionNumber        Int?
   slotNumber           Int?
   status               WalkInFormSubmissionStatus @default(PENDING)
@@ -887,6 +889,8 @@ model WalkInRegistration {
   registeredBy        String?
   confirmedAt         DateTime?
   viblockToken        String?
+  /// "YYYY-MM-DD" (MYT) the slot is on for multi-day events; "" otherwise.
+  slotDate            String       @default("")
   sessionNumber       Int?
   slotNumber          Int?
   /// TEAM competitions: one registration per team, anchored on the member the

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getParticipantSession } from "@/lib/auth/participant-session";
 import { Prisma } from "@prisma/client";
-import { isValidSlotScheduleConfig, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import { isValidSlotScheduleConfig } from "@/lib/walkin-slots";
+import { claimSlot, isSlotConflict, slotDatesOf } from "@/lib/walkin-slot-server";
 import { createWalkInSubmission } from "@/lib/walkin-submission";
 import { cleanIc, IC_RE, registrationHasIc, submissionHasIc } from "@/lib/walkin-team";
 
@@ -18,9 +19,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
-  const { walkInCompetitionId, sessionNumber, slotNumber } = body as {
-    walkInCompetitionId?: string; sessionNumber?: number; slotNumber?: number;
-  };
+  const { walkInCompetitionId } = body as { walkInCompetitionId?: string };
   if (!walkInCompetitionId)
     return NextResponse.json({ error: "MISSING_WALK_IN_COMPETITION_ID" }, { status: 400 });
 
@@ -31,7 +30,7 @@ export async function POST(req: NextRequest) {
       id: true,
       maxSlots: true,
       publishToPortal: true,
-      event: { select: { id: true, walkInUniqueParticipation: true } },
+      event: { select: { id: true, walkInUniqueParticipation: true, startDate: true, endDate: true } },
       competition: { select: { participationType: true } },
       walkInSlotSchedule: true,
       _count: { select: { registrations: true } },
@@ -62,38 +61,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(r.json, { status: r.status });
   }
 
-  // Slot selection required when a slot schedule is configured
+  // Slot selection (and, on multi-day events, a date) required when a slot schedule is configured
   const rawCfg = wic.walkInSlotSchedule;
   const scheduleCfg = isValidSlotScheduleConfig(rawCfg) ? rawCfg : null;
-  if (scheduleCfg) {
-    const cfg = scheduleCfg;
-    const validSession = Number.isInteger(sessionNumber) && sessionNumber! >= 1 && sessionNumber! <= cfg.totalSessions;
-    const validSlot    = Number.isInteger(slotNumber)    && slotNumber!    >= 1 && slotNumber!    <= cfg.slotsPerSession;
-    if (!validSession || !validSlot)
-      return NextResponse.json({ error: "SLOT_REQUIRED" }, { status: 400 });
-
-    const [takenReg, takenSub] = await Promise.all([
-      db.walkInRegistration.findFirst({
-        where: {
-          walkInCompetitionId,
-          sessionNumber: sessionNumber!,
-          slotNumber: slotNumber!,
-          status: { in: ["PENDING", "CONFIRMED"] },
-        },
-        select: { id: true },
-      }),
-      db.walkInFormSubmission.findFirst({
-        where: {
-          walkInCompetitionId,
-          sessionNumber: sessionNumber!,
-          slotNumber: slotNumber!,
-          status: "PENDING",
-        },
-        select: { id: true },
-      }),
-    ]);
-    if (takenReg || takenSub) return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
-  }
+  const claimed = await claimSlot(walkInCompetitionId, scheduleCfg, slotDatesOf(wic.event, scheduleCfg), body);
+  if ("error" in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status });
 
   // Penyertaan Unik: one active walk-in entry per participant per event —
   // their own registration, a team registration they are on, or a pending
@@ -130,15 +102,14 @@ export async function POST(req: NextRequest) {
         contingentId,
         status: "PENDING",
         method: "PORTAL",
-        ...(scheduleCfg && { sessionNumber: sessionNumber!, slotNumber: slotNumber! }),
+        ...claimed.slot,
       },
-      select: { id: true, status: true, sessionNumber: true, slotNumber: true },
+      select: { id: true, status: true, slotDate: true, sessionNumber: true, slotNumber: true },
     });
     return NextResponse.json({ data: reg }, { status: 201 });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined) ?? [];
-      if (target.includes("sessionNumber"))
+      if (isSlotConflict(e))
         return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
       return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });
     }

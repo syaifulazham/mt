@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GAME_PROVIDERS, asGameProvider, gameLabel, type GameProvider } from "@/lib/game-provider";
-import { DEFAULT_SLOT_SCHEDULE, buildSlotSchedule, fmtSlotMin, slotTimeToMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import { DEFAULT_SLOT_SCHEDULE, buildSlotSchedule, eventSlotDates, fmtSlotDate, fmtSlotMin, slotTimeToMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
 
 export type { SlotScheduleConfig } from "@/lib/walkin-slots";
 
@@ -571,7 +571,7 @@ function genUnlockCode(): string {
   return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
-function SlotScheduleSection({ eventId, wicId, initial, canWrite, onSaved }: { eventId: string; wicId: string; initial: SlotScheduleConfig | null; canWrite: boolean; onSaved: (cfg: SlotScheduleConfig) => void }) {
+function SlotScheduleSection({ eventId, wicId, initial, eventDays, canWrite, onSaved }: { eventId: string; wicId: string; initial: SlotScheduleConfig | null; eventDays: string[]; canWrite: boolean; onSaved: (cfg: SlotScheduleConfig) => void }) {
   const [cfg,       setCfg]       = useState<SlotScheduleConfig>(initial ?? DEFAULT_SLOT_SCHEDULE);
   const [persisted, setPersisted] = useState(initial != null);
   const [expanded,  setExpanded]  = useState(false);
@@ -594,6 +594,17 @@ function SlotScheduleSection({ eventId, wicId, initial, canWrite, onSaved }: { e
   const overTime      = lastSession != null && lastSession.end > endMin;
   const totalSlots    = cfg.totalSessions * cfg.slotsPerSession;
   const sessionCount  = blocks.filter(b => b.type === "session").length;
+  // Multi-day events: each day can be switched off; all are on by default. At least one stays on.
+  const multiDay      = eventDays.length > 1;
+  const offDates      = new Set(cfg.offDates ?? []);
+  const onDays        = eventDays.filter(d => !offDates.has(d));
+  const toggleDay = (d: string) => {
+    const next = new Set(offDates);
+    if (next.has(d)) next.delete(d);
+    else if (onDays.length > 1) next.add(d);
+    else return;
+    set({ offDates: eventDays.filter(x => next.has(x)) });
+  };
 
   async function save() {
     setSaving(true); setErr(""); setSaved(false);
@@ -643,7 +654,7 @@ function SlotScheduleSection({ eventId, wicId, initial, canWrite, onSaved }: { e
             : <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full shrink-0">Belum disahkan</span>}
           {!expanded && persisted && (
             <span className="text-[11px] text-zinc-400 truncate hidden sm:inline">
-              {sessionCount} sesi · {cfg.slotsPerSession} slot/sesi · kapasiti {totalSlots}
+              {multiDay && `${onDays.length} hari · `}{sessionCount} sesi · {cfg.slotsPerSession} slot/sesi · kapasiti {totalSlots * (multiDay ? onDays.length : 1)}
             </span>
           )}
         </div>
@@ -762,6 +773,31 @@ function SlotScheduleSection({ eventId, wicId, initial, canWrite, onSaved }: { e
             </div>
           </div>
 
+          {multiDay && (
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-zinc-400 block">
+                Tarikh dibuka <span className="text-zinc-300">· jadual masa yang sama digunakan setiap hari</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {eventDays.map(d => {
+                  const on = !offDates.has(d);
+                  const last = on && onDays.length === 1;
+                  return (
+                    <button key={d} type="button" onClick={() => toggleDay(d)}
+                      disabled={!editable || last} aria-pressed={on}
+                      title={last ? "Sekurang-kurangnya satu tarikh mesti dibuka" : undefined}
+                      className={`rounded-lg border px-3 py-1.5 text-left transition-colors disabled:cursor-not-allowed ${
+                        on ? "border-teal-300 bg-teal-50 text-teal-800" : "border-zinc-200 bg-zinc-50 text-zinc-400 line-through"
+                      } ${editable && !last ? "hover:border-teal-400" : ""} ${!editable ? "opacity-70" : ""}`}>
+                      <span className="block text-xs font-semibold">{fmtSlotDate(d, { weekday: "short", day: "numeric", month: "short" })}</span>
+                      <span className="block text-[10px] font-bold uppercase tracking-wide">{on ? "Buka" : "Tutup"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {err && <p className="text-xs text-red-500">{err}</p>}
 
       {/* Schedule visualization */}
@@ -769,7 +805,8 @@ function SlotScheduleSection({ eventId, wicId, initial, canWrite, onSaved }: { e
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
           <span><span className="font-semibold text-zinc-700">{sessionCount}</span> sesi</span>
           <span><span className="font-semibold text-zinc-700">{cfg.slotsPerSession}</span> slot / sesi</span>
-          <span>Kapasiti: <span className="font-semibold text-teal-700">{totalSlots}</span> slot</span>
+          {multiDay && <span><span className="font-semibold text-zinc-700">{onDays.length}</span> hari</span>}
+          <span>Kapasiti: <span className="font-semibold text-teal-700">{totalSlots * (multiDay ? onDays.length : 1)}</span> slot</span>
           {lastSession && (
             <span>Sesi terakhir tamat: <span className={`font-semibold ${overTime ? "text-red-600" : "text-zinc-700"}`}>{fmtSlotMin(lastSession.end)}</span></span>
           )}
@@ -1948,6 +1985,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                   eventId={event.id}
                   wicId={selectedWic.id}
                   initial={selectedWic.walkInSlotSchedule}
+                  eventDays={eventSlotDates(event.startDate, event.endDate)}
                   canWrite={canWrite}
                   onSaved={cfg => updateWic(selectedWic.id, { walkInSlotSchedule: cfg })}
                 />

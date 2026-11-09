@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { checkTeamPeople } from "@/lib/international";
 import { readTeamMembers, teamSizeBounds } from "@/lib/walkin-team";
+import { heldSlot, isSlotConflict, slotTaken } from "@/lib/walkin-slot-server";
 
 /**
  * Verifying a walk-in borang's temporary team against the main data.
@@ -47,7 +48,7 @@ export async function loadTeamSubmission(eventId: string, subId: string) {
     where: { id: subId, walkInCompetition: { eventId } },
     select: {
       id: true, status: true, walkInCompetitionId: true,
-      sessionNumber: true, slotNumber: true,
+      slotDate: true, sessionNumber: true, slotNumber: true,
       teamName: true, teamMembers: true,
       walkInCompetition: {
         select: {
@@ -200,18 +201,9 @@ export async function confirmTeamVerification(
   if ("notFound" in preview) return { error: "PARTICIPANT_NOT_FOUND", status: 404 };
   if (preview.error) return { error: preview.error.code, detail: preview.error.detail, status: 409 };
 
-  const hasSlot = sub.sessionNumber != null && sub.slotNumber != null;
-  if (hasSlot) {
-    const taken = await db.walkInRegistration.findFirst({
-      where: {
-        walkInCompetitionId: sub.walkInCompetitionId,
-        sessionNumber: sub.sessionNumber, slotNumber: sub.slotNumber,
-        status: { in: ["PENDING", "CONFIRMED"] },
-      },
-      select: { id: true },
-    });
-    if (taken) return { error: "SLOT_TAKEN", status: 409 };
-  }
+  const slot = heldSlot(sub);
+  if (slot && await slotTaken(sub.walkInCompetitionId, slot, { includeSubmissions: false }))
+    return { error: "SLOT_TAKEN", status: 409 };
 
   try {
     const result = await db.$transaction(async (tx) => {
@@ -246,7 +238,7 @@ export async function confirmTeamVerification(
           status: "CONFIRMED",
           method: "COUNTER",
           confirmedAt: new Date(),
-          ...(hasSlot && { sessionNumber: sub.sessionNumber, slotNumber: sub.slotNumber }),
+          ...slot,
         },
         select: { id: true },
       });
@@ -266,10 +258,8 @@ export async function confirmTeamVerification(
     return { outcome: preview.outcome, ...result };
   } catch (e: unknown) {
     if (e instanceof ProcessError) return { error: e.message, status: 409 };
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined) ?? [];
-      return { error: target.includes("sessionNumber") ? "SLOT_TAKEN" : "ALREADY_REGISTERED", status: 409 };
-    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+      return { error: isSlotConflict(e) ? "SLOT_TAKEN" : "ALREADY_REGISTERED", status: 409 };
     throw e;
   }
 }

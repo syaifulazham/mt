@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { buildSlotSchedule, isValidSlotScheduleConfig, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import { isValidSlotScheduleConfig } from "@/lib/walkin-slots";
+import { slotAvailabilityResponse } from "@/lib/walkin-slot-server";
 
-// GET /api/v2/walkin/[slug]/slots?passcode=...&competitionId=...
+// GET /api/v2/walkin/[slug]/slots?passcode=...&competitionId=...&date=YYYY-MM-DD
 // Counter-facing slot availability (booked slots per session).
 export async function GET(
   req: NextRequest,
@@ -27,42 +28,11 @@ export async function GET(
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId, eventId: endpoint.eventId },
-    select: { walkInSlotSchedule: true },
+    select: { walkInSlotSchedule: true, event: { select: { startDate: true, endDate: true } } },
   });
   const rawCfg = wic?.walkInSlotSchedule;
   if (!wic || !isValidSlotScheduleConfig(rawCfg))
     return NextResponse.json({ error: "NO_SCHEDULE" }, { status: 400 });
 
-  const cfg: SlotScheduleConfig = rawCfg;
-
-  const [regs, subs] = await Promise.all([
-    db.walkInRegistration.findMany({
-      where: {
-        walkInCompetitionId: wicId,
-        status: { in: ["PENDING", "CONFIRMED"] },
-        sessionNumber: { not: null },
-      },
-      select: { sessionNumber: true, slotNumber: true },
-    }),
-    db.walkInFormSubmission.findMany({
-      where: {
-        walkInCompetitionId: wicId,
-        status: "PENDING",
-        sessionNumber: { not: null },
-      },
-      select: { sessionNumber: true, slotNumber: true },
-    }),
-  ]);
-  const booked = [...regs, ...subs];
-
-  const sessions = buildSlotSchedule(cfg)
-    .filter((b): b is Extract<typeof b, { type: "session" }> => b.type === "session")
-    .map((b) => ({
-      n: b.n,
-      start: b.start,
-      end: b.end,
-      booked: booked.filter((r) => r.sessionNumber === b.n).map((r) => r.slotNumber),
-    }));
-
-  return NextResponse.json({ config: cfg, sessions });
+  return NextResponse.json(await slotAvailabilityResponse(wicId, rawCfg, wic.event, sp.get("date")));
 }

@@ -449,14 +449,14 @@ export default async function DashboardPage() {
         ],
       },
       select: {
-        id: true, walkInCompetitionId: true, status: true, viblockToken: true, sessionNumber: true, slotNumber: true,
+        id: true, walkInCompetitionId: true, status: true, viblockToken: true, slotDate: true, sessionNumber: true, slotNumber: true,
         team: { select: { name: true, members: { select: { participant: { select: { name: true } } } } } },
       },
     }),
     selfIc
       ? db.walkInFormSubmission.findMany({
           where: { ...submissionHasIc(selfIc), status: "PENDING", teamName: { not: null } },
-          select: { id: true, walkInCompetitionId: true, sessionNumber: true, slotNumber: true, teamName: true, teamMembers: true },
+          select: { id: true, walkInCompetitionId: true, slotDate: true, sessionNumber: true, slotNumber: true, teamName: true, teamMembers: true },
         })
       : Promise.resolve([]),
   ]);
@@ -502,7 +502,7 @@ export default async function DashboardPage() {
 
   type RegView = {
     id: string; status: string; viblockToken: string | null; vibeBlocksToken: string | null;
-    sessionNumber: number | null; slotNumber: number | null;
+    slotDate: string; sessionNumber: number | null; slotNumber: number | null;
     team: { name: string; members: string[] } | null;
   };
   const existingRegistrations: Record<string, RegView> = {};
@@ -510,7 +510,7 @@ export default async function DashboardPage() {
   for (const s of pendingTeamSubs) {
     existingRegistrations[s.walkInCompetitionId] = {
       id: s.id, status: "SUBMITTED", viblockToken: null, vibeBlocksToken: null,
-      sessionNumber: s.sessionNumber, slotNumber: s.slotNumber,
+      slotDate: s.slotDate, sessionNumber: s.sessionNumber, slotNumber: s.slotNumber,
       team: { name: s.teamName ?? "", members: readTeamMembers(s.teamMembers).map((m) => m.name) },
     };
   }
@@ -520,7 +520,7 @@ export default async function DashboardPage() {
       id: r.id, status: r.status,
       viblockToken: vb ? null : r.viblockToken,
       vibeBlocksToken: vb?.entryToken ?? null,
-      sessionNumber: r.sessionNumber, slotNumber: r.slotNumber,
+      slotDate: r.slotDate, sessionNumber: r.sessionNumber, slotNumber: r.slotNumber,
       team: r.team ? { name: r.team.name, members: r.team.members.map((m) => m.participant.name) } : null,
     };
   }

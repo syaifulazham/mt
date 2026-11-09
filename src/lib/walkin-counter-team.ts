@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isValidSlotScheduleConfig } from "@/lib/walkin-slots";
+import { claimSlot, isSlotConflict, slotDatesOf } from "@/lib/walkin-slot-server";
 import { createWalkInSubmission } from "@/lib/walkin-submission";
 import { confirmTeamVerification, loadTeamSubmission, previewTeamVerification } from "@/lib/walkin-team-verify";
 import { cleanIc, IC_RE, readTeamMembers, teamSizeBounds } from "@/lib/walkin-team";
@@ -28,7 +29,7 @@ export async function loadCounterWic(eventId: string, wicId: string) {
     where: { id: wicId, eventId },
     select: {
       id: true, maxSlots: true, walkInSlotSchedule: true, useVibeblocks: true, vibeBlocksProvider: true, viblockChallengeId: true,
-      event: { select: { walkInUniqueParticipation: true } },
+      event: { select: { walkInUniqueParticipation: true, startDate: true, endDate: true } },
       competition: { select: { id: true, participationType: true, minTeamSize: true, maxTeamSize: true } },
       _count: { select: { registrations: true } },
     },
@@ -83,7 +84,7 @@ export async function searchCounterTeams(eventId: string, wic: CounterWic, q: st
       orderBy: { createdAt: "asc" },
       select: {
         id: true, teamName: true, teamMembers: true, schoolName: true,
-        sessionNumber: true, slotNumber: true, endpointId: true,
+        slotDate: true, sessionNumber: true, slotNumber: true, endpointId: true,
       },
     }),
     db.team.findMany({
@@ -108,7 +109,7 @@ export async function searchCounterTeams(eventId: string, wic: CounterWic, q: st
         members: { select: { participant: { select: { id: true, name: true, ic: true } } }, orderBy: { createdAt: "asc" } },
         walkInRegistrations: {
           where: { walkInCompetitionId: wic.id, status: { in: ["PENDING", "CONFIRMED"] } },
-          select: { id: true, status: true, sessionNumber: true, slotNumber: true, viblockToken: true },
+          select: { id: true, status: true, slotDate: true, sessionNumber: true, slotNumber: true, viblockToken: true },
           take: 1,
         },
       },
@@ -121,7 +122,7 @@ export async function searchCounterTeams(eventId: string, wic: CounterWic, q: st
       teamName: s.teamName ?? "",
       schoolName: s.schoolName,
       source: s.endpointId ? "BORANG" : "PORTAL",
-      sessionNumber: s.sessionNumber, slotNumber: s.slotNumber,
+      slotDate: s.slotDate, sessionNumber: s.sessionNumber, slotNumber: s.slotNumber,
       members: readTeamMembers(s.teamMembers).map((m) => ({ name: m.name, ic: mask(m.ic) })),
     })),
     teams: teams.map((t) => {
@@ -131,7 +132,7 @@ export async function searchCounterTeams(eventId: string, wic: CounterWic, q: st
         contingentName: t.contingent.shortName ?? t.contingent.name,
         members: t.members.map((m) => ({ id: m.participant.id, name: m.participant.name, ic: mask(m.participant.ic) })),
         registration: reg && {
-          id: reg.id, status: reg.status, sessionNumber: reg.sessionNumber, slotNumber: reg.slotNumber,
+          id: reg.id, status: reg.status, slotDate: reg.slotDate, sessionNumber: reg.sessionNumber, slotNumber: reg.slotNumber,
           vibeBlocksToken: shownToken(wic, reg.viblockToken),
         },
       };
@@ -143,7 +144,7 @@ export async function searchCounterTeams(eventId: string, wic: CounterWic, q: st
 
 export type TeamRegResult = {
   registrationId: string; teamName: string; contingentName: string;
-  members: string[]; sessionNumber: number | null; slotNumber: number | null;
+  members: string[]; slotDate: string; sessionNumber: number | null; slotNumber: number | null;
   vibeBlocksToken: string | null;
   gameName: string | null;
 };
@@ -152,7 +153,7 @@ async function teamRegResult(regId: string, vibeBlocksToken: string | null): Pro
   const reg = await db.walkInRegistration.findUniqueOrThrow({
     where: { id: regId },
     select: {
-      sessionNumber: true, slotNumber: true,
+      slotDate: true, sessionNumber: true, slotNumber: true,
       walkInCompetition: { select: { useVibeblocks: true, vibeBlocksProvider: true } },
       contingent: { select: { name: true } },
       team: { select: { name: true, members: { select: { participant: { select: { name: true } } }, orderBy: { createdAt: "asc" } } } },
@@ -163,7 +164,7 @@ async function teamRegResult(regId: string, vibeBlocksToken: string | null): Pro
     teamName: reg.team?.name ?? "",
     contingentName: reg.contingent.name,
     members: reg.team?.members.map((m) => m.participant.name) ?? [],
-    sessionNumber: reg.sessionNumber, slotNumber: reg.slotNumber,
+    slotDate: reg.slotDate, sessionNumber: reg.sessionNumber, slotNumber: reg.slotNumber,
     vibeBlocksToken,
     gameName: reg.walkInCompetition.useVibeblocks ? gameLabel(reg.walkInCompetition.vibeBlocksProvider) : null,
   };
@@ -210,25 +211,17 @@ export async function confirmCounterSubmission(eventId: string, wic: CounterWic,
 
 /* ─── Slot checks shared by the two direct registrations ─────────────── */
 
-async function checkSlot(wic: CounterWic, sessionNumber: unknown, slotNumber: unknown) {
+export type SlotInput = { sessionNumber?: unknown; slotNumber?: unknown; slotDate?: unknown };
+
+function checkSlot(wic: CounterWic, input: SlotInput) {
   const cfg = isValidSlotScheduleConfig(wic.walkInSlotSchedule) ? wic.walkInSlotSchedule : null;
-  if (!cfg) return { slot: null };
-  const s = Number.isInteger(sessionNumber) ? (sessionNumber as number) : 0;
-  const n = Number.isInteger(slotNumber) ? (slotNumber as number) : 0;
-  if (s < 1 || s > cfg.totalSessions || n < 1 || n > cfg.slotsPerSession) return { error: "SLOT_REQUIRED", status: 400 } as Fail;
-  const slot = { sessionNumber: s, slotNumber: n };
-  const [takenReg, takenSub] = await Promise.all([
-    db.walkInRegistration.findFirst({ where: { walkInCompetitionId: wic.id, ...slot, status: { in: ["PENDING", "CONFIRMED"] } }, select: { id: true } }),
-    db.walkInFormSubmission.findFirst({ where: { walkInCompetitionId: wic.id, ...slot, status: "PENDING" }, select: { id: true } }),
-  ]);
-  if (takenReg || takenSub) return { error: "SLOT_TAKEN", status: 409 } as Fail;
-  return { slot };
+  return claimSlot(wic.id, cfg, slotDatesOf(wic.event, cfg), input);
 }
 
 /* ─── Existing team ───────────────────────────────────────────────────── */
 
 export async function registerExistingTeam(
-  eventId: string, wic: CounterWic, teamId: string, sessionNumber: unknown, slotNumber: unknown,
+  eventId: string, wic: CounterWic, teamId: string, slotInput: SlotInput,
 ): Promise<{ result: TeamRegResult } | Fail> {
   if (wic.maxSlots > 0 && wic._count.registrations >= wic.maxSlots) return { error: "SLOTS_FULL", status: 409 };
   const team = await db.team.findFirst({
@@ -238,7 +231,7 @@ export async function registerExistingTeam(
   if (!team) return { error: "TEAM_NOT_FOUND", status: 404 };
   if (team.members.length === 0) return { error: "EXISTING_TEAM_EMPTY", status: 409 };
 
-  const slotCheck = await checkSlot(wic, sessionNumber, slotNumber);
+  const slotCheck = await checkSlot(wic, slotInput);
   if ("error" in slotCheck) return slotCheck;
 
   // Nobody on the team may already hold this walk-in competition (or, with
@@ -287,10 +280,8 @@ export async function registerExistingTeam(
     });
     return { result: await teamRegResult(reg.id, await issueVibeBlocks(wic, reg.id)) };
   } catch (e: unknown) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined) ?? [];
-      return { error: target.includes("sessionNumber") ? "SLOT_TAKEN" : "ALREADY_REGISTERED", status: 409 };
-    }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+      return { error: isSlotConflict(e) ? "SLOT_TAKEN" : "ALREADY_REGISTERED", status: 409 };
     throw e;
   }
 }
@@ -299,7 +290,7 @@ export async function registerExistingTeam(
 
 export async function registerNewTeam(
   eventId: string, wic: CounterWic,
-  input: { teamName: unknown; ics: unknown; sessionNumber: unknown; slotNumber: unknown },
+  input: { teamName: unknown; ics: unknown } & SlotInput,
 ): Promise<{ result: TeamRegResult } | Fail> {
   if (wic.maxSlots > 0 && wic._count.registrations >= wic.maxSlots) return { error: "SLOTS_FULL", status: 409 };
   const teamName = typeof input.teamName === "string" ? input.teamName.trim() : "";
@@ -333,7 +324,7 @@ export async function registerNewTeam(
       teamName,
       members: people.map((p) => ({ ic: p.ic, name: p.name })),
       schoolName: people[0].contingent.name,
-      sessionNumber: input.sessionNumber, slotNumber: input.slotNumber,
+      sessionNumber: input.sessionNumber, slotNumber: input.slotNumber, slotDate: input.slotDate,
     },
   });
   const subId = (created.json.data as { id?: string } | undefined)?.id;

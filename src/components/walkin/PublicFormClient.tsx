@@ -6,7 +6,7 @@ import {
   CalendarDays, ClipboardList, AlertCircle, LayoutGrid, UserCheck, Trophy, User, Home,
   Plus, X, Users,
 } from "lucide-react";
-import { fmtSlotMin, type SlotScheduleConfig } from "@/lib/walkin-slots";
+import { fmtSlotDate, fmtSlotMin, slotDateChoices, type SlotScheduleConfig } from "@/lib/walkin-slots";
 import { QRCodeCanvas } from "qrcode.react";
 import Link from "next/link";
 
@@ -145,7 +145,7 @@ const STEPS = [
   { icon: ClipboardList, title: "Isi Borang",
     desc: "Masukkan no. IC, nama penuh dan nama sekolah anda dalam borang pendaftaran." },
   { icon: LayoutGrid,    title: "Tempah Slot",
-    desc: "Pilih sesi dan slot masa yang sesuai untuk pertandingan pilihan anda." },
+    desc: "Pilih tarikh (jika acara lebih dari sehari), sesi dan slot masa yang sesuai untuk pertandingan pilihan anda." },
   { icon: UserCheck,     title: "Sahkan di Kaunter",
     desc: "Hadir ke kaunter pendaftaran pada hari acara untuk pengesahan penyertaan." },
 ];
@@ -171,8 +171,10 @@ export function PublicFormClient({ slug }: { slug: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [formErr,    setFormErr]    = useState("");
   const [success,    setSuccess]    = useState<{ id: string; sessionNumber: number | null; slotNumber: number | null } | null>(null);
-  const [formStep,       setFormStep]       = useState<1 | 2>(1);
+  // 1 = details, 2 = date (multi-day events only), 3 = slot
+  const [formStep,       setFormStep]       = useState<1 | 2 | 3>(1);
   const [activeSession,  setActiveSession]  = useState<number | null>(null);
+  const [slotDate,       setSlotDate]       = useState<string | null>(null);
 
   // IC availability check
   const [usedCompIds,    setUsedCompIds]    = useState<Set<string>>(new Set());
@@ -201,20 +203,29 @@ export function PublicFormClient({ slug }: { slug: string }) {
   }, [slug]);
 
   const cfg: SlotScheduleConfig | null = comp?.walkInSlotSchedule ?? null;
+  // Multi-day events: a date step comes before the slot step (same sessions every day)
+  const dates = cfg && info ? slotDateChoices(info.event.startDate, info.event.endDate, cfg) : [];
+  const hasDateStep = dates.length > 0;
+  const needDate = hasDateStep && !slotDate;
 
-  // Load slot availability for the chosen competition
+  // Load slot availability for the chosen competition (and date)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!comp || !cfg) { setSlotSessions(null); return; }
+    if (!comp || !cfg || needDate) { setSlotSessions(null); return; }
     let cancelled = false;
-    setSlotsLoading(true); setSlotChoice(null); setFormStep(1); setActiveSession(null);
-    fetch(`/api/v2/borang/${slug}/slots?competitionId=${comp.id}`)
+    setSlotsLoading(true); setSlotChoice(null);
+    const sp = new URLSearchParams({ competitionId: comp.id, ...(slotDate && { date: slotDate }) });
+    fetch(`/api/v2/borang/${slug}/slots?${sp}`)
       .then(r => r.json())
-      .then(j => { if (!cancelled) setSlotSessions(j.sessions ?? null); })
+      .then(j => {
+        if (cancelled) return;
+        setSlotSessions(j.sessions ?? null);
+        setActiveSession(prev => prev ?? j.sessions?.[0]?.n ?? null);
+      })
       .catch(() => { if (!cancelled) setSlotSessions(null); })
       .finally(() => { if (!cancelled) setSlotsLoading(false); });
     return () => { cancelled = true; };
-  }, [comp, cfg, slug, slotRefreshKey]);
+  }, [comp, cfg, slug, slotRefreshKey, needDate, slotDate]);
 
   const selectedSlotSession = slotChoice && slotSessions
     ? slotSessions.find(s => s.n === slotChoice.sessionNumber)
@@ -230,6 +241,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
         ...(isTeamComp(comp) ? { teamName, members } : { ic, name }),
         schoolName,
         ...(slotChoice ?? {}),
+        ...(slotDate && { slotDate }),
       }),
     });
     const j = await res.json();
@@ -258,6 +270,8 @@ export function PublicFormClient({ slug }: { slug: string }) {
           ? "No. IC ahli pasukan tidak boleh berulang."
           : j.error === "SLOT_REQUIRED"
           ? "Sila pilih sesi dan slot."
+          : j.error === "DATE_REQUIRED"
+          ? "Sila pilih tarikh."
           : (j.message ?? "Gagal menghantar borang."),
       );
     } else {
@@ -268,6 +282,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
 
   function pickComp(c: Competition) {
     setComp(c);
+    setSlotChoice(null); setFormStep(1); setActiveSession(null); setSlotDate(null);
     if (isTeamComp(c)) {
       const { min } = teamBounds(c);
       setTeamName("");
@@ -361,6 +376,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
               <div className="rounded-xl px-4 py-3 border"
                 style={{ background: "rgba(236,72,153,.08)", borderColor: "rgba(236,72,153,.3)" }}>
                 <p className="text-[9px] font-bold tracking-[0.25em] uppercase" style={{ color: B.pinkLt }}>Slot Ditempah</p>
+                {slotDate && <p className="text-xs font-semibold text-white/80 mt-0.5">{fmtSlotDate(slotDate)}</p>}
                 <p className="text-base font-extrabold text-white mt-0.5">
                   Sesi {success.sessionNumber} · Slot {success.slotNumber}
                 </p>
@@ -374,7 +390,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
               Rujukan: <span className="font-mono text-white/60">{success.id.slice(-8).toUpperCase()}</span>
             </p>
             <button type="button"
-              onClick={() => { setSuccess(null); setComp(null); setName(""); setSchoolName(""); setTeamName(""); setMembers([]); setSlotChoice(null); checkIc(ic); }}
+              onClick={() => { setSuccess(null); setComp(null); setName(""); setSchoolName(""); setTeamName(""); setMembers([]); setSlotChoice(null); setSlotDate(null); checkIc(ic); }}
               className="w-full rounded-xl py-2.5 text-sm font-bold transition-transform hover:scale-[1.02] active:scale-[.98]"
               style={{ background: `linear-gradient(90deg, ${B.pinkDk}, ${B.pink})`, color: "white" }}>
               Selesai
@@ -632,9 +648,10 @@ export function PublicFormClient({ slug }: { slug: string }) {
               {/* Step indicator */}
               <div className="flex items-center gap-2">
                 {[
-                  { n: 1, icon: User,       label: "Maklumat Diri" },
-                  { n: 2, icon: LayoutGrid, label: "Pilih Slot" },
-                ].map((step, idx) => (
+                  { n: 1, icon: User,         label: "Maklumat Diri" },
+                  ...(hasDateStep ? [{ n: 2, icon: CalendarDays, label: "Pilih Tarikh" }] : []),
+                  { n: 3, icon: LayoutGrid,   label: "Pilih Slot" },
+                ].map((step, idx, all) => (
                   <div key={step.n} className="flex items-center gap-2 flex-1">
                     <div className="flex items-center gap-2 flex-1">
                       <div className="inline-flex h-8 w-8 rounded-full items-center justify-center shrink-0 transition-all"
@@ -650,7 +667,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
                         {step.label}
                       </span>
                     </div>
-                    {idx === 0 && (
+                    {idx < all.length - 1 && (
                       <div className="h-px flex-1 mx-1" style={{
                         background: formStep > step.n ? B.pink : "rgba(255,255,255,.1)",
                         transition: "background .3s",
@@ -770,10 +787,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
                       const err = step1Error();
                       if (err) { setFormErr(err); return; }
                       setFormErr("");
-                      setFormStep(2);
-                      if (cfg && slotSessions && slotSessions.length > 0 && activeSession === null) {
-                        setActiveSession(slotSessions[0].n);
-                      }
+                      setFormStep(hasDateStep ? 2 : 3);
                     }}
                     className="w-full h-11 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[.98]"
                     style={{ background: `linear-gradient(90deg, ${B.pinkDk}, ${B.pink})`, color: "white" }}>
@@ -782,8 +796,49 @@ export function PublicFormClient({ slug }: { slug: string }) {
                 </div>
               )}
 
-              {/* ── Step 2: Session tabs + slot picker ── */}
+              {/* ── Step 2: Date (multi-day events) ── */}
               {formStep === 2 && (
+                <div className="space-y-4 pk-card-in">
+                  <p className="text-[10px] font-bold tracking-[0.18em] uppercase" style={{ color: B.pinkLt }}>
+                    Pilih tarikh penyertaan
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {dates.map(d => {
+                      const isSel = slotDate === d;
+                      return (
+                        <button key={d} type="button"
+                          onClick={() => {
+                            if (d !== slotDate) { setSlotDate(d); setSlotChoice(null); setActiveSession(null); }
+                            setFormErr(""); setFormStep(3);
+                          }}
+                          className="rounded-xl px-4 py-3 text-left transition-all hover:scale-[1.01]"
+                          style={isSel
+                            ? { background: `linear-gradient(135deg, ${B.pinkDk}, ${B.pink})`, boxShadow: `0 3px 12px ${B.pink}30` }
+                            : { background: "rgba(255,255,255,.06)", border: "1px solid rgba(236,72,153,.2)" }}>
+                          <p className="text-sm font-bold text-white flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4" style={{ color: isSel ? "#fff" : B.pink }} />
+                            {fmtSlotDate(d, { weekday: "long" })}
+                          </p>
+                          <p className="text-xs mt-0.5" style={{ color: isSel ? "rgba(255,255,255,.85)" : "rgba(255,255,255,.5)" }}>
+                            {fmtSlotDate(d, { day: "numeric", month: "long", year: "numeric" })}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px]" style={{ color: "rgba(255,255,255,.4)" }}>
+                    Masa sesi adalah sama bagi setiap hari.
+                  </p>
+                  <button type="button" onClick={() => { setFormStep(1); setFormErr(""); }}
+                    className="w-full h-11 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border"
+                    style={{ borderColor: "rgba(236,72,153,.2)", color: "rgba(255,255,255,.6)" }}>
+                    <ChevronLeft className="h-4 w-4" /> Kembali
+                  </button>
+                </div>
+              )}
+
+              {/* ── Step 3: Session tabs + slot picker ── */}
+              {formStep === 3 && (
                 <div className="space-y-4 pk-card-in">
                   {/* Summary of step 1 */}
                   <div className="rounded-xl px-4 py-3 flex items-center justify-between"
@@ -810,6 +865,19 @@ export function PublicFormClient({ slug }: { slug: string }) {
                       Ubah
                     </button>
                   </div>
+
+                  {slotDate && (
+                    <div className="rounded-xl px-4 py-2.5 flex items-center justify-between"
+                      style={{ background: "rgba(236,72,153,.06)", border: "1px solid rgba(236,72,153,.15)" }}>
+                      <p className="text-xs font-semibold text-white flex items-center gap-2">
+                        <CalendarDays className="h-3.5 w-3.5" style={{ color: B.pink }} />{fmtSlotDate(slotDate)}
+                      </p>
+                      <button type="button" onClick={() => { setFormStep(2); setFormErr(""); }}
+                        className="text-[10px] font-bold uppercase tracking-wide hover:underline" style={{ color: B.pinkLt }}>
+                        Tukar
+                      </button>
+                    </div>
+                  )}
 
                   {cfg ? (
                     <>
@@ -935,7 +1003,7 @@ export function PublicFormClient({ slug }: { slug: string }) {
 
                   {/* Action buttons */}
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => { setFormStep(1); setFormErr(""); }}
+                    <button type="button" onClick={() => { setFormStep(hasDateStep ? 2 : 1); setFormErr(""); }}
                       className="flex-1 h-11 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all border"
                       style={{ borderColor: "rgba(236,72,153,.2)", color: "rgba(255,255,255,.6)" }}>
                       <ChevronLeft className="h-4 w-4" /> Kembali

@@ -10,6 +10,7 @@ import {
   droneListEndpoints, droneGetOrCreateCompetitionToken, deriveDroneUserId,
 } from "@/lib/drone";
 import { isValidSlotScheduleConfig } from "@/lib/walkin-slots";
+import { claimSlot, isSlotConflict, slotDatesOf } from "@/lib/walkin-slot-server";
 import { asGameProvider, gameLabel } from "@/lib/game-provider";
 
 export async function POST(
@@ -17,7 +18,7 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
-  const { participantId, passcode, registeredBy, competitionId, sessionNumber, slotNumber } = await req.json();
+  const { participantId, passcode, registeredBy, competitionId, sessionNumber, slotNumber, slotDate } = await req.json();
 
   if (!participantId) return NextResponse.json({ error: "MISSING_PARTICIPANT" }, { status: 400 });
 
@@ -37,42 +38,18 @@ export async function POST(
 
   const wic = await db.eventWalkInCompetition.findUnique({
     where: { id: wicId, eventId: endpoint.eventId },
-    select: { id: true, maxSlots: true, useViblockarena: true, useVibeblocks: true, vibeBlocksProvider: true, useDronearena: true, viblockChallengeId: true, walkInSlotSchedule: true, _count: { select: { registrations: true } } },
+    select: { id: true, maxSlots: true, useViblockarena: true, useVibeblocks: true, vibeBlocksProvider: true, useDronearena: true, viblockChallengeId: true, walkInSlotSchedule: true, event: { select: { startDate: true, endDate: true } }, _count: { select: { registrations: true } } },
   });
   if (!wic) return NextResponse.json({ error: "COMPETITION_NOT_FOUND" }, { status: 404 });
   const gp = asGameProvider(wic.vibeBlocksProvider);
   if (wic.maxSlots > 0 && wic._count.registrations >= wic.maxSlots)
     return NextResponse.json({ error: "SLOTS_FULL" }, { status: 409 });
 
-  // Slot selection required when a slot schedule is configured
+  // Slot selection (and, on multi-day events, a date) required when a slot schedule is configured
   const rawCfg = wic.walkInSlotSchedule;
   const scheduleCfg = isValidSlotScheduleConfig(rawCfg) ? rawCfg : null;
-  if (scheduleCfg) {
-    const validSession = Number.isInteger(sessionNumber) && sessionNumber >= 1 && sessionNumber <= scheduleCfg.totalSessions;
-    const validSlot    = Number.isInteger(slotNumber)    && slotNumber    >= 1 && slotNumber    <= scheduleCfg.slotsPerSession;
-    if (!validSession || !validSlot)
-      return NextResponse.json({ error: "SLOT_REQUIRED" }, { status: 400 });
-
-    const [takenReg, takenSub] = await Promise.all([
-      db.walkInRegistration.findFirst({
-        where: {
-          walkInCompetitionId: wic.id,
-          sessionNumber, slotNumber,
-          status: { in: ["PENDING", "CONFIRMED"] },
-        },
-        select: { id: true },
-      }),
-      db.walkInFormSubmission.findFirst({
-        where: {
-          walkInCompetitionId: wic.id,
-          sessionNumber, slotNumber,
-          status: "PENDING",
-        },
-        select: { id: true },
-      }),
-    ]);
-    if (takenReg || takenSub) return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
-  }
+  const claimed = await claimSlot(wic.id, scheduleCfg, slotDatesOf(wic.event, scheduleCfg), { sessionNumber, slotNumber, slotDate });
+  if ("error" in claimed) return NextResponse.json({ error: claimed.error }, { status: claimed.status });
 
   // Penyertaan Unik: one active walk-in registration per participant per event
   if (endpoint.event.walkInUniqueParticipation) {
@@ -165,9 +142,9 @@ export async function POST(
         registeredBy: registeredBy?.trim() || null,
         confirmedAt:  new Date(),
         viblockToken,
-        ...(scheduleCfg && { sessionNumber, slotNumber }),
+        ...claimed.slot,
       },
-      select: { id: true, status: true, sessionNumber: true, slotNumber: true },
+      select: { id: true, status: true, slotDate: true, sessionNumber: true, slotNumber: true },
     });
     if (wic.useVibeblocks && vibeBlocksConfigured(gp) && wic.viblockChallengeId) {
       try {
@@ -187,8 +164,7 @@ export async function POST(
     return NextResponse.json({ data: { ...reg, viblockToken, vibeBlocksToken, droneToken, gameName: wic.useVibeblocks ? gameLabel(gp) : null } }, { status: 201 });
   } catch (e: unknown) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined) ?? [];
-      if (target.includes("sessionNumber"))
+      if (isSlotConflict(e))
         return NextResponse.json({ error: "SLOT_TAKEN" }, { status: 409 });
       return NextResponse.json({ error: "ALREADY_REGISTERED" }, { status: 409 });
     }
