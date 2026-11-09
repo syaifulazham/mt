@@ -2,6 +2,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { youtubeId, type Backdrop, type Background, type Block, type SectionImage } from "@/lib/landingSections";
+import { BUTTON_ICON_COMPONENTS } from "@/components/landing/buttonIcons";
 
 // Renders a custom landing page section. Used by the public landing page and by
 // the organizer editor's live preview, so it must stay free of server-only code.
@@ -151,19 +152,25 @@ function BlockView({ block, p }: { block: Block; p: Palette }) {
       const items = block.items.filter((b) => b.label && b.url);
       return items.length ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: block.align === "center" ? "center" : "flex-start" }}>
-          {items.map((b, i) => (
+          {items.map((b, i) => {
+            const Icon = b.icon ? BUTTON_ICON_COMPONENTS[b.icon] : null;
+            const icon = Icon ? <Icon aria-hidden style={{ width: "1.25em", height: "1.25em", flexShrink: 0 }} strokeWidth={2.25} /> : null;
+            return (
             <a key={i} href={b.url} className="lp-btn"
               {...(isExternal(b.url) ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               style={{
-                display: "inline-block", padding: "12px 28px", borderRadius: 999, fontWeight: 700, fontSize: "0.82rem",
+                display: "inline-flex", alignItems: "center", gap: "0.55em", padding: "12px 28px", borderRadius: 999, fontWeight: 700, fontSize: "0.82rem",
                 letterSpacing: "0.12em", textTransform: "uppercase", textDecoration: "none",
                 ...(b.variant === "primary"
                   ? { background: "#CC0001", color: "#fff", boxShadow: "0 4px 16px rgba(204,0,1,0.3)" }
                   : { background: "transparent", color: p.text, border: `1.5px solid ${p.cardBorder === "#e5e7eb" ? "#cbd5e1" : "rgba(255,255,255,0.4)"}` }),
               }}>
+              {b.iconSide !== "right" && icon}
               {b.label}
+              {b.iconSide === "right" && icon}
             </a>
-          ))}
+            );
+          })}
         </div>
       ) : null;
     }

@@ -1,14 +1,16 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
-  Bold, Italic, Heading2, List, ListOrdered, Link2, Quote, ImagePlus, Plus, Trash2, ArrowUp, ArrowDown, X,
+  Bold, Italic, Heading2, List, ListOrdered, Link2, Quote, ImagePlus, Plus, Trash2, ArrowUp, ArrowDown, X, Search, Shapes,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BUTTON_ICON_COMPONENTS } from "@/components/landing/buttonIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Block, BlockOf, SectionImage } from "@/lib/landingSections";
+import { BUTTON_ICONS, type Block, type BlockOf, type ButtonIcon, type SectionImage } from "@/lib/landingSections";
 import { ImagePicker } from "./ImagePicker";
 
 // ── Small shared controls ────────────────────────────────────────────────────
@@ -274,12 +276,66 @@ function StatsForm({ block, onChange }: P<"stats">) {
   );
 }
 
+/** Picks a button icon from BUTTON_ICONS (searchable grid), or none. */
+function IconPicker({ value, onChange }: { value: ButtonIcon | undefined; onChange: (v: ButtonIcon | undefined) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const Current = value ? BUTTON_ICON_COMPONENTS[value] : null;
+  const list = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return BUTTON_ICONS.filter(([k, label]) => !s || k.includes(s) || label.toLowerCase().includes(s));
+  }, [q]);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} title={value ? "Change icon" : "Add icon"}
+        className={`flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs ${value ? "border-zinc-300 bg-white text-zinc-700" : "border-dashed border-zinc-300 text-zinc-400 hover:text-zinc-600"}`}>
+        {Current ? <Current className="h-4 w-4" /> : <Shapes className="h-4 w-4" />}
+        {value ? "" : "Icon"}
+      </button>
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Button icon</DialogTitle></DialogHeader>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search icons (e.g. daftar, download, whatsapp)…" className="pl-8" />
+          </div>
+          <div className="grid max-h-80 grid-cols-6 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-8">
+            <button type="button" onClick={() => { onChange(undefined); setOpen(false); }} title="No icon"
+              className={`flex aspect-square items-center justify-center rounded-lg border text-[10px] font-medium ${!value ? "border-violet-400 bg-violet-50 text-violet-700" : "text-zinc-400 hover:bg-zinc-50"}`}>
+              None
+            </button>
+            {list.map(([k, label]) => {
+              const Icon = BUTTON_ICON_COMPONENTS[k];
+              return (
+                <button key={k} type="button" title={label} onClick={() => { onChange(k); setOpen(false); }}
+                  className={`flex aspect-square items-center justify-center rounded-lg border ${value === k ? "border-violet-400 bg-violet-50 text-violet-700" : "text-zinc-600 hover:bg-zinc-50"}`}>
+                  <Icon className="h-5 w-5" />
+                </button>
+              );
+            })}
+          </div>
+          {list.length === 0 && <p className="text-center text-sm text-zinc-400">No icon matches “{q}”.</p>}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function ButtonsForm({ block, onChange }: P<"buttons">) {
   const set = (items: BlockOf<"buttons">["items"]) => onChange({ ...block, items });
+  const patch = (i: number, p: Partial<BlockOf<"buttons">["items"][number]>) => set(block.items.map((x, j) => (j === i ? { ...x, ...p } : x)));
   return (
     <div className="space-y-2">
       {block.items.map((b, i) => (
         <div key={i} className="flex flex-wrap items-center gap-2">
+          <IconPicker value={b.icon} onChange={(icon) => patch(i, { icon })} />
+          {b.icon && (
+            <select className={`${selectCls} h-8`} value={b.iconSide ?? "left"} title="Icon position"
+              onChange={(e) => patch(i, { iconSide: e.target.value as "left" | "right" })}>
+              <option value="left">Icon left</option>
+              <option value="right">Icon right</option>
+            </select>
+          )}
           <Input className="h-8 w-44 text-sm" value={b.label} placeholder="Button label" onChange={(e) => set(block.items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
           <Input className="h-8 min-w-0 flex-1 text-sm" value={b.url} placeholder="https://…, /path or #section" onChange={(e) => set(block.items.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} />
           <select className={selectCls} value={b.variant} onChange={(e) => set(block.items.map((x, j) => (j === i ? { ...x, variant: e.target.value as "primary" | "secondary" } : x)))}>
@@ -290,7 +346,7 @@ function ButtonsForm({ block, onChange }: P<"buttons">) {
         </div>
       ))}
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" size="sm" variant="outline" disabled={block.items.length >= 6} onClick={() => set([...block.items, { label: "", url: "", variant: "secondary" }])}><Plus className="mr-1 h-3.5 w-3.5" />Add button</Button>
+        <Button type="button" size="sm" variant="outline" disabled={block.items.length >= 6} onClick={() => set([...block.items, { label: "", url: "", variant: "secondary", iconSide: "left" }])}><Plus className="mr-1 h-3.5 w-3.5" />Add button</Button>
         <Choice value={block.align} options={ALIGN} onChange={(align) => onChange({ ...block, align })} />
       </div>
     </div>

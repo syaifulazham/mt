@@ -26,6 +26,35 @@ const image = z.object({
   caption: text(500),
 });
 
+// ── Button icons ─────────────────────────────────────────────────────────────
+
+/** Icons a button may show, with picker labels (English · Malay, for search). */
+export const BUTTON_ICONS = [
+  ["arrow-right", "Arrow right · Anak panah"], ["arrow-up-right", "Arrow up right · Pautan keluar"],
+  ["chevron-right", "Chevron · Seterusnya"], ["external-link", "External link · Pautan luar"],
+  ["download", "Download · Muat turun"], ["file-text", "Document · Dokumen"], ["calendar", "Calendar · Kalendar tarikh"],
+  ["clock", "Clock · Masa"], ["map-pin", "Location · Lokasi"], ["map", "Map · Peta"], ["phone", "Phone · Telefon"],
+  ["mail", "Email · Emel"], ["message-circle", "Chat · WhatsApp mesej"], ["send", "Send · Hantar"],
+  ["user-plus", "Register · Daftar"], ["users", "Team · Pasukan"], ["log-in", "Log in · Log masuk"],
+  ["trophy", "Trophy · Piala"], ["medal", "Medal · Pingat"], ["award", "Award · Anugerah"], ["star", "Star · Bintang"],
+  ["badge", "Verified · Sah"], ["rocket", "Rocket · Roket"], ["play", "Play · Main"], ["video", "Video"],
+  ["image", "Image · Gambar"], ["camera", "Camera · Kamera"], ["book-open", "Guide · Panduan buku"],
+  ["graduation-cap", "Education · Pendidikan"], ["school", "School · Sekolah"], ["info", "Info · Maklumat"],
+  ["help", "Help · Bantuan soalan"], ["search", "Search · Cari"], ["globe", "Website · Laman web"],
+  ["link", "Link · Pautan"], ["ticket", "Ticket · Tiket"], ["gift", "Prize · Hadiah"], ["heart", "Heart · Suka"],
+  ["thumbs-up", "Like · Suka"], ["bell", "Notify · Notifikasi"], ["megaphone", "Announcement · Pengumuman"],
+  ["newspaper", "News · Berita"], ["cart", "Shop · Beli"], ["cpu", "Tech · Teknologi"], ["bot", "Robot · Robot AI"],
+  ["code", "Code · Kod"], ["gamepad", "Game · Permainan"], ["sparkles", "New · Baharu"], ["check", "Done · Selesai"],
+  ["clipboard", "Form · Borang"], ["pen", "Write · Tulis"], ["qr-code", "QR code · Kod QR"],
+  ["smartphone", "Mobile · Telefon pintar"], ["printer", "Print · Cetak"], ["share", "Share · Kongsi"],
+  ["home", "Home · Utama"], ["building", "Organisation · Organisasi"], ["handshake", "Partner · Rakan kongsi"],
+  ["lightbulb", "Idea · Idea"], ["zap", "Fast · Pantas"], ["flag", "Flag · Bendera"], ["target", "Goal · Matlamat"],
+  ["facebook", "Facebook"], ["instagram", "Instagram"], ["youtube", "YouTube"], ["twitter", "X / Twitter"],
+  ["linkedin", "LinkedIn"],
+] as const;
+export type ButtonIcon = (typeof BUTTON_ICONS)[number][0];
+const BUTTON_ICON_KEYS = BUTTON_ICONS.map(([k]) => k) as [ButtonIcon, ...ButtonIcon[]];
+
 // ── Blocks ───────────────────────────────────────────────────────────────────
 
 export const blockSchema = z.discriminatedUnion("type", [
@@ -45,7 +74,12 @@ export const blockSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     id: z.string(), type: z.literal("buttons"),
-    items: z.array(z.object({ label: text(80), url: linkUrl.default(""), variant: z.enum(["primary", "secondary"]).default("primary") })).max(6).default([]),
+    items: z.array(z.object({
+      label: text(80), url: linkUrl.default(""), variant: z.enum(["primary", "secondary"]).default("primary"),
+      /** Optional icon (BUTTON_ICONS) and which side of the label it sits. Unknown keys are dropped. */
+      icon: z.enum(BUTTON_ICON_KEYS).optional().catch(undefined),
+      iconSide: z.enum(["left", "right"]).default("left"),
+    })).max(6).default([]),
     align,
   }),
   z.object({ id: z.string(), type: z.literal("video"), url: linkUrl.default(""), caption: text(500) }),
@@ -163,7 +197,7 @@ export function newBlock<T extends BlockType>(type: T): BlockOf<T> {
     media: { id, type: "media", image: blank, markdown: "", side: "left" },
     cards: { id, type: "cards", items: [{ title: "", text: "", image: "", url: "" }], columns: 3 },
     stats: { id, type: "stats", items: [{ value: "", label: "" }] },
-    buttons: { id, type: "buttons", items: [{ label: "", url: "", variant: "primary" }], align: "left" },
+    buttons: { id, type: "buttons", items: [{ label: "", url: "", variant: "primary", iconSide: "left" }], align: "left" },
     video: { id, type: "video", url: "", caption: "" },
   };
   return byType[type] as BlockOf<T>;
