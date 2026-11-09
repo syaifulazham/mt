@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
+import { resolveResultScope } from "@/lib/resultScope";
 import { eventJudgingProgress } from "@/lib/judgingStatus";
 import { EventJudgingClient } from "@/components/organizer/events/EventJudgingClient";
 
@@ -53,6 +54,7 @@ export default async function EventJudgingPage({ params }: { params: Promise<{ s
     const byTask = new Map(p?.tasks.map((t) => [t.id, t.judgedTeams]) ?? []);
     return {
       ...ec,
+      resultScope: resolveResultScope(ec, event.scope),
       teamCount: p?.teamCount ?? 0,
       rows: p?.rows ?? [],
       judgingTasks: ec.judgingTasks.map((t) => ({ ...t, judgedTeams: byTask.get(t.id) ?? 0 })),

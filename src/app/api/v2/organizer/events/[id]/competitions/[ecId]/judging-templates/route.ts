@@ -40,6 +40,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId } });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
+  if (ec.configLockedAt) return NextResponse.json({ error: "CONFIG_LOCKED", message: "Konfigurasi dikunci." }, { status: 409 });
+
   const template = await db.judgingTemplate.findUnique({ where: { id: judgingTemplateId } });
   if (!template) return NextResponse.json({ error: "TEMPLATE_NOT_FOUND" }, { status: 404 });
 

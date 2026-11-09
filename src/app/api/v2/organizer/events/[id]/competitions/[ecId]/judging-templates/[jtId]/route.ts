@@ -15,6 +15,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId } });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
+  if (ec.configLockedAt) return NextResponse.json({ error: "CONFIG_LOCKED", message: "Konfigurasi dikunci." }, { status: 409 });
+
   await db.eventCompetitionJudgingTemplate.deleteMany({
     where: { eventCompetitionId: ecId, judgingTemplateId: jtId },
   });

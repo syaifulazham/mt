@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { EventJudgingProgress, JudgingRow } from "@/lib/judgingStatus";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
 import { JudgingSetupPanel } from "@/components/organizer/judging/JudgingSetupPanel";
+import { defaultResultScope, type ResultScope } from "@/lib/resultScope";
 import type { DuelConfig } from "@/lib/duel";
 import { JudgingStatusTable, STATUS_CHIP, applyRowChange, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
 
@@ -57,6 +58,11 @@ type CompetitionBlock = JudgingState & {
   /** "SCORE" or "DUEL" (src/lib/duel.ts). */
   judgingMethod: string;
   duelConfig: unknown;
+  /** Effective result scope (src/lib/resultScope.ts). */
+  resultScope: ResultScope;
+  /** Judging setup frozen while set. */
+  configLockedAt: Date | string | null;
+  configLockedBy: string | null;
   /** ACTIVE teams entered in the event for this competition. */
   teamCount: number;
   /** Judging table rows: "Semua" + each state with teams. */
@@ -300,6 +306,11 @@ function CompetitionCard({
             {locked && (
               <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", chip.cls)}>{chip.label}</span>
             )}
+            {ec.configLockedAt && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700">
+                <Lock className="h-2.5 w-2.5" /> DIKUNCI
+              </span>
+            )}
           </p>
           <p className="text-xs text-zinc-400 mt-0.5">
             {ec.competition.participationType}
@@ -321,6 +332,12 @@ function CompetitionCard({
             eventSlug={event.slug}
             ecId={ec.id}
             canWrite={canWrite}
+            canLock={canWriteRole}
+            isSuperAdmin={isSuperAdmin}
+            resultConfig={{ resultScope: ec.resultScope, configLockedAt: ec.configLockedAt, configLockedBy: ec.configLockedBy }}
+            defaultScope={defaultResultScope(event.scope)}
+            onResultConfigChange={({ duelConfig, ...patch }) =>
+              onSetupChanged(ec.id, { ...patch, ...(duelConfig !== undefined && duelConfig !== null && { duelConfig }) })}
             method={ec.judgingMethod}
             duelConfig={ec.duelConfig}
             templates={ec.judgingTemplates.map(t => t.judgingTemplate)}

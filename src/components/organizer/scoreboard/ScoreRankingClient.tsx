@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Trophy } from "lucide-react";
-import { TeamAvatar } from "@/components/duel/TeamAvatar";
+import { TeamAvatar, preferFor } from "@/components/duel/TeamAvatar";
 import { cn } from "@/lib/utils";
-import type { CompetitionResult } from "@/lib/resultsRankings";
+import type { CompetitionResult, RankingEntry } from "@/lib/resultsRankings";
+import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
 
 const POLL_MS = 5_000;
 const fmtTime = (s: number | null) => s == null ? "—" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -31,6 +32,19 @@ export function ScoreRankingClient({ event, ecId, competition }: {
 
   const rows = result ? [...result.rankings, ...result.foreignRankings] : [];
   const hasTime = rows.some(r => r.bestTime != null);
+  const byState = result?.resultScope === "STATE";
+  // Negeri: one table per state, ranked within it (foreign teams keep their own table).
+  const groups: { key: string; name: string | null; flag: string | null; rows: RankingEntry[] }[] = !result ? [] : byState
+    ? [
+        ...[...new Map(result.rankings.map(r => [r.stateId ?? "", { name: r.stateName ?? "Tiada negeri", flag: r.stateFlag }])).entries()]
+          .sort(([a, x], [b, y]) => (a === "" ? 1 : b === "" ? -1 : x.name.localeCompare(y.name)))
+          .map(([key, v]) => ({
+            key, name: v.name, flag: v.flag,
+            rows: withSharedRanks(result.rankings.filter(r => (r.stateId ?? "") === key), compareScoreTime),
+          })),
+        ...(result.foreignRankings.length ? [{ key: "__intl", name: "Antarabangsa", flag: null, rows: result.foreignRankings }] : []),
+      ]
+    : [{ key: "", name: null, flag: null, rows }];
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-6">
@@ -40,7 +54,7 @@ export function ScoreRankingClient({ event, ecId, competition }: {
         </Link>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold text-zinc-900"><span className="mr-2 font-mono text-zinc-400">{competition.code}</span>{competition.name}</h1>
-          <p className="text-sm text-zinc-500">{event.name} · kedudukan langsung daripada markah penghakiman (dikemas kini setiap {POLL_MS / 1000} saat)</p>
+          <p className="text-sm text-zinc-500">{event.name} · {byState ? "kedudukan mengikut negeri" : "kedudukan kebangsaan"} · langsung daripada markah penghakiman (dikemas kini setiap {POLL_MS / 1000} saat)</p>
         </div>
       </div>
 
@@ -49,7 +63,15 @@ export function ScoreRankingClient({ event, ecId, competition }: {
       ) : rows.length === 0 ? (
         <p className="rounded-xl border border-dashed p-10 text-center text-sm text-zinc-400">Belum ada markah.</p>
       ) : (
-        <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+        groups.map(g => (
+        <div key={g.key} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+          {g.name && (
+            <div className="flex items-center gap-2 border-b bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-700">
+              {g.flag && <TeamAvatar flagUrl={g.flag} logoUrl={null} name={g.name} className="h-5 w-5" prefer="flag" />}
+              {g.name}
+              <span className="text-xs font-normal text-zinc-400">{g.rows.length} pasukan</span>
+            </div>
+          )}
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 text-xs text-zinc-500">
               <tr>
@@ -61,7 +83,7 @@ export function ScoreRankingClient({ event, ecId, competition }: {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {rows.map(r => (
+              {g.rows.map(r => (
                 <tr key={r.teamId} className={cn(r.rank <= 3 && !r.countryCode && "bg-amber-50/40")}>
                   <td className="px-4 py-2.5">
                     <span className={cn("inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
@@ -72,7 +94,7 @@ export function ScoreRankingClient({ event, ecId, competition }: {
                   <td className="px-4 py-2.5 font-medium text-zinc-800">{r.teamName}</td>
                   <td className="px-4 py-2.5">
                     <span className="flex items-center gap-2 text-zinc-600">
-                      <TeamAvatar flagUrl={r.stateFlag} logoUrl={r.contingentLogo} name={r.contingentName} className="h-6 w-6" />
+                      <TeamAvatar flagUrl={r.stateFlag} logoUrl={r.contingentLogo} name={r.contingentName} className="h-6 w-6" prefer={preferFor(result?.resultScope)} />
                       <span className="truncate">{r.contingentShortName || r.contingentName}</span>
                     </span>
                   </td>
@@ -83,6 +105,7 @@ export function ScoreRankingClient({ event, ecId, competition }: {
             </tbody>
           </table>
         </div>
+        ))
       )}
     </div>
   );

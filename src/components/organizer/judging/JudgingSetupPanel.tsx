@@ -2,11 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Gavel, Loader2, Plus, Search, Swords, Tag, X } from "lucide-react";
+import { Check, Gavel, Loader2, Lock, LockOpen, Plus, Search, Swords, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { DUEL_DEFAULTS, parseDuelConfig, type DuelConfig } from "@/lib/duel";
+import { RESULT_SCOPE_LABEL, type ResultScope } from "@/lib/resultScope";
+
+export type ResultConfig = {
+  resultScope: ResultScope;
+  configLockedAt: string | Date | null;
+  configLockedBy: string | null;
+};
 
 export type SetupTemplate = {
   id: string; name: string; code: string; description: string | null;
@@ -15,16 +22,25 @@ export type SetupTemplate = {
 
 /**
  * Top of a competition card on Penghakiman: the judging method (Skor / Duel),
- * assigned templates (add/remove here) and, for Duel, the duel settings.
+ * assigned templates (add/remove here), for Duel the duel settings, and the
+ * result configuration (Kebangsaan / Negeri) with the lock for all of it.
  */
 export function JudgingSetupPanel({
-  eventId, eventSlug, ecId, canWrite, method, duelConfig, templates, templateTaskCount,
-  onTemplatesChange, onMethodChange,
+  eventId, eventSlug, ecId, canWrite: canWriteRole, canLock, isSuperAdmin, method, duelConfig, templates, templateTaskCount,
+  resultConfig, defaultScope, onTemplatesChange, onMethodChange, onResultConfigChange,
 }: {
   eventId: string;
   eventSlug: string;
   ecId: string;
+  /** May edit the setup (role, and judging still open). */
   canWrite: boolean;
+  /** May lock the configuration (Admins); unlocking is Super Admin only. */
+  canLock: boolean;
+  isSuperAdmin: boolean;
+  resultConfig: ResultConfig;
+  /** The event scope's default result scope, shown as a hint. */
+  defaultScope: ResultScope;
+  onResultConfigChange: (patch: Partial<ResultConfig> & { duelConfig?: DuelConfig | null }) => void;
   method: string;
   duelConfig: unknown;
   templates: SetupTemplate[];
@@ -37,6 +53,21 @@ export function JudgingSetupPanel({
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const isDuel = method === "DUEL";
+  const locked = !!resultConfig.configLockedAt;
+  const canWrite = canWriteRole && !locked;
+
+  async function patchResultConfig(body: { resultScope?: ResultScope; locked?: boolean }, key: string) {
+    setBusy(key); setErr("");
+    try {
+      const res = await fetch(`${base}/result-config`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? j.error ?? "Gagal");
+      onResultConfigChange(j);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
+    finally { setBusy(null); }
+  }
 
   async function setMethod(next: "SCORE" | "DUEL") {
     if (next === method || !canWrite) return;
@@ -107,6 +138,58 @@ export function JudgingSetupPanel({
             Urus duel →
           </Link>
         )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs font-medium text-zinc-500">Konfigurasi keputusan</span>
+        <div className="inline-flex rounded-lg border bg-white p-0.5">
+          {(["NATIONAL", "STATE"] as const).map(k => (
+            <button
+              key={k}
+              type="button"
+              disabled={!canWrite || busy === "scope"}
+              onClick={() => k !== resultConfig.resultScope && patchResultConfig({ resultScope: k }, "scope")}
+              className={cn(
+                "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                resultConfig.resultScope === k ? "bg-zinc-800 text-white" : "text-zinc-500 hover:bg-zinc-100",
+                !canWrite && "cursor-default",
+              )}
+            >
+              {RESULT_SCOPE_LABEL[k]}
+            </button>
+          ))}
+        </div>
+        {busy === "scope" && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
+        <span className="text-[11px] text-zinc-400">
+          {resultConfig.resultScope === "STATE"
+            ? isDuel ? "Setiap negeri dicabut dan bertanding berasingan, dengan kedudukan sendiri." : "Kedudukan berasingan bagi setiap negeri."
+            : isDuel ? "Semua pasukan dalam satu cabutan dan satu kedudukan akhir." : "Satu kedudukan bagi semua negeri."}
+          {resultConfig.resultScope !== defaultScope && <> (lalai acara: {RESULT_SCOPE_LABEL[defaultScope]})</>}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {locked ? (
+            <>
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700"
+                title={resultConfig.configLockedBy ? `Dikunci oleh ${resultConfig.configLockedBy}` : undefined}
+              >
+                <Lock className="h-3 w-3" /> Konfigurasi dikunci
+              </span>
+              {isSuperAdmin && (
+                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" disabled={busy === "lock"}
+                  onClick={() => patchResultConfig({ locked: false }, "lock")}>
+                  {busy === "lock" ? <Loader2 className="h-3 w-3 animate-spin" /> : <LockOpen className="h-3 w-3" />} Buka kunci
+                </Button>
+              )}
+            </>
+          ) : canLock && (
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" disabled={busy === "lock"}
+              title="Bekukan kaedah, templat, tetapan duel dan konfigurasi keputusan"
+              onClick={() => patchResultConfig({ locked: true, resultScope: resultConfig.resultScope }, "lock")}>
+              {busy === "lock" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />} Kunci konfigurasi
+            </Button>
+          )}
+        </div>
       </div>
 
       {isDuel ? (
@@ -207,7 +290,6 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
   base: string; canWrite: boolean; config: DuelConfig; onSaved: (c: DuelConfig) => void;
 }) {
   const [f, setF] = useState({
-    scope: config.scope,
     perSession: String(config.perSession), advance: String(config.advance), arenas: String(config.arenas),
     duration: mmss(config.durationSec), brk: mmss(config.breakSec),
   });
@@ -216,7 +298,7 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
   const [err, setErr] = useState("");
 
   const next = {
-    scope: f.scope,
+    scope: config.scope,
     perSession: Number(f.perSession), advance: Number(f.advance), arenas: Number(f.arenas),
     durationSec: parseMmss(f.duration), breakSec: parseMmss(f.brk),
   };
@@ -226,7 +308,7 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
     !(next.arenas >= 1) ? "Arena sekurang-kurangnya 1." :
     !(next.durationSec >= 10) ? "Masa duel tidak sah (mm:ss)." :
     !(next.breakSec >= 0) ? "Masa rehat tidak sah (mm:ss)." : "";
-  const dirty = next.scope !== config.scope || next.perSession !== config.perSession || next.advance !== config.advance || next.arenas !== config.arenas
+  const dirty = next.perSession !== config.perSession || next.advance !== config.advance || next.arenas !== config.arenas
     || next.durationSec !== config.durationSec || next.breakSec !== config.breakSec;
 
   async function save() {
@@ -253,23 +335,6 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-[11px] font-medium text-zinc-500">Skop pertandingan</span>
-        <div className="inline-flex rounded-lg border bg-white p-0.5">
-          {([["NATIONAL", "Kebangsaan"], ["STATE", "Negeri"]] as const).map(([k, l]) => (
-            <button key={k} type="button" disabled={!canWrite} onClick={() => setF(p => ({ ...p, scope: k }))}
-              className={cn("rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                f.scope === k ? "bg-zinc-800 text-white" : "text-zinc-500 hover:bg-zinc-100")}>
-              {l}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-zinc-400">
-          {f.scope === "STATE"
-            ? "Setiap negeri dicabut dan bertanding berasingan, dengan kedudukan akhir sendiri."
-            : "Semua pasukan dalam satu cabutan dan satu kedudukan akhir."}
-        </span>
-      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {field("perSession", "Peserta maks / sesi")}
         {field("advance", "Bilangan mara / sesi")}

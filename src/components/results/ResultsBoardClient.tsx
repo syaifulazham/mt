@@ -81,6 +81,8 @@ type CompetitionResult = {
   verifiedAt: string | null;
   /** States verified on their own; when not `verified`, rankings hold only these states' teams. */
   verifiedStateIds?: string[];
+  /** "STATE": ranked per state only — the board stays in Negeri view. */
+  resultScope?: "NATIONAL" | "STATE";
   rankings: RankEntry[];
   /** The competition has foreign (non-Malaysian) teams — shows the Antara Bangsa toggle. */
   hasInternational?: boolean;
@@ -737,9 +739,11 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const [spotlight, setSpotlight] = useState<RankEntry | null>(null);
   const [showCompModal, setShowCompModal] = useState(false);
   const [selectedTargetGroup, setSelectedTargetGroup] = useState<string | null>(null);
-  // The viewer's choice; the effective `viewMode` (below) is forced to "state"
-  // while only some states of the competition are released.
-  const [viewChoice, setViewMode] = useState<"national" | "state" | "international">("national");
+  // The viewer's choice for one competition; until they pick (and on every other
+  // competition) the view opens on the competition's result scope — Negeri for
+  // STATE, Kebangsaan for NATIONAL. The effective `viewMode` (below) is still
+  // forced to "state" while only some states of the competition are released.
+  const [viewPick, setViewPick] = useState<{ compId: string; mode: "national" | "state" | "international" } | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [showStateModal, setShowStateModal] = useState(false);
   const [scales, setScales] = useState<ScaleConfig>(() =>
@@ -926,6 +930,11 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
   const hasInternational = !!activeResult?.hasInternational;
   // Antarabangsa can be verified before Kebangsaan, so it has its own gate.
   const internationalOpen = hasInternational && (nationalReleased || !!activeResult?.internationalReleased);
+  const defaultView: "national" | "state" = activeResult?.resultScope === "STATE" ? "state" : "national";
+  const viewChoice = activeResult && viewPick?.compId === activeResult.id ? viewPick.mode : defaultView;
+  const setViewMode = (mode: "national" | "state" | "international") => {
+    if (activeResult) setViewPick({ compId: activeResult.id, mode });
+  };
   const viewMode: "national" | "state" | "international" =
     viewChoice === "international" && internationalOpen ? "international"
     : activeResult && !nationalReleased && partialCount(activeResult) > 0 ? "state"

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { verifiedStatesBy } from "@/lib/judgingStatus";
 import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
 import { HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, isForeignCountry } from "@/lib/countries";
+import { defaultResultScope, resolveResultScope, type ResultScope } from "@/lib/resultScope";
 
 // Competition rankings from judging scores — shared by the public results
 // board (/api/results/[slug]) and the announcer board (/api/announce/[slug]).
@@ -44,6 +45,8 @@ export interface CompetitionResult {
   targetGroups: { code: string; name: string }[];
   /** Judging lifecycle: OPEN | COMPLETED | VERIFIED. */
   judgingStatus: string;
+  /** Ranked as one national list or per state (Penghakiman → Konfigurasi keputusan). */
+  resultScope: ResultScope;
   judgingVerifiedAt: Date | null;
   /** States whose own judging row is VERIFIED (per-state release). */
   verifiedStateIds: string[];
@@ -130,6 +133,7 @@ export async function computeCompetitionResults(
   eventId: string, isWalkIn: boolean, ids: string[] | null,
 ): Promise<CompetitionResult[]> {
   const competitions: CompetitionResult[] = [];
+  const eventScope = String((await db.event.findUnique({ where: { id: eventId }, select: { scope: true } }))?.scope ?? "");
 
   if (isWalkIn) {
     const walkInComps = await db.eventWalkInCompetition.findMany({
@@ -161,6 +165,7 @@ export async function computeCompetitionResults(
         code: wc.competition.code,
         targetGroups: wc.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
         judgingStatus: wc.judgingStatus,
+        resultScope: defaultResultScope(eventScope),
         judgingVerifiedAt: wc.judgingVerifiedAt,
         verifiedStateIds: [],
         ...rankSplit(registrations.map((reg) => {
@@ -214,6 +219,7 @@ export async function computeCompetitionResults(
       code: ec.competition.code,
       targetGroups: ec.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
       judgingStatus: ec.judgingStatus,
+      resultScope: resolveResultScope(ec, eventScope),
       judgingVerifiedAt: ec.judgingVerifiedAt,
       verifiedStateIds: [],
       ...rankSplit(teams.map((team) => {

@@ -698,6 +698,11 @@ model EventCompetition {
   // "SCORE" (judging templates) or "DUEL" (drawn sessions ranked round by round, src/lib/duel.ts)
   judgingMethod           String    @default("SCORE")
   duelConfig              Json? // { perSession, advance, arenas, durationSec, breakSec }
+  // Results ranked "NATIONAL" (one list) or "STATE" (per state); null = event scope default (src/lib/resultScope.ts)
+  resultScope             String?
+  // Judging setup (method, templates, duel config, result scope) frozen while set
+  configLockedAt          DateTime?
+  configLockedBy          String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 

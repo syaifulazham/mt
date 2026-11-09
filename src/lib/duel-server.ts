@@ -57,8 +57,9 @@ export async function loadDuelEc(eventId: string, ecId: string) {
     where: { id: ecId, eventId },
     select: {
       id: true, eventId: true, competitionId: true, judgingMethod: true, duelConfig: true,
+      resultScope: true, configLockedAt: true,
       competition: { select: { name: true, code: true, participationType: true } },
-      event: { select: { name: true, slug: true } },
+      event: { select: { name: true, slug: true, scope: true } },
     },
   });
 }
