@@ -1,12 +1,14 @@
 import { db } from "@/lib/db";
 import { verifiedStatesBy } from "@/lib/judgingStatus";
+import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
 import { HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, isForeignCountry } from "@/lib/countries";
 
 // Competition rankings from judging scores — shared by the public results
 // board (/api/results/[slug]) and the announcer board (/api/announce/[slug]).
 // Regular competitions rank teams by the sum of every judging task's scores;
 // walk-in competitions rank confirmed walk-in registrations the same way.
-// Ties on total score go to the best (lowest) time.
+// Ties on total score go to the best (lowest) time; teams equal on both share a
+// rank (1, 2, 2, 4 — src/lib/sharedRank.ts).
 //
 // Foreign teams (contingent of a country other than Malaysia — see
 // src/lib/international.ts) are kept out of `rankings`, so national and state
@@ -60,31 +62,30 @@ function addScore(map: Map<string, Agg>, key: string, score: number | null, time
   map.set(key, cur);
 }
 
-/** Higher total first; ties go to the best (lowest) time, no time last. */
-function compareEntries(a: Pick<RankingEntry, "totalScore" | "bestTime">, b: Pick<RankingEntry, "totalScore" | "bestTime">) {
-  if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-  if (a.bestTime === null && b.bestTime === null) return 0;
-  if (a.bestTime === null) return 1;
-  if (b.bestTime === null) return -1;
-  return a.bestTime - b.bestTime;
-}
+/** Higher total first; ties go to the best (lowest) time, no time last. Equal = shared rank. */
+const compareEntries = compareScoreTime;
 
-function rank(entries: Omit<RankingEntry, "rank">[]): RankingEntry[] {
-  return [...entries]
-    .sort(compareEntries)
-    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
-}
-
-/** Ranks everyone once, then splits: locals re-ranked 1..n, foreigners per country. */
-function rankSplit(entries: Omit<RankingEntry, "rank">[]): Pick<CompetitionResult, "rankings" | "foreignRankings"> {
-  const all = rank(entries);
-  const rankings = all.filter(r => !r.countryId).map((r, i) => ({ ...r, rank: i + 1 }));
-  const counters = new Map<string, number>();
-  const foreignRankings = all.filter(r => r.countryId).map(r => {
-    const n = (counters.get(r.countryId!) ?? 0) + 1;
-    counters.set(r.countryId!, n);
-    return { ...r, rank: n };
+/**
+ * Re-ranks already-sorted entries within each group (state, country, …):
+ * 1..n per group, with equal score and time sharing a rank (1, 2, 2, 4).
+ */
+function rankWithin<T extends Pick<RankingEntry, "totalScore" | "bestTime">>(sorted: T[], group: (r: T) => string): (T & { rank: number })[] {
+  const last = new Map<string, { entry: T; rank: number; count: number }>();
+  return sorted.map(r => {
+    const k = group(r);
+    const prev = last.get(k);
+    const count = (prev?.count ?? 0) + 1;
+    const rank = prev && compareEntries(prev.entry, r) === 0 ? prev.rank : count;
+    last.set(k, { entry: r, rank, count });
+    return { ...r, rank };
   });
+}
+
+/** Sorts everyone once, then splits: locals ranked 1..n, foreigners per country; ties share a rank. */
+function rankSplit(entries: Omit<RankingEntry, "rank">[]): Pick<CompetitionResult, "rankings" | "foreignRankings"> {
+  const all = [...entries].sort(compareEntries);
+  const rankings = withSharedRanks(all.filter(r => !r.countryId), compareEntries);
+  const foreignRankings = rankWithin(all.filter(r => r.countryId), r => r.countryId!);
   return { rankings, foreignRankings };
 }
 
@@ -241,14 +242,7 @@ export async function computeCompetitionResults(
 export function releasedRankings(c: Pick<CompetitionResult, "judgingStatus" | "verifiedStateIds" | "rankings">): RankingEntry[] {
   if (c.judgingStatus === "VERIFIED") return c.rankings;
   const allowed = new Set(c.verifiedStateIds);
-  const counters = new Map<string, number>();
-  return c.rankings
-    .filter(r => r.stateId && allowed.has(r.stateId))
-    .map(r => {
-      const n = (counters.get(r.stateId!) ?? 0) + 1;
-      counters.set(r.stateId!, n);
-      return { ...r, rank: n };
-    });
+  return rankWithin(c.rankings.filter(r => r.stateId && allowed.has(r.stateId)), r => r.stateId!);
 }
 
 /** Foreign results may be shown: the competition is VERIFIED, or its Antarabangsa judging scope is. */
@@ -278,5 +272,5 @@ export function internationalRankings(
     ? c.rankings.slice(0, places).map(r => ({ ...r, countryName: "Malaysia", countryCode: HOME_COUNTRY_ISO2 }))
     : [];
   const foreign = internationalReleased(c) ? c.foreignRankings.filter(r => r.rank <= places) : [];
-  return [...malaysia, ...foreign].sort(compareEntries).map((r, i) => ({ ...r, rank: i + 1 }));
+  return withSharedRanks([...malaysia, ...foreign].sort(compareEntries), compareEntries);
 }

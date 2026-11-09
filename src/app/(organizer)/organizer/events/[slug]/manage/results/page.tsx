@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { withSharedRanks } from "@/lib/sharedRank";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
@@ -174,9 +175,8 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       return 0;
     }
 
-    const rankings: RankEntry[] = [...teamsWithScores]
-      .sort(compareScore)
-      .map((r, i) => ({ ...r, rank: i + 1 }));
+    // Equal score and time share a rank (1, 2, 2, 4).
+    const rankings: RankEntry[] = withSharedRanks([...teamsWithScores].sort(compareScore), compareScore);
 
     let stateGroups: StateGroup[] = [];
     if (isZoneScope) {
@@ -199,7 +199,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
       stateGroups = [...groupMap.entries()]
         .map(([stateId, { stateName, teams }]) => {
-          const sortedTeams = [...teams].sort(compareScore).map((r, i) => ({ ...r, rank: i + 1 }));
+          const sortedTeams = withSharedRanks([...teams].sort(compareScore), compareScore);
           const bestScore = sortedTeams[0]?.totalScore ?? 0;
           return { stateId, stateName, bestScore, teams: sortedTeams };
         })

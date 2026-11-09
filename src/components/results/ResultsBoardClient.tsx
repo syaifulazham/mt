@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
 import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown, SlidersHorizontal, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -944,9 +945,8 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
     if (viewMode !== "state") return activeResult.rankings;
     const stateId = currentStateId;
     if (!stateId) return activeResult.rankings;
-    return activeResult.rankings
-      .filter(r => r.stateId === stateId)
-      .map((r, i) => ({ ...r, rank: i + 1 }));
+    // Re-ranked within the state; equal score and time share a rank.
+    return withSharedRanks(activeResult.rankings.filter(r => r.stateId === stateId), compareScoreTime);
   })();
 
   return (

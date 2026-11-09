@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
 import { db } from "@/lib/db";
 import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
 import { announceKey } from "@/lib/announceKey";
@@ -143,7 +144,7 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
   const rankingsFor = (kind: string, refId: string, stateId: string | null) => {
     if (stateId === INTERNATIONAL_SCOPE_ID) return rankingsBy.get(`${kind}:${refId}:${INTERNATIONAL_SCOPE_ID}`) ?? [];
     const r = rankingsBy.get(`${kind}:${refId}`) ?? [];
-    return stateId === null ? r : r.filter(x => x.stateId === stateId).map((x, i) => ({ ...x, rank: i + 1 }));
+    return stateId === null ? r : withSharedRanks(r.filter(x => x.stateId === stateId), compareScoreTime);
   };
 
   const items = verified.map((x) => {

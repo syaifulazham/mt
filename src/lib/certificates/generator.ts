@@ -22,6 +22,7 @@
 import { CertTargetType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
+import { compareScoreTime } from "@/lib/sharedRank";
 import { allocateSerial, newUniqueCode } from "./serial";
 
 export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM"] as const;
@@ -184,11 +185,14 @@ export async function resolveRecipients(
         return internationalRankings(verifiedOnly ? r : { ...r, judgingStatus: "VERIFIED" }).map(e => ({ r, e, rank: e.rank }));
       if (!byState)
         return verifiedOnly && r.judgingStatus !== "VERIFIED" ? [] : r.rankings.map(e => ({ r, e, rank: e.rank }));
-      const perState = new Map<string, number>();
+      // Equal score and time share a rank within the state (1, 2, 2, 4).
+      const perState = new Map<string, { e: RankingEntry; rank: number; count: number }>();
       return r.rankings.flatMap(e => {
         const st = e.stateId ?? "-";
-        const rank = (perState.get(st) ?? 0) + 1;
-        perState.set(st, rank);
+        const prev = perState.get(st);
+        const count = (prev?.count ?? 0) + 1;
+        const rank = prev && compareScoreTime(prev.e, e) === 0 ? prev.rank : count;
+        perState.set(st, { e, rank, count });
         const verified = r.judgingStatus === "VERIFIED" || (!!e.stateId && r.verifiedStateIds.includes(e.stateId));
         return verifiedOnly && !verified ? [] : [{ r, e, rank }];
       });

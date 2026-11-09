@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
@@ -92,7 +93,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
       },
     });
 
-    const sorted = registrations
+    const sorted = withSharedRanks(registrations
       .map(r => {
         const agg = scoreMap.get(r.id)!;
         return {
@@ -110,8 +111,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
         if (a.bestTime != null) return -1;
         if (b.bestTime != null) return 1;
         return 0;
-      })
-      .map((r, i) => ({ ...r, rank: i + 1 }));
+      }), compareScoreTime);
 
     competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, judging, rankings: sorted });
   }
