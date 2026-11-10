@@ -444,7 +444,7 @@ function nextVbIdentity(slug: string, currentId: string | null, currentName: str
   return { eventId: `${base0}${sep}${n}`, name: `${base}_${n}` };
 }
 
-type VbRecreateForm = { startsAt: string; endsAt: string; competitionRound: "qualifier" | "final"; schoolLevel: GameSchoolLevel | ""; runDurationSec: number };
+type VbRecreateForm = { challengeId: string; startsAt: string; endsAt: string; competitionRound: "qualifier" | "final"; schoolLevel: GameSchoolLevel | ""; runDurationSec: number };
 
 const SCHOOL_LEVEL_LABEL: Record<GameSchoolLevel, string> = { primary: "Sekolah Rendah (primary)", secondary: "Sekolah Menengah (secondary)" };
 
@@ -461,8 +461,12 @@ function wicDefaultSchoolLevel(w: WalkInCompSummary): GameSchoolLevel | "" {
 }
 
 /** Recreate the VibeBlocks event with a new schedule, then re-issue every token. */
-function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, busy, progress, error, onCancel, onConfirm }: {
+function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, challenges, reason, busy, progress, error, onCancel, onConfirm }: {
   provider: GameProvider;
+  /** The platform's challenges to pick from (the current one is kept when the list is empty). */
+  challenges: VibeBlocksChallenge[];
+  /** Why the dialog opened from Update Event: the changes the platform only takes on a new event. */
+  reason?: string[];
   preview: { eventId: string; name: string };
   oldEventId: string; oldClosed: boolean;
   initial: VbRecreateForm;
@@ -476,7 +480,7 @@ function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, b
   const { runMin, runMax, label } = GAME_PROVIDERS[provider];
   const needLevel = GAME_PROVIDERS[provider].schoolLevel;
   const valid = !!f.startsAt && !!f.endsAt && f.endsAt > f.startsAt
-    && f.runDurationSec >= runMin && f.runDurationSec <= runMax && (!needLevel || !!f.schoolLevel);
+    && f.runDurationSec >= runMin && f.runDurationSec <= runMax && (!needLevel || !!f.schoolLevel) && !!f.challengeId;
   const input = "w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60";
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={() => { if (!busy) onCancel(); }}>
@@ -489,11 +493,23 @@ function VbRecreateDialog({ provider, preview, oldEventId, oldClosed, initial, b
           <p>Acara baharu: <strong>{preview.name}</strong></p>
           <p className="text-zinc-500">Event ID: <code className="font-mono">{preview.eventId}</code></p>
         </div>
+        {reason && reason.length > 0 && (
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+            {label} tidak membenarkan {reason.join(", ")} diubah pada acara sedia ada{reason.includes("challenge") ? "" : " selepas token pertama didaftarkan"}. Perubahan ini akan digunakan pada acara baharu.
+          </p>
+        )}
         <ul className="text-[11px] text-zinc-600 list-disc pl-4 space-y-0.5">
           <li>Setiap peserta berdaftar akan diberi <strong>token baharu</strong>. Sesi dan slot mereka kekal.</li>
           <li>Token lama tidak lagi sah{oldClosed ? "" : <> — acara <code className="font-mono">{oldEventId}</code> akan <strong>ditutup</strong></>}.</li>
           <li>Keputusan acara lama tidak dipaparkan di sini selepas ini.</li>
         </ul>
+        <div>
+          <label className="text-[11px] text-zinc-400 block mb-0.5">Challenge</label>
+          <select value={f.challengeId} disabled={busy} onChange={e => setF({ ...f, challengeId: e.target.value })} className={`${input} bg-white`}>
+            {!challenges.some(c => c.id === f.challengeId) && <option value={f.challengeId}>{f.challengeId || "— Pilih challenge —"}</option>}
+            {challenges.map(c => <option key={c.id} value={c.id}>{c.name} ({c.challenge_mode})</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[11px] text-zinc-400 block mb-0.5">Start (UTC)</label>
@@ -936,6 +952,8 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
     : vibeBlocksCreateForm.provider;
   const vbRules = GAME_PROVIDERS[vbProvider];
   const [vibeBlocksCreating, setVibeBlocksCreating] = useState(false);
+  // Set when Update Event opens Cipta Semula for changes the platform locks.
+  const [vbRecreateFromForm, setVbRecreateFromForm] = useState<string[] | null>(null);
   const [vibeBlocksUpdating, setVibeBlocksUpdating] = useState(false);
   const [vibeBlocksError,    setVibeBlocksError]    = useState("");
   const [vbExpanded,   setVbExpanded]   = useState(false);
@@ -1237,6 +1255,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           recreate: true,
+          challengeId: f.challengeId,
           competitionRound: f.competitionRound,
           ...(f.schoolLevel && { schoolLevel: f.schoolLevel }),
           startsAt: dateTimeLocalToISO(f.startsAt),
@@ -1248,6 +1267,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
       if (!res.ok) { setVbRecreateErr((j.message as string) ?? (j.error as string) ?? "Gagal mencipta semula acara."); return; }
       updateWic(selectedWic.id, {
         viblockChallengeId:         j.eventId as string,
+        vibeBlocksChallengeId:      f.challengeId,
         vibeBlocksEventName:        j.name as string,
         vibeBlocksCompetitionRound: f.competitionRound,
         vibeBlocksSchoolLevel:      (j.schoolLevel as string | null) ?? null,
@@ -1278,12 +1298,21 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
   }
 
   /** Recreate defaults: the slot schedule's hours on today (or the event's first day). */
-  function vbRecreateDefaults(): VbRecreateForm {
+  function vbRecreateDefaults(fromForm = false): VbRecreateForm {
+    if (fromForm) return {
+      challengeId:      vibeBlocksCreateForm.challengeId,
+      startsAt:         vibeBlocksCreateForm.startsAt,
+      endsAt:           vibeBlocksCreateForm.endsAt,
+      competitionRound: vibeBlocksCreateForm.competitionRound,
+      schoolLevel:      vibeBlocksCreateForm.schoolLevel,
+      runDurationSec:   vibeBlocksCreateForm.runDurationSec,
+    };
     const today = todayMyt();
     const first = event.startDate ? new Date(new Date(event.startDate).getTime() + 8 * 3600_000).toISOString().slice(0, 10) : today;
     const day = first > today ? first : today;
     const cfg = selectedWic?.walkInSlotSchedule ?? null;
     return {
+      challengeId: vibeBlocksCreateForm.challengeId || selectedWic?.vibeBlocksChallengeId || "",
       startsAt: cfg ? mytTimeToUtcLocal(day, cfg.startTime) : isoToDateTimeLocal(new Date().toISOString()),
       endsAt:   cfg ? mytTimeToUtcLocal(day, cfg.endTime) : isoToDateTimeLocal(selectedWic?.vibeBlocksEndsAt ?? event.endDate),
       competitionRound: vibeBlocksCreateForm.competitionRound,
@@ -1488,8 +1517,33 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
     }
   }
 
+  /**
+   * Changes the platform only accepts on a new event: the challenge (never
+   * changeable), and — once a token is registered — the start/end time and the
+   * school level. Update Event sends these through Cipta Semula instead.
+   */
+  function vbRecreateReasons(): string[] {
+    if (!selectedWic?.viblockChallengeId) return [];
+    const ev = vbLive?.event ?? null;
+    const entries = (vbLive?.entryCount ?? 0) > 0;
+    const out: string[] = [];
+    if (selectedWic.vibeBlocksChallengeId && vibeBlocksCreateForm.challengeId && vibeBlocksCreateForm.challengeId !== selectedWic.vibeBlocksChallengeId) out.push("challenge");
+    if (entries && vbRules.timingLocksAfterEntry && ev &&
+        (vibeBlocksCreateForm.startsAt !== isoToDateTimeLocal(ev.starts_at) || vibeBlocksCreateForm.endsAt !== isoToDateTimeLocal(ev.ends_at)))
+      out.push("masa mula/tamat");
+    if (entries && vbRules.schoolLevel && ev && vibeBlocksCreateForm.schoolLevel && vibeBlocksCreateForm.schoolLevel !== (ev.school_level ?? ""))
+      out.push("peringkat sekolah");
+    return out;
+  }
+
   async function updateVibeBlocksEvent() {
     if (!selectedWic) return;
+    const reasons = vbRecreateReasons();
+    if (reasons.length > 0) {
+      if (!canAdmin) { setVibeBlocksError(`Perubahan ${reasons.join(", ")} memerlukan Cipta Semula acara oleh pentadbir.`); return; }
+      setVbRecreateErr(""); setVbRecreateFromForm(reasons); setVbRecreateOpen(true);
+      return;
+    }
     setVibeBlocksUpdating(true); setVibeBlocksError("");
     try {
       const res = await fetch(
@@ -2366,7 +2420,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                   <select
                                     value={vibeBlocksCreateForm.challengeId}
                                     onChange={e => setVibeBlocksCreateForm(f => ({ ...f, challengeId: e.target.value }))}
-                                    disabled={vbLocked || !!(selectedWic.viblockChallengeId && selectedWic.vibeBlocksChallengeId)}
+                                    disabled={vbLocked}
                                     className="w-full text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
                                   >
                                     <option value="">— Select challenge —</option>
@@ -2396,7 +2450,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                     type="datetime-local"
                                     value={vibeBlocksCreateForm.startsAt}
                                     onChange={e => setVibeBlocksCreateForm(f => ({ ...f, startsAt: e.target.value }))}
-                                    disabled={vbLocked || vbTimingLocked}
+                                    disabled={vbLocked}
                                     className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
                                   />
                                   <p className="text-[10px] text-zinc-400 mt-0.5">{utcLocalToMyt(vibeBlocksCreateForm.startsAt)}</p>
@@ -2407,7 +2461,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                     type="datetime-local"
                                     value={vibeBlocksCreateForm.endsAt}
                                     onChange={e => setVibeBlocksCreateForm(f => ({ ...f, endsAt: e.target.value }))}
-                                    disabled={vbLocked || vbTimingLocked}
+                                    disabled={vbLocked}
                                     className="w-full text-sm border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50"
                                   />
                                   <p className="text-[10px] text-zinc-400 mt-0.5">{utcLocalToMyt(vibeBlocksCreateForm.endsAt)}</p>
@@ -2415,7 +2469,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                               </div>
                               {vbTimingLocked && (
                                 <p className="text-[10px] text-zinc-500 flex items-center gap-1">
-                                  <Lock className="h-3 w-3" /> Masa mula/tamat dikunci oleh {vbRules.label} selepas token pertama didaftarkan. Nama, pusingan dan tempoh larian masih boleh diubah.
+                                  <Lock className="h-3 w-3" /> {vbRules.label} mengunci masa mula/tamat selepas token pertama didaftarkan — jika diubah, Update Event akan mencipta semula acara.
                                 </p>
                               )}
                               <div>
@@ -2436,7 +2490,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                   <select
                                     value={vibeBlocksCreateForm.schoolLevel}
                                     onChange={e => setVibeBlocksCreateForm(f => ({ ...f, schoolLevel: e.target.value as GameSchoolLevel | "" }))}
-                                    disabled={vbLocked || vbLevelLocked}
+                                    disabled={vbLocked}
                                     className={`w-full text-sm border rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60 disabled:bg-zinc-50 ${vibeBlocksCreateForm.schoolLevel ? "border-zinc-200" : "border-amber-300"}`}
                                   >
                                     {!vibeBlocksCreateForm.schoolLevel && <option value="">Pilih peringkat sekolah…</option>}
@@ -2449,7 +2503,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                       : vbEv && !vbEv.school_level
                                         ? "Acara lama tanpa peringkat sekolah (final: C1–C5). Tetapkan sebelum token pertama didaftarkan."
                                         : "Diperlukan oleh VibeBlocks. Peserta rendah dan menengah perlu acara berasingan."}
-                                    {vbLevelLocked && " Dikunci selepas token pertama didaftarkan — cipta semula acara untuk peringkat lain."}
+                                    {vbLevelLocked && " Dikunci oleh VibeBlocks selepas token pertama — jika diubah, Update Event akan mencipta semula acara."}
                                   </p>
                                 </div>
                               )}
@@ -2504,7 +2558,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5"
                                 >
                                   {vibeBlocksUpdating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                                  Update Event
+                                  {vbRecreateReasons().length > 0 ? "Update Event (cipta semula)" : "Update Event"}
                                 </Button>
                               ) : null}
                               {canAdmin && selectedWic.viblockChallengeId && selectedWic.vibeBlocksChallengeId && (
@@ -2512,7 +2566,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                                   <p className="text-[10px] text-zinc-400">
                                     Perlu tarikh baharu atau acara telah ditutup? Cipta acara baharu ({nextVbIdentity(event.slug, selectedWic.viblockChallengeId, vbEv?.name ?? selectedWic.vibeBlocksEventName ?? event.name, vbProvider).name}); semua peserta diberi token baharu.
                                   </p>
-                                  <Button size="sm" variant="outline" onClick={() => { setVbRecreateErr(""); setVbRecreateOpen(true); }}
+                                  <Button size="sm" variant="outline" onClick={() => { setVbRecreateErr(""); setVbRecreateFromForm(null); setVbRecreateOpen(true); }}
                                     className="h-7 text-xs shrink-0 gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50">
                                     <RotateCcw className="h-3.5 w-3.5" /> Cipta Semula
                                   </Button>
@@ -3014,7 +3068,9 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
           preview={nextVbIdentity(event.slug, selectedWic.viblockChallengeId, vbLive?.event?.name ?? selectedWic.vibeBlocksEventName ?? event.name, vbProvider)}
           oldEventId={selectedWic.viblockChallengeId}
           oldClosed={vbLive?.event?.status === "closed"}
-          initial={vbRecreateDefaults()}
+          initial={vbRecreateDefaults(!!vbRecreateFromForm)}
+          challenges={vibeBlocksChallenges}
+          reason={vbRecreateFromForm ?? undefined}
           busy={vbRecreating}
           progress={vbSyncProgress}
           error={vbRecreateErr}
