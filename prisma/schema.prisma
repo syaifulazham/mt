@@ -706,11 +706,12 @@ model EventCompetition {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  event            Event                             @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  competition      Competition                       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
-  judgingTemplates EventCompetitionJudgingTemplate[]
-  judgingTasks     JudgingTask[]
-  duelRounds       DuelRound[]
+  event                Event                             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  competition          Competition                       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  judgingTemplates     EventCompetitionJudgingTemplate[]
+  judgingTasks         JudgingTask[]
+  duelRounds           DuelRound[]
+  webcraftAiJudgements WebcraftAiJudgement[]
 
   @@unique([eventId, competitionId])
   @@map("event_competitions")
@@ -1038,6 +1039,7 @@ model Team {
   droneChallenges       TeamDroneChallenge[]
   csiAccess             TeamCsiAccess?
   webcraftAccess        TeamWebcraftAccess?
+  webcraftAiJudgements  WebcraftAiJudgement[]
   judgingScores         JudgingScore[]
   walkInRegistrations   WalkInRegistration[]
   walkInFormSubmissions WalkInFormSubmission[]
@@ -1686,6 +1688,40 @@ model TeamWebcraftAccess {
   @@map("team_webcraft_access")
 }
 
+/// AI marking of one team's published WebCraft project against a judging
+/// template (the rubric). status: IDLE | QUEUED | RUNNING | DONE | ERROR.
+/// A re-run keeps the previous result until the new one replaces it.
+/// "Rekod ke kad skor" copies DONE results into JudgingScore.
+model WebcraftAiJudgement {
+  id                 String    @id @default(cuid())
+  eventCompetitionId String
+  teamId             String
+  status             String    @default("IDLE")
+  templateId         String?
+  projectId          String?
+  projectName        String?
+  projectUrl         String?
+  /// [{ criterionId, name, score, max, reason }]
+  scores             Json?
+  total              Float?
+  maxTotal           Float?
+  comment            String?
+  error              String?
+  model              String?
+  queuedAt           DateTime?
+  startedAt          DateTime?
+  judgedAt           DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+  team             Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([eventCompetitionId, teamId])
+  @@index([eventCompetitionId, status])
+  @@map("webcraft_ai_judgements")
+}
+
 model EmailBlast {
   id            String           @id @default(cuid())
   title         String
@@ -2013,18 +2049,18 @@ model DuelRound {
 }
 
 model DuelSession {
-  id          String    @id @default(cuid())
-  roundId     String
-  number      Int
-  label       String
-  arena       Int       @default(1)
-  wave        Int       @default(0)
-  scheduledAt DateTime?
-  status      String    @default("PENDING") // PENDING | RUNNING | PAUSED | DONE
-  startedAt   DateTime?
-  pausedAt    DateTime?
-  pausedMs    Int       @default(0)
-  endedAt     DateTime?
+  id                String    @id @default(cuid())
+  roundId           String
+  number            Int
+  label             String
+  arena             Int       @default(1)
+  wave              Int       @default(0)
+  scheduledAt       DateTime?
+  status            String    @default("PENDING") // PENDING | RUNNING | PAUSED | DONE
+  startedAt         DateTime?
+  pausedAt          DateTime?
+  pausedMs          Int       @default(0)
+  endedAt           DateTime?
   // Live video from the media team's phone (Cloudflare Stream, WebRTC). The
   // publish URL holds a secret: it only goes to the media endpoint.
   streamInputId     String?
@@ -2035,8 +2071,8 @@ model DuelSession {
   replayVideoId     String?
   replayStatus      String? // UPLOADING | READY | FAILED
   replayUrl         String? // Stream watch page
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   round   DuelRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
   entries DuelEntry[]

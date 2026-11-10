@@ -17,6 +17,8 @@ export type WebcraftRosterTeam = {
   members: WebcraftRosterMember[];
 };
 export type WebcraftRosterCompetition = {
+  /** EventCompetition id */
+  ecId: string;
   competitionId: string; code: string; name: string; participationType: string;
   teams: WebcraftRosterTeam[];
 };
@@ -29,7 +31,7 @@ export type WebcraftRosterCompetition = {
 export async function loadWebcraftRoster(eventId: string): Promise<WebcraftRosterCompetition[]> {
   const ecs = await db.eventCompetition.findMany({
     where:   { eventId, competition: { thirdPartyIntegration: WEBCRAFT_INTEGRATION } },
-    select:  { competition: { select: { id: true, code: true, name: true, participationType: true } } },
+    select:  { id: true, competition: { select: { id: true, code: true, name: true, participationType: true } } },
     orderBy: { competition: { code: "asc" } },
   });
   if (ecs.length === 0) return [];
@@ -76,7 +78,8 @@ export async function loadWebcraftRoster(eventId: string): Promise<WebcraftRoste
     byComp.set(t.competitionId, list);
   }
 
-  return ecs.map(({ competition: c }) => ({
+  return ecs.map(({ id: ecId, competition: c }) => ({
+    ecId,
     competitionId:     c.id,
     code:              c.code,
     name:              c.name,

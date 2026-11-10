@@ -25,7 +25,7 @@ export default async function EventWebcraftJudgingPage({ params }: { params: Pro
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
-      <EventWebcraftJudgingClient event={event} competitions={competitions} />
+      <EventWebcraftJudgingClient event={event} competitions={competitions} canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)} />
     </OrganizerShell>
   );
 }

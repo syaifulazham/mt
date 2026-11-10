@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Globe, ExternalLink, Search, Loader2, AlertTriangle, RefreshCw, UserX,
 } from "lucide-react";
 import type { ParticipantProjects, WebcraftRosterCompetition, WebcraftRosterTeam } from "@/lib/webcraftJudging";
 import type { WebcraftPublishedProject } from "@/lib/eptim-webcraft";
+import { AiCell, AiDetail, WebcraftAiPanel, useWebcraftAi } from "@/components/organizer/events/WebcraftAiPanel";
 
 const PAGE_SIZE = 100;
 
@@ -35,15 +36,18 @@ function fmt(d: string | null | undefined) {
 }
 
 export function EventWebcraftJudgingClient({
-  event, competitions,
+  event, competitions, canWrite,
 }: {
   event: { id: string; name: string; slug: string };
   competitions: WebcraftRosterCompetition[];
+  canWrite: boolean;
 }) {
   const [activeId, setActiveId] = useState(competitions[0]?.competitionId ?? "");
   const [q,        setQ]        = useState("");
   const [filter,   setFilter]   = useState<Filter>("all");
   const [page,     setPage]     = useState(0);
+  const [sort,     setSort]     = useState<"contingent" | "ai">("contingent");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const [projects, setProjects] = useState<Record<string, ParticipantProjects> | null>(null);
   const [teamProjects, setTeamProjects] = useState<Record<string, ParticipantProjects>>({});
@@ -72,6 +76,9 @@ export function EventWebcraftJudgingClient({
   useEffect(() => { load(); }, [load]);
 
   const active = competitions.find((c) => c.competitionId === activeId) ?? competitions[0];
+  const ai = useWebcraftAi(event.id, active?.ecId ?? "");
+  const aiByTeam = useMemo(() => new Map((ai.state?.rows ?? []).map((r) => [r.teamId, r])), [ai.state]);
+  const teamNames = useMemo(() => new Map((active?.teams ?? []).map((t) => [t.teamId, t.teamName])), [active]);
 
   const isTeam = active?.participationType !== "INDIVIDUAL";
 
@@ -103,7 +110,7 @@ export function EventWebcraftJudgingClient({
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return rows.filter((r) => {
+    const list = rows.filter((r) => {
       if (filter === "no_account" && r.hasAccount) return false;
       if (filter === "with"    && r.projects.length === 0) return false;
       if (filter === "without" && !(r.hasAccount && projects && r.projects.length === 0)) return false;
@@ -111,7 +118,10 @@ export function EventWebcraftJudgingClient({
       const hay = `${r.teamName} ${r.contingent} ${r.members.map((m) => m.name).join(" ")} ${r.projects.map((p) => p.name).join(" ")}`;
       return hay.toLowerCase().includes(needle);
     });
-  }, [rows, q, filter, projects]);
+    if (sort === "contingent") return list;
+    const total = (r: TeamRow) => aiByTeam.get(r.teamId)?.total ?? -1;
+    return [...list].sort((a, b) => total(b) - total(a));
+  }, [rows, q, filter, projects, sort, aiByTeam]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage  = Math.min(page, pageCount - 1);
@@ -189,6 +199,13 @@ export function EventWebcraftJudgingClient({
               </div>
             </div>
 
+            <WebcraftAiPanel
+              ai={ai}
+              canWrite={canWrite}
+              teamNames={teamNames}
+              teamsWithProjects={projects ? rows.filter((r) => r.projects.length > 0).length : null}
+            />
+
             {/* Search + filter */}
             <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-zinc-100 bg-zinc-50/50">
               <div className="relative flex-1 min-w-[14rem]">
@@ -210,6 +227,14 @@ export function EventWebcraftJudgingClient({
                 <option value="without">Akaun ada, tiada projek</option>
                 <option value="no_account">Tiada akaun Webcraft</option>
               </select>
+              <select
+                value={sort}
+                onChange={(e) => { setSort(e.target.value as "contingent" | "ai"); setPage(0); }}
+                className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs"
+              >
+                <option value="contingent">Susun: kontinjen</option>
+                <option value="ai">Susun: markah AI</option>
+              </select>
             </div>
 
             {error && (
@@ -225,15 +250,17 @@ export function EventWebcraftJudgingClient({
                     <th className="px-5 py-2 font-medium">{isTeam ? "Pasukan" : "Peserta"}</th>
                     {isTeam && <th className="px-3 py-2 font-medium">Ahli</th>}
                     <th className="px-3 py-2 font-medium">Kontinjen</th>
-                    <th className="px-3 py-2 font-medium w-[38%]">Projek diterbitkan</th>
+                    <th className="px-3 py-2 font-medium w-[32%]">Projek diterbitkan</th>
+                    <th className="px-3 py-2 font-medium w-28">Markah AI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                   {visible.length === 0 && (
-                    <tr><td colSpan={4} className="px-5 py-10 text-center text-xs text-zinc-400">Tiada {unit} sepadan.</td></tr>
+                    <tr><td colSpan={5} className="px-5 py-10 text-center text-xs text-zinc-400">Tiada {unit} sepadan.</td></tr>
                   )}
                   {visible.map((r) => (
-                    <tr key={r.teamId} className="align-top">
+                    <Fragment key={r.teamId}>
+                    <tr className="align-top">
                       <td className="px-5 py-2.5">
                         <p className="font-medium text-zinc-800">{isTeam ? r.teamName : r.members[0]?.name ?? r.teamName}</p>
                         {(r.teamWebcraftUserId ?? (!isTeam ? r.members[0]?.webcraftUserId : null)) && (
@@ -293,7 +320,31 @@ export function EventWebcraftJudgingClient({
                           <span className="text-xs text-zinc-400">Belum menerbitkan projek</span>
                         )}
                       </td>
+                      <td className="px-3 py-2.5">
+                        <AiCell
+                          row={aiByTeam.get(r.teamId)}
+                          open={expanded.has(r.teamId)}
+                          onToggle={() => setExpanded((s) => {
+                            const n = new Set(s);
+                            if (n.has(r.teamId)) n.delete(r.teamId); else n.add(r.teamId);
+                            return n;
+                          })}
+                          canRun={canWrite && r.projects.length > 0 && !!ai.state?.aiConfigured && !!ai.chosen}
+                          busy={ai.busy === `team:${r.teamId}`}
+                          onRun={() => {
+                            if (ai.chosen) ai.act("start", { templateId: ai.chosen.id, mode: "all", teamIds: [r.teamId] });
+                          }}
+                        />
+                      </td>
                     </tr>
+                    {expanded.has(r.teamId) && aiByTeam.get(r.teamId)?.scores && (
+                      <tr>
+                        <td colSpan={5} className="px-5 pb-3 pt-0">
+                          <AiDetail row={aiByTeam.get(r.teamId)!} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
