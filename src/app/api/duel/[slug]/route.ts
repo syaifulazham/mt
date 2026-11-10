@@ -1,3 +1,4 @@
+import { parseSharedRankMode } from "@/lib/sharedRank";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { parseDuelConfig, remainingMs } from "@/lib/duel";
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const endpoint = await db.duelDisplayEndpoint.findUnique({
     where: { routeSlug: slug },
-    include: { event: { select: { id: true, name: true } } },
+    include: { event: { select: { id: true, name: true, sharedRankMode: true } } },
   });
   if (!endpoint) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (endpoint.status === "CLOSED") return NextResponse.json({ error: "ENDPOINT_CLOSED" }, { status: 403 });
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
           })),
         })),
         finished: g.rounds.some(r => r.isFinal && r.status === "DONE"),
-        standings: standingsOf(g.rounds).map(s => ({ position: s.position, total: s.total, ...pubTeam(s.team) })),
+        standings: standingsOf(g.rounds, parseSharedRankMode(endpoint.event.sharedRankMode)).map(s => ({ position: s.position, total: s.total, ...pubTeam(s.team) })),
       })),
     };
   }));

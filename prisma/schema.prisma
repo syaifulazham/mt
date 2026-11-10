@@ -579,6 +579,10 @@ model Event {
   allowMultipleParticipation Boolean             @default(false)
   participationPolicy        ParticipationPolicy @default(ALL)
   winnerExclusionRank        Int?
+  /// Penghakiman → Tetapan global: how tied teams affect the next rank.
+  /// SKIP = 1, 2, 2, 4 · DENSE = 1, 2, 2, 3. Used by scoreboard, keputusan,
+  /// pengumuman, medal tally and certificate generation.
+  sharedRankMode             String              @default("SKIP")
   createdAt                  DateTime            @default(now())
   updatedAt                  DateTime            @updatedAt
 

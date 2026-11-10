@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "sharedRankMode" TEXT NOT NULL DEFAULT 'SKIP';

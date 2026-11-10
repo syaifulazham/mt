@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { withSharedRanks } from "@/lib/sharedRank";
+import { parseSharedRankMode, withSharedRanks } from "@/lib/sharedRank";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
@@ -20,7 +20,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
   const event = await db.event.findUnique({
     where: { slug },
     select: {
-      id: true, name: true, slug: true, scope: true,
+      id: true, name: true, slug: true, scope: true, sharedRankMode: true,
       eventCompetitions: {
         select: {
           id: true,
@@ -54,6 +54,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
   });
 
   if (!event) redirect("/organizer/events");
+  const rankMode = parseSharedRankMode(event.sharedRankMode);
 
   type RankEntry = {
     teamId: string; teamName: string;
@@ -176,8 +177,8 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       return 0;
     }
 
-    // Equal score and time share a rank (1, 2, 2, 4).
-    const rankings: RankEntry[] = withSharedRanks([...teamsWithScores].sort(compareScore), compareScore);
+    // Equal score and time share a rank; the event's sharedRankMode decides 1, 2, 2, 4 or 1, 2, 2, 3.
+    const rankings: RankEntry[] = withSharedRanks([...teamsWithScores].sort(compareScore), compareScore, rankMode);
 
     let stateGroups: StateGroup[] = [];
     // Always built, so either view can be shown; the default follows resultScope.
@@ -201,7 +202,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
       stateGroups = [...groupMap.entries()]
         .map(([stateId, { stateName, teams }]) => {
-          const sortedTeams = withSharedRanks([...teams].sort(compareScore), compareScore);
+          const sortedTeams = withSharedRanks([...teams].sort(compareScore), compareScore, rankMode);
           const bestScore = sortedTeams[0]?.totalScore ?? 0;
           return { stateId, stateName, bestScore, teams: sortedTeams };
         })

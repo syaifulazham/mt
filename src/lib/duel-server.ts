@@ -1,3 +1,4 @@
+import type { SharedRankMode } from "@/lib/sharedRank";
 import { NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -59,7 +60,7 @@ export async function loadDuelEc(eventId: string, ecId: string) {
       id: true, eventId: true, competitionId: true, judgingMethod: true, duelConfig: true,
       resultScope: true, configLockedAt: true,
       competition: { select: { name: true, code: true, participationType: true } },
-      event: { select: { name: true, slug: true, scope: true } },
+      event: { select: { name: true, slug: true, scope: true, sharedRankMode: true } },
     },
   });
 }
@@ -142,16 +143,16 @@ export function duelGroups(scope: string, pool: DuelTeam[], rounds: DuelRoundDto
 }
 
 /** Standings with team details, from loaded rounds (one bracket). */
-export function standingsOf(rounds: DuelRoundDto[]) {
+export function standingsOf(rounds: DuelRoundDto[], mode?: SharedRankMode) {
   const teams = new Map<string, DuelTeam>();
   for (const r of rounds) for (const s of r.sessions) for (const e of s.entries) teams.set(e.teamId, e.team);
-  return duelStandings(rounds).map(s => ({ ...s, team: teams.get(s.teamId)! }));
+  return duelStandings(rounds, mode).map(s => ({ ...s, team: teams.get(s.teamId)! }));
 }
 
 /** Standings per bracket, keyed by group key. */
-export function standingsByGroup(rounds: DuelRoundDto[]) {
+export function standingsByGroup(rounds: DuelRoundDto[], mode?: SharedRankMode) {
   const keys = [...new Set(rounds.map(r => r.groupKey))];
-  return Object.fromEntries(keys.map(k => [k, standingsOf(rounds.filter(r => r.groupKey === k))]));
+  return Object.fromEntries(keys.map(k => [k, standingsOf(rounds.filter(r => r.groupKey === k), mode)]));
 }
 
 /** Overall phase of a duel competition, for cards (summed over state brackets). */

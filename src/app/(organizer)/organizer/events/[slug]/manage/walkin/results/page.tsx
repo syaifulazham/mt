@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
+import { compareScoreTime, parseSharedRankMode, withSharedRanks } from "@/lib/sharedRank";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
@@ -18,7 +18,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
   const event = await db.event.findUnique({
     where: { slug },
     select: {
-      id: true, name: true, slug: true, scope: true,
+      id: true, name: true, slug: true, scope: true, sharedRankMode: true,
       walkInCompetitions: {
         select: {
           id: true,
@@ -111,7 +111,7 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
         if (a.bestTime != null) return -1;
         if (b.bestTime != null) return 1;
         return 0;
-      }), compareScoreTime);
+      }), compareScoreTime, parseSharedRankMode(event.sharedRankMode));
 
     competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, judging, rankings: sorted });
   }

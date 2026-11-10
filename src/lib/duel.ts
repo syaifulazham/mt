@@ -7,6 +7,7 @@
  * final. Final standings are the points summed over every round
  * (src/lib/duel-server.ts loads the rows; this file only computes).
  */
+import type { SharedRankMode } from "@/lib/sharedRank";
 
 /** NATIONAL: one bracket for everyone. STATE: each state runs its own bracket and standings. */
 export type DuelScope = "NATIONAL" | "STATE";
@@ -186,7 +187,7 @@ export type Standing = {
  * the final, then rank in the team's last round. Equal on all of these share
  * a position.
  */
-export function duelStandings(rounds: StandingRound[]): Standing[] {
+export function duelStandings(rounds: StandingRound[], mode: SharedRankMode = "SKIP"): Standing[] {
   const map = new Map<string, Standing & { lastRank: number | null }>();
   for (const r of [...rounds].sort((a, b) => a.number - b.number)) {
     for (const s of r.sessions) for (const e of s.entries) {
@@ -203,6 +204,10 @@ export function duelStandings(rounds: StandingRound[]): Standing[] {
   const cmp = (a: Standing & { lastRank: number | null }, b: Standing & { lastRank: number | null }) =>
     b.total - a.total || b.reached - a.reached || nz(a.finalRank) - nz(b.finalRank) || nz(a.lastRank) - nz(b.lastRank);
   const rows = [...map.values()].sort(cmp);
-  rows.forEach((r, i) => { r.position = i > 0 && cmp(rows[i - 1], r) === 0 ? rows[i - 1].position : i + 1; });
+  // Equal rows share a position; the event's sharedRankMode decides 1, 2, 2, 4 or 1, 2, 2, 3.
+  rows.forEach((r, i) => {
+    r.position = i === 0 ? 1 : cmp(rows[i - 1], r) === 0 ? rows[i - 1].position
+      : mode === "DENSE" ? rows[i - 1].position + 1 : i + 1;
+  });
   return rows.map(r => ({ teamId: r.teamId, position: r.position, total: r.total, reached: r.reached, finalRank: r.finalRank, perRound: r.perRound }));
 }

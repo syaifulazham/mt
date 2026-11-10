@@ -40,7 +40,7 @@ export function ScoreRankingClient({ event, ecId, competition }: {
           .sort(([a, x], [b, y]) => (a === "" ? 1 : b === "" ? -1 : x.name.localeCompare(y.name)))
           .map(([key, v]) => ({
             key, name: v.name, flag: v.flag,
-            rows: withSharedRanks(result.rankings.filter(r => (r.stateId ?? "") === key), compareScoreTime),
+            rows: withSharedRanks(result.rankings.filter(r => (r.stateId ?? "") === key), compareScoreTime, result.rankMode),
           })),
         ...(result.foreignRankings.length ? [{ key: "__intl", name: "Antarabangsa", flag: null, rows: result.foreignRankings }] : []),
       ]

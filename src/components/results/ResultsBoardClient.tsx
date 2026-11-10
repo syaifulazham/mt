@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
+import { compareScoreTime, withSharedRanks, type SharedRankMode } from "@/lib/sharedRank";
 import { Trophy, Loader2, Eye, EyeOff, Lock, Star, X, ChevronDown, SlidersHorizontal, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +84,8 @@ type CompetitionResult = {
   /** "STATE": ranked per state only — the board stays in Negeri view. */
   resultScope?: "NATIONAL" | "STATE";
   rankings: RankEntry[];
+  /** The event's shared-rank rule (Penghakiman → Tetapan global). */
+  rankMode?: SharedRankMode;
   /** The competition has foreign (non-Malaysian) teams — shows the Antara Bangsa toggle. */
   hasInternational?: boolean;
   /** Foreign results verified (Antarabangsa scope, or the whole competition). */
@@ -955,7 +957,7 @@ export function ResultsBoardClient({ slug }: { slug: string }) {
     const stateId = currentStateId;
     if (!stateId) return activeResult.rankings;
     // Re-ranked within the state; equal score and time share a rank.
-    return withSharedRanks(activeResult.rankings.filter(r => r.stateId === stateId), compareScoreTime);
+    return withSharedRanks(activeResult.rankings.filter(r => r.stateId === stateId), compareScoreTime, activeResult.rankMode);
   })();
 
   return (

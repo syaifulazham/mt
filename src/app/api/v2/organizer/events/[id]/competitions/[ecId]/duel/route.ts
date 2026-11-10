@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseSharedRankMode } from "@/lib/sharedRank";
 import { duelGroups, duelGuard, duelPool, loadRounds, standingsByGroup, withClock } from "@/lib/duel-server";
 
 type Params = { params: Promise<{ id: string; ecId: string }> };
@@ -18,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     pool,
     groups: duelGroups(cfg.scope, pool, rounds),
     rounds: rounds.map(r => ({ ...r, sessions: r.sessions.map(s => withClock(s, cfg.durationSec, now)) })),
-    standings: standingsByGroup(rounds),
+    standings: standingsByGroup(rounds, parseSharedRankMode(ec.event.sharedRankMode)),
     serverNow: now,
   });
 }

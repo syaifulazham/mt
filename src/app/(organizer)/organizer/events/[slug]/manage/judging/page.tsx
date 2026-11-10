@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { resolveResultScope } from "@/lib/resultScope";
 import { eventJudgingProgress } from "@/lib/judgingStatus";
 import { EventJudgingClient } from "@/components/organizer/events/EventJudgingClient";
+import { parseSharedRankMode } from "@/lib/sharedRank";
 
 export const metadata: Metadata = { title: "Penghakiman" };
 
@@ -18,7 +19,7 @@ export default async function EventJudgingPage({ params }: { params: Promise<{ s
   const event = await db.event.findUnique({
     where: { slug },
     select: {
-      id: true, name: true, slug: true, scope: true, status: true,
+      id: true, name: true, slug: true, scope: true, status: true, sharedRankMode: true,
       eventCompetitions: {
         include: {
           competition: {
@@ -66,6 +67,7 @@ export default async function EventJudgingPage({ params }: { params: Promise<{ s
       <EventJudgingClient
         event={{ id: event.id, name: event.name, slug: event.slug, scope: event.scope }}
         competitions={competitions}
+        sharedRankMode={parseSharedRankMode(event.sharedRankMode)}
         canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
         isSuperAdmin={session.role === "SUPER_ADMIN"}
       />

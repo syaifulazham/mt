@@ -185,13 +185,15 @@ export async function resolveRecipients(
         return internationalRankings(verifiedOnly ? r : { ...r, judgingStatus: "VERIFIED" }).map(e => ({ r, e, rank: e.rank }));
       if (!byState)
         return verifiedOnly && r.judgingStatus !== "VERIFIED" ? [] : r.rankings.map(e => ({ r, e, rank: e.rank }));
-      // Equal score and time share a rank within the state (1, 2, 2, 4).
+      // Equal score and time share a rank within the state; the event's
+      // sharedRankMode decides 1, 2, 2, 4 or 1, 2, 2, 3.
       const perState = new Map<string, { e: RankingEntry; rank: number; count: number }>();
       return r.rankings.flatMap(e => {
         const st = e.stateId ?? "-";
         const prev = perState.get(st);
         const count = (prev?.count ?? 0) + 1;
-        const rank = prev && compareScoreTime(prev.e, e) === 0 ? prev.rank : count;
+        const rank = !prev ? 1 : compareScoreTime(prev.e, e) === 0 ? prev.rank
+          : r.rankMode === "DENSE" ? prev.rank + 1 : count;
         perState.set(st, { e, rank, count });
         const verified = r.judgingStatus === "VERIFIED" || (!!e.stateId && r.verifiedStateIds.includes(e.stateId));
         return verifiedOnly && !verified ? [] : [{ r, e, rank }];

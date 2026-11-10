@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import type { EventJudgingProgress, JudgingRow } from "@/lib/judgingStatus";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
 import { JudgingSetupPanel } from "@/components/organizer/judging/JudgingSetupPanel";
+import { JudgingGlobalSettings } from "@/components/organizer/judging/JudgingGlobalSettings";
+import type { SharedRankMode } from "@/lib/sharedRank";
 import { defaultResultScope, type ResultScope } from "@/lib/resultScope";
 import type { DuelConfig } from "@/lib/duel";
 import { JudgingStatusTable, STATUS_CHIP, applyRowChange, fmtWhen, type JudgingState } from "@/components/organizer/judging/JudgingStatusPanel";
@@ -437,10 +439,11 @@ function CompetitionCard({
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function EventJudgingClient({
-  event, competitions: initialCompetitions, canWrite, isSuperAdmin = false,
+  event, competitions: initialCompetitions, sharedRankMode, canWrite, isSuperAdmin = false,
 }: {
   event: EventInfo;
   competitions: CompetitionBlock[];
+  sharedRankMode: SharedRankMode;
   canWrite: boolean;
   isSuperAdmin?: boolean;
 }) {
@@ -624,6 +627,8 @@ export function EventJudgingClient({
           <p className="text-sm text-zinc-400 mt-0.5">{event.name}</p>
         </div>
       </div>
+
+      <JudgingGlobalSettings eventId={event.id} sharedRankMode={sharedRankMode} canWrite={canWrite} />
 
       {/* Wildcard filter on competition code / name */}
       {competitions.length > 0 && (

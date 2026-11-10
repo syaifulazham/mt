@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
+import { compareScoreTime, withSharedRanks, type SharedRankMode } from "@/lib/sharedRank";
 import { db } from "@/lib/db";
 import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
 import { announceKey } from "@/lib/announceKey";
@@ -126,12 +126,14 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
   const verified = scoped.filter(x => x.status === "VERIFIED");
 
   let rankingsBy = new Map<string, RankingEntry[]>();
+  let rankMode: SharedRankMode = "SKIP";
   if (opts.withRankings && verified.length > 0) {
     const ids = (k: AnnounceKind) => [...new Set(verified.filter(x => x.kind === k).map(x => x.c.id))];
     const [reg, walk] = await Promise.all([
       ids("event").length  ? computeCompetitionResults(eventId, false, ids("event"))  : Promise.resolve([]),
       ids("walkin").length ? computeCompetitionResults(eventId, true,  ids("walkin")) : Promise.resolve([]),
     ]);
+    rankMode = reg[0]?.rankMode ?? walk[0]?.rankMode ?? rankMode;
     rankingsBy = new Map([
       ...reg.map(r => [`event:${r.id}`, r.rankings] as const),
       ...walk.map(r => [`walkin:${r.id}`, r.rankings] as const),
@@ -144,7 +146,7 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
   const rankingsFor = (kind: string, refId: string, stateId: string | null) => {
     if (stateId === INTERNATIONAL_SCOPE_ID) return rankingsBy.get(`${kind}:${refId}:${INTERNATIONAL_SCOPE_ID}`) ?? [];
     const r = rankingsBy.get(`${kind}:${refId}`) ?? [];
-    return stateId === null ? r : withSharedRanks(r.filter(x => x.stateId === stateId), compareScoreTime);
+    return stateId === null ? r : withSharedRanks(r.filter(x => x.stateId === stateId), compareScoreTime, rankMode);
   };
 
   const items = verified.map((x) => {
