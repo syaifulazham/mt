@@ -36,6 +36,8 @@ type CompetitionRanking = {
   judging?: ResultsJudging;
   rankings: RankEntry[];
   stateGroups: StateGroup[];
+  /** Penghakiman → Konfigurasi keputusan: the view each competition opens in. */
+  resultScope: "NATIONAL" | "STATE";
 };
 
 type Endpoint = {
@@ -59,7 +61,6 @@ const MEDAL: Record<number, { icon: string; cls: string }> = {
   3: { icon: "🥉", cls: "text-orange-400" },
 };
 
-const ZONE_SCOPES = ["ZONE", "ONLINE_ZONE"];
 
 // ── Switch toggle ──────────────────────────────────────────────────────────────
 
@@ -314,9 +315,9 @@ export function EventResultsClient({
   const [showDownload, setShowDownload] = useState(false);
   const [dlCompScope, setDlCompScope] = useState<"all" | "select">("all");
   const [dlSelectedComps, setDlSelectedComps] = useState<Set<string>>(new Set());
-  const [dlRankedBy, setDlRankedBy] = useState<"national" | "state">(
-    ["ZONE", "ONLINE_ZONE", "STATE"].includes(event.scope) ? "state" : "national"
-  );
+  const [dlRankedBy, setDlRankedBy] = useState<"config" | "national" | "state">("config");
+  // Kebangsaan / Negeri picked on this page; otherwise the competition's own setting.
+  const [viewOverride, setViewOverride] = useState<Record<string, "NATIONAL" | "STATE">>({});
   const [downloading, setDownloading] = useState(false);
 
   // Selected state map — synced with preregistration page's TeamEvent.selected
@@ -330,7 +331,6 @@ export function EventResultsClient({
   });
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
-  const isZone = ZONE_SCOPES.includes(event.scope);
 
   async function toggleSelected(teamId: string) {
     const current = selectedMap.get(teamId) ?? false;
@@ -383,7 +383,8 @@ export function EventResultsClient({
 
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
   const theme = judgingTheme(activeRanking?.judging?.status);
-  const useStateGroups = isZone && (activeRanking?.stateGroups.length ?? 0) > 0;
+  const activeView = activeRanking ? (viewOverride[activeRanking.id] ?? activeRanking.resultScope) : "NATIONAL";
+  const useStateGroups = activeView === "STATE" && (activeRanking?.stateGroups.length ?? 0) > 0;
   const hasData = useStateGroups
     ? (activeRanking?.stateGroups.length ?? 0) > 0
     : (activeRanking?.rankings.length ?? 0) > 0;
@@ -474,6 +475,26 @@ export function EventResultsClient({
           </div>
         </div>
         <JudgingStatusStrip judging={activeRanking?.judging} />
+        {activeRanking && activeRanking.stateGroups.length > 0 && (
+          <div className="px-5 py-2 border-b flex items-center gap-2 flex-wrap text-xs">
+            <span className="text-zinc-500">Paparan</span>
+            <div className="inline-flex rounded-lg border bg-white p-0.5">
+              {([["NATIONAL", "Kebangsaan"], ["STATE", "Negeri"]] as const).map(([v, label]) => (
+                <button key={v} type="button"
+                  onClick={() => setViewOverride(p => ({ ...p, [activeRanking.id]: v }))}
+                  className={cn("rounded-md px-3 py-1 font-medium transition-colors",
+                    activeView === v ? "bg-zinc-800 text-white" : "text-zinc-500 hover:bg-zinc-100")}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="text-zinc-400">
+              {activeView === activeRanking.resultScope
+                ? "Ikut Konfigurasi keputusan (Penghakiman)"
+                : `Konfigurasi keputusan: ${activeRanking.resultScope === "STATE" ? "Negeri" : "Kebangsaan"}`}
+            </span>
+          </div>
+        )}
         {/* Per-state verification (Semua + states) */}
         {activeRanking?.judging && (
           <ResultsVerification
@@ -639,7 +660,7 @@ export function EventResultsClient({
               <div>
                 <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Susun Mengikut</p>
                 <div className="flex gap-2">
-                  {([["national", "Kebangsaan"], ["state", "Negeri"]] as const).map(([v, label]) => (
+                  {([["config", "Ikut konfigurasi"], ["national", "Kebangsaan"], ["state", "Negeri"]] as const).map(([v, label]) => (
                     <button key={v} type="button"
                       onClick={() => setDlRankedBy(v)}
                       className={cn(

@@ -17,6 +17,8 @@ type CompetitionRanking = {
   targetGroup: { id: string; code: string; name: string } | null;
   rankings: RankEntry[];
   stateGroups: StateGroup[];
+  /** Penghakiman → Konfigurasi keputusan; used when rankedBy is "config". */
+  resultScope?: "NATIONAL" | "STATE";
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -66,7 +68,8 @@ export async function exportResultsExcel({
 }: {
   eventName: string;
   competitions: CompetitionRanking[];
-  rankedBy: "national" | "state";
+  /** "config": each competition as its Konfigurasi keputusan says. */
+  rankedBy: "config" | "national" | "state";
 }): Promise<void> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
@@ -137,7 +140,8 @@ export async function exportResultsExcel({
     ws.views = [{ state: "frozen", xSplit: 0, ySplit: headerRowNum, topLeftCell: `A${headerRowNum + 1}` }];
 
     // ── Data rows ─────────────────────────────────────────────────────────────
-    const useStateGroups = rankedBy === "state" && comp.stateGroups.length > 0;
+    const byState = rankedBy === "config" ? comp.resultScope === "STATE" : rankedBy === "state";
+    const useStateGroups = byState && comp.stateGroups.length > 0;
 
     function addTeamRow(r: RankEntry, idx: number) {
       const rn = currentRow;

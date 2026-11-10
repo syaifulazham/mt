@@ -4,13 +4,12 @@ import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
+import { resolveResultScope, type ResultScope } from "@/lib/resultScope";
 import { flagEmoji, isForeignCountry } from "@/lib/countries";
 import { EventResultsClient } from "@/components/organizer/events/EventResultsClient";
 import { eventJudgingProgress, type JudgingRow } from "@/lib/judgingStatus";
 
 export const metadata: Metadata = { title: "Keputusan" };
-
-const ZONE_SCOPES = ["ZONE", "ONLINE_ZONE"];
 
 export default async function EventResultsPage({ params }: { params: Promise<{ slug: string }> }) {
   const session = await getOrganizerSession();
@@ -26,6 +25,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
         select: {
           id: true,
           judgingStatus: true, judgingVerifiedAt: true, judgingVerifiedBy: true,
+          resultScope: true, judgingMethod: true, duelConfig: true,
           competition: {
             select: {
               id: true,
@@ -55,8 +55,6 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
   if (!event) redirect("/organizer/events");
 
-  const isZoneScope = ZONE_SCOPES.includes(event.scope);
-
   type RankEntry = {
     teamId: string; teamName: string;
     contingentName: string; contingentLogo: string | null;
@@ -76,6 +74,8 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     judging: { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string; rows: JudgingRow[] };
     rankings: RankEntry[];
     stateGroups: StateGroup[];
+    /** Penghakiman → Konfigurasi keputusan: the view the page opens in. */
+    resultScope: ResultScope;
   };
 
   const competitionRankings: CompetitionRankingOut[] = [];
@@ -84,6 +84,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
   for (const ec of event.eventCompetitions) {
     const targetGroup = ec.competition.targetGroups[0]?.targetGroup ?? null;
+    const resultScope = resolveResultScope(ec, event.scope);
     const judging = {
       status:     ec.judgingStatus,
       verifiedAt: ec.judgingVerifiedAt?.toISOString() ?? null,
@@ -107,7 +108,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     if (scoreMap.size === 0) {
       competitionRankings.push({
         id: ec.competition.id, name: ec.competition.name, code: ec.competition.code,
-        targetGroup, judging, rankings: [], stateGroups: [],
+        targetGroup, judging, rankings: [], stateGroups: [], resultScope,
       });
       continue;
     }
@@ -179,7 +180,8 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     const rankings: RankEntry[] = withSharedRanks([...teamsWithScores].sort(compareScore), compareScore);
 
     let stateGroups: StateGroup[] = [];
-    if (isZoneScope) {
+    // Always built, so either view can be shown; the default follows resultScope.
+    {
       const stateIdSet = new Set(teamsWithScores.map((t) => t.effectiveStateId).filter(Boolean) as string[]);
       const states = await db.state.findMany({
         where: { id: { in: [...stateIdSet] } },
@@ -211,7 +213,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
     competitionRankings.push({
       id: ec.competition.id, name: ec.competition.name, code: ec.competition.code,
-      targetGroup, judging, rankings, stateGroups,
+      targetGroup, judging, rankings, stateGroups, resultScope,
     });
   }
 
