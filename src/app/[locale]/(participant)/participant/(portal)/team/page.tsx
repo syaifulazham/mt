@@ -271,7 +271,7 @@ export default async function TeamPage() {
                                 <EptimDroneTeamButton teamId={team.id} />
                               )}
                               {comp.thirdPartyIntegration === "eptim-webcraft" && (
-                                <EptimWebcraftButton />
+                                <EptimWebcraftButton teamId={team.id} />
                               )}
                             </div>
                           </div>

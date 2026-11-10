@@ -5,15 +5,22 @@ import Link from "next/link";
 import {
   ArrowLeft, Globe, ExternalLink, Search, Loader2, AlertTriangle, RefreshCw, UserX,
 } from "lucide-react";
-import type { ParticipantProjects, WebcraftRosterCompetition } from "@/lib/webcraftJudging";
+import type { ParticipantProjects, WebcraftRosterCompetition, WebcraftRosterTeam } from "@/lib/webcraftJudging";
+import type { WebcraftPublishedProject } from "@/lib/eptim-webcraft";
 
 const PAGE_SIZE = 100;
 
 type Filter = "all" | "with" | "without" | "no_account";
 
-type Row = {
-  participantId: string; name: string; webcraftUserId: string | null;
-  teamId: string; teamName: string; contingent: string; acceptance: string;
+type Project = WebcraftPublishedProject & { owner: string | null };
+
+/** One row per team: its shared account plus any members' personal accounts. */
+type TeamRow = WebcraftRosterTeam & {
+  hasAccount: boolean;
+  /** Union of every account's published projects, de-duplicated. */
+  projects: Project[];
+  /** true when every account answered; false while any is still unknown. */
+  resolved: boolean;
 };
 
 const ACCEPTANCE_STYLE: Record<string, string> = {
@@ -39,6 +46,7 @@ export function EventWebcraftJudgingClient({
   const [page,     setPage]     = useState(0);
 
   const [projects, setProjects] = useState<Record<string, ParticipantProjects> | null>(null);
+  const [teamProjects, setTeamProjects] = useState<Record<string, ParticipantProjects>>({});
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
@@ -51,6 +59,7 @@ export function EventWebcraftJudgingClient({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       setProjects(json.data ?? {});
+      setTeamProjects(json.teams ?? {});
       setFetchedAt(json.fetchedAt ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal memuatkan projek Webcraft");
@@ -64,39 +73,54 @@ export function EventWebcraftJudgingClient({
 
   const active = competitions.find((c) => c.competitionId === activeId) ?? competitions[0];
 
-  const rows: Row[] = useMemo(() => (active?.teams ?? []).flatMap((t) =>
-    t.members.map((m) => ({
-      ...m, teamId: t.teamId, teamName: t.teamName, contingent: t.contingent, acceptance: t.acceptance,
-    })),
-  ), [active]);
+  const isTeam = active?.participationType !== "INDIVIDUAL";
 
-  const countOf = (r: Row) => {
-    const p = projects?.[r.participantId];
-    return p?.state === "ok" ? p.projects.length : 0;
-  };
+  const rows: TeamRow[] = useMemo(() => (active?.teams ?? []).map((t) => {
+    const sources: { owner: string | null; state: ParticipantProjects | undefined }[] = [];
+    if (t.teamWebcraftUserId) sources.push({ owner: "Akaun pasukan", state: teamProjects[t.teamId] });
+    for (const m of t.members) {
+      // A team account adopted from a member is that member's account — don't list it twice.
+      if (!m.webcraftUserId || m.webcraftUserId === t.teamWebcraftUserId) continue;
+      sources.push({ owner: m.name, state: projects?.[m.participantId] });
+    }
+    const seen = new Set<string>();
+    const list: Project[] = [];
+    for (const src of sources) {
+      if (src.state?.state !== "ok") continue;
+      for (const p of src.state.projects) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        list.push({ ...p, owner: sources.length > 1 ? src.owner : null });
+      }
+    }
+    return {
+      ...t,
+      hasAccount: sources.length > 0,
+      projects:   list,
+      resolved:   !!projects && sources.every((src) => src.state && src.state.state !== "unknown"),
+    };
+  }), [active, projects, teamProjects]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
-      if (filter === "no_account" && r.webcraftUserId) return false;
-      if (filter === "with"    && !(r.webcraftUserId && countOf(r) > 0)) return false;
-      if (filter === "without" && !(r.webcraftUserId && projects && countOf(r) === 0)) return false;
+      if (filter === "no_account" && r.hasAccount) return false;
+      if (filter === "with"    && r.projects.length === 0) return false;
+      if (filter === "without" && !(r.hasAccount && projects && r.projects.length === 0)) return false;
       if (!needle) return true;
-      const p = projects?.[r.participantId];
-      const projectNames = p?.state === "ok" ? p.projects.map((x) => x.name).join(" ") : "";
-      return `${r.name} ${r.teamName} ${r.contingent} ${projectNames}`.toLowerCase().includes(needle);
+      const hay = `${r.teamName} ${r.contingent} ${r.members.map((m) => m.name).join(" ")} ${r.projects.map((p) => p.name).join(" ")}`;
+      return hay.toLowerCase().includes(needle);
     });
-    // countOf reads `projects`, which is in the deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, q, filter, projects]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage  = Math.min(page, pageCount - 1);
   const visible   = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
-  const withAccount  = rows.filter((r) => r.webcraftUserId).length;
-  const withProjects = projects ? rows.filter((r) => countOf(r) > 0).length : null;
-  const isTeam       = active?.participationType !== "INDIVIDUAL";
+  const memberCount  = rows.reduce((n, r) => n + r.members.length, 0);
+  const withAccount  = rows.filter((r) => r.hasAccount).length;
+  const withProjects = projects ? rows.filter((r) => r.projects.length > 0).length : null;
+  const unit         = isTeam ? "pasukan" : "peserta";
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-5">
@@ -156,11 +180,11 @@ export function EventWebcraftJudgingClient({
                 <span className="font-mono text-zinc-400 mr-1.5">{active.code}</span>{active.name}
               </h2>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">{rows.length} peserta</span>
-                {isTeam && <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">{active.teams.length} pasukan</span>}
-                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">{withAccount} akaun Webcraft</span>
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">{memberCount} peserta</span>
+                {isTeam && <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">{rows.length} pasukan</span>}
+                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">{withAccount} {unit} ada akaun Webcraft</span>
                 <span className="rounded-full bg-green-50 px-2 py-0.5 text-green-700">
-                  {withProjects === null ? "…" : withProjects} ada projek diterbitkan
+                  {withProjects === null ? "…" : withProjects} {unit} ada projek diterbitkan
                 </span>
               </div>
             </div>
@@ -181,7 +205,7 @@ export function EventWebcraftJudgingClient({
                 onChange={(e) => { setFilter(e.target.value as Filter); setPage(0); }}
                 className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs"
               >
-                <option value="all">Semua peserta</option>
+                <option value="all">Semua {unit}</option>
                 <option value="with">Ada projek diterbitkan</option>
                 <option value="without">Akaun ada, tiada projek</option>
                 <option value="no_account">Tiada akaun Webcraft</option>
@@ -198,74 +222,79 @@ export function EventWebcraftJudgingClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-100 text-left text-[11px] uppercase tracking-wide text-zinc-400">
-                    <th className="px-5 py-2 font-medium">Peserta</th>
-                    {isTeam && <th className="px-3 py-2 font-medium">Pasukan</th>}
+                    <th className="px-5 py-2 font-medium">{isTeam ? "Pasukan" : "Peserta"}</th>
+                    {isTeam && <th className="px-3 py-2 font-medium">Ahli</th>}
                     <th className="px-3 py-2 font-medium">Kontinjen</th>
                     <th className="px-3 py-2 font-medium w-[38%]">Projek diterbitkan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                   {visible.length === 0 && (
-                    <tr><td colSpan={4} className="px-5 py-10 text-center text-xs text-zinc-400">Tiada peserta sepadan.</td></tr>
+                    <tr><td colSpan={4} className="px-5 py-10 text-center text-xs text-zinc-400">Tiada {unit} sepadan.</td></tr>
                   )}
-                  {visible.map((r) => {
-                    const p = projects?.[r.participantId];
-                    return (
-                      <tr key={`${r.teamId}-${r.participantId}`} className="align-top">
-                        <td className="px-5 py-2.5">
-                          <p className="font-medium text-zinc-800">{r.name}</p>
-                          {r.webcraftUserId && (
-                            <p className="text-[10px] font-mono text-zinc-400">{r.webcraftUserId}</p>
-                          )}
-                        </td>
-                        {isTeam && (
-                          <td className="px-3 py-2.5">
-                            <p className="text-zinc-700">{r.teamName}</p>
-                            <span className={`mt-0.5 inline-block rounded-full px-1.5 text-[10px] ${ACCEPTANCE_STYLE[r.acceptance] ?? "bg-zinc-100 text-zinc-500"}`}>
-                              {r.acceptance}
-                            </span>
-                          </td>
+                  {visible.map((r) => (
+                    <tr key={r.teamId} className="align-top">
+                      <td className="px-5 py-2.5">
+                        <p className="font-medium text-zinc-800">{isTeam ? r.teamName : r.members[0]?.name ?? r.teamName}</p>
+                        {(r.teamWebcraftUserId ?? (!isTeam ? r.members[0]?.webcraftUserId : null)) && (
+                          <p className="text-[10px] font-mono text-zinc-400">
+                            {r.teamWebcraftUserId ?? r.members[0]?.webcraftUserId}
+                          </p>
                         )}
-                        <td className="px-3 py-2.5 text-xs text-zinc-500">{r.contingent}</td>
+                        <span className={`mt-0.5 inline-block rounded-full px-1.5 text-[10px] ${ACCEPTANCE_STYLE[r.acceptance] ?? "bg-zinc-100 text-zinc-500"}`}>
+                          {r.acceptance}
+                        </span>
+                      </td>
+                      {isTeam && (
                         <td className="px-3 py-2.5">
-                          {!r.webcraftUserId ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-zinc-400">
-                              <UserX className="h-3.5 w-3.5" /> Tiada akaun Webcraft
-                            </span>
-                          ) : loading && !projects ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-zinc-400">
-                              <Loader2 className="h-3 w-3 animate-spin" /> Memuatkan…
-                            </span>
-                          ) : !p || p.state === "unknown" ? (
-                            <span className="text-xs text-zinc-400">—</span>
-                          ) : p.state === "no_account" ? (
-                            <span className="text-xs text-amber-600">Akaun tiada di Webcraft</span>
-                          ) : p.projects.length === 0 ? (
-                            <span className="text-xs text-zinc-400">Belum menerbitkan projek</span>
-                          ) : (
-                            <ul className="space-y-1">
-                              {p.projects.map((proj) => (
-                                <li key={proj.id}>
-                                  <a
-                                    href={proj.published_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-sm font-medium text-violet-700 hover:underline"
-                                  >
-                                    {proj.name} <ExternalLink className="h-3 w-3 shrink-0" />
-                                  </a>
-                                  <p className="text-[10px] text-zinc-400">
-                                    {fmt(proj.published_at) && `Diterbitkan ${fmt(proj.published_at)}`}
-                                    {proj.updated_at && fmt(proj.updated_at) !== fmt(proj.published_at) && ` · Dikemas kini ${fmt(proj.updated_at)}`}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                          <ul className="space-y-1">
+                            {r.members.map((m) => (
+                              <li key={m.participantId} className="text-xs text-zinc-700 leading-snug">
+                                {m.name}
+                                {!m.webcraftUserId && <span className="ml-1 text-[10px] text-zinc-400">(tiada akaun)</span>}
+                              </li>
+                            ))}
+                          </ul>
                         </td>
-                      </tr>
-                    );
-                  })}
+                      )}
+                      <td className="px-3 py-2.5 text-xs text-zinc-500">{r.contingent}</td>
+                      <td className="px-3 py-2.5">
+                        {r.projects.length > 0 ? (
+                          <ul className="space-y-1">
+                            {r.projects.map((proj) => (
+                              <li key={proj.id}>
+                                <a
+                                  href={proj.published_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-sm font-medium text-violet-700 hover:underline"
+                                >
+                                  {proj.name} <ExternalLink className="h-3 w-3 shrink-0" />
+                                </a>
+                                <p className="text-[10px] text-zinc-400">
+                                  {fmt(proj.published_at) && `Diterbitkan ${fmt(proj.published_at)}`}
+                                  {proj.updated_at && fmt(proj.updated_at) !== fmt(proj.published_at) && ` · Dikemas kini ${fmt(proj.updated_at)}`}
+                                  {proj.owner && ` · ${proj.owner}`}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : !r.hasAccount ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-zinc-400">
+                            <UserX className="h-3.5 w-3.5" /> Tiada akaun Webcraft
+                          </span>
+                        ) : loading && !projects ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-zinc-400">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Memuatkan…
+                          </span>
+                        ) : !r.resolved ? (
+                          <span className="text-xs text-zinc-400">—</span>
+                        ) : (
+                          <span className="text-xs text-zinc-400">Belum menerbitkan projek</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

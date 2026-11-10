@@ -1037,6 +1037,7 @@ model Team {
   droneAccess           TeamDroneAccess?
   droneChallenges       TeamDroneChallenge[]
   csiAccess             TeamCsiAccess?
+  webcraftAccess        TeamWebcraftAccess?
   judgingScores         JudgingScore[]
   walkInRegistrations   WalkInRegistration[]
   walkInFormSubmissions WalkInFormSubmission[]
@@ -1667,6 +1668,22 @@ model ParticipantWebcraftAccess {
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@map("participant_webcraft_access")
+}
+
+/// One shared WebCraft account per team, so every member opens the same
+/// projects. Usually adopted from a member's existing personal account
+/// (sourceParticipantId); otherwise created for the team.
+model TeamWebcraftAccess {
+  id                  String   @id @default(cuid())
+  teamId              String   @unique
+  webcraftUserId      String
+  webcraftPassword    String
+  sourceParticipantId String?
+  createdAt           DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("team_webcraft_access")
 }
 
 model EmailBlast {

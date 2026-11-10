@@ -7,9 +7,12 @@ type WebcraftStatus = {
   registered: boolean;
   userExists: boolean | null;
   webcraftUserId: string | null;
+  team?: boolean;
+  sharedFrom?: string | null;
 };
 
-export function EptimWebcraftButton() {
+/** With teamId, every member of the team uses the team's one shared account. */
+export function EptimWebcraftButton({ teamId }: { teamId?: string } = {}) {
   const [status,  setStatus]  = useState<WebcraftStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy,    setBusy]    = useState(false);
@@ -20,7 +23,7 @@ export function EptimWebcraftButton() {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch("/api/v2/participant/webcraft/status");
+      const res  = await fetch(`/api/v2/participant/webcraft/status${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ""}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       setStatus(json as WebcraftStatus);
@@ -29,7 +32,7 @@ export function EptimWebcraftButton() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [teamId]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
@@ -38,7 +41,9 @@ export function EptimWebcraftButton() {
     setBusy(true);
     setError(null);
     try {
-      const res  = await fetch("/api/v2/participant/webcraft/register", { method: "POST" });
+      const res  = await fetch("/api/v2/participant/webcraft/register", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }),
+      });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       await load();
@@ -53,7 +58,9 @@ export function EptimWebcraftButton() {
     setBusy(true);
     setError(null);
     try {
-      const res  = await fetch("/api/v2/participant/webcraft/signin", { method: "POST" });
+      const res  = await fetch("/api/v2/participant/webcraft/signin", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ teamId }),
+      });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       const { accessToken, refreshToken, appUrl } = json as {
@@ -124,12 +131,15 @@ export function EptimWebcraftButton() {
           <div className="space-y-2.5">
             {/* Status */}
             <div className="rounded-lg bg-white dark:bg-zinc-900 px-2.5 py-2 text-[11px]">
-              <p className="text-zinc-500 mb-0.5">Akaun Pelajar</p>
+              <p className="text-zinc-500 mb-0.5">{status.team ? "Akaun Pasukan (dikongsi semua ahli)" : "Akaun Pelajar"}</p>
               <p className={`font-medium ${status.registered || status.userExists ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
                 {status.registered ? "Berdaftar" : status.userExists === false ? "Belum daftar" : "—"}
               </p>
               {status.registered && status.webcraftUserId && (
                 <p className="text-[10px] text-zinc-400 font-mono mt-0.5">{status.webcraftUserId}</p>
+              )}
+              {status.team && status.sharedFrom && (
+                <p className="text-[10px] text-zinc-500 mt-0.5">Menggunakan akaun {status.sharedFrom}</p>
               )}
             </div>
 
@@ -142,7 +152,7 @@ export function EptimWebcraftButton() {
                 className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-medium py-2 transition-colors"
               >
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
-                Daftar Akaun Webcraft
+                {status.team ? "Daftar Akaun Pasukan" : "Daftar Akaun Webcraft"}
               </button>
             )}
 

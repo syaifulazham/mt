@@ -12,6 +12,8 @@ export type ParticipantProjects =
 export type WebcraftRosterMember = { participantId: string; name: string; webcraftUserId: string | null };
 export type WebcraftRosterTeam = {
   teamId: string; teamName: string; contingent: string; acceptance: string;
+  /** The team's shared account, once a member has signed in through it. */
+  teamWebcraftUserId: string | null;
   members: WebcraftRosterMember[];
 };
 export type WebcraftRosterCompetition = {
@@ -40,6 +42,7 @@ export async function loadWebcraftRoster(eventId: string): Promise<WebcraftRoste
         select: {
           id: true, name: true, competitionId: true,
           contingent: { select: { name: true } },
+          webcraftAccess: { select: { webcraftUserId: true } },
           members: {
             select: {
               participant: {
@@ -61,6 +64,7 @@ export async function loadWebcraftRoster(eventId: string): Promise<WebcraftRoste
       teamName:   t.name,
       contingent: t.contingent.name,
       acceptance: te.acceptance,
+      teamWebcraftUserId: t.webcraftAccess?.webcraftUserId ?? null,
       members: t.members
         .map(({ participant: p }) => ({
           participantId:  p.id,

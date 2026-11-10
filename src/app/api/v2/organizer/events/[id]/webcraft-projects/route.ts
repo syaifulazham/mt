@@ -11,6 +11,7 @@ import { WEBCRAFT_INTEGRATION, type ParticipantProjects } from "@/lib/webcraftJu
  * WebCraft competitions, keyed by participant id. Called by the judging page
  * after it renders, so a slow WebCraft never delays the roster. Participants
  * without a local WebCraft account are simply absent — the page already knows.
+ * Team shared accounts come back under `teams`, keyed by team id.
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getOrganizerSession();
@@ -37,17 +38,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     },
     select: { participantId: true, webcraftUserId: true },
   });
+  const teamAccounts = await db.teamWebcraftAccess.findMany({
+    where: {
+      team: {
+        teamEvents:  { some: { eventId } },
+        competition: { thirdPartyIntegration: WEBCRAFT_INTEGRATION, eventCompetitions: { some: { eventId } } },
+      },
+    },
+    select: { teamId: true, webcraftUserId: true },
+  });
 
   try {
-    const remote = await webcraftPublishedProjects(accounts.map((a) => a.webcraftUserId));
+    const remote = await webcraftPublishedProjects([
+      ...accounts.map((a) => a.webcraftUserId), ...teamAccounts.map((a) => a.webcraftUserId),
+    ]);
+    const toState = (userId: string): ParticipantProjects => {
+      const u = remote.get(userId);
+      return !u ? { state: "unknown" } : !u.exists ? { state: "no_account" } : { state: "ok", projects: u.projects };
+    };
     const data: Record<string, ParticipantProjects> = {};
-    for (const a of accounts) {
-      const u = remote.get(a.webcraftUserId);
-      data[a.participantId] = !u ? { state: "unknown" }
-        : !u.exists ? { state: "no_account" }
-        : { state: "ok", projects: u.projects };
-    }
-    return NextResponse.json({ data, fetchedAt: new Date().toISOString() });
+    for (const a of accounts) data[a.participantId] = toState(a.webcraftUserId);
+    const teams: Record<string, ParticipantProjects> = {};
+    for (const a of teamAccounts) teams[a.teamId] = toState(a.webcraftUserId);
+    return NextResponse.json({ data, teams, fetchedAt: new Date().toISOString() });
   } catch (e: unknown) {
     const err = e as { message?: string; status?: number; detail?: string };
     console.error(`[webcraft] published projects failed for event ${eventId}:`, err.message, "| upstream:", err.detail ?? "—");
