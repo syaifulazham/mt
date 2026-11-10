@@ -57,11 +57,20 @@ const BUTTON_ICON_KEYS = BUTTON_ICONS.map(([k]) => k) as [ButtonIcon, ...ButtonI
 
 // ── Blocks ───────────────────────────────────────────────────────────────────
 
+/** Image grid aspect ratios, as CSS aspect-ratio values ("original" = keep each image's own shape). */
+export const IMAGE_ASPECTS = ["original", "1/1", "4/3", "3/2", "16/9", "3/4", "4/5", "9/16"] as const;
+export type ImageAspect = (typeof IMAGE_ASPECTS)[number];
+
 export const blockSchema = z.discriminatedUnion("type", [
   z.object({ id: z.string(), type: z.literal("heading"), text: text(300), level: z.union([z.literal(2), z.literal(3)]).default(3), align }),
   z.object({ id: z.string(), type: z.literal("text"), markdown: text(20000), align }),
   z.object({ id: z.string(), type: z.literal("image"), image, width: z.enum(["full", "wide", "medium"]).default("wide") }),
-  z.object({ id: z.string(), type: z.literal("images"), items: z.array(image).max(48).default([]), columns: z.union([z.literal(2), z.literal(3), z.literal(4)]).default(3) }),
+  z.object({
+    id: z.string(), type: z.literal("images"), items: z.array(image).max(48).default([]),
+    columns: z.union([z.literal(2), z.literal(3), z.literal(4)]).default(3),
+    /** One aspect ratio for every image ("original" = uncropped). Older blocks without it stay 4:3. */
+    aspect: z.enum(IMAGE_ASPECTS).default("4/3"),
+  }),
   z.object({ id: z.string(), type: z.literal("media"), image, markdown: text(20000), side: z.enum(["left", "right"]).default("left") }),
   z.object({
     id: z.string(), type: z.literal("cards"),
@@ -193,7 +202,7 @@ export function newBlock<T extends BlockType>(type: T): BlockOf<T> {
     heading: { id, type: "heading", text: "", level: 3, align: "left" },
     text: { id, type: "text", markdown: "", align: "left" },
     image: { id, type: "image", image: blank, width: "wide" },
-    images: { id, type: "images", items: [], columns: 3 },
+    images: { id, type: "images", items: [], columns: 3, aspect: "4/3" },
     media: { id, type: "media", image: blank, markdown: "", side: "left" },
     cards: { id, type: "cards", items: [{ title: "", text: "", image: "", url: "" }], columns: 3 },
     stats: { id, type: "stats", items: [{ value: "", label: "" }] },

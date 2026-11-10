@@ -105,7 +105,7 @@ function BlockView({ block, p }: { block: Block; p: Palette }) {
     case "images":
       return block.items.length ? (
         <div style={grid(block.columns, 180)}>
-          {block.items.map((img, i) => <Figure key={i} image={img} radius={10} aspect="4/3" />)}
+          {block.items.map((img, i) => <Figure key={i} image={img} radius={10} aspect={block.aspect === "original" ? undefined : block.aspect ?? "4/3"} />)}
         </div>
       ) : null;
     case "media": {

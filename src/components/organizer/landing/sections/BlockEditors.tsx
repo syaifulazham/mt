@@ -10,8 +10,9 @@ import { BUTTON_ICON_COMPONENTS } from "@/components/landing/buttonIcons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BUTTON_ICONS, type Block, type BlockOf, type ButtonIcon, type SectionImage } from "@/lib/landingSections";
+import { BUTTON_ICONS, type Block, type BlockOf, type ButtonIcon, type ImageAspect, type SectionImage } from "@/lib/landingSections";
 import { ImagePicker } from "./ImagePicker";
+import { cn } from "@/lib/utils";
 
 // ── Small shared controls ────────────────────────────────────────────────────
 
@@ -43,6 +44,10 @@ function Choice<T extends string | number>({ value, options, onChange }: {
 }
 
 const ALIGN = [{ value: "left" as const, label: "Left" }, { value: "center" as const, label: "Centre" }];
+const ASPECTS: { value: ImageAspect; label: string }[] = [
+  { value: "original", label: "Asal" }, { value: "1/1", label: "1:1" }, { value: "4/3", label: "4:3" }, { value: "3/2", label: "3:2" },
+  { value: "16/9", label: "16:9" }, { value: "3/4", label: "3:4" }, { value: "4/5", label: "4:5" }, { value: "9/16", label: "9:16" },
+];
 const COLS = [{ value: 2 as const, label: "2" }, { value: 3 as const, label: "3" }, { value: 4 as const, label: "4" }];
 
 /** Move / remove buttons for an item inside a list block. */
@@ -195,23 +200,32 @@ function ImageForm({ block, onChange }: P<"image">) {
 function ImagesForm({ block, onChange }: P<"images">) {
   const [open, setOpen] = useState(false);
   const set = (items: SectionImage[]) => onChange({ ...block, items });
+  const aspect = block.aspect ?? "4/3";
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
         {block.items.map((img, i) => (
-          <div key={`${img.url}-${i}`} className="group relative aspect-[4/3] overflow-hidden rounded-md border bg-zinc-100">
-            <img src={img.url} alt="" className="h-full w-full object-cover" />
-            <div className="absolute inset-x-0 bottom-0 flex justify-end bg-gradient-to-t from-black/60 to-transparent p-1 opacity-0 transition group-hover:opacity-100">
-              <div className="rounded bg-white/90"><ItemTools i={i} n={block.items.length} onMove={(a, b) => set(move(block.items, a, b))} onRemove={() => set(block.items.filter((_, j) => j !== i))} /></div>
+          <div key={`${img.url}-${i}`} className="space-y-1">
+            <div style={{ aspectRatio: aspect === "original" ? "4/3" : aspect }} className="group relative overflow-hidden rounded-md border bg-zinc-100">
+              <img src={img.url} alt="" className={cn("h-full w-full", aspect === "original" ? "object-contain" : "object-cover")} />
+              <div className="absolute inset-x-0 bottom-0 flex justify-end bg-gradient-to-t from-black/60 to-transparent p-1 opacity-0 transition group-hover:opacity-100">
+                <div className="rounded bg-white/90"><ItemTools i={i} n={block.items.length} onMove={(a, b) => set(move(block.items, a, b))} onRemove={() => set(block.items.filter((_, j) => j !== i))} /></div>
+              </div>
             </div>
+            <Input className="h-7 px-2 text-[11px]" value={img.caption} maxLength={500} placeholder="Caption (optional)"
+              onChange={(e) => set(block.items.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)))} />
           </div>
         ))}
         <button type="button" onClick={() => setOpen(true)}
-          className="flex aspect-[4/3] flex-col items-center justify-center rounded-md border-2 border-dashed border-zinc-300 text-xs text-zinc-400 hover:border-sky-300 hover:text-sky-600">
+          style={{ aspectRatio: aspect === "original" ? "4/3" : aspect }}
+          className="flex self-start flex-col items-center justify-center rounded-md border-2 border-dashed border-zinc-300 text-xs text-zinc-400 hover:border-sky-300 hover:text-sky-600">
           <ImagePlus className="mb-1 h-5 w-5" /> Add images
         </button>
       </div>
-      <div className="flex items-center gap-2 text-xs text-zinc-500">Columns <Choice value={block.columns} options={COLS} onChange={(columns) => onChange({ ...block, columns })} /></div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500">
+        <span className="flex items-center gap-2">Columns <Choice value={block.columns} options={COLS} onChange={(columns) => onChange({ ...block, columns })} /></span>
+        <span className="flex flex-wrap items-center gap-2">Aspect ratio <Choice value={aspect} options={ASPECTS} onChange={(aspect) => onChange({ ...block, aspect })} /></span>
+      </div>
       <ImagePicker open={open} multiple onClose={() => setOpen(false)} onPick={(imgs) => set([...block.items, ...imgs])} />
     </div>
   );
