@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { cn } from "@/lib/utils";
 import type { CsiMonitorCompetition, CsiMonitorTeam } from "@/lib/csiMonitor";
 import { confirmationCode } from "@/lib/confirmationCode";
+import { CsiJudgingPanel } from "@/components/organizer/events/CsiJudgingPanel";
 
 // Pantauan Pertandingan Dalam Talian → Eptim CSI: per CSI-linked competition of
 // the event, the teams registered on each case (toggle by case), with their
@@ -329,6 +330,9 @@ function CompetitionPanel({ comp, eventId, canReset, onReload }: {
           {comp.teamsInEvent} pasukan dalam acara · {comp.teamsWithAccount} mempunyai akaun Eptim CSI · {comp.teams.length} berdaftar pada sekurang-kurangnya satu kes
         </p>
       </div>
+
+      {/* Judging template + sync of the CSI results into judging scores */}
+      <CsiJudgingPanel eventId={eventId} ecId={comp.ecId} />
 
       {comp.error ? (
         <p className="px-5 py-6 text-sm text-red-600 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{comp.error}</p>
