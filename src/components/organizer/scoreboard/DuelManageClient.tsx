@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AvatarPreference, TeamAvatar, preferFor } from "@/components/duel/TeamAvatar";
 import { WhepVideo } from "@/components/duel/WhepVideo";
+import { TeamCertCell, useTeamCertCounts } from "@/components/organizer/scoreboard/TeamCertCell";
 import { cn } from "@/lib/utils";
 import { findClashes, remainingMs, sessionSizes, type DuelConfig, type DuelSplit } from "@/lib/duel";
 
@@ -219,7 +220,7 @@ export function DuelManageClient({ event, ecId, competition, role }: {
           onNext={() => setTab("draw")}
         />
       )}
-      {active === "standings" && <Standings rounds={rounds} standings={data.standings[gKey] ?? []} finished={finished} />}
+      {active === "standings" && <Standings rounds={rounds} standings={data.standings[gKey] ?? []} finished={finished} event={event} ecId={ecId} />}
     </div>
     </AvatarPreference>
   );
@@ -765,7 +766,10 @@ function RankDialog({ session, round, advance, onClose, onSave }: {
 
 // ── Standings ────────────────────────────────────────────────────────────────
 
-function Standings({ rounds, standings, finished }: { rounds: Round[]; standings: Standing[]; finished: boolean }) {
+function Standings({ rounds, standings, finished, event, ecId }: {
+  rounds: Round[]; standings: Standing[]; finished: boolean; event: { id: string; slug: string }; ecId: string;
+}) {
+  const certCounts = useTeamCertCounts(event.id, ecId);
   const played = rounds.filter(r => r.status !== "DRAFT");
   if (standings.length === 0 || played.length === 0) {
     return <p className="rounded-xl border border-dashed p-10 text-center text-sm text-zinc-400">Kedudukan dipaparkan selepas cabutan disahkan.</p>;
@@ -785,6 +789,7 @@ function Standings({ rounds, standings, finished }: { rounds: Round[]; standings
               <th className="px-4 py-2 text-left">Pasukan</th>
               {played.map(r => <th key={r.id} className="w-20 px-2 py-2 text-center">{r.isFinal ? "Akhir" : `P${r.number}`}</th>)}
               <th className="w-20 px-4 py-2 text-right">Jumlah</th>
+              <th className="w-20 px-4 py-2 text-center">Sijil</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -809,6 +814,9 @@ function Standings({ rounds, standings, finished }: { rounds: Round[]; standings
                   <td key={r.id} className="px-2 py-2.5 text-center font-mono text-zinc-600">{s.perRound[r.number] ?? (r.number <= s.reached ? "–" : "")}</td>
                 ))}
                 <td className="px-4 py-2.5 text-right font-mono text-base font-bold text-zinc-900">{s.total}</td>
+                <td className="px-4 py-2.5 text-center">
+                  <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={s.teamId} count={certCounts[s.teamId]} />
+                </td>
               </tr>
             ))}
           </tbody>

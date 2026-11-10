@@ -7,6 +7,7 @@ import { TeamAvatar, preferFor } from "@/components/duel/TeamAvatar";
 import { cn } from "@/lib/utils";
 import type { CompetitionResult, RankingEntry } from "@/lib/resultsRankings";
 import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
+import { TeamCertCell, useTeamCertCounts } from "@/components/organizer/scoreboard/TeamCertCell";
 
 const POLL_MS = 5_000;
 const fmtTime = (s: number | null) => s == null ? "—" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -16,6 +17,7 @@ export function ScoreRankingClient({ event, ecId, competition }: {
   event: { id: string; name: string; slug: string }; ecId: string; competition: { name: string; code: string };
 }) {
   const [result, setResult] = useState<CompetitionResult | null | undefined>(undefined);
+  const certCounts = useTeamCertCounts(event.id, ecId);
 
   useEffect(() => {
     let stop = false, timer: ReturnType<typeof setTimeout>;
@@ -80,6 +82,7 @@ export function ScoreRankingClient({ event, ecId, competition }: {
                 <th className="px-4 py-2 text-left">Kontinjen</th>
                 <th className="w-24 px-4 py-2 text-right">Markah</th>
                 {hasTime && <th className="w-20 px-4 py-2 text-right">Masa</th>}
+                <th className="w-20 px-4 py-2 text-center">Sijil</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -100,6 +103,9 @@ export function ScoreRankingClient({ event, ecId, competition }: {
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono font-semibold">{Number(r.totalScore.toFixed(2))}</td>
                   {hasTime && <td className="px-4 py-2.5 text-right font-mono text-zinc-500">{fmtTime(r.bestTime)}</td>}
+                  <td className="px-4 py-2.5 text-center">
+                    <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={r.teamId} count={certCounts[r.teamId]} />
+                  </td>
                 </tr>
               ))}
             </tbody>
