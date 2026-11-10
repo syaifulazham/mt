@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { BATCH_SIZE, DISTRIBUTION_LEVELS, issueBatch, resolveRecipients, type DistributionLevel, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { BATCH_SIZE, DISTRIBUTION_LEVELS, RESULTS_BY, issueBatch, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -53,6 +53,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 /**
  * PATCH { distributionLevel } — change where the job's certificates appear on
  * the portals. Applied at once to the certificates this job already issued.
+ *
+ * PATCH { resultsBy } — Pemenang Acara: how winners are ranked. Saved only;
+ * issued certificates change when the job is re-run with "Kemas kini sijil
+ * sedia ada".
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getOrganizerSession();
@@ -60,7 +64,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   const { id } = await params;
-  const { distributionLevel } = await req.json().catch(() => ({})) as { distributionLevel?: string };
+  const { distributionLevel, resultsBy } = await req.json().catch(() => ({})) as { distributionLevel?: string; resultsBy?: string };
+  if (resultsBy !== undefined) {
+    if (!RESULTS_BY.includes(resultsBy as ResultsBy)) return NextResponse.json({ error: "INVALID_RESULTS_BY" }, { status: 400 });
+    const job = await db.certGeneratorJob.findUnique({ where: { id } });
+    if (!job) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+    if (job.source !== "EVENT_WINNERS") return NextResponse.json({ error: "NOT_WINNERS_JOB" }, { status: 400 });
+    await db.certGeneratorJob.update({
+      where: { id },
+      data:  { config: { ...(job.config as object), resultsBy } as Prisma.InputJsonValue },
+    });
+    return NextResponse.json({ ok: true });
+  }
   if (!DISTRIBUTION_LEVELS.includes(distributionLevel as DistributionLevel))
     return NextResponse.json({ error: "INVALID_LEVEL" }, { status: 400 });
   const job = await db.certGeneratorJob.findUnique({ where: { id } });

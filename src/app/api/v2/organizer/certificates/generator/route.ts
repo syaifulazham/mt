@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { DISTRIBUTION_LEVELS, GENERATOR_SOURCES, resolveRecipients, type DistributionLevel, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { DISTRIBUTION_LEVELS, GENERATOR_SOURCES, RESULTS_BY, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
 
 export const dynamic = "force-dynamic";
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
@@ -76,8 +76,7 @@ export async function POST(req: NextRequest) {
     rankFrom:          body.config?.rankFrom ? Math.max(1, Math.floor(body.config.rankFrom)) : undefined,
     rankTo:            body.config?.rankTo ? Math.max(1, Math.floor(body.config.rankTo)) : undefined,
     verifiedOnly:      body.config?.verifiedOnly !== false,
-    resultsBy:         body.config?.resultsBy === "STATE" || body.config?.resultsBy === "INTERNATIONAL"
-                         ? body.config.resultsBy : "NATIONAL",
+    resultsBy:         RESULTS_BY.includes(body.config?.resultsBy as ResultsBy) ? body.config!.resultsBy : "NATIONAL",
     contingentType:    body.config?.contingentType || undefined,
     rows:              source === "CUSTOM" ? (body.config?.rows ?? []).slice(0, 20000) : undefined,
     eventNameOverride: body.config?.eventNameOverride?.trim() || undefined,

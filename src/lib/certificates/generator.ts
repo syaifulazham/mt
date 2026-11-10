@@ -48,11 +48,13 @@ export type GeneratorConfig = {
   rankFrom?: number; rankTo?: number;  // EVENT_WINNERS
   verifiedOnly?: boolean;              // EVENT_WINNERS (default true)
   /**
-   * EVENT_WINNERS: rank across the whole event (local teams), within each
-   * state, or INTERNATIONAL — the Antarabangsa ranking (top 2 of each country,
-   * Malaysia included, ranked together; see internationalRankings).
+   * EVENT_WINNERS: CONFIG — each competition as Penghakiman → Konfigurasi
+   * keputusan says (national or per state, like the Keputusan page); rank
+   * across the whole event (local teams); within each state; or INTERNATIONAL —
+   * the Antarabangsa ranking (top 2 of each country, Malaysia included, ranked
+   * together; see internationalRankings).
    */
-  resultsBy?: "NATIONAL" | "STATE" | "INTERNATIONAL";
+  resultsBy?: ResultsBy;
   contingentType?: string;             // ALL_REGISTERED: SCHOOL | HIGHER | INDEPENDENT | INTERNATIONAL
   rows?: CustomRow[];                  // CUSTOM
   /** Printed instead of the event's own name. */
@@ -77,6 +79,9 @@ export type Recipient = {
 };
 
 export const BATCH_SIZE = 250;
+
+export type ResultsBy = "CONFIG" | "NATIONAL" | "STATE" | "INTERNATIONAL";
+export const RESULTS_BY: ResultsBy[] = ["CONFIG", "NATIONAL", "STATE", "INTERNATIONAL"];
 
 export function awardTitleForRank(rank: number): string {
   return rank === 1 ? "TEMPAT PERTAMA" : `TEMPAT KE-${rank}`;
@@ -164,8 +169,10 @@ export async function resolveRecipients(
     if (!cfg.eventId) throw new Error("Pilih acara.");
     const from = Math.max(1, cfg.rankFrom ?? 1), to = Math.max(from, cfg.rankTo ?? 3);
     const verifiedOnly = cfg.verifiedOnly !== false;
-    const byState = cfg.resultsBy === "STATE";
     const intl    = cfg.resultsBy === "INTERNATIONAL";
+    // Per state for this competition? CONFIG follows its Konfigurasi keputusan.
+    const stateFor = (r: { resultScope: string }) =>
+      cfg.resultsBy === "STATE" || (cfg.resultsBy === "CONFIG" && r.resultScope === "STATE");
     const results = [
       ...await computeCompetitionResults(cfg.eventId, false, null),
       ...await computeCompetitionResults(cfg.eventId, true, null),
@@ -183,7 +190,7 @@ export async function resolveRecipients(
     const ranked = results.flatMap((r): { r: typeof r; e: RankingEntry; rank: number }[] => {
       if (intl)
         return internationalRankings(verifiedOnly ? r : { ...r, judgingStatus: "VERIFIED" }).map(e => ({ r, e, rank: e.rank }));
-      if (!byState)
+      if (!stateFor(r))
         return verifiedOnly && r.judgingStatus !== "VERIFIED" ? [] : r.rankings.map(e => ({ r, e, rank: e.rank }));
       // Equal score and time share a rank within the state; the event's
       // sharedRankMode decides 1, 2, 2, 4 or 1, 2, 2, 3.
@@ -203,7 +210,7 @@ export async function resolveRecipients(
       .filter(x => x.rank >= from && x.rank <= to)
       .flatMap(x => x.e.members.map(m => ({ ...x, pid: m.id })));
     entries.sort((a, b) => a.r.code.localeCompare(b.r.code)
-      || (byState ? (a.e.stateName ?? "").localeCompare(b.e.stateName ?? "") : 0)
+      || (stateFor(a.r) ? (a.e.stateName ?? "").localeCompare(b.e.stateName ?? "") : 0)
       || a.rank - b.rank || a.e.teamName.localeCompare(b.e.teamName));
     const page = entries.slice(offset, offset + limit);
 

@@ -21,8 +21,17 @@ type Job = {
   createdBy: string | null; createdAt: string; completedAt: string | null; eventName: string | null;
   config: { eventId?: string; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
             verifiedOnly?: boolean; contingentType?: string; eventNameOverride?: string; rowCount?: number;
-            resultsBy?: "NATIONAL" | "STATE" | "INTERNATIONAL";
+            resultsBy?: ResultsBy;
             distributionLevel?: DistLevel };
+};
+type ResultsBy = "CONFIG" | "NATIONAL" | "STATE" | "INTERNATIONAL";
+const RESULTS_BY_LABEL: Record<ResultsBy, string> = {
+  CONFIG: "Ikut konfigurasi keputusan", STATE: "State (ikut negeri)",
+  NATIONAL: "National (kebangsaan)", INTERNATIONAL: "International (antarabangsa)",
+};
+const RESULTS_BY_SHORT: Record<ResultsBy, string> = {
+  CONFIG: "Keputusan ikut konfigurasi", STATE: "Keputusan ikut negeri",
+  NATIONAL: "Keputusan kebangsaan", INTERNATIONAL: "Keputusan antarabangsa",
 };
 type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM";
 type DistLevel = "NONE" | "SCHOOL" | "STATE" | "NATIONAL";
@@ -97,13 +106,12 @@ function parseCustom(text: string) {
   }).filter(r => r.name);
 }
 
-function describe(j: Job) {
+function describe(j: Job, withResultsBy = true) {
   const c = j.config;
   const parts: string[] = [];
   if (j.eventName) parts.push(j.eventName);
   if (j.source === "EVENT_WINNERS") {
-    parts.push(c.resultsBy === "STATE" ? "Keputusan ikut negeri"
-      : c.resultsBy === "INTERNATIONAL" ? "Keputusan antarabangsa" : "Keputusan kebangsaan");
+    if (withResultsBy) parts.push(RESULTS_BY_SHORT[c.resultsBy ?? "NATIONAL"]);
     parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
   }
   if (j.source === "EVENT_PARTICIPANTS" && c.attendedOnly) parts.push("Hadir sahaja");
@@ -130,7 +138,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
   const [rankFrom, setRankFrom] = useState(c?.rankFrom ?? 1);
   const [rankTo, setRankTo] = useState(c?.rankTo ?? 3);
   const [verifiedOnly, setVerifiedOnly] = useState(c?.verifiedOnly ?? true);
-  const [resultsBy, setResultsBy] = useState<"NATIONAL" | "STATE" | "INTERNATIONAL">(c?.resultsBy ?? "NATIONAL");
+  const [resultsBy, setResultsBy] = useState<ResultsBy>(c?.resultsBy ?? "CONFIG");
   const [contingentType, setContingentType] = useState(c?.contingentType ?? "");
   const [customText, setCustomText] = useState("");
   const [eventNameOverride, setOverride] = useState(c?.eventNameOverride ?? "");
@@ -251,7 +259,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
                 <>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="w-28 text-zinc-500">Results by</span>
-                    {([["STATE", "State (ikut negeri)"], ["NATIONAL", "National (kebangsaan)"], ["INTERNATIONAL", "International (antarabangsa)"]] as const).map(([v, l]) => (
+                    {(Object.entries(RESULTS_BY_LABEL) as [ResultsBy, string][]).map(([v, l]) => (
                       <button key={v} type="button" onClick={() => setResultsBy(v)}
                         className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
                           resultsBy === v ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
@@ -259,7 +267,8 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
                       </button>
                     ))}
                     <span className="text-zinc-400">
-                      {resultsBy === "STATE" ? "Kedudukan dikira semula dalam setiap negeri."
+                      {resultsBy === "CONFIG" ? "Setiap pertandingan mengikut Penghakiman → Konfigurasi keputusan (Kebangsaan / Negeri), sama seperti halaman Keputusan."
+                        : resultsBy === "STATE" ? "Kedudukan dikira semula dalam setiap negeri."
                         : resultsBy === "INTERNATIONAL" ? "2 teratas setiap negara (termasuk Malaysia), disusun bersama."
                         : "Kedudukan merentas semua negeri."}
                     </span>
@@ -378,9 +387,20 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
         offset = r.nextOffset;
       }
       if (updated) setErr("");
-      setNotice(updated ? `${fmt(updated)} sijil sedia ada dikemas kini · ${fmt(created)} baharu` : "");
+      setNotice(updated ? `${fmt(updated)} sijil sedia ada dikemas kini · ${fmt(created)} baharu`
+        : skipped ? `${fmt(created)} sijil baharu · ${fmt(skipped)} sijil sedia ada tidak diubah (anugerah/kedudukan lama kekal). Untuk mengemas kininya, klik Jana semula dan tandakan "Kemas kini sijil sedia ada".`
+        : "");
     } catch (e) { setErr(e instanceof Error ? e.message : "Gagal menjana"); }
     finally { setRunning(null); setRefresh(false); load(); }
+  }
+
+  async function setResultsBy(job: Job, resultsBy: ResultsBy) {
+    setErr(""); setNotice("");
+    try {
+      await call(`${API}/${job.id}`, { method: "PATCH", body: JSON.stringify({ resultsBy }) });
+      setNotice(`Kedudukan ditukar ke "${RESULTS_BY_LABEL[resultsBy]}" · klik Jana semula dan tandakan "Kemas kini sijil sedia ada" untuk mengemas kini sijil yang telah dijana`);
+      load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
   }
 
   async function setDistribution(job: Job, level: DistLevel) {
@@ -470,7 +490,14 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                     <p className="text-[11px] font-medium text-zinc-400">Data Penerima</p>
                     <p className="rounded-md border bg-zinc-50 px-2.5 py-1.5 text-sm font-medium">{SOURCE_LABEL[j.source]}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
-                      {describe(j).map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
+                      {j.source === "EVENT_WINNERS" && (
+                        <select value={j.config.resultsBy ?? "NATIONAL"} disabled={!!running} title="Kedudukan dikira"
+                          onChange={e => setResultsBy(j, e.target.value as ResultsBy)}
+                          className="h-6 rounded border bg-white px-1 text-[11px] text-zinc-600">
+                          {(Object.keys(RESULTS_BY_SHORT) as ResultsBy[]).map(v => <option key={v} value={v}>{RESULTS_BY_SHORT[v]}</option>)}
+                        </select>
+                      )}
+                      {describe(j, false).map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
                       {j.source !== "TRAINERS" && j.source !== "MANAGERS" && (
                       <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-zinc-500">
                         Edaran
