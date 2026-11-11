@@ -18,11 +18,9 @@ export async function GET(req: NextRequest) {
 
   const eventId = req.nextUrl.searchParams.get("eventId");
   if (eventId) {
-    const [regular, walkIn] = await Promise.all([
-      db.eventCompetition.findMany({ where: { eventId }, select: { competition: { select: { code: true, name: true } } } }),
-      db.eventWalkInCompetition.findMany({ where: { eventId }, select: { competition: { select: { code: true, name: true } } } }),
-    ]);
-    const all = new Map([...regular, ...walkIn].map(c => [c.competition.code, c.competition]));
+    // Registered competitions only: walk-in competitions never get certificates.
+    const regular = await db.eventCompetition.findMany({ where: { eventId }, select: { competition: { select: { code: true, name: true } } } });
+    const all = new Map(regular.map(c => [c.competition.code, c.competition]));
     return NextResponse.json({ competitions: [...all.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })) });
   }
 

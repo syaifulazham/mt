@@ -4,10 +4,12 @@
  *
  * Sources:
  *   EVENT_PARTICIPANTS — members of accepted teams of an event (online events:
- *                        every team not rejected) + confirmed walk-in
- *                        registrations, optionally attended only
+ *                        every team not rejected), optionally attended only
  *   EVENT_WINNERS      — ranked members from the event's results, rank range,
  *                        verified judging only by default
+ *
+ * Walk-in competitions never get certificates: both event sources cover the
+ * event's registered (EventCompetition) competitions only.
  *   ALL_REGISTERED     — every registered participant (optionally by contingent type)
  *   CUSTOM             — rows pasted by the organizer
  *
@@ -139,14 +141,6 @@ export async function resolveRecipients(
         JOIN contestants p   ON p.id = tm."contestantId"
         ${PERSON_JOINS.replace("%CT%", `t."contingentId"`)}
         WHERE te."eventId" = $1 AND ${accepted} ${attended} ${codeFilter}
-        UNION ALL
-        SELECT ${PERSON_COLS}, NULL, NULL, c.id, c.name, c.code
-        FROM walkin_registrations wr
-        JOIN event_walkin_competitions wc ON wc.id = wr."walkInCompetitionId"
-        JOIN competitions c  ON c.id = wc."competitionId"
-        JOIN contestants p   ON p.id = wr."participantId"
-        ${PERSON_JOINS.replace("%CT%", `wr."contingentId"`)}
-        WHERE wc."eventId" = $1 AND wr.status = 'CONFIRMED' ${codeFilter}
       ) x`;
     const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${sql}) y`, ...params);
     const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string | null; team_name: string | null; comp_id: string; comp_name: string; comp_code: string })[]>(
@@ -173,10 +167,9 @@ export async function resolveRecipients(
     // Per state for this competition? CONFIG follows its Konfigurasi keputusan.
     const stateFor = (r: { resultScope: string }) =>
       cfg.resultsBy === "STATE" || (cfg.resultsBy === "CONFIG" && r.resultScope === "STATE");
-    const results = [
-      ...await computeCompetitionResults(cfg.eventId, false, null),
-      ...await computeCompetitionResults(cfg.eventId, true, null),
-    ].filter(r => !codes || codes.includes(r.code));
+    // Registered competitions only — walk-in results are not certified.
+    const results = (await computeCompetitionResults(cfg.eventId, false, null))
+      .filter(r => !codes || codes.includes(r.code));
 
     // National: the event-wide rank. By state: re-rank each state's entries in
     // the same order (rankings are already sorted by score, then best time).
