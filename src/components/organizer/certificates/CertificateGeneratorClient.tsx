@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Copy, Eye, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
+import { ArrowRight, Copy, Eye, Link2, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { GENERATOR_GROUP_COOKIE } from "./generatorCookie";
+import { PregenLinkDialog } from "./PregenLinkDialog";
 
 // Certificates → Generator. A generator = template + recipient data
 // (event participants / event winners / all registered / custom) + settings.
@@ -33,7 +34,7 @@ const RESULTS_BY_SHORT: Record<ResultsBy, string> = {
   CONFIG: "Keputusan ikut konfigurasi", STATE: "Keputusan ikut negeri",
   NATIONAL: "Keputusan kebangsaan", INTERNATIONAL: "Keputusan antarabangsa",
 };
-type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM";
+type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "EVENT_WINNERS_PREGEN" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM";
 type DistLevel = "NONE" | "SCHOOL" | "STATE" | "NATIONAL";
 const DIST_LABEL: Record<DistLevel, string> = {
   NONE: "Tiada", SCHOOL: "Peringkat Sekolah", STATE: "Peringkat Negeri", NATIONAL: "Peringkat Kebangsaan",
@@ -43,6 +44,7 @@ const API = "/api/v2/organizer/certificates/generator";
 const SOURCE_LABEL: Record<Source, string> = {
   EVENT_PARTICIPANTS: "Peserta Acara",
   EVENT_WINNERS:      "Pencapaian Acara",
+  EVENT_WINNERS_PREGEN: "Pencapaian Acara (pra-acara)",
   ALL_REGISTERED:     "Semua Berdaftar",
   TRAINERS:           "Jurulatih",
   MANAGERS:           "Pengurus Kontinjen",
@@ -110,7 +112,7 @@ function describe(j: Job, withResultsBy = true) {
   const c = j.config;
   const parts: string[] = [];
   if (j.eventName) parts.push(j.eventName);
-  if (j.source === "EVENT_WINNERS") {
+  if (j.source === "EVENT_WINNERS" || j.source === "EVENT_WINNERS_PREGEN") {
     if (withResultsBy) parts.push(RESULTS_BY_SHORT[c.resultsBy ?? "NATIONAL"]);
     parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
   }
@@ -155,7 +157,8 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const needsEvent = source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS";
+  const winnersLike = source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN";
+  const needsEvent = source === "EVENT_PARTICIPANTS" || winnersLike;
   // Trainers / Contingent Manager Portal users: no event, no portal distribution
   const personSource = source === "TRAINERS" || source === "MANAGERS";
   const customRows = source === "CUSTOM" ? parseCustom(customText) : [];
@@ -163,9 +166,8 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
 
   async function pickEvent(id: string) {
     setEventId(id); setCodes([]); setCompetitions([]);
-    // Zone events rank by state by default; national (and other) events nationally
-    const scope = events.find(e => e.id === id)?.scope ?? "";
-    setResultsBy(scope === "ZONE" || scope === "ONLINE_ZONE" ? "STATE" : "NATIONAL");
+    // Each competition as its Konfigurasi keputusan says (Kebangsaan / Negeri)
+    setResultsBy("CONFIG");
     if (id) call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${id}`).then(j => setCompetitions(j.competitions)).catch(() => {});
   }
 
@@ -183,7 +185,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
   }
 
   const sel = "h-9 rounded-md border bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200";
-  const ready = templateId && source && (!needsEvent || eventId) && (source !== "CUSTOM" || customRows.length > 0) && (source !== "EVENT_WINNERS" || rankTo >= rankFrom);
+  const ready = templateId && source && (!needsEvent || eventId) && (source !== "CUSTOM" || customRows.length > 0) && (!winnersLike || rankTo >= rankFrom) && !(source === "EVENT_WINNERS_PREGEN" && resultsBy === "INTERNATIONAL");
 
   return (
     <div className={cn("rounded-xl border bg-white p-5 shadow-sm", initial && "border-sky-300 ring-2 ring-sky-100")}>
@@ -255,11 +257,18 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
                   <input type="checkbox" checked={attendedOnly} onChange={e => setAttendedOnly(e.target.checked)} /> Pasukan yang hadir sahaja
                 </label>
               )}
-              {source === "EVENT_WINNERS" && (
+              {source === "EVENT_WINNERS_PREGEN" && (
+                <p className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-[11px] leading-relaxed text-sky-900">
+                  Sijil <b>kosong</b> dijana sebelum acara untuk setiap pertandingan × kedudukan × ahli pasukan (saiz pasukan maksimum)
+                  {" "}— dan × negeri bagi pertandingan yang disusun ikut negeri — dengan nombor siri sebenar, sedia untuk dicetak.
+                  Sijil kosong tidak dipaparkan di portal. Selepas keputusan, klik <b>Padankan pemenang</b> untuk mengikat setiap sijil kepada pemenang.
+                </p>
+              )}
+              {winnersLike && (
                 <>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="w-28 text-zinc-500">Results by</span>
-                    {(Object.entries(RESULTS_BY_LABEL) as [ResultsBy, string][]).map(([v, l]) => (
+                    {(Object.entries(RESULTS_BY_LABEL) as [ResultsBy, string][]).filter(([v]) => source !== "EVENT_WINNERS_PREGEN" || v !== "INTERNATIONAL").map(([v, l]) => (
                       <button key={v} type="button" onClick={() => setResultsBy(v)}
                         className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
                           resultsBy === v ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
@@ -283,6 +292,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
                   <label className="flex items-center gap-2 text-xs text-zinc-600">
                     <span className="w-28 text-zinc-500">Keputusan</span>
                     <input type="checkbox" checked={verifiedOnly} onChange={e => setVerifiedOnly(e.target.checked)} /> Pertandingan yang telah disahkan (VERIFIED) sahaja
+                    {source === "EVENT_WINNERS_PREGEN" && <span className="text-zinc-400">(semasa memadankan pemenang)</span>}
                   </label>
                 </>
               )}
@@ -351,6 +361,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [duplicateFrom, setDuplicateFrom] = useState<Job | null>(null);
+  const [linking, setLinking] = useState<Job | null>(null);
   const [running, setRunning] = useState<{ id: string; processed: number; total: number; created: number; skipped: number; updated: number } | null>(null);
   const [refresh, setRefresh] = useState(false);
   const [err, setErr] = useState("");
@@ -497,7 +508,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                           {(Object.keys(RESULTS_BY_SHORT) as ResultsBy[]).map(v => <option key={v} value={v}>{RESULTS_BY_SHORT[v]}</option>)}
                         </select>
                       )}
-                      {describe(j, false).map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
+                      {describe(j, j.source !== "EVENT_WINNERS").map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
                       {j.source !== "TRAINERS" && j.source !== "MANAGERS" && (
                       <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-zinc-500">
                         Edaran
@@ -550,10 +561,18 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                     Dicipta {new Date(j.createdAt).toLocaleString("ms-MY", { dateStyle: "medium", timeStyle: "short" })}{j.createdBy && ` oleh ${j.createdBy}`}
                   </p>
                   {/* This generator's issued certificates: review + download */}
+                  <span className="flex shrink-0 items-center gap-2">
+                  {j.source === "EVENT_WINNERS_PREGEN" && j.created + j.skipped > 0 && (
+                    <button type="button" onClick={() => setLinking(j)} disabled={!!running}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
+                      <Link2 className="h-3.5 w-3.5" /> Padankan pemenang
+                    </button>
+                  )}
                   <Link href={`/organizer/certificates/generator/${j.id}`}
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-white px-2.5 py-1 text-xs font-medium text-[#085782] hover:bg-sky-50">
                     <Eye className="h-3.5 w-3.5" /> Lihat sijil{j.created + j.skipped > 0 ? ` (${fmt(j.created + j.skipped)})` : ""}
                   </Link>
+                  </span>
                 </div>
               </div>
             );
@@ -563,6 +582,8 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
         </div>
       )}
 
+      {linking && <PregenLinkDialog job={linking} onClose={() => { setLinking(null); load(); }} />}
+
       {/* Confirm: generate */}
       <Dialog open={!!confirmRun} onOpenChange={o => { if (!o) setConfirmRun(null); }}>
         <DialogContent className="max-w-md">
@@ -570,7 +591,9 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
             <DialogTitle>{confirmRun?.total ? "Jana sijil?" : "Tiada penerima"}</DialogTitle>
             <DialogDescription>
               {confirmRun?.total
-                ? <>Sijil <b>{confirmRun.templateName}</b> akan dijana untuk <b>{fmt(confirmRun.total)}</b> penerima. Penerima yang sudah mempunyai sijil templat ini akan dilangkau.</>
+                ? confirmRun.source === "EVENT_WINNERS_PREGEN"
+                  ? <><b>{fmt(confirmRun.total)}</b> sijil kosong <b>{confirmRun.templateName}</b> akan dijana (pra-acara). Slot yang sudah mempunyai sijil akan dilangkau; sijil yang telah dipadankan kepada pemenang tidak diubah.</>
+                  : <>Sijil <b>{confirmRun.templateName}</b> akan dijana untuk <b>{fmt(confirmRun.total)}</b> penerima. Penerima yang sudah mempunyai sijil templat ini akan dilangkau.</>
                 : <>Tiada penerima yang sepadan dengan tetapan penjana ini{confirmRun?.source === "EVENT_WINNERS" && confirmRun.config.verifiedOnly !== false
                     ? " — keputusan pertandingan acara ini mungkin belum disahkan (VERIFIED). Sahkan keputusan dahulu, atau cipta penjana baharu tanpa pilihan “disahkan sahaja”."
                     : "."} Jumlah penerima dikira semula setiap kali dijana.</>}
@@ -582,7 +605,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
               {describe(confirmRun).map(d => <p key={d}>{d}</p>)}
             </div>
           )}
-          {confirmRun && confirmRun.created + confirmRun.skipped > 0 && (
+          {confirmRun && confirmRun.source !== "EVENT_WINNERS_PREGEN" && confirmRun.created + confirmRun.skipped > 0 && (
             <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <input type="checkbox" className="mt-0.5" checked={refresh} onChange={e => setRefresh(e.target.checked)} />
               <span>

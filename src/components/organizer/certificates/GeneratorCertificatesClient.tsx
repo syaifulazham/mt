@@ -130,7 +130,7 @@ export function GeneratorCertificatesClient({ jobId, templateName, source, event
                 <tr className={cn("hover:bg-sky-50/50", preview?.id === r.id && "bg-sky-50")}>
                   <td className="px-3 py-2 font-mono text-xs text-zinc-600">{r.serialNumber}<span className="ml-1 text-zinc-300">v{r.templateVersion.version}</span></td>
                   <td className="px-3 py-2">
-                    <p className="font-medium text-zinc-900">{r.recipientName}</p>
+                    <p className="font-medium text-zinc-900">{r.recipientName || <span className="italic text-zinc-400">Sijil kosong (pra-acara)</span>}</p>
                     <p className="font-mono text-[11px] text-zinc-400">{fmtIc(r.recipientIc)}</p>
                   </td>
                   <td className="px-3 py-2 text-xs text-zinc-600">{r.contingentName}<p className="text-[11px] text-zinc-400">{r.stateName}</p></td>
@@ -173,7 +173,7 @@ export function GeneratorCertificatesClient({ jobId, templateName, source, event
         <aside className="sticky top-0 flex h-[calc(100vh-4rem)] w-[460px] shrink-0 flex-col border-l bg-white">
           <div className="flex items-center gap-2 border-b px-3 py-2">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-zinc-900">{preview.recipientName}</p>
+              <p className="truncate text-sm font-medium text-zinc-900">{preview.recipientName || "Sijil kosong (pra-acara)"}</p>
               <p className="font-mono text-[11px] text-zinc-400">{preview.serialNumber}</p>
             </div>
             <a href={`/api/v2/certificates/${preview.id}/download`} className="inline-flex items-center gap-1 rounded-md bg-[#085782] px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90">

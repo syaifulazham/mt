@@ -81,7 +81,9 @@ export async function POST(req: NextRequest) {
     distributionLevel: !personSource && DISTRIBUTION_LEVELS.includes(body.config?.distributionLevel as DistributionLevel)
       ? body.config!.distributionLevel : "NONE",
   };
-  if ((source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS") && !cfg.eventId)
+  if (source === "EVENT_WINNERS_PREGEN" && cfg.resultsBy === "INTERNATIONAL")
+    return NextResponse.json({ error: "Sijil pra-acara tidak menyokong keputusan antarabangsa." }, { status: 400 });
+  if ((source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN") && !cfg.eventId)
     return NextResponse.json({ error: "Pilih acara." }, { status: 400 });
 
   try {

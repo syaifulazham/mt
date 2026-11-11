@@ -7,6 +7,11 @@
  *                        every team not rejected), optionally attended only
  *   EVENT_WINNERS      — ranked members from the event's results, rank range,
  *                        verified judging only by default
+ *   EVENT_WINNERS_PREGEN — pre-event "Pencapaian Acara": blank certificates
+ *                        (DRAFT, hidden from portals) for every competition ×
+ *                        rank × (state) × team member slot, so they can be
+ *                        printed early; after the event src/lib/certificates/
+ *                        pregen.ts ties each slot to the actual winner
  *
  * Walk-in competitions never get certificates: both event sources cover the
  * event's registered (EventCompetition) competitions only.
@@ -25,9 +30,10 @@ import { CertTargetType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
 import { compareScoreTime } from "@/lib/sharedRank";
+import { resolveResultScope } from "@/lib/resultScope";
 import { allocateSerial, newUniqueCode } from "./serial";
 
-export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM"] as const;
+export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_PREGEN", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM"] as const;
 export type GeneratorSource = (typeof GENERATOR_SOURCES)[number];
 
 /** Where issued certificates are offered on the portals (Certificates → Distribution). */
@@ -78,7 +84,16 @@ export type Recipient = {
   competitionId: string | null; competitionName: string | null; competitionCode: string | null;
   eventId: string | null; eventName: string | null;
   awardTitle: string | null; rank: number | null;
+  /** EVENT_WINNERS: the state the rank is within ("-" = national) — matches a pre-event slot. */
+  slotState?: string;
+  /** Pre-event blanks are DRAFT (never on the portals); everything else READY. */
+  status?: "DRAFT" | "READY";
+  /** Extra meta stored with the certificate (pre-event slot details). */
+  extraMeta?: Record<string, unknown>;
 };
+
+/** A pre-event slot: one blank certificate for competition × rank × state × team member. */
+export type PregenSlot = { compId: string; stateId: string | null; rank: number; member: number };
 
 export const BATCH_SIZE = 250;
 
@@ -113,6 +128,53 @@ async function eventName(cfg: GeneratorConfig): Promise<string | null> {
   if (cfg.eventNameOverride?.trim()) return cfg.eventNameOverride.trim();
   if (!cfg.eventId) return null;
   return (await db.event.findUnique({ where: { id: cfg.eventId }, select: { name: true } }))?.name ?? null;
+}
+
+/**
+ * Pre-event slots of an event: every registered competition × rank (rankFrom–
+ * rankTo) × team member (the competition's max team size; 1 for individual),
+ * and × state for competitions ranked per state (Results by, or CONFIG →
+ * Konfigurasi keputusan). The states are those of the competition's registered
+ * local teams, resolved like the rankings do (contingent → school → institution).
+ */
+async function pregenSlots(cfg: GeneratorConfig) {
+  const from = Math.max(1, cfg.rankFrom ?? 1), to = Math.max(from, cfg.rankTo ?? 3);
+  const codes = cfg.competitionCodes?.length ? cfg.competitionCodes : null;
+  const event = await db.event.findUnique({ where: { id: cfg.eventId! }, select: { scope: true } });
+  const ecs = (await db.eventCompetition.findMany({
+    where: { eventId: cfg.eventId! },
+    select: {
+      resultScope: true, judgingMethod: true, duelConfig: true,
+      competition: { select: { id: true, code: true, name: true, participationType: true, maxTeamSize: true } },
+    },
+  })).filter(ec => !codes || codes.includes(ec.competition.code));
+
+  const states = await db.$queryRawUnsafe<{ comp_id: string; state_id: string; state_name: string }[]>(`
+    SELECT DISTINCT t."competitionId" AS comp_id, st.id AS state_id, st.name AS state_name
+    FROM team_events te
+    JOIN teams t        ON t.id = te."teamId"
+    JOIN contingents ct ON ct.id = t."contingentId"
+    LEFT JOIN schools s ON s.id = ct."schoolId"
+    LEFT JOIN higher_institutions hi ON hi.id = ct."higherInstitutionId"
+    LEFT JOIN countries co ON co.id = ct."countryId"
+    JOIN states st ON st.id = COALESCE(ct."stateId", s."stateId", hi."stateId")
+    WHERE te."eventId" = $1 AND te.acceptance <> 'REJECT' AND (co.id IS NULL OR co."codeIso2" = 'MY')`, cfg.eventId);
+
+  const out: (PregenSlot & { compCode: string; compName: string; stateName: string | null })[] = [];
+  for (const ec of ecs.sort((a, b) => a.competition.code.localeCompare(b.competition.code, undefined, { numeric: true }))) {
+    const c = ec.competition;
+    const byState = cfg.resultsBy === "STATE"
+      || ((cfg.resultsBy ?? "CONFIG") === "CONFIG" && resolveResultScope(ec, String(event?.scope ?? "")) === "STATE");
+    const groups: { id: string | null; name: string | null }[] = byState
+      ? states.filter(x => x.comp_id === c.id).map(x => ({ id: x.state_id, name: x.state_name })).sort((a, b) => a.name!.localeCompare(b.name!))
+      : [{ id: null, name: null }];
+    const members = c.participationType === "INDIVIDUAL" ? 1 : Math.max(1, c.maxTeamSize);
+    for (const g of groups)
+      for (let rank = from; rank <= to; rank++)
+        for (let member = 1; member <= members; member++)
+          out.push({ compId: c.id, compCode: c.code, compName: c.name, stateId: g.id, stateName: g.name, rank, member });
+  }
+  return out;
 }
 
 /** One page of recipients plus the total, in a stable order. */
@@ -231,8 +293,28 @@ export async function resolveRecipients(
           teamId: e.teamId, teamName: e.teamName,
           competitionId: compIds.get(r.code) ?? null, competitionName: r.name, competitionCode: r.code,
           eventId: cfg.eventId!, eventName: evName, awardTitle: awardTitleForRank(rank), rank,
+          slotState: !intl && stateFor(r) ? (e.stateId ?? "-") : "-",
         };
       }),
+    };
+  }
+
+  if (source === "EVENT_WINNERS_PREGEN") {
+    if (!cfg.eventId) throw new Error("Pilih acara.");
+    if (cfg.resultsBy === "INTERNATIONAL") throw new Error("Sijil pra-acara tidak menyokong keputusan antarabangsa.");
+    const slots = await pregenSlots(cfg);
+    return {
+      total: slots.length,
+      rows: slots.slice(offset, offset + limit).map(s => ({
+        key: `pre:${cfg.eventId}:${s.compId}:${s.stateId ?? "-"}:${s.rank}:${s.member}`,
+        participantId: null, name: "", ic: null,
+        contingentId: null, contingentName: null, schoolName: null, stateName: s.stateName,
+        teamId: null, teamName: null,
+        competitionId: s.compId, competitionName: s.compName, competitionCode: s.compCode,
+        eventId: cfg.eventId!, eventName: evName, awardTitle: awardTitleForRank(s.rank), rank: s.rank,
+        status: "DRAFT" as const,
+        extraMeta: { pregen: { compId: s.compId, stateId: s.stateId, rank: s.rank, member: s.member } satisfies PregenSlot },
+      })),
     };
   }
 
@@ -309,7 +391,7 @@ export async function resolveRecipients(
 }
 
 /** The snapshot fields a recipient contributes to its certificate row. */
-function snapshotOf(r: Recipient) {
+export function snapshotOf(r: Recipient) {
   return {
     recipientName: r.name, recipientType: r.recipientType ?? (r.participantId ? "PARTICIPANT" as const : "OTHER" as const), recipientIc: r.ic,
     contingentName: r.contingentName, schoolName: r.schoolName, stateName: r.stateName, countryName: r.countryName ?? null,
@@ -341,14 +423,24 @@ export async function issueBatch(opts: {
   if (template.season.archivedAt) throw new Error("Musim templat ini telah diarkibkan.");
 
   const genKeys = opts.rows.map(r => `${template.id}:${r.key}`);
-  const existing = genKeys.length ? await db.$queryRaw<{ k: string; id: string; status: string }[]>`
-    SELECT meta->>'genKey' AS k, id, status::text AS status FROM certificates WHERE meta->>'genKey' = ANY(${genKeys})` : [];
-  const done = new Map(existing.map(e => [e.k, e]));
+  // A winner already tied to a pre-event blank (meta.winKey) counts as issued.
+  const existing = genKeys.length ? await db.$queryRaw<{ k: string; w: string | null; id: string; status: string; linked: boolean }[]>`
+    SELECT meta->>'genKey' AS k, meta->>'winKey' AS w, id, status::text AS status,
+           (meta->'pregen'->>'assignedKey') IS NOT NULL AS linked
+    FROM certificates WHERE meta->>'genKey' = ANY(${genKeys}) OR meta->>'winKey' = ANY(${genKeys})` : [];
+  const done = new Map<string, (typeof existing)[number]>();
+  for (const e of existing) {
+    if (e.w && genKeys.includes(e.w)) done.set(e.w, e);
+    if (genKeys.includes(e.k) && !done.has(e.k)) done.set(e.k, e);
+  }
   const todo = opts.rows.filter((_, i) => !done.has(genKeys[i]));
   const toRefresh = opts.refresh
     ? opts.rows.flatMap((r, i) => {
         const e = done.get(genKeys[i]);
-        return e && e.status !== "REVOKED" ? [{ id: e.id, r }] : []; // revoked certificates stay as they were
+        // Revoked certificates stay as they were; a pre-event blank is never
+        // refreshed back to blank once a winner is tied to it.
+        if (!e || e.status === "REVOKED" || (r.status === "DRAFT" && e.linked)) return [];
+        return [{ id: e.id, r, linked: e.linked }];
       })
     : [];
   const now = new Date();
@@ -361,6 +453,7 @@ export async function issueBatch(opts: {
   const metaOf = (r: Recipient) => ({
     genKey: `${template.id}:${r.key}`, jobId: opts.jobId, distLevel,
     online: !!r.eventId && onlineEvents.has(r.eventId),
+    ...r.extraMeta,
   }) as Prisma.InputJsonValue;
 
   await db.$transaction(async (tx) => {
@@ -369,17 +462,18 @@ export async function issueBatch(opts: {
       await tx.certificate.create({
         data: {
           seasonId: template.seasonId, templateVersionId: template.currentVersionId!,
-          serialNumber, uniqueCode: newUniqueCode(), status: "READY", issuedAt: now,
+          serialNumber, uniqueCode: newUniqueCode(), status: r.status ?? "READY", issuedAt: now,
           ...snapshotOf(r),
           meta: metaOf(r),
           createdBy: opts.createdBy,
         },
       });
     }
-    for (const { id, r } of toRefresh)
+    for (const { id, r, linked } of toRefresh)
       await tx.certificate.update({
         where: { id },
-        data: { ...snapshotOf(r), meta: metaOf(r) },
+        // A pre-printed blank tied to this winner keeps its slot meta and serial.
+        data: linked ? snapshotOf(r) : { ...snapshotOf(r), meta: metaOf(r) },
       });
   }, { timeout: 120_000 });
 
