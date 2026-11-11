@@ -467,10 +467,12 @@ export async function issueBatch(opts: {
   const toRefresh = opts.refresh
     ? opts.rows.flatMap((r, i) => {
         const e = done.get(genKeys[i]);
-        // Revoked certificates stay as they were; a pre-event blank is never
-        // refreshed back to blank once a winner is tied to it.
-        if (!e || e.status === "REVOKED" || (r.status === "DRAFT" && e.linked)) return [];
-        return [{ id: e.id, r, linked: e.linked }];
+        // Revoked certificates stay as they were.
+        if (!e || e.status === "REVOKED") return [];
+        // A pre-event blank a winner is tied to keeps the winner: only its
+        // event / competition wording follows the generator ("slot").
+        const mode = !e.linked ? "full" as const : r.status === "DRAFT" ? "slot" as const : "winner" as const;
+        return [{ id: e.id, r, mode }];
       })
     : [];
   const now = new Date();
@@ -499,11 +501,13 @@ export async function issueBatch(opts: {
         },
       });
     }
-    for (const { id, r, linked } of toRefresh)
+    for (const { id, r, mode } of toRefresh)
       await tx.certificate.update({
         where: { id },
-        // A pre-printed blank tied to this winner keeps its slot meta and serial.
-        data: linked ? snapshotOf(r) : { ...snapshotOf(r), meta: metaOf(r) },
+        // A pre-printed blank tied to a winner keeps its slot meta, serial and winner.
+        data: mode === "full" ? { ...snapshotOf(r), meta: metaOf(r) }
+          : mode === "winner" ? snapshotOf(r)
+          : { eventName: r.eventName, competitionName: r.competitionName, competitionCode: r.competitionCode },
       });
   }, { timeout: 120_000 });
 

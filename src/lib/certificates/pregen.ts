@@ -206,3 +206,19 @@ export async function saveLinks(job: Job, mapping: Record<string, string | null>
   }
   return { linked, cleared, created, revoked: revoke.length };
 }
+
+/**
+ * "Kemas kini sijil sedia ada" on a pre-event generator: the new certificates
+ * issued to winners beyond the blanks (no meta.pregen) follow the generator's
+ * event name too, like the blanks do.
+ */
+export async function refreshExtras(job: Job): Promise<number> {
+  const cfg = job.config as GeneratorConfig;
+  const eventName = cfg.eventNameOverride?.trim()
+    || (cfg.eventId ? (await db.event.findUnique({ where: { id: cfg.eventId }, select: { name: true } }))?.name : null)
+    || null;
+  return db.$executeRaw`
+    UPDATE certificates SET "eventName" = ${eventName}, "updatedAt" = now()
+    WHERE meta->>'jobId' = ${job.id} AND NOT (meta ? 'pregen') AND status <> 'REVOKED'
+      AND "eventName" IS DISTINCT FROM ${eventName}`;
+}

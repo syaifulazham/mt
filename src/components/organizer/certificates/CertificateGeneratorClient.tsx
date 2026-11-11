@@ -199,7 +199,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
         <p className="mb-3 flex items-center gap-1.5 text-xs text-sky-800">
           <Pencil className="h-3.5 w-3.5" /> Mengedit penjana &ldquo;{editing.templateName}&rdquo; ({SOURCE_LABEL[editing.source]}).
           {locked
-            ? " Sijil telah dijana — templat dan data penerima tidak boleh ditukar; tetapan lain terpakai pada Jana seterusnya (Edaran terus dikemas kini)."
+            ? " Sijil telah dijana — templat dan data penerima tidak boleh ditukar. Edaran terus dikemas kini; tetapan lain (cth. nama acara) hanya mengubah sijil sedia ada apabila anda klik Jana semula dan tandakan “Kemas kini sijil sedia ada”."
             : " Perubahan terpakai pada Jana seterusnya."}
         </p>
       )}
@@ -637,13 +637,16 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
               {describe(confirmRun).map(d => <p key={d}>{d}</p>)}
             </div>
           )}
-          {confirmRun && confirmRun.source !== "EVENT_WINNERS_PREGEN" && confirmRun.created + confirmRun.skipped > 0 && (
+          {confirmRun && confirmRun.created + confirmRun.skipped > 0 && (
             <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <input type="checkbox" className="mt-0.5" checked={refresh} onChange={e => setRefresh(e.target.checked)} />
               <span>
-                <b>Kemas kini sijil sedia ada</b> — sijil yang telah dijana untuk penerima ini diperbaharui mengikut data
-                dan istilah semasa (cth. anugerah, nama, kontinjen, nama acara). Nombor siri, kod pengesahan dan tarikh kekal.
-                Sijil yang dibatalkan tidak diubah.
+                <b>Kemas kini sijil sedia ada</b> — {confirmRun.source === "EVENT_WINNERS_PREGEN"
+                  ? <>sijil kosong yang telah dijana diperbaharui mengikut tetapan semasa (cth. nama acara, pertandingan). Sijil yang
+                    telah dipadankan kepada pemenang mengekalkan pemenangnya — hanya nama acara dan pertandingan dikemas kini.</>
+                  : <>sijil yang telah dijana untuk penerima ini diperbaharui mengikut data dan istilah semasa (cth. anugerah, nama,
+                    kontinjen, nama acara).</>}{" "}
+                Nombor siri, kod pengesahan dan tarikh kekal. Sijil yang dibatalkan tidak diubah.
               </span>
             </label>
           )}

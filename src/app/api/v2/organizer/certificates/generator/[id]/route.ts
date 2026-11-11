@@ -3,6 +3,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { BATCH_SIZE, DISTRIBUTION_LEVELS, GENERATOR_SOURCES, RESULTS_BY, issueBatch, normalizeConfig, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { refreshExtras } from "@/lib/certificates/pregen";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -35,6 +36,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
     if (updated) console.warn(`[certificates] ${session.name || session.email} refreshed ${updated} issued certificates (job ${id})`);
     const nextOffset = rows.length === BATCH_SIZE && offset + rows.length < total ? offset + rows.length : null;
+    // Pre-event: extra certificates (winners beyond the blanks) follow the event name as well.
+    if (refresh && nextOffset === null && job.source === "EVENT_WINNERS_PREGEN") await refreshExtras(job);
     const updatedJob = await db.certGeneratorJob.update({
       where: { id },
       data: {
