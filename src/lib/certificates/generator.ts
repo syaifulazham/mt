@@ -100,6 +100,36 @@ export const BATCH_SIZE = 250;
 export type ResultsBy = "CONFIG" | "NATIONAL" | "STATE" | "INTERNATIONAL";
 export const RESULTS_BY: ResultsBy[] = ["CONFIG", "NATIONAL", "STATE", "INTERNATIONAL"];
 
+/**
+ * A generator's settings from a request body, cleaned and checked (create and
+ * edit share it). Returns the error to show instead when they don't hold.
+ */
+export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | undefined): { cfg: GeneratorConfig } | { error: string } {
+  // Trainers / Contingent Manager Portal users: no event and no portal distribution
+  const personSource = source === "TRAINERS" || source === "MANAGERS";
+  const cfg: GeneratorConfig = {
+    eventId:           personSource ? undefined : raw?.eventId || undefined,
+    competitionCodes:  raw?.competitionCodes?.filter(Boolean),
+    attendedOnly:      !!raw?.attendedOnly,
+    rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
+    rankTo:            raw?.rankTo ? Math.max(1, Math.floor(raw.rankTo)) : undefined,
+    verifiedOnly:      raw?.verifiedOnly !== false,
+    resultsBy:         RESULTS_BY.includes(raw?.resultsBy as ResultsBy) ? raw!.resultsBy : "NATIONAL",
+    contingentType:    raw?.contingentType || undefined,
+    rows:              source === "CUSTOM" ? (raw?.rows ?? []).slice(0, 20000) : undefined,
+    eventNameOverride: raw?.eventNameOverride?.trim() || undefined,
+    distributionLevel: !personSource && DISTRIBUTION_LEVELS.includes(raw?.distributionLevel as DistributionLevel)
+      ? raw!.distributionLevel : "NONE",
+  };
+  if (source === "EVENT_WINNERS_PREGEN" && cfg.resultsBy === "INTERNATIONAL")
+    return { error: "Sijil pra-acara tidak menyokong keputusan antarabangsa." };
+  if ((source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN") && !cfg.eventId)
+    return { error: "Pilih acara." };
+  if (cfg.rankFrom && cfg.rankTo && cfg.rankTo < cfg.rankFrom)
+    return { error: "Julat kedudukan tidak sah." };
+  return { cfg };
+}
+
 export function awardTitleForRank(rank: number): string {
   return rank === 1 ? "TEMPAT PERTAMA" : `TEMPAT KE-${rank}`;
 }

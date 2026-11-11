@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { DISTRIBUTION_LEVELS, GENERATOR_SOURCES, RESULTS_BY, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { GENERATOR_SOURCES, normalizeConfig, resolveRecipients, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
 
 export const dynamic = "force-dynamic";
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
@@ -65,26 +65,9 @@ export async function POST(req: NextRequest) {
   if (template.season.archivedAt) return NextResponse.json({ error: "Musim templat ini telah diarkibkan." }, { status: 409 });
 
   const source = body.source as GeneratorSource;
-  // Trainers / Contingent Manager Portal users: no event and no portal distribution
-  const personSource = source === "TRAINERS" || source === "MANAGERS";
-  const cfg: GeneratorConfig = {
-    eventId:           personSource ? undefined : body.config?.eventId || undefined,
-    competitionCodes:  body.config?.competitionCodes?.filter(Boolean),
-    attendedOnly:      !!body.config?.attendedOnly,
-    rankFrom:          body.config?.rankFrom ? Math.max(1, Math.floor(body.config.rankFrom)) : undefined,
-    rankTo:            body.config?.rankTo ? Math.max(1, Math.floor(body.config.rankTo)) : undefined,
-    verifiedOnly:      body.config?.verifiedOnly !== false,
-    resultsBy:         RESULTS_BY.includes(body.config?.resultsBy as ResultsBy) ? body.config!.resultsBy : "NATIONAL",
-    contingentType:    body.config?.contingentType || undefined,
-    rows:              source === "CUSTOM" ? (body.config?.rows ?? []).slice(0, 20000) : undefined,
-    eventNameOverride: body.config?.eventNameOverride?.trim() || undefined,
-    distributionLevel: !personSource && DISTRIBUTION_LEVELS.includes(body.config?.distributionLevel as DistributionLevel)
-      ? body.config!.distributionLevel : "NONE",
-  };
-  if (source === "EVENT_WINNERS_PREGEN" && cfg.resultsBy === "INTERNATIONAL")
-    return NextResponse.json({ error: "Sijil pra-acara tidak menyokong keputusan antarabangsa." }, { status: 400 });
-  if ((source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN") && !cfg.eventId)
-    return NextResponse.json({ error: "Pilih acara." }, { status: 400 });
+  const norm = normalizeConfig(source, body.config);
+  if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
+  const cfg = norm.cfg;
 
   try {
     const { total } = await resolveRecipients(source, cfg, 0, 1);

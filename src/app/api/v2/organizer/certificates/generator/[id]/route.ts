@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { BATCH_SIZE, DISTRIBUTION_LEVELS, RESULTS_BY, issueBatch, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { BATCH_SIZE, DISTRIBUTION_LEVELS, GENERATOR_SOURCES, RESULTS_BY, issueBatch, normalizeConfig, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -89,6 +89,62 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     UPDATE certificates SET meta = COALESCE(meta, '{}'::jsonb) || jsonb_build_object('distLevel', ${distributionLevel}::text)
     WHERE meta->>'jobId' = ${id}`;
   console.warn(`[certificates] ${session.name || session.email} set distribution of job ${id} to ${distributionLevel} (${applied} certificates)`);
+  return NextResponse.json({ ok: true, applied });
+}
+
+/**
+ * PUT { templateId, source, config } — edit a generator's settings. Once it has
+ * issued certificates its template and recipient source are fixed (re-running
+ * matches recipients by template, and serials stay with this generator). A
+ * changed distribution level is applied to the certificates already issued, as
+ * PATCH does; everything else takes effect on the next "Jana". CUSTOM keeps its
+ * rows when no new ones are sent.
+ */
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+
+  const { id } = await params;
+  const job = await db.certGeneratorJob.findUnique({ where: { id } });
+  if (!job) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const body = await req.json().catch(() => ({})) as { templateId?: string; source?: string; config?: GeneratorConfig };
+
+  const issued = await db.certificate.count({ where: { meta: { path: ["jobId"], equals: id } } });
+  const templateId = body.templateId || job.templateId;
+  const source = (body.source || job.source) as GeneratorSource;
+  if (!GENERATOR_SOURCES.includes(source)) return NextResponse.json({ error: "Data penerima tidak sah." }, { status: 400 });
+  if (issued && (templateId !== job.templateId || source !== job.source))
+    return NextResponse.json({ error: "Templat dan data penerima tidak boleh ditukar selepas sijil dijana. Duplikasi penjana ini untuk tetapan baharu." }, { status: 409 });
+  if (templateId !== job.templateId) {
+    const t = await db.certTemplate.findUnique({ where: { id: templateId }, select: { currentVersionId: true, season: { select: { archivedAt: true } } } });
+    if (!t?.currentVersionId) return NextResponse.json({ error: "Templat belum diterbitkan." }, { status: 400 });
+    if (t.season.archivedAt) return NextResponse.json({ error: "Musim templat ini telah diarkibkan." }, { status: 409 });
+  }
+
+  const old = job.config as GeneratorConfig;
+  const raw = { ...body.config };
+  if (source === "CUSTOM" && !raw.rows?.length) raw.rows = old.rows;
+  const norm = normalizeConfig(source, raw);
+  if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
+  const cfg = norm.cfg;
+
+  try {
+    const { total } = await resolveRecipients(source, cfg, 0, 1);
+    await db.certGeneratorJob.update({
+      where: { id },
+      data: { templateId, source, config: cfg as unknown as Prisma.InputJsonValue, total },
+    });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal" }, { status: 400 });
+  }
+
+  let applied = 0;
+  if ((cfg.distributionLevel ?? "NONE") !== (old.distributionLevel ?? "NONE") && issued)
+    applied = await db.$executeRaw`
+      UPDATE certificates SET meta = COALESCE(meta, '{}'::jsonb) || jsonb_build_object('distLevel', ${cfg.distributionLevel ?? "NONE"}::text)
+      WHERE meta->>'jobId' = ${id}`;
+  console.warn(`[certificates] ${session.name || session.email} edited generator ${id}${applied ? ` (distribution applied to ${applied})` : ""}`);
   return NextResponse.json({ ok: true, applied });
 }
 

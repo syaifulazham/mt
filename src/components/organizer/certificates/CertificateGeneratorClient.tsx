@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Copy, Eye, Link2, Loader2, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
+import { ArrowRight, Copy, Eye, Link2, Loader2, Pencil, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -125,14 +125,19 @@ function describe(j: Job, withResultsBy = true) {
 }
 
 // ── New generator form ───────────────────────────────────────────────────────
-function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
+function NewGenerator({ templates, events, onCreated, onCancel, initial, editing }: {
   templates: Template[]; events: EventOpt[]; onCreated: () => void; onCancel: () => void;
   /** Duplicate: start from an existing generator's settings (saved as a new generator). */
   initial?: Job | null;
+  /** Edit: change this generator's own settings. */
+  editing?: Job | null;
 }) {
-  const c = initial?.config;
-  const [templateId, setTemplateId] = useState(initial && templates.some(t => t.id === initial.templateId) ? initial.templateId : "");
-  const [source, setSource] = useState<Source | "">(initial?.source ?? "");
+  const base = editing ?? initial;
+  // Once certificates exist, the template and recipient source stay as they are.
+  const locked = !!editing && editing.created + editing.skipped > 0;
+  const c = base?.config;
+  const [templateId, setTemplateId] = useState(base && (editing || templates.some(t => t.id === base.templateId)) ? base.templateId : "");
+  const [source, setSource] = useState<Source | "">(base?.source ?? "");
   const [eventId, setEventId] = useState(c?.eventId ?? "");
   const [competitions, setCompetitions] = useState<{ code: string; name: string }[]>([]);
   const [codes, setCodes] = useState<string[]>(c?.competitionCodes ?? []);
@@ -146,14 +151,14 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
   const [eventNameOverride, setOverride] = useState(c?.eventNameOverride ?? "");
   const [distributionLevel, setDistributionLevel] = useState<DistLevel>(c?.distributionLevel ?? "NONE");
 
-  // Duplicating a generator with an event: load that event's competitions for the filter
+  // Duplicating / editing a generator with an event: load that event's competitions for the filter
   useEffect(() => {
-    if (!initial?.config.eventId) return;
+    if (!base?.config.eventId) return;
     let alive = true;
-    call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${initial.config.eventId}`)
+    call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${base.config.eventId}`)
       .then(j => { if (alive) setCompetitions(j.competitions); }).catch(() => {});
     return () => { alive = false; };
-  }, [initial]);
+  }, [base]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -174,7 +179,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
   async function save() {
     setSaving(true); setErr("");
     try {
-      await call(API, { method: "POST", body: JSON.stringify({
+      await call(editing ? `${API}/${editing.id}` : API, { method: editing ? "PUT" : "POST", body: JSON.stringify({
         templateId, source,
         config: { eventId: eventId || undefined, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
@@ -185,11 +190,19 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
   }
 
   const sel = "h-9 rounded-md border bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200";
-  const ready = templateId && source && (!needsEvent || eventId) && (source !== "CUSTOM" || customRows.length > 0) && (!winnersLike || rankTo >= rankFrom) && !(source === "EVENT_WINNERS_PREGEN" && resultsBy === "INTERNATIONAL");
+  const ready = templateId && source && (!needsEvent || eventId) && (source !== "CUSTOM" || customRows.length > 0 || (!!editing && editing.source === "CUSTOM")) && (!winnersLike || rankTo >= rankFrom) && !(source === "EVENT_WINNERS_PREGEN" && resultsBy === "INTERNATIONAL");
 
   return (
-    <div className={cn("rounded-xl border bg-white p-5 shadow-sm", initial && "border-sky-300 ring-2 ring-sky-100")}>
-      {initial && (
+    <div className={cn("rounded-xl border bg-white p-5 shadow-sm", base && "border-sky-300 ring-2 ring-sky-100")}>
+      {editing && (
+        <p className="mb-3 flex items-center gap-1.5 text-xs text-sky-800">
+          <Pencil className="h-3.5 w-3.5" /> Mengedit penjana &ldquo;{editing.templateName}&rdquo; ({SOURCE_LABEL[editing.source]}).
+          {locked
+            ? " Sijil telah dijana — templat dan data penerima tidak boleh ditukar; tetapan lain terpakai pada Jana seterusnya (Edaran terus dikemas kini)."
+            : " Perubahan terpakai pada Jana seterusnya."}
+        </p>
+      )}
+      {!editing && initial && (
         <p className="mb-3 flex items-center gap-1.5 text-xs text-sky-800">
           <Copy className="h-3.5 w-3.5" /> Salinan tetapan daripada penjana &ldquo;{initial.templateName}&rdquo; ({SOURCE_LABEL[initial.source]}).
           Ubah suai, kemudian simpan sebagai penjana baharu.
@@ -199,7 +212,8 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
       <div className="flex flex-wrap items-start gap-3">
         <div className="space-y-1">
           <p className="text-xs font-medium text-zinc-500">Template</p>
-          <select value={templateId} onChange={e => setTemplateId(e.target.value)} className={cn(sel, "w-72")}>
+          <select value={templateId} onChange={e => setTemplateId(e.target.value)} disabled={locked} className={cn(sel, "w-72 disabled:bg-zinc-100")}>
+            {editing && !templates.some(t => t.id === editing.templateId) && <option value={editing.templateId}>{editing.templateName}</option>}
             <option value="">Pilih templat…</option>
             {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -208,7 +222,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
         <ArrowRight className="mt-8 h-4 w-4 text-zinc-300" />
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-xs font-medium text-zinc-500">Data Penerima</p>
-          <select value={source} onChange={e => setSource(e.target.value as Source)} className={cn(sel, "w-56")}>
+          <select value={source} onChange={e => setSource(e.target.value as Source)} disabled={locked} className={cn(sel, "w-56 disabled:bg-zinc-100")}>
             <option value="">Pilih…</option>
             {(Object.keys(SOURCE_LABEL) as Source[]).map(s => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
           </select>
@@ -313,7 +327,10 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
                   <textarea value={customText} onChange={e => setCustomText(e.target.value)} rows={5}
                     placeholder={"nama,ic,kontingen,pertandingan,anugerah\nAli bin Abu,080101-01-0101,SMK Bukit Jalil,Cabaran EZBOT,Tempat Pertama"}
                     className="w-full rounded-md border bg-white p-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-200" />
-                  <p className="text-[11px] text-zinc-400">{fmt(customRows.length)} baris dikesan.</p>
+                  <p className="text-[11px] text-zinc-400">
+                    {fmt(customRows.length)} baris dikesan.
+                    {editing?.source === "CUSTOM" && !customRows.length && ` Biarkan kosong untuk mengekalkan ${fmt(editing.config.rowCount ?? 0)} baris sedia ada.`}
+                  </p>
                 </div>
               )}
               {!personSource && (
@@ -339,7 +356,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial }: {
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onCancel}>Batal</Button>
         <Button size="sm" onClick={save} disabled={!ready || saving}>
-          {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />} Simpan penjana
+          {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />} {editing ? "Simpan perubahan" : "Simpan penjana"}
         </Button>
       </div>
     </div>
@@ -361,6 +378,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [duplicateFrom, setDuplicateFrom] = useState<Job | null>(null);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [linking, setLinking] = useState<Job | null>(null);
   const [running, setRunning] = useState<{ id: string; processed: number; total: number; created: number; skipped: number; updated: number } | null>(null);
   const [refresh, setRefresh] = useState(false);
@@ -439,7 +457,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
           </p>
         </div>
         {!creating && (
-          <Button onClick={() => { setDuplicateFrom(null); setCreating(true); }} disabled={!templates.length}>
+          <Button onClick={() => { setDuplicateFrom(null); setEditingJob(null); setCreating(true); }} disabled={!templates.length}>
             <Plus className="mr-1.5 h-4 w-4" /> Create New Generator
           </Button>
         )}
@@ -452,9 +470,10 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
       )}
 
       {creating && (
-        <NewGenerator key={duplicateFrom?.id ?? "new"} templates={templates} events={events} initial={duplicateFrom}
-          onCreated={() => { setCreating(false); setDuplicateFrom(null); load(); }}
-          onCancel={() => { setCreating(false); setDuplicateFrom(null); }} />
+        <NewGenerator key={editingJob ? `edit-${editingJob.id}` : duplicateFrom?.id ?? "new"} templates={templates} events={events}
+          initial={duplicateFrom} editing={editingJob}
+          onCreated={() => { setCreating(false); setDuplicateFrom(null); setEditingJob(null); load(); }}
+          onCancel={() => { setCreating(false); setDuplicateFrom(null); setEditingJob(null); }} />
       )}
 
       {err && <p className="flex items-center gap-1.5 text-xs text-red-600"><AlertTriangle className="h-3.5 w-3.5" /> {err}</p>}
@@ -531,7 +550,12 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                           : j.status === "DONE" ? <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
                         {isRunning ? "Menjana…" : j.status === "DONE" ? "Jana semula" : "Jana"}
                       </Button>
-                      <button onClick={() => { setDuplicateFrom(j); setCreating(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                      <button onClick={() => { setDuplicateFrom(null); setEditingJob(j); setCreating(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                        disabled={!!running} title="Edit tetapan penjana ini"
+                        className="rounded p-1.5 text-zinc-400 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-40">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => { setEditingJob(null); setDuplicateFrom(j); setCreating(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                         disabled={!!running} title="Duplikasi tetapan ke penjana baharu"
                         className="rounded p-1.5 text-zinc-400 hover:bg-sky-50 hover:text-sky-700 disabled:opacity-40">
                         <Copy className="h-4 w-4" />
