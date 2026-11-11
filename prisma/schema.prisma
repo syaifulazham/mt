@@ -877,7 +877,7 @@ model WalkInJudgingScore {
   walkInRegistrationId    String
   criterionId             String
   score                   Float?
-  timeSeconds             Int?
+  timeSeconds             Float?
   optionIds               String[]
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -1158,14 +1158,16 @@ model JudgingTask {
 }
 
 model JudgingCriterion {
-  id         String        @id @default(cuid())
-  templateId String
-  name       String
-  order      Int           @default(0)
-  type       CriterionType
-  maxScore   Float?
-  minScore   Float?
-  maxTime    Int? // seconds, for TIME type
+  id            String        @id @default(cuid())
+  templateId    String
+  name          String
+  order         Int           @default(0)
+  type          CriterionType
+  maxScore      Float?
+  minScore      Float?
+  maxTime       Float? // seconds, for TIME type (fractional when timePrecision > 0)
+  /// TIME type: decimal places judges record — 0 = saat, 2 = 1/100 saat, 3 = milisaat.
+  timePrecision Int           @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1198,7 +1200,7 @@ model JudgingScore {
   teamId        String
   criterionId   String
   score         Float? // NUMBER / SINGLE_OPTION / MULTIPLE_OPTION
-  timeSeconds   Int? // TIME type
+  timeSeconds   Float? // TIME type, seconds (fractional to the criterion's timePrecision)
   optionIds     String[] // selected option ids (for display)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

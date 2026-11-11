@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { TIME_PRECISIONS, formatTime, parsePrecision, parseTime, roundTime, type TimePrecision } from "@/lib/judgingTime";
 import type { OrganizerRole } from "@/types";
 
 function genConfirmCode() {
@@ -37,6 +38,7 @@ type JudgingCriterion = {
   maxScore: number | null;
   minScore: number | null;
   maxTime: number | null;
+  timePrecision: number;
   options: JudgingOption[];
 };
 
@@ -67,16 +69,6 @@ const TYPE_META: Record<CriterionType, { label: string; icon: React.ElementType;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function fmtTime(secs: number) {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function parseTime(val: string): number {
-  const [m, s] = val.split(":").map(Number);
-  return (m || 0) * 60 + (s || 0);
-}
 
 // ── Criterion card ─────────────────────────────────────────────────────────────
 
@@ -99,7 +91,10 @@ function CriterionCard({
   const [type,     setType]     = useState<CriterionType>(criterion.type);
   const [maxScore, setMaxScore] = useState(String(criterion.maxScore ?? ""));
   const [minScore, setMinScore] = useState(String(criterion.minScore ?? ""));
-  const [maxTime,  setMaxTime]  = useState(criterion.maxTime ? fmtTime(criterion.maxTime) : "");
+  const [precision, setPrecision] = useState<TimePrecision>(parsePrecision(criterion.timePrecision));
+  const [maxTime,  setMaxTime]  = useState(criterion.maxTime ? formatTime(criterion.maxTime, criterion.timePrecision, true) : "");
+  const maxTimeSec = maxTime.trim() === "" ? null : parseTime(maxTime);
+  const maxTimeInvalid = maxTime.trim() !== "" && maxTimeSec === null;
   const [saving,   setSaving]   = useState(false);
   const [dirty,    setDirty]    = useState(false);
 
@@ -125,7 +120,8 @@ function CriterionCard({
             type,
             maxScore: maxScore !== "" ? Number(maxScore) : null,
             minScore: minScore !== "" ? Number(minScore) : null,
-            maxTime:  maxTime  !== "" ? parseTime(maxTime) : null,
+            maxTime:  maxTimeSec != null ? roundTime(maxTimeSec, precision) : null,
+            timePrecision: precision,
           }),
         }
       );
@@ -261,16 +257,35 @@ function CriterionCard({
 
           {type === "TIME" && (
             <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label className="text-xs">Ketepatan masa</Label>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {TIME_PRECISIONS.map(p => (
+                    <button key={p.value} type="button" disabled={!canWrite}
+                      onClick={() => {
+                        setPrecision(p.value); setDirty(true);
+                        if (maxTimeSec != null) setMaxTime(formatTime(maxTimeSec, p.value, true));
+                      }}
+                      className={cn("rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                        precision === p.value ? "border-zinc-900 bg-zinc-900 text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
+                      {p.label} <span className={cn("font-mono", precision === p.value ? "text-zinc-300" : "text-zinc-400")}>{p.example}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
-                <Label className="text-xs">Masa Maksimum (mm:ss)</Label>
+                <Label className="text-xs">Masa Maksimum ({TIME_PRECISIONS.find(p => p.value === precision)!.example})</Label>
                 <Input
                   value={maxTime}
                   onChange={e => { setMaxTime(e.target.value); setDirty(true); }}
-                  placeholder="e.g. 3:00"
-                  className="mt-1 h-8 text-sm font-mono"
+                  onBlur={() => { if (maxTimeSec != null) setMaxTime(formatTime(maxTimeSec, precision, true)); }}
+                  placeholder={precision === 0 ? "e.g. 03:00" : precision === 2 ? "e.g. 00:02.00" : "e.g. 00:02.000"}
+                  className={cn("mt-1 h-8 text-sm font-mono", maxTimeInvalid && "border-red-400")}
                   disabled={!canWrite}
                 />
-                <p className="text-[10px] text-zinc-400 mt-1">Skor berkurang dari maks ke 0 apabila masa tamat.</p>
+                <p className={cn("text-[10px] mt-1", maxTimeInvalid ? "text-red-500" : "text-zinc-400")}>
+                  {maxTimeInvalid ? "Format masa tidak sah (cth. 01:30 atau 00:02.50)." : "Skor berkurang dari maks ke 0 apabila masa tamat."}
+                </p>
               </div>
               <div>
                 <Label className="text-xs">Skor Maksimum</Label>
@@ -331,7 +346,7 @@ function CriterionCard({
 
           {canWrite && dirty && (
             <div className="flex justify-end pt-1">
-              <Button size="sm" onClick={saveConfig} disabled={saving} className="h-7 text-xs gap-1.5">
+              <Button size="sm" onClick={saveConfig} disabled={saving || (type === "TIME" && maxTimeInvalid)} className="h-7 text-xs gap-1.5">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                 Simpan
               </Button>
@@ -826,7 +841,7 @@ export function JudgingTemplatesClient({ role }: { role: OrganizerRole }) {
                     const Icon = TYPE_META[c.type].icon;
                     let scoreDesc = "—";
                     if (c.type === "NUMBER") scoreDesc = `${c.minScore ?? 0} – ${c.maxScore ?? "?"} pts`;
-                    if (c.type === "TIME")   scoreDesc = `0 – ${c.maxScore ?? "?"} pts (masa maks: ${c.maxTime ? fmtTime(c.maxTime) : "?"})`;
+                    if (c.type === "TIME")   scoreDesc = `0 – ${c.maxScore ?? "?"} pts (masa maks: ${c.maxTime ? formatTime(c.maxTime, c.timePrecision) : "?"})`;
                     if (c.type === "SINGLE_OPTION") {
                       const max = Math.max(...c.options.map(o => o.weight), 0);
                       scoreDesc = `maks ${max} pts (pilih satu)`;

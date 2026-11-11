@@ -5,12 +5,13 @@ import Link from "next/link";
 import { ArrowLeft, Loader2, Trophy } from "lucide-react";
 import { TeamAvatar, preferFor } from "@/components/duel/TeamAvatar";
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/judgingTime";
 import type { CompetitionResult, RankingEntry } from "@/lib/resultsRankings";
 import { compareScoreTime, withSharedRanks } from "@/lib/sharedRank";
 import { TeamCertCell, useTeamCertCounts } from "@/components/organizer/scoreboard/TeamCertCell";
 
 const POLL_MS = 5_000;
-const fmtTime = (s: number | null) => s == null ? "—" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const fmtTime = (s: number | null) => s == null ? "—" : formatTime(s);
 
 /** Live ranking of a score-judged competition from every judging task's scores. */
 export function ScoreRankingClient({ event, ecId, competition }: {

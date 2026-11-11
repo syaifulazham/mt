@@ -1,3 +1,5 @@
+import { formatDuration } from "@/lib/judgingTime";
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type RankEntry = {
@@ -23,10 +25,7 @@ type CompetitionRanking = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function fmtTime(s: number): string {
-  const m = Math.floor(s / 60); const sec = s % 60;
-  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
-}
+const fmtTime = (s: number) => formatDuration(s);
 
 function triggerDownload(buffer: ArrayBuffer, filename: string) {
   const blob = new Blob([buffer], {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { roundTime } from "@/lib/judgingTime";
 import { db } from "@/lib/db";
 import { contingentStateId, taskLockMap, teamLocked } from "@/lib/judgingStatus";
 
@@ -17,6 +18,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     timeSeconds?: number | null;
     optionIds?: string[];
   };
+  // Fractions of a second are kept to the millisecond (TIME criteria with 1/100 s or ms precision).
+  const time = typeof timeSeconds === "number" && Number.isFinite(timeSeconds) && timeSeconds > 0 ? roundTime(timeSeconds) : null;
 
   if (!passcode || !walkInRegistrationId || !criterionId)
     return NextResponse.json({ error: "MISSING_FIELDS" }, { status: 400 });
@@ -55,12 +58,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       walkInRegistrationId,
       criterionId,
       score: score ?? null,
-      timeSeconds: timeSeconds ?? null,
+      timeSeconds: time,
       optionIds: optionIds ?? [],
     },
     update: {
       score: score ?? null,
-      timeSeconds: timeSeconds ?? null,
+      timeSeconds: time,
       optionIds: optionIds ?? [],
     },
   });

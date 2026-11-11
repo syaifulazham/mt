@@ -53,6 +53,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           maxScore:   c.maxScore,
           minScore:   c.minScore,
           maxTime:    c.maxTime,
+          timePrecision: c.timePrecision,
         },
       });
 

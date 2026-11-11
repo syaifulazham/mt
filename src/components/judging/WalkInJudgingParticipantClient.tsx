@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { formatTime, roundTime } from "@/lib/judgingTime";
 import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -17,6 +18,8 @@ type COption = { id: string; label: string; weight: number; order: number };
 type Criterion = {
   id: string; name: string; order: number; type: string;
   maxScore: number | null; minScore: number | null; maxTime: number | null;
+  /** TIME: decimal places of a second judges record (0, 2 or 3). */
+  timePrecision?: number;
   options: COption[];
 };
 type Participant = {
@@ -44,12 +47,6 @@ type DraftScore = {
   timeSeconds: number | string;
   optionIds: string[];
 };
-
-function fmtMaxTime(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
 
 // ── Criterion input ────────────────────────────────────────────────────────────
 
@@ -80,7 +77,7 @@ function CriterionInput({
             <p className="text-xs text-zinc-400 mt-0.5">Skor: {criterion.minScore ?? 0} – {criterion.maxScore}</p>
           )}
           {criterion.type === "TIME" && criterion.maxTime != null && (
-            <p className="text-xs text-zinc-400 mt-0.5">Masa maks: {fmtMaxTime(criterion.maxTime)}</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Masa maks: {formatTime(criterion.maxTime, criterion.timePrecision ?? 0)}</p>
           )}
         </div>
         <span className={cn(
@@ -159,10 +156,12 @@ function CriterionInput({
                 type="number"
                 value={draft.timeSeconds}
                 min={0}
-                max={59}
+                max={59.999}
+                step={criterion.timePrecision ? 10 ** -criterion.timePrecision : 1}
+                inputMode={criterion.timePrecision ? "decimal" : "numeric"}
                 onChange={e => onChange("timeSeconds", e.target.value)}
-                className="w-20 h-11 text-xl font-bold text-center"
-                placeholder="00"
+                className={cn("h-11 text-xl font-bold text-center", criterion.timePrecision ? "w-32" : "w-20")}
+                placeholder={criterion.timePrecision ? "00." + "0".repeat(criterion.timePrecision) : "00"}
               />
               <span className="text-xs text-zinc-400">saat</span>
             </div>
@@ -258,8 +257,11 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
           let timeMinutes = "";
           let timeSecs = "";
           if (existing?.timeSeconds != null) {
-            timeMinutes = String(Math.floor(existing.timeSeconds / 60));
-            timeSecs = String(existing.timeSeconds % 60);
+            const p = c.timePrecision ?? 0;
+            const total = roundTime(existing.timeSeconds, p);
+            const mins = Math.floor(total / 60);
+            timeMinutes = String(mins);
+            timeSecs = (total - mins * 60).toFixed(p);
           }
           d[c.id] = {
             score: existing?.score ?? "",
@@ -301,7 +303,7 @@ export function WalkInJudgingParticipantClient({ slug, regId }: { slug: string; 
         } else if (c.type === "TIME") {
           const m = d.timeMinutes === "" ? 0 : Number(d.timeMinutes);
           const s = d.timeSeconds === "" ? 0 : Number(d.timeSeconds);
-          timeSeconds = m * 60 + s || null;
+          timeSeconds = roundTime(m * 60 + s, c.timePrecision ?? 0) || null;
         } else {
           optionIds = d.optionIds;
           score = c.options.filter(o => optionIds.includes(o.id)).reduce((s, o) => s + o.weight, 0);

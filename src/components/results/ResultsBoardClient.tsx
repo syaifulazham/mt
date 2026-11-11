@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { flagEmoji } from "@/lib/countries";
+import { formatTime } from "@/lib/judgingTime";
 
 // ── Scale config (per-item font/element sizes, persisted in cookies) ──────────
 
@@ -128,10 +129,7 @@ function partialCount(c: CompetitionResult) {
   return c.verified ? 0 : (c.verifiedStateIds?.length ?? 0);
 }
 
-function fmtTime(s: number) {
-  const m = Math.floor(s / 60); const sec = s % 60;
-  return `${m}:${String(sec).padStart(2, "0")}`;
-}
+const fmtTime = (s: number) => formatTime(s);
 
 
 function ContingentLogo({ logo, name, size = "md", style }: { logo: string | null; name: string; size?: "sm" | "md" | "lg" | "xl"; style?: React.CSSProperties }) {

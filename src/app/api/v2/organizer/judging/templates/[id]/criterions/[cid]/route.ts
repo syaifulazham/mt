@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parsePrecision, roundTime } from "@/lib/judgingTime";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { CriterionType } from "@prisma/client";
@@ -28,7 +29,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(body.order    !== undefined && { order:    Number(body.order) }),
         ...(body.maxScore !== undefined && { maxScore: body.maxScore != null ? Number(body.maxScore) : null }),
         ...(body.minScore !== undefined && { minScore: body.minScore != null ? Number(body.minScore) : null }),
-        ...(body.maxTime  !== undefined && { maxTime:  body.maxTime  != null ? Number(body.maxTime)  : null }),
+        ...(body.maxTime  !== undefined && { maxTime:  body.maxTime  != null ? roundTime(Number(body.maxTime)) : null }),
+        ...(body.timePrecision !== undefined && { timePrecision: parsePrecision(body.timePrecision) }),
       },
       include: { options: { orderBy: { order: "asc" } } },
     });

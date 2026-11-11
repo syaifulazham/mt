@@ -80,6 +80,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         maxScore: c.maxScore,
         minScore: c.minScore,
         maxTime: c.maxTime,
+        timePrecision: c.timePrecision,
         options: c.options.map(o => ({ id: o.id, label: o.label, weight: o.weight, order: o.order })),
       })),
     },

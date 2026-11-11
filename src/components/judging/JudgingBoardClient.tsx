@@ -14,6 +14,7 @@ import {
   CompleteButton, CompleteDialog, JudgingLockBanner, StateLockStrip,
   completeScopes, lockMapOf, lockedFor, useJudgingCompletion,
 } from "@/components/judging/JudgingCompletion";
+import { formatDuration } from "@/lib/judgingTime";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -68,11 +69,7 @@ function bestTime(criterions: Criterion[], teamScores: ScoreRow[]): number | nul
   return null;
 }
 
-function fmtTime(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
+const fmtTime = (s: number) => formatDuration(s);
 
 function isTeamScored(criterions: Criterion[], teamScores: ScoreRow[]): boolean {
   return criterions.every(c => teamScores.some(s => s.criterionId === c.id));

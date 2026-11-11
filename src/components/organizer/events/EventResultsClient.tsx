@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/judgingTime";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -50,10 +51,7 @@ type EventInfo = { id: string; name: string; slug: string; scope: string };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function fmtTime(s: number) {
-  const m = Math.floor(s / 60); const sec = s % 60;
-  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
-}
+const fmtTime = (s: number) => formatDuration(s);
 
 const MEDAL: Record<number, { icon: string; cls: string }> = {
   1: { icon: "🥇", cls: "text-amber-500" },
