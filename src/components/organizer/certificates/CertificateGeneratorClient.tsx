@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Copy, Eye, Link2, Loader2, Pencil, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
+import { ArrowRight, Copy, Eye, FileSearch, Link2, Loader2, Pencil, Play, Plus, Trash2, CheckCircle2, AlertTriangle, X, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { GENERATOR_GROUP_COOKIE } from "./generatorCookie";
 import { PregenLinkDialog } from "./PregenLinkDialog";
+import { GeneratorSampleDialog } from "./GeneratorSampleDialog";
 
 // Certificates → Generator. A generator = template + recipient data
 // (event participants / event winners / all registered / custom) + settings.
@@ -380,6 +381,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
   const [duplicateFrom, setDuplicateFrom] = useState<Job | null>(null);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [linking, setLinking] = useState<Job | null>(null);
+  const [sampling, setSampling] = useState<Job | null>(null);
   const [running, setRunning] = useState<{ id: string; processed: number; total: number; created: number; skipped: number; updated: number } | null>(null);
   const [refresh, setRefresh] = useState(false);
   const [err, setErr] = useState("");
@@ -586,6 +588,11 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                   </p>
                   {/* This generator's issued certificates: review + download */}
                   <span className="flex shrink-0 items-center gap-2">
+                  <button type="button" onClick={() => setSampling(j)} disabled={!!running}
+                    title="Lihat contoh sijil sebelum Jana — tiada sijil dikeluarkan"
+                    className="inline-flex items-center gap-1.5 rounded-md border bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">
+                    <FileSearch className="h-3.5 w-3.5" /> Pratonton
+                  </button>
                   {j.source === "EVENT_WINNERS_PREGEN" && j.created + j.skipped > 0 && (
                     <button type="button" onClick={() => setLinking(j)} disabled={!!running}
                       className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
@@ -607,6 +614,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
       )}
 
       {linking && <PregenLinkDialog job={linking} onClose={() => { setLinking(null); load(); }} />}
+      {sampling && <GeneratorSampleDialog job={sampling} onClose={() => setSampling(null)} />}
 
       {/* Confirm: generate */}
       <Dialog open={!!confirmRun} onOpenChange={o => { if (!o) setConfirmRun(null); }}>
@@ -640,6 +648,11 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
             </label>
           )}
           <DialogFooter>
+            {confirmRun && (
+              <Button variant="ghost" className="mr-auto" onClick={() => { setSampling(confirmRun); setConfirmRun(null); setRefresh(false); }}>
+                <FileSearch className="mr-1.5 h-3.5 w-3.5" /> Pratonton dahulu
+              </Button>
+            )}
             <Button variant="outline" onClick={() => { setConfirmRun(null); setRefresh(false); }}>Batal</Button>
             <Button onClick={() => confirmRun && run(confirmRun)}>
               <Play className="mr-1.5 h-3.5 w-3.5" /> {confirmRun?.total ? "Jana" : "Cuba jana juga"}
