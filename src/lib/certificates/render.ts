@@ -170,22 +170,47 @@ export async function renderCertificatePdf(
     page.drawImage(backgroundImage, { x: 0, y: 0, width: config.canvas.width, height: config.canvas.height });
   }
 
-  const { height: pageHeight } = page.getSize();
+  const fonts = await embedCertFonts(doc, config);
+  await drawCertificatePage({ doc, page, config, data, fonts, warnings, appUrl: input.appUrl });
 
+  return { bytes: await doc.save(), warnings };
+}
+
+type Fonts = Map<FontKey, PDFFont>;
+
+/** Embeds every font the template's text elements use, once per document. */
+async function embedCertFonts(doc: PDFDocument, config: CertConfig): Promise<Fonts> {
   const textElements = config.elements.filter(
     (el): el is Extract<CertElement, { type: "static_text" | "field" }> =>
       el.type === "static_text" || el.type === "field",
   );
-  const fonts = await embedFonts(doc, textElements.map((el) => fontKey(el.style)));
+  return embedFonts(doc, textElements.map((el) => fontKey(el.style)));
+
+}
+
+/** Draws one certificate's elements onto `page` (the background is already there). */
+async function drawCertificatePage(ctx: {
+  doc: PDFDocument; page: PDFPage; config: CertConfig; data: CertFieldSource;
+  fonts: Fonts; warnings: RenderWarning[]; appUrl?: string;
+  /** Element images embedded once per document (bulk files). */
+  images?: Map<string, PDFImage | null>;
+}): Promise<void> {
+  const { doc, page, config, data, fonts, warnings } = ctx;
+  const input = { appUrl: ctx.appUrl };
+  const { height: pageHeight } = page.getSize();
 
   for (const el of [...config.elements].sort((a, b) => a.z - b.z)) {
     // yPdf is the anchor line; the baseline is derived from it per vAlign below.
     const anchorY = pageHeight - el.y;
 
     if (el.type === "image") {
-      const bytes = await fetchAsset(el.url).catch(() => null);
-      if (!bytes) { warnings.push({ elementId: el.id, message: `image fetch failed: ${el.url}` }); continue; }
-      const img = bytes[0] === 0x89 ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+      let img = ctx.images?.get(el.url);
+      if (img === undefined) {
+        const bytes = await fetchAsset(el.url).catch(() => null);
+        img = bytes ? (bytes[0] === 0x89 ? await doc.embedPng(bytes) : await doc.embedJpg(bytes)) : null;
+        ctx.images?.set(el.url, img);
+      }
+      if (!img) { warnings.push({ elementId: el.id, message: `image fetch failed: ${el.url}` }); continue; }
       const box = boxTopLeft(el, el.width, el.height);
       page.drawImage(img, { x: box.left, y: pageHeight - box.top - el.height, width: el.width, height: el.height, opacity: el.opacity });
       continue;
@@ -246,6 +271,43 @@ export async function renderCertificatePdf(
     });
   }
 
+}
+
+/**
+ * Many certificates of one template version as one multi-page PDF (bulk
+ * download). The background — base PDF page or image — and fonts are embedded
+ * once and reused on every page, so a 300-page file stays small. In memory only.
+ */
+export async function renderCertificatesPdf(input: {
+  config: CertConfig; baseAsset: BaseAsset; items: CertFieldSource[]; appUrl?: string;
+}): Promise<{ bytes: Uint8Array; warnings: RenderWarning[] }> {
+  const { config, baseAsset } = input;
+  const warnings: RenderWarning[] = [];
+  const assetBytes = await fetchAsset(baseAsset.url);
+  const doc = await PDFDocument.create();
+
+  let size: [number, number] = [config.canvas.width, config.canvas.height];
+  let drawBackground: (page: PDFPage) => void;
+  if (baseAsset.type === "PDF") {
+    const src = await PDFDocument.load(assetBytes);
+    const first = src.getPages()[0];
+    if (!first) throw new Error("Base PDF has no pages");
+    const [embedded] = await doc.embedPages([first]);
+    const { width, height } = first.getSize();
+    size = [width, height];
+    drawBackground = (page) => page.drawPage(embedded, { x: 0, y: 0, width, height });
+  } else {
+    const img = assetBytes[0] === 0x89 ? await doc.embedPng(assetBytes) : await doc.embedJpg(assetBytes);
+    drawBackground = (page) => page.drawImage(img, { x: 0, y: 0, width: size[0], height: size[1] });
+  }
+
+  const fonts = await embedCertFonts(doc, config);
+  const images = new Map<string, PDFImage | null>();
+  for (const data of input.items) {
+    const page = doc.addPage(size);
+    drawBackground(page);
+    await drawCertificatePage({ doc, page, config, data, fonts, warnings, appUrl: input.appUrl, images });
+  }
   return { bytes: await doc.save(), warnings };
 }
 

@@ -6,6 +6,14 @@ import { ArrowLeft, Download, Eye, Loader2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GEN_CERTS_GROUP_COOKIE, type GenCertsGroupBy } from "./generatorCertsCookie";
 
+type ZipFormat = "single" | "competition" | "state" | "contingent";
+const ZIP_FORMATS: { key: ZipFormat; label: string; hint: string }[] = [
+  { key: "single",      label: "Setiap sijil",     hint: "Satu PDF bagi setiap sijil (dalam folder pertandingan)." },
+  { key: "competition", label: "Ikut pertandingan", hint: "Satu PDF berbilang halaman bagi setiap pertandingan." },
+  { key: "state",       label: "Ikut negeri",       hint: "Satu PDF berbilang halaman bagi setiap negeri." },
+  { key: "contingent",  label: "Ikut kontinjen",    hint: "Satu PDF berbilang halaman bagi setiap kontinjen, dalam folder negeri." },
+];
+
 const GROUPS: { key: GenCertsGroupBy; label: string }[] = [
   { key: "none", label: "Tiada" }, { key: "state", label: "Negeri" },
   { key: "rank", label: "Kedudukan" }, { key: "competition", label: "Pertandingan" },
@@ -45,6 +53,8 @@ export function GeneratorCertificatesClient({ jobId, templateName, source, event
   const [page, setPage] = useState(1);
   const [data, setData] = useState<{ total: number; pageSize: number; rows: Row[]; groups?: Record<string, number> } | null>(null);
   const [preview, setPreview] = useState<Row | null>(null);
+  const [zipFormat, setZipFormat] = useState<ZipFormat>("competition");
+  const zipHref = `/api/v2/organizer/certificates/generator/${jobId}/download?${new URLSearchParams({ format: zipFormat, ...(query && { q: query }) })}`;
 
   useEffect(() => {
     let alive = true;
@@ -97,6 +107,28 @@ export function GeneratorCertificatesClient({ jobId, templateName, source, event
             ))}
           </div>
         </form>
+
+        {/* Bulk download: the certificates matching the current search, as one ZIP */}
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white px-3 py-2.5 text-xs shadow-sm">
+          <span className="font-medium text-zinc-700">Muat turun ZIP</span>
+          {ZIP_FORMATS.map(f => (
+            <button key={f.key} type="button" onClick={() => setZipFormat(f.key)} title={f.hint}
+              className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
+                zipFormat === f.key ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
+              {f.label}
+            </button>
+          ))}
+          <span className="text-zinc-400">
+            {ZIP_FORMATS.find(f => f.key === zipFormat)!.hint}
+            {zipFormat === "single" && " Fail besar — setiap PDF membawa latar templat sendiri."}
+            {" "}Sijil dibatalkan tidak disertakan{query && <> · hanya hasil carian &ldquo;{query}&rdquo;</>}.
+          </span>
+          <a href={zipHref} download
+            className={cn("ml-auto inline-flex items-center gap-1.5 rounded-md bg-[#085782] px-3 py-1.5 font-medium text-white hover:opacity-90",
+              !data?.total && "pointer-events-none opacity-40")}>
+            <Download className="h-3.5 w-3.5" /> Muat turun{data ? ` (${data.total.toLocaleString()})` : ""}
+          </a>
+        </div>
 
         <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
           <table className="w-full text-sm">
