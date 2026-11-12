@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { AlertCircle, Ban, FileText, Loader2, Minus, Plus, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertCircle, Ban, Check, ClipboardCopy, ClipboardPaste, FileText, Loader2, Minus, Plus, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,19 @@ export function DuelScorecardEditor({ base, canWrite, config, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ai, setAi] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [pasting, setPasting] = useState(false);
+
+  // Shareable JSON: the items without ids (new ones are made on paste), tagged so a paste can be recognised.
+  const exportJson = () => JSON.stringify({
+    type: SCORECARD_JSON_TYPE, version: 1,
+    items: card.items.map(({ group, kind, label, points, max, disqualify, options }) =>
+      ({ group, kind, label, points, max, disqualify, options: options.map(o => ({ label: o.label, points: o.points })) })),
+  }, null, 2);
+  async function copyCard() {
+    try { await navigator.clipboard.writeText(exportJson()); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { setErr("Pelayar menyekat papan keratan — salin tidak berjaya."); }
+  }
 
   const update = (next: Scorecard) => { setCard(next); setDirty(true); };
   const setItem = (id: string, patch: Partial<ScoreItem>) => update({ ...card, items: card.items.map(i => (i.id === id ? { ...i, ...patch } : i)) });
@@ -134,9 +147,20 @@ export function DuelScorecardEditor({ base, canWrite, config, onSaved }: {
           Rekod keputusan menggunakan kad skor
         </label>
         <span className="text-[11px] text-zinc-400">{card.items.length} item{card.items.length > 0 && ` · maks mata ${maxGain(card)}${card.items.some(i => i.group === "GAIN" && i.kind === "COUNT" && !i.max) ? "+" : ""}`}</span>
+        <span className="ml-auto" />
+        {card.items.length > 0 && (
+          <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={copyCard} title="Salin kad skor (JSON) untuk ditampal ke pertandingan lain">
+            {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <ClipboardCopy className="h-3 w-3" />} {copied ? "Disalin" : "Salin"}
+          </Button>
+        )}
+        {canWrite && (
+          <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => setPasting(true)} title="Tampal kad skor yang disalin daripada pertandingan lain">
+            <ClipboardPaste className="h-3 w-3" /> Tampal
+          </Button>
+        )}
         {canWrite && (
           <Button size="sm" variant="outline" onClick={() => setAi(true)}
-            className="ml-auto h-7 gap-1 rounded-full border-violet-300 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-xs text-violet-700">
+            className="h-7 gap-1 rounded-full border-violet-300 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-xs text-violet-700">
             <Sparkles className="h-3 w-3" /> Pembantu AI
           </Button>
         )}
@@ -155,8 +179,70 @@ export function DuelScorecardEditor({ base, canWrite, config, onSaved }: {
           {err && <span className="text-xs text-red-600">{err}</span>}
         </div>
       )}
+      {pasting && <PasteScorecardDialog hasItems={card.items.length > 0} onClose={() => setPasting(false)}
+        onApply={items => { update({ enabled: true, items }); setPasting(false); }} />}
       {ai && <ScorecardAiDialog base={base} card={card} onClose={() => setAi(false)} onApply={items => { update({ enabled: true, items }); setAi(false); }} />}
     </div>
+  );
+}
+
+export const SCORECARD_JSON_TYPE = "mt-duel-scorecard";
+
+/** Items from pasted JSON: a copied scorecard, a bare { items } object or an items array. */
+function itemsFromJson(text: string): ScoreItem[] | string {
+  let raw: unknown;
+  try { raw = JSON.parse(text); } catch { return "Bukan JSON yang sah."; }
+  const items = Array.isArray(raw) ? raw : (raw as { items?: unknown } | null)?.items;
+  if (!Array.isArray(items)) return "Tiada senarai item kad skor dalam JSON ini.";
+  // Fresh ids, so the pasted card never shares ids with the one it came from.
+  const card = parseScorecard({ enabled: true, items: items.map(i => ({ ...(i as object), id: undefined, options: ((i as { options?: unknown[] })?.options ?? []).map(o => ({ ...(o as object), id: undefined })) })) });
+  return card.items.length ? card.items : "Tiada item yang sah dalam JSON ini.";
+}
+
+function PasteScorecardDialog({ hasItems, onClose, onApply }: { hasItems: boolean; onClose: () => void; onApply: (items: ScoreItem[]) => void }) {
+  const [text, setText] = useState("");
+  // Prefill from the clipboard when the browser allows it.
+  useEffect(() => {
+    let alive = true;
+    navigator.clipboard?.readText?.()
+      .then(t => { if (alive && (t.trim().startsWith("{") || t.trim().startsWith("["))) setText(cur => cur || t); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const parsed = text.trim() ? itemsFromJson(text) : null;
+  const items = Array.isArray(parsed) ? parsed : null;
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><ClipboardPaste className="h-4 w-4" /> Tampal kad skor</DialogTitle>
+          <DialogDescription>Tampal JSON yang disalin dengan butang “Salin” pada kad skor pertandingan lain.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 px-6 pb-6 pt-4">
+          <textarea value={text} onChange={e => setText(e.target.value)} rows={10} placeholder='{"type": "mt-duel-scorecard", "items": [...]}'
+            className="w-full rounded-xl border px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-rose-200" />
+          {typeof parsed === "string" && <p className="flex items-center gap-1.5 text-sm text-red-600"><AlertCircle className="h-4 w-4" /> {parsed}</p>}
+          {items && (
+            <div className="rounded-xl border bg-zinc-50 p-3 text-xs">
+              <p className="mb-1 font-semibold text-zinc-700">{items.length} item akan dimuatkan:</p>
+              <ul className="space-y-0.5">
+                {items.map(i => (
+                  <li key={i.id} className={i.group === "PENALTY" ? "text-red-700" : "text-emerald-700"}>
+                    {i.group === "PENALTY" ? "−" : "+"} {i.label}
+                    <span className="text-zinc-500"> · {i.kind === "COUNT" ? `${i.points} mata${i.max ? `, maks ${i.max}` : ""}${i.disqualify ? ", hilang kelayakan" : ""}` : i.options.map(o => `${o.label} ${o.points}`).join(" / ")}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            {hasItems && items && <span className="mr-auto text-[11px] text-amber-700">Item kad skor semasa akan diganti (belum disimpan sehingga anda klik Simpan kad skor).</span>}
+            <Button variant="outline" onClick={onClose}>Batal</Button>
+            <Button className="bg-rose-600 hover:bg-rose-700" disabled={!items} onClick={() => items && onApply(items)}>Guna dalam editor</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
