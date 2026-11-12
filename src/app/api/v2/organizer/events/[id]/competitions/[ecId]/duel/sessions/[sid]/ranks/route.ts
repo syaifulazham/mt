@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { pointsFor } from "@/lib/duel";
+import { leaguePointsFor, pointsFor } from "@/lib/duel";
 import { DUEL_CONTROL_ROLES, duelErr, duelGuard, loadDuelSession } from "@/lib/duel-server";
 
 type Params = { params: Promise<{ id: string; ecId: string; sid: string }> };
@@ -26,8 +26,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { ranks } = await req.json().catch(() => ({}));
   const n = s.entries.length;
   const got = s.entries.map(e => Number(ranks?.[e.teamId]));
-  if (got.some(r => !Number.isInteger(r) || r < 1 || r > n) || new Set(got).size !== n)
-    return duelErr("BAD_RANKS", `Beri setiap pasukan kedudukan 1 hingga ${n}, sekali sahaja.`);
+  // Group-stage match (league): win 3, draw 1, loss 0 — a draw is both ranked 1.
+  const isGroup = s.round.stage === "GROUP";
+  const draw = isGroup && n === 2 && got[0] === 1 && got[1] === 1;
+  if (draw && !g.cfg.allowDraw) return duelErr("NO_DRAW", "Seri tidak dibenarkan — pilih pemenang.");
+  if (!draw && (got.some(r => !Number.isInteger(r) || r < 1 || r > n) || new Set(got).size !== n))
+    return duelErr("BAD_RANKS", n === 2 ? "Pilih pemenang perlawanan." : `Beri setiap pasukan kedudukan 1 hingga ${n}, sekali sahaja.`);
 
   const now = new Date();
   await db.$transaction(async tx => {
@@ -36,7 +40,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       const rank = got[i];
       await tx.duelEntry.update({
         where: { id: e.id },
-        data: { rank, points: pointsFor(rank, n), advanced: !s.round.isFinal && rank <= g.cfg.advance },
+        data: isGroup
+          ? { rank, points: leaguePointsFor(rank, got), advanced: false }
+          : { rank, points: pointsFor(rank, n), advanced: !s.round.isFinal && rank <= g.cfg.advance },
       });
     }
     await tx.duelSession.update({

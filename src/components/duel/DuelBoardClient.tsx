@@ -27,7 +27,7 @@ type SchedSession = { id: string; label: string; arena: number; scheduledAt: str
 type LiveSession = { id: string; label: string; group: string | null; round: string; status: string; scheduledAt: string | null; remainingMs: number; video?: string | null; teams: PubTeam[] };
 type Bracket = {
   key: string; name: string | null; flagUrl: string | null;
-  rounds: { number: number; isFinal: boolean; status: string; sessions: SchedSession[] }[];
+  rounds: { number: number; isFinal: boolean; status: string; title?: string; sessions: SchedSession[] }[];
   finished: boolean;
   standings: (PubTeam & { position: number; total: number })[];
 };
@@ -48,7 +48,7 @@ const store = {
 
 const clock = (ms: number) => { const t = Math.ceil(Math.max(0, ms) / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 const hhmm = (iso: string | null) => iso ? new Date(iso).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kuala_Lumpur" }) : null;
-const roundName = (r: { number: number; isFinal: boolean }) => (r.isFinal ? "Akhir" : `Pusingan ${r.number}`);
+const roundName = (r: { number: number; isFinal: boolean; title?: string }) => r.title ?? (r.isFinal ? "Akhir" : `Pusingan ${r.number}`);
 
 const BG = {
   background: "radial-gradient(ellipse at 20% 0%, #6d28d9 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, #0e7490 0%, transparent 45%), linear-gradient(135deg, #2e1065 0%, #4c1d95 45%, #3b0764 100%)",
@@ -302,8 +302,8 @@ function SessionCard({ s, isFinal, advance, rows }: { s: SchedSession; isFinal: 
   return (
     <div className="relative flex min-h-0 flex-col rounded-[2vh] bg-white/10 pb-[1.4vh] pl-[3.2vw] pr-[1vw] pt-[1.6vh] shadow-xl backdrop-blur-sm">
       <span className="db-exo absolute -left-[0.8vw] -top-[2.2vh] flex h-[8vh] w-[8vh] flex-col items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-teal-500 text-center font-black leading-none text-violet-950 shadow-lg">
-        <span style={{ fontSize: "min(1.5vh, 1.1vw)" }}>{isFinal ? "" : "Sesi"}</span>
-        <span style={{ fontSize: isFinal ? "min(2.2vh, 1.6vw)" : "min(3.6vh, 2.6vw)" }}>{isFinal ? "AKHIR" : s.label.replace(/^Sesi /, "")}</span>
+        <span style={{ fontSize: "min(1.5vh, 1.1vw)" }}>{isFinal ? "" : s.label.startsWith("Perlawanan ") ? "Perl." : "Sesi"}</span>
+        <span style={{ fontSize: isFinal ? "min(2.2vh, 1.6vw)" : "min(3.6vh, 2.6vw)" }}>{isFinal ? "AKHIR" : s.label.replace(/^(Sesi|Perlawanan) /, "")}</span>
       </span>
       <div className="mb-[0.6vh] flex items-center justify-end gap-2 text-white/60" style={{ fontSize: "min(1.7vh, 1.2vw)" }}>
         {s.arena > 0 && <span className="uppercase tracking-wider">Arena {s.arena}</span>}

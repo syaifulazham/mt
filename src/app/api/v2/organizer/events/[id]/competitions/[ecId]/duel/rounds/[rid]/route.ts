@@ -7,7 +7,7 @@ type Params = { params: Promise<{ id: string; ecId: string; rid: string }> };
 async function draftRound(ecId: string, rid: string) {
   return db.duelRound.findFirst({
     where: { id: rid, eventCompetitionId: ecId },
-    select: { id: true, status: true, sessions: { orderBy: { number: "asc" }, select: { id: true, entries: { select: { teamId: true } } } } },
+    select: { id: true, status: true, stage: true, sessions: { orderBy: { number: "asc" }, select: { id: true, entries: { select: { teamId: true } } } } },
   });
 }
 
@@ -27,8 +27,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const after = next.flat().sort();
   if (next.length !== round.sessions.length || before.join() !== after.join())
     return duelErr("MISMATCH", "Susunan tidak sepadan dengan cabutan — muat semula halaman.", 409);
-  if (next.some(s => s.length === 0)) return duelErr("EMPTY_SESSION", "Setiap sesi perlu sekurang-kurangnya satu pasukan.");
-  if (next.some(s => s.length > g.cfg.perSession)) return duelErr("SESSION_FULL", `Maksimum ${g.cfg.perSession} pasukan satu sesi.`);
+  // A draft group stage holds the groups (round-robin matches come on confirm).
+  const isGroup = round.stage === "GROUP";
+  const max = isGroup ? g.cfg.groupSize : g.cfg.perSession;
+  if (next.some(s => s.length < (isGroup ? 2 : 1)))
+    return duelErr("EMPTY_SESSION", isGroup ? "Setiap kumpulan perlu sekurang-kurangnya 2 pasukan." : "Setiap sesi perlu sekurang-kurangnya satu pasukan.");
+  if (next.some(s => s.length > max)) return duelErr("SESSION_FULL", `Maksimum ${max} pasukan satu ${isGroup ? "kumpulan" : "sesi"}.`);
 
   await db.$transaction([
     db.duelEntry.deleteMany({ where: { sessionId: { in: round.sessions.map(s => s.id) } } }),

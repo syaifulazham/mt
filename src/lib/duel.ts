@@ -12,16 +12,35 @@ import type { SharedRankMode } from "@/lib/sharedRank";
 /** NATIONAL: one bracket for everyone. STATE: each state runs its own bracket and standings. */
 export type DuelScope = "NATIONAL" | "STATE";
 
+/**
+ * ELIMINATION: sessions of `perSession`, top `advance` go on, round after round.
+ * LEAGUE (1 vs 1 only): a round-robin group stage, then a seeded knockout of
+ * the top `groupAdvance` of every group.
+ */
+export type DuelFormat = "ELIMINATION" | "LEAGUE";
+
 export type DuelConfig = {
   scope: DuelScope;
+  format: DuelFormat;
   perSession: number;
   advance: number;
+  /** LEAGUE: teams per group, how many of each group reach the knockout, and whether a group match can end level. */
+  groupSize: number;
+  groupAdvance: number;
+  allowDraw: boolean;
   arenas: number;
   durationSec: number;
   breakSec: number;
 };
 
-export const DUEL_DEFAULTS: DuelConfig = { scope: "NATIONAL", perSession: 4, advance: 2, arenas: 2, durationSec: 180, breakSec: 60 };
+export const DUEL_DEFAULTS: DuelConfig = {
+  scope: "NATIONAL", format: "ELIMINATION", perSession: 4, advance: 2,
+  groupSize: 4, groupAdvance: 2, allowDraw: true,
+  arenas: 2, durationSec: 180, breakSec: 60,
+};
+
+/** Group-stage match points. */
+export const LEAGUE_POINTS = { win: 3, draw: 1, loss: 0 } as const;
 
 export type DuelSplit = "even" | "fill";
 
@@ -34,10 +53,16 @@ const int = (v: unknown, min: number, max: number, dflt: number) => {
 export function parseDuelConfig(json: unknown): DuelConfig {
   const o = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
   const perSession = int(o.perSession, 2, 32, DUEL_DEFAULTS.perSession);
+  const groupSize = int(o.groupSize, 3, 16, DUEL_DEFAULTS.groupSize);
   return {
     scope: o.scope === "STATE" ? "STATE" : "NATIONAL",
+    // A league is 1 vs 1 matches; with bigger sessions it falls back to elimination.
+    format: o.format === "LEAGUE" && perSession === 2 ? "LEAGUE" : "ELIMINATION",
     perSession,
     advance: int(o.advance, 1, perSession - 1, Math.min(DUEL_DEFAULTS.advance, perSession - 1)),
+    groupSize,
+    groupAdvance: int(o.groupAdvance, 1, groupSize - 1, Math.min(DUEL_DEFAULTS.groupAdvance, groupSize - 1)),
+    allowDraw: o.allowDraw !== false,
     arenas: int(o.arenas, 1, 20, DUEL_DEFAULTS.arenas),
     durationSec: int(o.durationSec, 10, 4 * 3600, DUEL_DEFAULTS.durationSec),
     breakSec: int(o.breakSec, 0, 3600, DUEL_DEFAULTS.breakSec),
@@ -173,13 +198,19 @@ export function remainingMs(
 }
 
 export type StandingRound = {
-  number: number; isFinal: boolean;
-  sessions: { entries: { teamId: string; rank: number | null; points: number | null }[] }[];
+  number: number; isFinal: boolean; stage?: string;
+  sessions: { pool?: string | null; status?: string; entries: { teamId: string; rank: number | null; points: number | null }[] }[];
 };
+
+export type LeagueRecord = { pool: string; played: number; won: number; drawn: number; lost: number; points: number };
 
 export type Standing = {
   teamId: string; position: number; total: number; reached: number;
   finalRank: number | null; perRound: Record<number, number | null>;
+  /** Rank in each round (knockout: 1 = won the match). */
+  ranks: Record<number, number | null>;
+  /** LEAGUE format: the team's group-stage record. */
+  league?: LeagueRecord;
 };
 
 /**
@@ -188,13 +219,15 @@ export type Standing = {
  * a position.
  */
 export function duelStandings(rounds: StandingRound[], mode: SharedRankMode = "SKIP"): Standing[] {
+  if (rounds.some(r => r.stage === "GROUP")) return leagueStandings(rounds, mode);
   const map = new Map<string, Standing & { lastRank: number | null }>();
   for (const r of [...rounds].sort((a, b) => a.number - b.number)) {
     for (const s of r.sessions) for (const e of s.entries) {
-      const row = map.get(e.teamId) ?? { teamId: e.teamId, position: 0, total: 0, reached: 0, finalRank: null, perRound: {}, lastRank: null };
+      const row = map.get(e.teamId) ?? { teamId: e.teamId, position: 0, total: 0, reached: 0, finalRank: null, perRound: {}, ranks: {}, lastRank: null };
       row.total += e.points ?? 0;
       row.reached = Math.max(row.reached, r.number);
       row.perRound[r.number] = e.points;
+      row.ranks[r.number] = e.rank;
       row.lastRank = e.rank;
       if (r.isFinal) row.finalRank = e.rank;
       map.set(e.teamId, row);
@@ -209,5 +242,224 @@ export function duelStandings(rounds: StandingRound[], mode: SharedRankMode = "S
     r.position = i === 0 ? 1 : cmp(rows[i - 1], r) === 0 ? rows[i - 1].position
       : mode === "DENSE" ? rows[i - 1].position + 1 : i + 1;
   });
-  return rows.map(r => ({ teamId: r.teamId, position: r.position, total: r.total, reached: r.reached, finalRank: r.finalRank, perRound: r.perRound }));
+  return rows.map(r => ({ teamId: r.teamId, position: r.position, total: r.total, reached: r.reached, finalRank: r.finalRank, perRound: r.perRound, ranks: r.ranks }));
+}
+
+/** Positions for rows already sorted by `cmp`: equal rows share, as the event's sharedRankMode says. */
+function assignPositions<T extends { position: number }>(rows: T[], cmp: (a: T, b: T) => number, mode: SharedRankMode) {
+  rows.forEach((r, i) => {
+    r.position = i === 0 ? 1 : cmp(rows[i - 1], r) === 0 ? rows[i - 1].position
+      : mode === "DENSE" ? rows[i - 1].position + 1 : i + 1;
+  });
+}
+
+// ── League: group stage, then knockout ───────────────────────────────────────
+
+/**
+ * Round-robin matchdays (circle method): every pair meets once, and nobody
+ * plays twice on a matchday. Odd groups get one team resting each matchday.
+ */
+export function roundRobin(ids: string[]): [string, string][][] {
+  const list: (string | null)[] = [...ids];
+  if (list.length % 2) list.push(null);
+  const n = list.length, days: [string, string][][] = [];
+  for (let d = 0; d < n - 1; d++) {
+    const day: [string, string][] = [];
+    for (let i = 0; i < n / 2; i++) {
+      const a = list[i], b = list[n - 1 - i];
+      // Alternate sides so the fixed team is not always listed first.
+      if (a && b) day.push(d % 2 && i === 0 ? [b, a] : [a, b]);
+    }
+    days.push(day);
+    list.splice(1, 0, list.pop()!);
+  }
+  return days;
+}
+
+/**
+ * Group matches in playing order: matchday 1 of every group, then matchday 2…
+ * so a team is not on in back-to-back waves and groups progress together.
+ */
+export function leagueFixtures(groups: { label: string; teamIds: string[] }[]) {
+  const days = groups.map(g => roundRobin(g.teamIds));
+  const out: { pool: string; label: string; teamIds: [string, string] }[] = [];
+  const count = new Map<string, number>();
+  for (let d = 0; d < Math.max(0, ...days.map(x => x.length)); d++) {
+    groups.forEach((g, gi) => {
+      for (const m of days[gi][d] ?? []) {
+        const k = (count.get(g.label) ?? 0) + 1;
+        count.set(g.label, k);
+        out.push({ pool: g.label, label: `${g.label}${k}`, teamIds: m });
+      }
+    });
+  }
+  return out;
+}
+
+/** Group-match points from ranks: both 1 = draw; else 1 = win, 2 = loss. */
+export function leaguePointsFor(rank: number, ranks: number[]) {
+  const draw = ranks.length === 2 && ranks[0] === ranks[1];
+  return draw ? LEAGUE_POINTS.draw : rank === 1 ? LEAGUE_POINTS.win : LEAGUE_POINTS.loss;
+}
+
+export type LeagueRow = LeagueRecord & { teamId: string; position: number };
+
+/**
+ * Group tables from the group-stage sessions (one match each, `pool` = group).
+ * Order: points, then wins, then points in the matches between the tied teams;
+ * still equal → shared position.
+ */
+export function leagueTables(group: StandingRound | undefined, mode: SharedRankMode = "SKIP") {
+  const pools = new Map<string, Map<string, LeagueRow>>();
+  const results: { pool: string; a: string; b: string; ra: number; rb: number }[] = [];
+  for (const s of group?.sessions ?? []) {
+    const pool = s.pool ?? "";
+    const rows = pools.get(pool) ?? new Map<string, LeagueRow>();
+    pools.set(pool, rows);
+    for (const e of s.entries) if (!rows.has(e.teamId)) rows.set(e.teamId, { teamId: e.teamId, pool, position: 0, played: 0, won: 0, drawn: 0, lost: 0, points: 0 });
+    const [a, b] = s.entries;
+    if (!a || !b || a.rank == null || b.rank == null) continue;
+    results.push({ pool, a: a.teamId, b: b.teamId, ra: a.rank, rb: b.rank });
+    for (const [me, my, their] of [[a, a.rank, b.rank], [b, b.rank, a.rank]] as const) {
+      const r = rows.get(me.teamId)!;
+      r.played++;
+      if (my === their) { r.drawn++; r.points += LEAGUE_POINTS.draw; }
+      else if (my < their) { r.won++; r.points += LEAGUE_POINTS.win; }
+      else { r.lost++; r.points += LEAGUE_POINTS.loss; }
+    }
+  }
+  return [...pools.entries()].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true })).map(([pool, map]) => {
+    const rows = [...map.values()];
+    const key = (r: LeagueRow) => `${r.points}:${r.won}`;
+    // Head-to-head points among the teams level on points and wins.
+    const h2h = new Map<string, number>();
+    for (const m of results.filter(x => x.pool === pool)) {
+      const ta = map.get(m.a)!, tb = map.get(m.b)!;
+      if (key(ta) !== key(tb)) continue;
+      const pa = m.ra === m.rb ? LEAGUE_POINTS.draw : m.ra < m.rb ? LEAGUE_POINTS.win : 0;
+      const pb = m.ra === m.rb ? LEAGUE_POINTS.draw : m.rb < m.ra ? LEAGUE_POINTS.win : 0;
+      h2h.set(m.a, (h2h.get(m.a) ?? 0) + pa);
+      h2h.set(m.b, (h2h.get(m.b) ?? 0) + pb);
+    }
+    const cmp = (x: LeagueRow, y: LeagueRow) => y.points - x.points || y.won - x.won || (h2h.get(y.teamId) ?? 0) - (h2h.get(x.teamId) ?? 0);
+    rows.sort(cmp);
+    assignPositions(rows, cmp, mode);
+    return { pool, rows, done: (group?.sessions ?? []).filter(s => (s.pool ?? "") === pool).every(s => s.status === "DONE") };
+  });
+}
+
+/**
+ * Who reaches the knockout: the first `perGroup` of every table, plus the
+ * groups where a shared position straddles the cut (to be settled by hand).
+ */
+export function leagueQualifiers(tables: ReturnType<typeof leagueTables>, perGroup: number) {
+  const qualifiers: (LeagueRow & { seed: number })[] = [];
+  const cutoffTies: string[] = [];
+  for (const t of tables) {
+    t.rows.slice(0, perGroup).forEach(r => qualifiers.push({ ...r, seed: 0 }));
+    const last = t.rows[perGroup - 1], next = t.rows[perGroup];
+    if (last && next && last.position === next.position) cutoffTies.push(t.pool);
+  }
+  // Seeds: group winners first (best record first), then runners-up…
+  qualifiers.sort((a, b) => a.position - b.position || b.points - a.points || b.won - a.won || a.pool.localeCompare(b.pool, undefined, { numeric: true }));
+  qualifiers.forEach((q, i) => { q.seed = i + 1; });
+  return { qualifiers, cutoffTies };
+}
+
+/** Seed order of a bracket of `size` (a power of 2): 1 and 2 can only meet in the final. */
+export function bracketOrder(size: number): number[] {
+  let order = [1];
+  while (order.length < size) {
+    const n = order.length * 2;
+    order = order.flatMap(s => [s, n + 1 - s]);
+  }
+  return order;
+}
+
+/**
+ * First knockout round from seeded qualifiers (best first). The bracket is
+ * the next power of 2; the top seeds get the byes (a match of one). Then
+ * same-group pairings are swapped away where another match allows it, since
+ * those two have already met.
+ */
+export function seedKnockout(seeded: { teamId: string; pool: string }[]): string[][] {
+  const q = seeded.length;
+  if (q < 2) return seeded.map(s => [s.teamId]);
+  let size = 2;
+  while (size < q) size *= 2;
+  const order = bracketOrder(size);
+  const matches: { teamId: string; pool: string }[][] = [];
+  for (let i = 0; i < size; i += 2) matches.push([seeded[order[i] - 1], seeded[order[i + 1] - 1]].filter(Boolean));
+  const clash = (m: { pool: string }[]) => m.length === 2 && m[0].pool === m[1].pool;
+  for (let i = 0; i < matches.length; i++) {
+    if (!clash(matches[i])) continue;
+    // Nearest match first, so the bracket halves stay as seeded where possible.
+    const others = matches.map((_, j) => j).filter(j => j !== i && matches[j].length === 2).sort((a, b) => Math.abs(a - i) - Math.abs(b - i));
+    for (const j of others) {
+      const a = [matches[i][0], matches[j][1]], b = [matches[j][0], matches[i][1]];
+      if (!clash(a) && !clash(b)) { matches[i] = a; matches[j] = b; break; }
+    }
+  }
+  return matches.map(m => m.map(t => t.teamId));
+}
+
+/** Next knockout round: winners of matches 1 & 2 meet, 3 & 4… (bracket order). */
+export function nextKnockout(prev: { number: number; entries: { teamId: string; advanced: boolean }[] }[]): string[][] {
+  const winners = [...prev].sort((a, b) => a.number - b.number).map(s => s.entries.find(e => e.advanced)?.teamId).filter((x): x is string => !!x);
+  const out: string[][] = [];
+  for (let i = 0; i < winners.length; i += 2) out.push(winners.slice(i, i + 2));
+  return out;
+}
+
+/** Display name of a round. League knockouts are named by size: Suku Akhir, Separuh Akhir… */
+export function roundTitle(r: { number: number; isFinal: boolean; stage?: string; sessions: unknown[] }, league: boolean): string {
+  if (r.stage === "GROUP") return "Peringkat Kumpulan";
+  if (r.isFinal) return "Akhir";
+  if (!league) return `Pusingan ${r.number}`;
+  const n = r.sessions.length;
+  return n === 2 ? "Separuh Akhir" : n <= 4 ? "Suku Akhir" : `Pusingan ${n * 2} Terbaik`;
+}
+
+/** Whether a round belongs to a league bracket (group stage, or a knockout match "M1"…). */
+export const isLeagueRound = (r: { stage?: string; sessions: { label: string }[] }) =>
+  r.stage === "GROUP" || /^M\d+$/.test(r.sessions[0]?.label ?? "");
+
+/** Display name of a session: "Akhir", "Perlawanan A1" (league) or "Sesi B". */
+export function sessionTitle(r: { isFinal: boolean; stage?: string; sessions: { label: string }[] }, s: { label: string }) {
+  return r.isFinal ? "Akhir" : isLeagueRound(r) ? `Perlawanan ${s.label}` : `Sesi ${s.label}`;
+}
+
+/**
+ * League standings: knockout depth first (furthest round, then rank in the
+ * final); teams out in the same round, and those out in the groups, are
+ * ordered by group-stage points then wins. `total` is the group points.
+ */
+export function leagueStandings(rounds: StandingRound[], mode: SharedRankMode = "SKIP"): Standing[] {
+  const group = rounds.find(r => r.stage === "GROUP");
+  const records = new Map(leagueTables(group, mode).flatMap(t => t.rows.map(r => [r.teamId, r] as const)));
+  type Row = Standing & { league: LeagueRecord };
+  const map = new Map<string, Row>();
+  for (const [teamId, r] of records) {
+    map.set(teamId, {
+      teamId, position: 0, total: r.points, reached: group?.number ?? 1, finalRank: null,
+      perRound: { [group?.number ?? 1]: r.points }, ranks: { [group?.number ?? 1]: r.position },
+      league: { pool: r.pool, played: r.played, won: r.won, drawn: r.drawn, lost: r.lost, points: r.points },
+    });
+  }
+  for (const r of [...rounds].filter(x => x.stage !== "GROUP").sort((a, b) => a.number - b.number)) {
+    for (const s of r.sessions) for (const e of s.entries) {
+      const row = map.get(e.teamId);
+      if (!row) continue;
+      row.reached = Math.max(row.reached, r.number);
+      row.perRound[r.number] = e.points;
+      row.ranks[r.number] = e.rank;
+      if (r.isFinal) row.finalRank = e.rank;
+    }
+  }
+  const nz = (v: number | null) => v ?? Number.MAX_SAFE_INTEGER;
+  const cmp = (a: Row, b: Row) =>
+    b.reached - a.reached || nz(a.finalRank) - nz(b.finalRank) || b.league.points - a.league.points || b.league.won - a.league.won;
+  const rows = [...map.values()].sort(cmp);
+  assignPositions(rows, cmp, mode);
+  return rows;
 }

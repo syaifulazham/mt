@@ -2,7 +2,7 @@ import type { SharedRankMode } from "@/lib/sharedRank";
 import { NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { duelStandings, parseDuelConfig, remainingMs, type DrawTeam } from "@/lib/duel";
+import { duelStandings, leagueQualifiers, leagueTables, parseDuelConfig, remainingMs, roundTitle, type DrawTeam } from "@/lib/duel";
 import { isStreamLive } from "@/lib/cf-stream";
 
 /** Draw, confirm, reopen and config. */
@@ -39,6 +39,8 @@ export type DuelTeam = {
   contingentId: string; contingentName: string; logoUrl: string | null;
   stateId: string | null; stateName: string | null; flagUrl: string | null; countryIso2: string | null;
 };
+/** A pool team: `attended` once its attendance (team or any member) is recorded. */
+export type DuelPoolTeam = DuelTeam & { attended: boolean };
 
 function teamDto(t: TeamRow): DuelTeam {
   const c = t.contingent;
@@ -65,19 +67,27 @@ export async function loadDuelEc(eventId: string, ecId: string) {
   });
 }
 
-/** Teams that attended the event for this competition — the draw pool. */
-export async function duelPool(eventId: string, competitionId: string): Promise<DuelTeam[]> {
+/**
+ * The draw pool: every team registered to the event for this competition,
+ * flagged with whether it has attended. Draws default to attended teams; the
+ * organizer may include the rest to draw before attendance is taken.
+ */
+export async function duelPool(eventId: string, competitionId: string): Promise<DuelPoolTeam[]> {
   const teams = await db.team.findMany({
-    where: {
-      competitionId, status: "ACTIVE",
+    where: { competitionId, status: "ACTIVE", teamEvents: { some: { eventId } } },
+    select: {
+      ...TEAM_SELECT,
       teamEvents: {
-        some: { eventId, OR: [{ attendedAt: { not: null } }, { participantAttendance: { some: {} } }] },
+        where: { eventId }, take: 1,
+        select: { attendedAt: true, _count: { select: { participantAttendance: true } } },
       },
     },
-    select: TEAM_SELECT,
     orderBy: { name: "asc" },
   });
-  return teams.map(teamDto);
+  return teams.map(t => {
+    const te = t.teamEvents[0];
+    return { ...teamDto(t as TeamRow), attended: !!te && (!!te.attendedAt || te._count.participantAttendance > 0) };
+  });
 }
 
 /** Every round of the competition with sessions, entries and team details. */
@@ -93,11 +103,11 @@ export async function loadRounds(ecId: string) {
     },
   });
   return rounds.map(r => ({
-    id: r.id, groupKey: r.groupKey, number: r.number, isFinal: r.isFinal, status: r.status, split: r.split,
+    id: r.id, groupKey: r.groupKey, number: r.number, stage: r.stage, isFinal: r.isFinal, status: r.status, split: r.split,
     noSameContingent: r.noSameContingent, noSameState: r.noSameState,
     startAt: r.startAt, confirmedAt: r.confirmedAt,
     sessions: r.sessions.map(s => ({
-      id: s.id, number: s.number, label: s.label, arena: s.arena, wave: s.wave,
+      id: s.id, number: s.number, label: s.label, pool: s.pool, arena: s.arena, wave: s.wave,
       scheduledAt: s.scheduledAt, status: s.status,
       startedAt: s.startedAt, pausedAt: s.pausedAt, pausedMs: s.pausedMs, endedAt: s.endedAt,
       // Never the publish URL (a secret for the media team's camera).
@@ -155,6 +165,31 @@ export function standingsByGroup(rounds: DuelRoundDto[], mode?: SharedRankMode) 
   return Object.fromEntries(keys.map(k => [k, standingsOf(rounds.filter(r => r.groupKey === k), mode)]));
 }
 
+/**
+ * A bracket's group stage: tables (with teams), the seeded qualifiers, and
+ * groups where a tie straddles the cut. Null without a confirmed group stage.
+ */
+export function leagueOf(rounds: DuelRoundDto[], groupAdvance: number, mode?: SharedRankMode) {
+  const group = rounds.find(r => r.stage === "GROUP");
+  if (!group || group.status === "DRAFT") return null;
+  const teams = new Map<string, DuelTeam>();
+  for (const s of group.sessions) for (const e of s.entries) teams.set(e.teamId, e.team);
+  const tables = leagueTables(group, mode);
+  const { qualifiers, cutoffTies } = leagueQualifiers(tables, groupAdvance);
+  return {
+    done: group.status === "DONE",
+    tables: tables.map(t => ({ ...t, rows: t.rows.map(r => ({ ...r, team: teams.get(r.teamId)! })) })),
+    qualifiers: qualifiers.map(q => q.teamId),
+    cutoffTies,
+  };
+}
+
+/** League data per bracket, keyed by group key. */
+export function leagueByGroup(rounds: DuelRoundDto[], groupAdvance: number, mode?: SharedRankMode) {
+  const keys = [...new Set(rounds.map(r => r.groupKey))];
+  return Object.fromEntries(keys.map(k => [k, leagueOf(rounds.filter(r => r.groupKey === k), groupAdvance, mode)]));
+}
+
 /** Overall phase of a duel competition, for cards (summed over state brackets). */
 export function duelPhase(rounds: DuelRoundDto[]) {
   const keys = [...new Set(rounds.map(r => r.groupKey))];
@@ -177,9 +212,10 @@ function bracketPhase(rounds: DuelRoundDto[]) {
   if (!last) return { label: "Belum dicabut", round: 0, done: 0, total: 0, finished: false };
   const total = last.sessions.length;
   const done = last.sessions.filter(s => s.status === "DONE").length;
-  const name = last.isFinal ? "Akhir" : `Pusingan ${last.number}`;
+  const name = roundTitle(last, rounds.some(r => r.stage === "GROUP"));
   const finished = last.isFinal && last.status === "DONE";
-  const label = finished ? "Selesai" : last.status === "DRAFT" ? `${name} · draf cabutan` : `${name} · ${done}/${total} sesi selesai`;
+  const unit = last.stage === "GROUP" || rounds.some(r => r.stage === "GROUP") ? "perlawanan" : "sesi";
+  const label = finished ? "Selesai" : last.status === "DRAFT" ? `${name} · draf cabutan` : `${name} · ${done}/${total} ${unit} selesai`;
   return { label, round: last.number, done, total, finished };
 }
 
@@ -206,7 +242,7 @@ export async function loadDuelSession(ecId: string, sid: string) {
   return db.duelSession.findFirst({
     where: { id: sid, round: { eventCompetitionId: ecId } },
     include: {
-      round: { select: { id: true, groupKey: true, number: true, status: true, isFinal: true } },
+      round: { select: { id: true, groupKey: true, number: true, stage: true, status: true, isFinal: true } },
       entries: { select: { id: true, teamId: true } },
     },
   });

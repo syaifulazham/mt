@@ -292,24 +292,33 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
   const [f, setF] = useState({
     perSession: String(config.perSession), advance: String(config.advance), arenas: String(config.arenas),
     duration: mmss(config.durationSec), brk: mmss(config.breakSec),
+    groupSize: String(config.groupSize), groupAdvance: String(config.groupAdvance),
   });
+  const [format, setFormat] = useState(config.format);
+  const [allowDraw, setAllowDraw] = useState(config.allowDraw);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
 
+  const league = format === "LEAGUE";
   const next = {
-    scope: config.scope,
-    perSession: Number(f.perSession), advance: Number(f.advance), arenas: Number(f.arenas),
+    scope: config.scope, format,
+    // A league is 1 vs 1: two per session, the winner goes on.
+    perSession: league ? 2 : Number(f.perSession), advance: league ? 1 : Number(f.advance), arenas: Number(f.arenas),
+    groupSize: Number(f.groupSize), groupAdvance: Number(f.groupAdvance), allowDraw,
     durationSec: parseMmss(f.duration), breakSec: parseMmss(f.brk),
   };
   const invalid =
     !(next.perSession >= 2) ? "Peserta/sesi sekurang-kurangnya 2." :
     !(next.advance >= 1 && next.advance < next.perSession) ? "Bilangan mara mesti kurang daripada peserta/sesi." :
+    league && !(next.groupSize >= 3) ? "Pasukan/kumpulan sekurang-kurangnya 3." :
+    league && !(next.groupAdvance >= 1 && next.groupAdvance < next.groupSize) ? "Bilangan layak mesti kurang daripada pasukan/kumpulan." :
     !(next.arenas >= 1) ? "Arena sekurang-kurangnya 1." :
     !(next.durationSec >= 10) ? "Masa duel tidak sah (mm:ss)." :
     !(next.breakSec >= 0) ? "Masa rehat tidak sah (mm:ss)." : "";
   const dirty = next.perSession !== config.perSession || next.advance !== config.advance || next.arenas !== config.arenas
-    || next.durationSec !== config.durationSec || next.breakSec !== config.breakSec;
+    || next.durationSec !== config.durationSec || next.breakSec !== config.breakSec || next.format !== config.format
+    || (league && (next.groupSize !== config.groupSize || next.groupAdvance !== config.groupAdvance || next.allowDraw !== config.allowDraw));
 
   async function save() {
     setSaving(true); setErr("");
@@ -335,9 +344,28 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
 
   return (
     <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium text-zinc-500">Format</span>
+        {([["ELIMINATION", "Kalah mati berperingkat"], ["LEAGUE", "Liga kumpulan → kalah mati (1 lwn 1)"]] as const).map(([k, l]) => (
+          <button key={k} type="button" disabled={!canWrite} onClick={() => setFormat(k)}
+            className={cn("rounded-full border px-3 py-1 text-xs transition",
+              format === k ? "border-rose-400 bg-rose-50 font-semibold text-rose-700" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
+            {l}
+          </button>
+        ))}
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {field("perSession", "Peserta maks / sesi")}
-        {field("advance", "Bilangan mara / sesi")}
+        {league ? (
+          <>
+            {field("groupSize", "Pasukan maks / kumpulan")}
+            {field("groupAdvance", "Layak ke kalah mati / kumpulan")}
+          </>
+        ) : (
+          <>
+            {field("perSession", "Peserta maks / sesi")}
+            {field("advance", "Bilangan mara / sesi")}
+          </>
+        )}
         {field("arenas", "Arena maks serentak")}
         {field("duration", "Masa maks / duel", "mm:ss")}
         {field("brk", "Rehat antara gelombang", "mm:ss")}
@@ -348,8 +376,16 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : saved ? <Check className="h-3 w-3" /> : null} Simpan tetapan duel
           </Button>
         )}
+        {league && (
+          <label className="flex items-center gap-1.5 text-xs text-zinc-600">
+            <input type="checkbox" checked={allowDraw} disabled={!canWrite} onChange={e => setAllowDraw(e.target.checked)} className="accent-rose-600" />
+            Benarkan seri (peringkat kumpulan)
+          </label>
+        )}
         <p className="text-[11px] text-zinc-400">
-          Mata setiap sesi: tempat pertama = n, terakhir = 1. Kedudukan akhir = jumlah mata semua pusingan.
+          {league
+            ? "Setiap pasukan bertemu sekali dalam kumpulannya (menang 3, seri 1, kalah 0). Teratas setiap kumpulan ke kalah mati 1 lwn 1 hingga Akhir."
+            : "Mata setiap sesi: tempat pertama = n, terakhir = 1. Kedudukan akhir = jumlah mata semua pusingan."}
         </p>
       </div>
       {(invalid && dirty ? invalid : err) && <p className="text-xs text-red-600">{invalid && dirty ? invalid : err}</p>}

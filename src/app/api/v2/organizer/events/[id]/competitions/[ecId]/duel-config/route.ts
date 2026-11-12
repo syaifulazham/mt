@@ -27,7 +27,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     data.judgingMethod = body.judgingMethod;
     if (body.judgingMethod === "DUEL" && body.duelConfig === undefined) data.duelConfig = { ...g.cfg, scope };
   }
-  if (body.duelConfig !== undefined) data.duelConfig = { ...parseDuelConfig(body.duelConfig), scope };
+  if (body.duelConfig !== undefined) {
+    const next = parseDuelConfig(body.duelConfig);
+    // The format and group shape decide how rounds are built: frozen once a round is confirmed.
+    if (next.format !== g.cfg.format || (next.format === "LEAGUE" && (next.groupSize !== g.cfg.groupSize || next.groupAdvance !== g.cfg.groupAdvance))) {
+      const confirmed = await db.duelRound.count({ where: { eventCompetitionId: ecId, status: { not: "DRAFT" } } });
+      if (confirmed) return duelErr("DUEL_STARTED", "Cabutan sudah disahkan — format dan saiz kumpulan tidak boleh ditukar.", 409);
+      await db.duelRound.deleteMany({ where: { eventCompetitionId: ecId, status: "DRAFT" } });
+    }
+    data.duelConfig = { ...next, scope };
+  }
 
   const ec = await db.eventCompetition.update({
     where: { id: ecId }, data, select: { judgingMethod: true, duelConfig: true },

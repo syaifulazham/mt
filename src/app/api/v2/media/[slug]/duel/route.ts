@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { authMedia } from "@/lib/media-endpoint";
 import { isStreamLive, streamConfigured } from "@/lib/cf-stream";
-import { parseDuelConfig } from "@/lib/duel";
+import { isLeagueRound, parseDuelConfig, roundTitle, sessionTitle } from "@/lib/duel";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
         where: { status: { not: "DRAFT" } },
         orderBy: [{ groupKey: "asc" }, { number: "desc" }],
         select: {
-          id: true, groupKey: true, number: true, isFinal: true,
+          id: true, groupKey: true, number: true, stage: true, isFinal: true,
           sessions: {
             where: { arena: { gt: 0 } },
             orderBy: [{ wave: "asc" }, { number: "asc" }],
@@ -52,8 +52,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       scope: parseDuelConfig(ec.duelConfig).scope,
       sessions: [...latest.values()].flatMap(r => r.sessions.map(s => ({
         id: s.id,
-        label: r.isFinal ? "Akhir" : `Sesi ${s.label}`,
-        round: r.isFinal ? "Akhir" : `Pusingan ${r.number}`,
+        label: sessionTitle(r, s),
+        round: roundTitle(r, isLeagueRound(r)),
         group: r.groupKey ? stateName.get(r.groupKey) ?? "Tiada negeri" : null,
         arena: s.arena, scheduledAt: s.scheduledAt, status: s.status,
         live: isStreamLive(s, now), replayStatus: s.replayStatus,

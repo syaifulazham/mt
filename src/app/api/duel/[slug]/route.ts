@@ -1,7 +1,7 @@
 import { parseSharedRankMode } from "@/lib/sharedRank";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { parseDuelConfig, remainingMs } from "@/lib/duel";
+import { isLeagueRound, parseDuelConfig, remainingMs, roundTitle, sessionTitle } from "@/lib/duel";
 import { loadRounds, standingsOf, type DuelTeam } from "@/lib/duel-server";
 
 export const dynamic = "force-dynamic";
@@ -61,8 +61,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         return (current?.sessions ?? []).filter(s => s.arena > 0).map(s => ({ s, round: current!, group: g.name }));
       });
       const dto = ({ s, round, group }: (typeof playing)[number]) => ({
-        id: s.id, label: round.isFinal ? "Akhir" : `Sesi ${s.label}`, group,
-        round: round.isFinal ? "Akhir" : `Pusingan ${round.number}`,
+        id: s.id, label: sessionTitle(round, s), group,
+        round: roundTitle(round, isLeagueRound(round)),
         status: s.status, scheduledAt: s.scheduledAt,
         remainingMs: remainingMs(s, cfg.durationSec, now),
         video: s.video,
@@ -84,9 +84,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       groups: groups.map(g => ({
         key: g.key, name: g.name, flagUrl: g.flagUrl,
         rounds: g.rounds.map(r => ({
-          number: r.number, isFinal: r.isFinal, status: r.status,
+          number: r.number, isFinal: r.isFinal, status: r.status, title: roundTitle(r, isLeagueRound(r)),
           sessions: r.sessions.map(s => ({
-            id: s.id, label: r.isFinal ? "Akhir" : `Sesi ${s.label}`, arena: s.arena, scheduledAt: s.scheduledAt, status: s.status,
+            id: s.id, label: sessionTitle(r, s), arena: s.arena, scheduledAt: s.scheduledAt, status: s.status,
             teams: [...s.entries]
               .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99) || a.slot - b.slot)
               .map(e => ({ ...pubTeam(e.team), rank: e.rank, points: e.points, advanced: e.advanced })),

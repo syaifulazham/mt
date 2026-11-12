@@ -2037,6 +2037,9 @@ model DuelRound {
   // (each state runs its own rounds and standings).
   groupKey           String    @default("")
   number             Int
+  // ROUND: elimination sessions. GROUP: a league's group stage — while DRAFT
+  // its sessions are the groups; confirming expands them into 1 vs 1 matches.
+  stage              String    @default("ROUND")
   isFinal            Boolean   @default(false)
   status             String    @default("DRAFT") // DRAFT | CONFIRMED | DONE
   split              String    @default("even") // even | fill
@@ -2060,6 +2063,7 @@ model DuelSession {
   roundId           String
   number            Int
   label             String
+  pool              String? // group letter of a league's group-stage match
   arena             Int       @default(1)
   wave              Int       @default(0)
   scheduledAt       DateTime?

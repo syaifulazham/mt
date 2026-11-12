@@ -13,17 +13,19 @@ import { AvatarPreference, TeamAvatar, preferFor } from "@/components/duel/TeamA
 import { WhepVideo } from "@/components/duel/WhepVideo";
 import { TeamCertCell, useTeamCertCounts } from "@/components/organizer/scoreboard/TeamCertCell";
 import { cn } from "@/lib/utils";
-import { findClashes, remainingMs, sessionSizes, type DuelConfig, type DuelSplit } from "@/lib/duel";
+import { LEAGUE_POINTS, findClashes, isLeagueRound, sessionTitle, remainingMs, roundTitle, sessionSizes, type DuelConfig, type DuelSplit, type LeagueRecord } from "@/lib/duel";
 
 // ── Types (shape of GET …/duel) ───────────────────────────────────────────────
 
 type Team = {
   id: string; name: string; contingentId: string; contingentName: string; logoUrl: string | null;
   stateId: string | null; stateName: string | null; flagUrl: string | null;
+  /** Pool teams only: attendance recorded (team or a member). */
+  attended?: boolean;
 };
 type Entry = { id: string; teamId: string; slot: number; rank: number | null; points: number | null; advanced: boolean; team: Team };
 type Session = {
-  id: string; number: number; label: string; arena: number; wave: number; scheduledAt: string | null;
+  id: string; number: number; label: string; pool: string | null; arena: number; wave: number; scheduledAt: string | null;
   status: string; startedAt: string | null; pausedAt: string | null; pausedMs: number; endedAt: string | null;
   /** WHEP URL while the media team's camera is live. */
   video: string | null;
@@ -32,20 +34,29 @@ type Session = {
   entries: Entry[];
 };
 type Round = {
-  id: string; groupKey: string; number: number; isFinal: boolean; status: string; split: string;
+  id: string; groupKey: string; number: number; stage: string; isFinal: boolean; status: string; split: string;
   noSameContingent: boolean; noSameState: boolean; startAt: string | null; sessions: Session[];
 };
-type Standing = { teamId: string; position: number; total: number; reached: number; finalRank: number | null; perRound: Record<number, number | null>; team: Team };
+type Standing = {
+  teamId: string; position: number; total: number; reached: number; finalRank: number | null;
+  perRound: Record<number, number | null>; ranks: Record<number, number | null>; league?: LeagueRecord; team: Team;
+};
+type LeagueRow = LeagueRecord & { teamId: string; position: number; team: Team };
+type League = { done: boolean; tables: { pool: string; done: boolean; rows: LeagueRow[] }[]; qualifiers: string[]; cutoffTies: string[] };
 type Group = { key: string; name: string | null; flagUrl: string | null; poolCount: number };
 type State = {
   config: DuelConfig; role: string; pool: Team[]; groups: Group[]; rounds: Round[];
   /** Standings per bracket (group key; "" for a national bracket). */
-  standings: Record<string, Standing[]>; serverNow: number;
+  standings: Record<string, Standing[]>;
+  /** Group tables and knockout qualifiers per bracket (LEAGUE format), null before the group stage is confirmed. */
+  league: Record<string, League | null>;
+  serverNow: number;
 };
 
 const POLL_MS = 3_000;
-const roundName = (r: { number: number; isFinal: boolean }) => (r.isFinal ? "Akhir" : `Pusingan ${r.number}`);
-const sessionName = (r: Round, s: Session) => (r.isFinal ? "Akhir" : `Sesi ${s.label}`);
+/** League brackets (group stage + knockout) name rounds by size and sessions "Perlawanan". */
+const roundName = (r: Round) => roundTitle(r, isLeagueRound(r));
+const sessionName = (r: Round, s: Session) => sessionTitle(r, s);
 const clock = (ms: number) => {
   const t = Math.ceil(ms / 1000);
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
@@ -71,6 +82,8 @@ export function DuelManageClient({ event, ecId, competition, role }: {
   const [offset, setOffset] = useState(0);
   const [tab, setTab] = useState<string | null>(null);
   const [groupSel, setGroupSel] = useState<string | null>(null);
+  /** Draw from every registered team, not only those marked present (null = automatic: on when nobody is present yet). */
+  const [includeAbsent, setIncludeAbsent] = useState<boolean | null>(null);
   const [err, setErr] = useState("");
   const pauseRef = useRef(false);
   const canConfig = ["SUPER_ADMIN", "ADMIN"].includes(role);
@@ -117,14 +130,18 @@ export function DuelManageClient({ event, ecId, competition, role }: {
   const gKey = groups.some(g => g.key === groupSel) ? groupSel! : groups[0]?.key ?? "";
   const group = groups.find(g => g.key === gKey);
   const rounds = data.rounds.filter(r => r.groupKey === gKey);
-  const pool = data.pool.filter(t => (isState ? t.stateId ?? "" : "") === gKey);
+  const registered = data.pool.filter(t => (isState ? t.stateId ?? "" : "") === gKey);
+  const attendedCount = registered.filter(t => t.attended).length;
+  const withAbsent = includeAbsent ?? attendedCount === 0;
+  const pool = withAbsent ? registered : registered.filter(t => t.attended);
   const last = rounds[rounds.length - 1];
   const finished = !!last?.isFinal && last.status === "DONE";
   // A new draw is possible when nothing is drawn yet or the last round is done (and not the final).
   const canDraw = !last || (last.status === "DONE" && !last.isFinal);
+  const league = config.format === "LEAGUE" || rounds.some(r => r.stage === "GROUP");
   const tabs = [
     ...rounds.map(r => ({ key: r.id, label: roundName(r), badge: r.status })),
-    ...(canDraw ? [{ key: "draw", label: last ? "Cabut pusingan seterusnya" : "Cabutan", badge: "NEW" }] : []),
+    ...(canDraw ? [{ key: "draw", label: !last ? (league ? "Cabutan kumpulan" : "Cabutan") : league ? "Jana pusingan seterusnya" : "Cabut pusingan seterusnya", badge: "NEW" }] : []),
     { key: "standings", label: "Kedudukan Akhir", badge: finished ? "DONE" : "" },
   ];
   const active = tab && tabs.some(t => t.key === tab) ? tab : canDraw ? "draw" : last?.id ?? "standings";
@@ -147,7 +164,10 @@ export function DuelManageClient({ event, ecId, competition, role }: {
         <div className="flex flex-wrap gap-2 text-[11px]">
           {[
             isState ? "Skop: Negeri" : "Skop: Kebangsaan",
-            `${config.perSession} pasukan/sesi`, `${config.advance} mara/sesi`, `${config.arenas} arena`,
+            ...(config.format === "LEAGUE"
+              ? ["Liga kumpulan → kalah mati", `${config.groupSize} pasukan/kumpulan`, `${config.groupAdvance} layak/kumpulan`]
+              : [`${config.perSession} pasukan/sesi`, `${config.advance} mara/sesi`]),
+            `${config.arenas} arena`,
             `${clock(config.durationSec * 1000)} /duel`,
           ].map(t => <span key={t} className="rounded-full border bg-white px-2.5 py-1 text-zinc-600">{t}</span>)}
           <Link href={`/organizer/events/${event.slug}/manage/judging`} className="rounded-full border border-rose-200 px-2.5 py-1 font-medium text-rose-600 hover:bg-rose-50">Tetapan</Link>
@@ -198,7 +218,25 @@ export function DuelManageClient({ event, ecId, competition, role }: {
         </p>
       )}
 
-      {active === "draw" && (
+      {active === "draw" && !last && registered.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm">
+          <div className="w-auto"><Toggle on={withAbsent} onChange={setIncludeAbsent} label="Termasuk pasukan yang belum hadir" /></div>
+          <p className="flex-1 text-xs text-zinc-500">
+            {attendedCount}/{registered.length} pasukan berdaftar sudah direkodkan hadir.
+            {withAbsent ? " Cabutan dibuat daripada semua pasukan berdaftar — tidak perlu menunggu kehadiran. Nyahtanda pasukan yang tidak datang."
+              : " Hanya pasukan yang hadir dicabut."}
+          </p>
+        </div>
+      )}
+      {active === "draw" && league && (
+        <LeagueDrawPanel
+          key={gKey}
+          base={base} config={config} canConfig={canConfig} groupKey={gKey} groupName={group?.name ?? null}
+          pool={pool} last={last ?? null} league={data.league[gKey] ?? null}
+          act={act} onDrawn={() => setTab(null)}
+        />
+      )}
+      {active === "draw" && !league && (
         <DrawPanel
           key={gKey}
           base={base} config={config} canConfig={canConfig} groupKey={gKey} groupName={group?.name ?? null}
@@ -216,11 +254,11 @@ export function DuelManageClient({ event, ecId, competition, role }: {
         <LiveRound
           base={base} round={round} config={config} offset={offset} role={role}
           canConfig={canConfig} canControl={canControl} act={act}
-          isLast={round.id === last?.id}
+          isLast={round.id === last?.id} league={round.stage === "GROUP" ? data.league[gKey] ?? null : null}
           onNext={() => setTab("draw")}
         />
       )}
-      {active === "standings" && <Standings rounds={rounds} standings={data.standings[gKey] ?? []} finished={finished} event={event} ecId={ecId} />}
+      {active === "standings" && <Standings league={league} rounds={rounds} standings={data.standings[gKey] ?? []} finished={finished} event={event} ecId={ecId} />}
     </div>
     </AvatarPreference>
   );
@@ -263,7 +301,7 @@ function DrawPanel({ base, config, canConfig, groupKey, groupName, entrants, nex
           <Users className="h-4 w-4 text-zinc-400" />
           <p className="flex-1 text-sm font-semibold text-zinc-800">
             {groupName && <span className="mr-1 text-rose-600">{groupName} ·</span>}
-            {isPool ? "Pasukan hadir" : `Pasukan mara ke ${isFinal ? "Akhir" : `Pusingan ${nextNumber}`}`}
+            {isPool ? (entrants.some(t => !t.attended) ? "Pasukan berdaftar" : "Pasukan hadir") : `Pasukan mara ke ${isFinal ? "Akhir" : `Pusingan ${nextNumber}`}`}
             <span className="ml-2 font-normal text-zinc-400">{chosen.length}/{entrants.length} dipilih</span>
           </p>
           {isPool && entrants.length > 0 && (
@@ -279,7 +317,7 @@ function DrawPanel({ base, config, canConfig, groupKey, groupName, entrants, nex
         </div>
         {entrants.length === 0 ? (
           <p className="p-10 text-center text-sm text-zinc-400">
-            {isPool ? "Tiada pasukan yang direkodkan hadir untuk pertandingan ini. Rekod kehadiran di Log Kehadiran dahulu." : "Tiada pasukan yang mara."}
+            {isPool ? "Tiada pasukan berdaftar untuk pertandingan ini." : "Tiada pasukan yang mara."}
           </p>
         ) : (
           <div className="grid max-h-[32rem] gap-1 overflow-y-auto p-2 sm:grid-cols-2">
@@ -296,6 +334,7 @@ function DrawPanel({ base, config, canConfig, groupKey, groupName, entrants, nex
                     <span className="block truncate text-sm font-medium text-zinc-800">{t.name}</span>
                     <span className="block truncate text-[11px] text-zinc-400">{t.contingentName}{t.stateName ? ` · ${t.stateName}` : ""}</span>
                   </span>
+                  {t.attended === false && <span className="ml-auto shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">belum hadir</span>}
                 </label>
               );
             })}
@@ -367,6 +406,11 @@ function DraftRound({ base, round, config, canConfig, act, pauseRef }: {
   const [confirming, setConfirming] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [busy, setBusy] = useState(false);
+  const isGroup = round.stage === "GROUP";
+  const knockout = !isGroup && isLeagueRound(round);
+  const cap = isGroup ? config.groupSize : config.perSession;
+  const minSize = isGroup ? 2 : 1;
+  const matchCount = isGroup ? layout.reduce((a, t) => a + (t.length * (t.length - 1)) / 2, 0) : 0;
 
   const byId = useMemo(() => new Map(layout.flat().map(t => [t.id, { id: t.id, contingentId: t.contingentId, stateId: t.stateId }])), [layout]);
   const clashes = findClashes(layout.map(s => s.map(t => t.id)), byId, round);
@@ -385,7 +429,7 @@ function DraftRound({ base, round, config, canConfig, act, pauseRef }: {
     if (from.s === to.s && (to.i === null || from.i === to.i)) return;
     const next = layout.map(s => [...s]);
     if (to.i === null) {
-      if (next[to.s].length >= config.perSession || next[from.s].length <= 1) return;
+      if (next[to.s].length >= cap || next[from.s].length <= minSize) return;
       const [t] = next[from.s].splice(from.i, 1);
       next[to.s].push(t);
     } else {
@@ -414,14 +458,15 @@ function DraftRound({ base, round, config, canConfig, act, pauseRef }: {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
         <p className="flex-1 text-sm text-amber-900">
-          <b>Draf {roundName(round)}</b> · {layout.flat().length} pasukan dalam {layout.length} sesi.
+          <b>Draf {roundName(round)}</b> · {layout.flat().length} pasukan dalam {layout.length} {isGroup ? "kumpulan" : knockout ? "perlawanan" : "sesi"}.
+          {isGroup && ` ${matchCount} perlawanan liga akan dijana bila disahkan.`}
           {canConfig && " Seret pasukan ke pasukan lain untuk bertukar, atau ke ruang kosong sesi untuk pindah. Di tablet: ketik satu pasukan, kemudian ketik sasaran."}
         </p>
         {canConfig && (
           <>
-            <Button variant="outline" size="sm" onClick={redraw} disabled={busy} className="gap-1.5 bg-white">
+            {!knockout && <Button variant="outline" size="sm" onClick={redraw} disabled={busy} className="gap-1.5 bg-white">
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Shuffle className="h-3.5 w-3.5" />} Cabut semula
-            </Button>
+            </Button>}
             <Button variant="outline" size="sm" onClick={() => setDiscard(true)} className="gap-1.5 bg-white text-red-600">
               <Trash2 className="h-3.5 w-3.5" /> Buang draf
             </Button>
@@ -443,9 +488,9 @@ function DraftRound({ base, round, config, canConfig, act, pauseRef }: {
             onDrop={e => { e.preventDefault(); if (drag) move(drag, { s, i: null }); setDrag(null); }}
             className="relative rounded-2xl border bg-gradient-to-br from-violet-950 to-indigo-900 p-3 pt-6 text-white shadow-sm">
             <span className="absolute -top-3 left-3 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-3 py-0.5 text-xs font-bold text-violet-950 shadow">
-              {round.isFinal ? "AKHIR" : `SESI ${round.sessions[s]?.label}`}
+              {round.isFinal ? "AKHIR" : isGroup ? `KUMPULAN ${round.sessions[s]?.label}` : knockout ? `PERLAWANAN ${round.sessions[s]?.label}` : `SESI ${round.sessions[s]?.label}`}
             </span>
-            <span className="absolute right-3 top-1.5 text-[10px] text-white/50">{teams.length}/{config.perSession}</span>
+            <span className="absolute right-3 top-1.5 text-[10px] text-white/50">{knockout && teams.length === 1 ? "bye" : `${teams.length}/${cap}`}</span>
             <div className="space-y-1.5">
               {teams.map((t, i) => {
                 const isPicked = picked?.s === s && picked.i === i;
@@ -471,7 +516,7 @@ function DraftRound({ base, round, config, canConfig, act, pauseRef }: {
                   </div>
                 );
               })}
-              {canConfig && teams.length < config.perSession && (
+              {canConfig && teams.length < cap && (
                 <button type="button" onClick={() => tap(s, null)}
                   className={cn("w-full rounded-lg border border-dashed border-white/25 py-1.5 text-[11px] text-white/50", picked && "border-cyan-300 text-cyan-200")}>
                   {picked ? "Pindah ke sini" : "Ruang kosong"}
@@ -489,7 +534,7 @@ function DraftRound({ base, round, config, canConfig, act, pauseRef }: {
             <Input type="datetime-local" value={startAt} onChange={e => setStartAt(e.target.value)} className="h-9 w-56" />
           </label>
           <p className="flex-1 text-xs text-zinc-500">
-            Sesi diagih kepada {config.arenas} arena secara bergilir; setiap gelombang {clock(config.durationSec * 1000)} + rehat {clock(config.breakSec * 1000)}.
+            {isGroup ? "Perlawanan" : "Sesi"} diagih kepada {config.arenas} arena secara bergilir; setiap gelombang {clock(config.durationSec * 1000)} + rehat {clock(config.breakSec * 1000)}.
           </p>
           <Button onClick={() => setConfirming(true)} className="gap-2 bg-rose-600 hover:bg-rose-700">
             <Lock className="h-4 w-4" /> Sahkan & jadualkan
@@ -499,7 +544,9 @@ function DraftRound({ base, round, config, canConfig, act, pauseRef }: {
 
       <ConfirmDialog open={confirming} onOpenChange={setConfirming}
         title={`Sahkan ${roundName(round)}?`}
-        description="Susunan sesi akan dikunci dan arena serta masa dijadualkan. Sesi 1 pasukan (bye) terus selesai dan pasukan itu mara."
+        description={isGroup
+          ? `Kumpulan dikunci dan ${matchCount} perlawanan liga (setiap pasukan bertemu sekali dalam kumpulannya) dijadualkan ke arena.`
+          : "Susunan sesi akan dikunci dan arena serta masa dijadualkan. Sesi 1 pasukan (bye) terus selesai dan pasukan itu mara."}
         confirmLabel="Sahkan"
         onConfirm={async () => {
           await act(`${base}/rounds/${round.id}/confirm`, "POST", { startAt: startAt ? new Date(startAt).toISOString() : null });
@@ -524,10 +571,11 @@ function useNow(offset: number, active: boolean) {
   return now;
 }
 
-function LiveRound({ base, round, config, offset, role, canConfig, canControl, act, isLast, onNext }: {
+function LiveRound({ base, round, config, offset, role, canConfig, canControl, act, isLast, onNext, league }: {
   base: string; round: Round; config: DuelConfig; offset: number; role: string;
-  canConfig: boolean; canControl: boolean; act: Act; isLast: boolean; onNext: () => void;
+  canConfig: boolean; canControl: boolean; act: Act; isLast: boolean; onNext: () => void; league: League | null;
 }) {
+  const unit = isLeagueRound(round) ? "perlawanan" : "sesi";
   const running = round.sessions.some(s => s.status === "RUNNING");
   const now = useNow(offset, running);
   const [ranking, setRanking] = useState<Session | null>(null);
@@ -547,11 +595,13 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm">
         <p className="flex-1 text-sm text-zinc-700">
-          <b>{roundName(round)}</b> · {done}/{round.sessions.length} sesi selesai
+          <b>{roundName(round)}</b> · {done}/{round.sessions.length} {unit} selesai
           {round.startAt && <> · mula {timeOf(round.startAt)}</>}
         </p>
         {round.status === "DONE" && isLast && !round.isFinal && canConfig && (
-          <Button size="sm" onClick={onNext} className="gap-1.5 bg-rose-600 hover:bg-rose-700"><Shuffle className="h-3.5 w-3.5" /> Cabut pusingan seterusnya</Button>
+          <Button size="sm" onClick={onNext} className="gap-1.5 bg-rose-600 hover:bg-rose-700">
+            <Shuffle className="h-3.5 w-3.5" /> {round.stage === "GROUP" ? "Jana kalah mati" : isLeagueRound(round) ? "Jana pusingan seterusnya" : "Cabut pusingan seterusnya"}
+          </Button>
         )}
         {round.status === "DONE" && round.isFinal && (
           <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600"><Trophy className="h-4 w-4" /> Pertandingan selesai</span>
@@ -617,11 +667,13 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
         </div>
       )}
 
+      {league && <LeagueTables league={league} advance={config.groupAdvance} />}
+
       <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-zinc-50 text-xs text-zinc-500">
             <tr>
-              <th className="w-24 px-4 py-2 text-left">Sesi</th>
+              <th className="w-24 px-4 py-2 text-left">{unit === "sesi" ? "Sesi" : "Perlawanan"}</th>
               <th className="w-24 px-4 py-2 text-left">Arena</th>
               <th className="w-20 px-4 py-2 text-left">Masa</th>
               <th className="px-4 py-2 text-left">Pasukan (kedudukan · mata)</th>
@@ -650,7 +702,7 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
                         <span key={e.id} className={cn("inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 text-xs",
                           e.advanced ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-zinc-200 text-zinc-700")}>
                           <TeamAvatar flagUrl={e.team.flagUrl} logoUrl={e.team.logoUrl} name={e.team.contingentName} className="h-5 w-5" />
-                          {e.rank != null && <b>#{e.rank}</b>} {e.team.name}
+                          {e.rank != null && <b>{round.stage === "GROUP" ? (s.entries.every(x => x.rank === 1) ? "S" : e.rank === 1 ? "M" : "K") : `#${e.rank}`}</b>} {e.team.name}
                           {e.points != null && <span className="text-zinc-400">· {e.points}m</span>}
                         </span>
                       ))}
@@ -677,7 +729,12 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
         </table>
       </section>
 
-      {ranking && (
+      {ranking && ranking.entries.length === 2 && (
+        <MatchDialog key={ranking.id} session={ranking} round={round} allowDraw={round.stage === "GROUP" && config.allowDraw}
+          onClose={() => setRanking(null)}
+          onSave={async ranks => { const ok = await act(`${base}/sessions/${ranking.id}/ranks`, "POST", { ranks }); if (ok) setRanking(null); }} />
+      )}
+      {ranking && ranking.entries.length !== 2 && (
         <RankDialog key={ranking.id} session={ranking} round={round} advance={config.advance}
           onClose={() => setRanking(null)}
           onSave={async ranks => { const ok = await act(`${base}/sessions/${ranking.id}/ranks`, "POST", { ranks }); if (ok) setRanking(null); }} />
@@ -766,11 +823,14 @@ function RankDialog({ session, round, advance, onClose, onSave }: {
 
 // ── Standings ────────────────────────────────────────────────────────────────
 
-function Standings({ rounds, standings, finished, event, ecId }: {
-  rounds: Round[]; standings: Standing[]; finished: boolean; event: { id: string; slug: string }; ecId: string;
+function Standings({ league, rounds, standings, finished, event, ecId }: {
+  league: boolean; rounds: Round[]; standings: Standing[]; finished: boolean; event: { id: string; slug: string }; ecId: string;
 }) {
   const certCounts = useTeamCertCounts(event.id, ecId);
   const played = rounds.filter(r => r.status !== "DRAFT");
+  if (league && standings.length > 0 && played.length > 0) {
+    return <LeagueStandings rounds={played} standings={standings} finished={finished} certCounts={certCounts} event={event} ecId={ecId} />;
+  }
   if (standings.length === 0 || played.length === 0) {
     return <p className="rounded-xl border border-dashed p-10 text-center text-sm text-zinc-400">Kedudukan dipaparkan selepas cabutan disahkan.</p>;
   }
@@ -814,6 +874,363 @@ function Standings({ rounds, standings, finished, event, ecId }: {
                   <td key={r.id} className="px-2 py-2.5 text-center font-mono text-zinc-600">{s.perRound[r.number] ?? (r.number <= s.reached ? "–" : "")}</td>
                 ))}
                 <td className="px-4 py-2.5 text-right font-mono text-base font-bold text-zinc-900">{s.total}</td>
+                <td className="px-4 py-2.5 text-center">
+                  <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={s.teamId} count={certCounts[s.teamId]} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── League: group draw, knockout generation, tables, match result ─────────────
+
+function LeagueDrawPanel({ base, config, canConfig, groupKey, groupName, pool, last, league, act, onDrawn }: {
+  base: string; config: DuelConfig; canConfig: boolean; groupKey: string; groupName: string | null;
+  pool: Team[]; last: Round | null; league: League | null; act: Act; onDrawn: () => void;
+}) {
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [q, setQ] = useState("");
+  const [noSameContingent, setNoC] = useState(true);
+  const [noSameState, setNoS] = useState(false);
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const post = async (body: object) => {
+    setBusy(true);
+    const j = await act(`${base}/rounds`, "POST", { groupKey, ...body });
+    setBusy(false);
+    if (j) onDrawn();
+  };
+
+  // 1 · Group draw from the attended pool.
+  if (!last) {
+    const chosen = pool.filter(t => !excluded.has(t.id));
+    const sizes = sessionSizes(chosen.length, config.groupSize, "even");
+    const matches = sizes.reduce((a, n) => a + (n * (n - 1)) / 2, 0);
+    const shown = pool.filter(t => !q || `${t.name} ${t.contingentName} ${t.stateName ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+    return (
+      <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
+        <section className="rounded-2xl border bg-white shadow-sm">
+          <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+            <Users className="h-4 w-4 text-zinc-400" />
+            <p className="flex-1 text-sm font-semibold text-zinc-800">
+              {groupName && <span className="mr-1 text-rose-600">{groupName} ·</span>}
+              {pool.some(t => !t.attended) ? "Pasukan berdaftar" : "Pasukan hadir"} <span className="ml-2 font-normal text-zinc-400">{chosen.length}/{pool.length} dipilih</span>
+            </p>
+            {pool.length > 0 && (
+              <>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                  <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Cari…" className="h-8 w-44 pl-7 text-xs" />
+                </div>
+                <button className="text-xs text-violet-600 hover:underline" onClick={() => setExcluded(new Set())}>Pilih semua</button>
+                <button className="text-xs text-zinc-500 hover:underline" onClick={() => setExcluded(new Set(pool.map(t => t.id)))}>Kosongkan</button>
+              </>
+            )}
+          </div>
+          {pool.length === 0 ? (
+            <p className="p-10 text-center text-sm text-zinc-400">Tiada pasukan berdaftar untuk pertandingan ini.</p>
+          ) : (
+            <div className="grid max-h-[32rem] gap-1 overflow-y-auto p-2 sm:grid-cols-2">
+              {shown.map(t => {
+                const on = !excluded.has(t.id);
+                return (
+                  <label key={t.id} className={cn("flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-zinc-50", !on && "opacity-50")}>
+                    <input type="checkbox" checked={on} className="accent-rose-600"
+                      onChange={() => setExcluded(p => { const n = new Set(p); if (on) n.add(t.id); else n.delete(t.id); return n; })} />
+                    <TeamAvatar flagUrl={t.flagUrl} logoUrl={t.logoUrl} name={t.contingentName} className="h-7 w-7" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-zinc-800">{t.name}</span>
+                      <span className="block truncate text-[11px] text-zinc-400">{t.contingentName}{t.stateName ? ` · ${t.stateName}` : ""}</span>
+                    </span>
+                    {t.attended === false && <span className="ml-auto shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">belum hadir</span>}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </section>
+        <section className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold text-zinc-800">Cabutan kumpulan</p>
+          <div className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+            {chosen.length >= 3 ? (
+              <>
+                <b>{sizes.length} kumpulan</b>: {sizes.join(", ")} pasukan · <b>{matches} perlawanan</b> liga.
+                <br />Teratas {config.groupAdvance} setiap kumpulan layak ke kalah mati
+                ({Math.min(chosen.length, sizes.reduce((a, n) => a + Math.min(n, config.groupAdvance), 0))} pasukan).
+              </>
+            ) : "Pilih sekurang-kurangnya 3 pasukan."}
+          </div>
+          <div className="space-y-2">
+            <Toggle on={noSameContingent} onChange={setNoC} label="Elak kontinjen sama dalam satu kumpulan" />
+            {config.scope !== "STATE" && <Toggle on={noSameState} onChange={setNoS} label="Elak negeri sama dalam satu kumpulan" />}
+          </div>
+          <p className="text-[11px] text-zinc-500">
+            Mata liga: menang {LEAGUE_POINTS.win}, {config.allowDraw ? `seri ${LEAGUE_POINTS.draw}, ` : ""}kalah {LEAGUE_POINTS.loss}.
+            Seri mata dipecahkan oleh bilangan menang, kemudian keputusan pertemuan sesama mereka.
+          </p>
+          {canConfig ? (
+            <Button disabled={busy || chosen.length < 3} className="w-full gap-2 bg-rose-600 hover:bg-rose-700"
+              onClick={() => post({ teamIds: chosen.map(t => t.id), noSameContingent, noSameState: config.scope !== "STATE" && noSameState })}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shuffle className="h-4 w-4" />} Cabut kumpulan secara rawak
+            </Button>
+          ) : <p className="text-xs text-zinc-400">Hanya Admin boleh membuat cabutan.</p>}
+          <p className="text-[11px] text-zinc-400">Kumpulan disimpan sebagai draf — tukar pasukan antara kumpulan sebelum mengesahkan.</p>
+        </section>
+      </div>
+    );
+  }
+
+  // 2 · Knockout from the group tables.
+  if (last.stage === "GROUP") {
+    if (!league) return null;
+    const sel = picked ?? new Set(league.qualifiers);
+    const toggle = (id: string) => setPicked(() => { const n = new Set(sel); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    let bracket = 2;
+    while (bracket < sel.size) bracket *= 2;
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm">
+          <p className="flex-1 text-sm text-zinc-700">
+            {groupName && <span className="mr-1 font-semibold text-rose-600">{groupName} ·</span>}
+            <b>{sel.size} pasukan</b> layak ke kalah mati · undian {bracket} tempat
+            {bracket > sel.size && <> · {bracket - sel.size} bye kepada pilihan teratas</>}.
+            Johan kumpulan bertemu naib johan kumpulan lain.
+          </p>
+          {canConfig && (
+            <Button disabled={busy || sel.size < 2} className="gap-2 bg-rose-600 hover:bg-rose-700"
+              onClick={() => post(picked ? { qualifiers: [...sel] } : {})}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Swords className="h-4 w-4" />} Jana kalah mati
+            </Button>
+          )}
+        </div>
+        {league.cutoffTies.length > 0 && (
+          <p className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Seri pada had kelayakan dalam kumpulan {league.cutoffTies.join(", ")}. Tentukan pasukan yang layak (cth. selepas perlawanan penentu) dengan menanda kotak di bawah.
+          </p>
+        )}
+        <LeagueTables league={league} advance={config.groupAdvance} selected={canConfig ? sel : undefined} onToggle={toggle} />
+      </div>
+    );
+  }
+
+  // 3 · Next knockout round: winners in bracket order.
+  const winners = [...last.sessions].sort((a, b) => a.number - b.number).flatMap(s => s.entries.filter(e => e.advanced).map(e => e.team));
+  const nextName = winners.length <= 2 ? "Akhir" : winners.length <= 4 ? "Separuh Akhir" : winners.length <= 8 ? "Suku Akhir" : `Pusingan ${winners.length} Terbaik`;
+  return (
+    <div className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="flex-1 text-sm text-zinc-700">
+          {groupName && <span className="mr-1 font-semibold text-rose-600">{groupName} ·</span>}
+          <b>{winners.length} pemenang</b> ke {nextName}. Pemenang perlawanan 1 bertemu pemenang perlawanan 2, dan seterusnya.
+        </p>
+        {canConfig && (
+          <Button disabled={busy || winners.length < 2} onClick={() => post({})} className="gap-2 bg-rose-600 hover:bg-rose-700">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Swords className="h-4 w-4" />} Jana {nextName}
+          </Button>
+        )}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {Array.from({ length: Math.ceil(winners.length / 2) }, (_, i) => (
+          <div key={i} className="flex items-center gap-2 rounded-xl border bg-zinc-50 px-3 py-2 text-sm">
+            <span className="w-8 text-xs font-bold text-zinc-400">M{i + 1}</span>
+            {winners.slice(i * 2, i * 2 + 2).map((t, j) => (
+              <span key={t.id} className="flex min-w-0 flex-1 items-center gap-1.5">
+                {j === 1 && <span className="text-xs text-zinc-400">lwn</span>}
+                <TeamAvatar flagUrl={t.flagUrl} logoUrl={t.logoUrl} name={t.contingentName} className="h-6 w-6" />
+                <span className="truncate font-medium text-zinc-800">{t.name}</span>
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Group tables; the top `advance` of each are marked as qualifying (or `selected` when picking by hand). */
+function LeagueTables({ league, advance, selected, onToggle }: {
+  league: League; advance: number; selected?: Set<string>; onToggle?: (id: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {league.tables.map(t => (
+        <section key={t.pool} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+          <div className="flex items-center justify-between bg-gradient-to-r from-violet-950 to-indigo-900 px-4 py-2 text-white">
+            <span className="text-sm font-bold">Kumpulan {t.pool}</span>
+            <span className="text-[10px] text-white/60">{t.done ? "Selesai" : "Sedang berjalan"}</span>
+          </div>
+          <table className="w-full text-xs">
+            <thead className="text-zinc-400">
+              <tr>
+                <th className="w-8 px-2 py-1.5 text-left">#</th>
+                <th className="px-2 py-1.5 text-left">Pasukan</th>
+                <th className="w-7 py-1.5 text-center" title="Main">M</th>
+                <th className="w-7 py-1.5 text-center" title="Menang">Mn</th>
+                {league.tables.some(x => x.rows.some(r => r.drawn)) && <th className="w-7 py-1.5 text-center" title="Seri">S</th>}
+                <th className="w-7 py-1.5 text-center" title="Kalah">K</th>
+                <th className="w-10 px-2 py-1.5 text-right">Mata</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {t.rows.map((r, i) => {
+                const q = selected ? selected.has(r.teamId) : i < advance;
+                return (
+                  <tr key={r.teamId} className={cn(q && "bg-emerald-50/70")}>
+                    <td className="px-2 py-1.5">
+                      {selected ? (
+                        <input type="checkbox" checked={q} onChange={() => onToggle?.(r.teamId)} className="accent-emerald-600" />
+                      ) : (
+                        <span className={cn("font-bold", q ? "text-emerald-600" : "text-zinc-400")}>{r.position}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <TeamAvatar flagUrl={r.team.flagUrl} logoUrl={r.team.logoUrl} name={r.team.contingentName} className="h-5 w-5" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-zinc-800">{r.team.name}</span>
+                          <span className="block truncate text-[10px] text-zinc-400">{r.team.contingentName}</span>
+                        </span>
+                      </span>
+                    </td>
+                    <td className="text-center text-zinc-500">{r.played}</td>
+                    <td className="text-center text-zinc-500">{r.won}</td>
+                    {league.tables.some(x => x.rows.some(y => y.drawn)) && <td className="text-center text-zinc-500">{r.drawn}</td>}
+                    <td className="text-center text-zinc-500">{r.lost}</td>
+                    <td className="px-2 text-right font-mono text-sm font-bold text-zinc-900">{r.points}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** 1 vs 1 result: pick the winner (or a draw in the group stage). */
+function MatchDialog({ session, round, allowDraw, onClose, onSave }: {
+  session: Session; round: Round; allowDraw: boolean; onClose: () => void; onSave: (ranks: Record<string, number>) => Promise<void>;
+}) {
+  const [a, b] = [...session.entries].sort((x, y) => x.slot - y.slot);
+  const initial = a.rank == null || b.rank == null ? null : a.rank === b.rank ? "draw" : a.rank < b.rank ? a.teamId : b.teamId;
+  const [pick, setPick] = useState<string | null>(initial);
+  const [saving, setSaving] = useState(false);
+  const isGroup = round.stage === "GROUP";
+  const ranks = pick === "draw" ? { [a.teamId]: 1, [b.teamId]: 1 }
+    : pick ? { [pick]: 1, [pick === a.teamId ? b.teamId : a.teamId]: 2 } : null;
+
+  const side = (e: Entry) => (
+    <button key={e.id} type="button" onClick={() => setPick(e.teamId)}
+      className={cn("flex flex-1 flex-col items-center gap-2 rounded-2xl border-2 p-4 text-center transition",
+        pick === e.teamId ? "border-amber-400 bg-amber-50" : "border-zinc-200 hover:bg-zinc-50")}>
+      <TeamAvatar flagUrl={e.team.flagUrl} logoUrl={e.team.logoUrl} name={e.team.contingentName} className="h-12 w-12" />
+      <span className="text-sm font-bold text-zinc-800">{e.team.name}</span>
+      <span className="text-[11px] text-zinc-400">{e.team.contingentName}</span>
+      {pick === e.teamId && <span className="flex items-center gap-1 text-xs font-bold text-amber-600"><Trophy className="h-3.5 w-3.5" /> Menang</span>}
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div>
+          <p className="text-lg font-bold text-zinc-900">Keputusan · {sessionName(round, session)}</p>
+          <p className="text-xs text-zinc-500">
+            {isGroup
+              ? `Pilih pemenang${allowDraw ? " atau Seri" : ""}. Mata liga: menang ${LEAGUE_POINTS.win}${allowDraw ? `, seri ${LEAGUE_POINTS.draw}` : ""}, kalah ${LEAGUE_POINTS.loss}.`
+              : round.isFinal ? "Pilih juara." : "Pilih pemenang — pemenang mara ke pusingan seterusnya."}
+          </p>
+        </div>
+        <div className="flex items-stretch gap-3">
+          {side(a)}
+          <span className="self-center text-xs font-black text-zinc-300">LWN</span>
+          {side(b)}
+        </div>
+        {allowDraw && (
+          <button type="button" onClick={() => setPick("draw")}
+            className={cn("w-full rounded-xl border-2 py-2 text-sm font-semibold transition",
+              pick === "draw" ? "border-violet-400 bg-violet-50 text-violet-700" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}>
+            Seri
+          </button>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button disabled={!ranks || saving} className="gap-1.5 bg-rose-600 hover:bg-rose-700"
+            onClick={async () => { if (!ranks) return; setSaving(true); await onSave(ranks); setSaving(false); }}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Simpan keputusan
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeagueStandings({ rounds, standings, finished, certCounts, event, ecId }: {
+  rounds: Round[]; standings: Standing[]; finished: boolean; certCounts: Record<string, number>;
+  event: { id: string; slug: string }; ecId: string;
+}) {
+  const ko = rounds.filter(r => r.stage !== "GROUP");
+  return (
+    <div className="space-y-3">
+      <p className="flex items-center gap-2 text-xs text-zinc-500">
+        <Clock className="h-3.5 w-3.5" />
+        {finished ? "Kedudukan muktamad." : "Kedudukan sementara."}
+        {" "}Disusun mengikut peringkat kalah mati yang dicapai (juara, naib johan, separuh akhir…); pasukan yang terkeluar di peringkat sama disusun mengikut mata kumpulan, kemudian bilangan menang.
+      </p>
+      <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-zinc-50 text-xs text-zinc-500">
+            <tr>
+              <th className="w-14 px-4 py-2 text-left">#</th>
+              <th className="px-4 py-2 text-left">Pasukan</th>
+              <th className="w-16 px-2 py-2 text-center">Kump.</th>
+              <th className="w-24 px-2 py-2 text-center">M-S-K</th>
+              <th className="w-16 px-2 py-2 text-center">Mata</th>
+              {ko.map(r => <th key={r.id} className="w-24 px-2 py-2 text-center">{roundName(r)}</th>)}
+              <th className="w-20 px-4 py-2 text-center">Sijil</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {standings.map(s => (
+              <tr key={s.teamId} className={cn(finished && s.position <= 3 && "bg-amber-50/50")}>
+                <td className="px-4 py-2.5">
+                  <span className={cn("inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
+                    s.position === 1 ? "bg-amber-400 text-white" : s.position === 2 ? "bg-zinc-300 text-white" : s.position === 3 ? "bg-orange-300 text-white" : "bg-zinc-100 text-zinc-500")}>
+                    {s.position}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className="flex items-center gap-2">
+                    <TeamAvatar flagUrl={s.team.flagUrl} logoUrl={s.team.logoUrl} name={s.team.contingentName} className="h-7 w-7" />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-zinc-800">{s.team.name}</span>
+                      <span className="block truncate text-[11px] text-zinc-400">{s.team.contingentName}</span>
+                    </span>
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-center font-semibold text-zinc-600">{s.league?.pool ?? "–"}</td>
+                <td className="px-2 py-2.5 text-center font-mono text-xs text-zinc-500">
+                  {s.league ? `${s.league.won}-${s.league.drawn}-${s.league.lost}` : "–"}
+                </td>
+                <td className="px-2 py-2.5 text-center font-mono font-bold text-zinc-900">{s.league?.points ?? "–"}</td>
+                {ko.map(r => {
+                  const rank = s.ranks[r.number];
+                  const inRound = r.number in s.ranks;
+                  return (
+                    <td key={r.id} className="px-2 py-2.5 text-center text-xs">
+                      {!inRound ? "" : rank == null ? <span className="text-zinc-400">…</span>
+                        : rank === 1 ? <span className="font-bold text-emerald-600">{r.isFinal ? "Juara" : "Menang"}</span>
+                        : <span className="text-zinc-400">Kalah</span>}
+                    </td>
+                  );
+                })}
                 <td className="px-4 py-2.5 text-center">
                   <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={s.teamId} count={certCounts[s.teamId]} />
                 </td>

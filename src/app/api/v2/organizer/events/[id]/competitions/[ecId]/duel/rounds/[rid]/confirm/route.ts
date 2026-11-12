@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { scheduleRound } from "@/lib/duel";
+import { leagueFixtures, scheduleRound } from "@/lib/duel";
 import { DUEL_CONFIG_ROLES, duelErr, duelGuard } from "@/lib/duel-server";
 
 type Params = { params: Promise<{ id: string; ecId: string; rid: string }> };
@@ -8,8 +8,11 @@ type Params = { params: Promise<{ id: string; ecId: string; rid: string }> };
 const loadRound = (ecId: string, rid: string) => db.duelRound.findFirst({
   where: { id: rid, eventCompetitionId: ecId },
   select: {
-    id: true, groupKey: true, number: true, status: true, isFinal: true,
-    sessions: { orderBy: { number: "asc" }, select: { id: true, startedAt: true, entries: { select: { id: true } } } },
+    id: true, groupKey: true, number: true, stage: true, status: true, isFinal: true,
+    sessions: {
+      orderBy: { number: "asc" },
+      select: { id: true, label: true, pool: true, startedAt: true, entries: { orderBy: { slot: "asc" }, select: { id: true, teamId: true } } },
+    },
   },
 });
 
@@ -28,14 +31,35 @@ export async function POST(req: NextRequest, { params }: Params) {
   const startAt = body.startAt ? new Date(body.startAt) : null;
   if (startAt && isNaN(startAt.getTime())) return duelErr("INVALID_START", "Masa mula tidak sah.");
 
-  // Byes take no arena slot.
-  const playing = round.sessions.filter(s => s.entries.length > 1);
   // Arenas are shared with the other brackets (STATE scope): queue behind their unfinished sessions.
   const busy = await db.duelSession.groupBy({
     by: ["arena"], _count: true,
     where: { status: { not: "DONE" }, arena: { gt: 0 }, round: { eventCompetitionId: ecId, status: "CONFIRMED", id: { not: rid } } },
   });
   const queued = Array.from({ length: g.cfg.arenas }, (_, i) => busy.find(b => b.arena === i + 1)?._count ?? 0);
+  const confirmedBy = g.session.name || g.session.email;
+
+  if (round.stage === "GROUP") {
+    // The draft's sessions are the groups: replace them with every group's
+    // round-robin matches, matchday by matchday, and schedule those.
+    const matches = leagueFixtures(round.sessions.map(s => ({ label: s.pool ?? s.label, teamIds: s.entries.map(e => e.teamId) })));
+    const slots = scheduleRound(matches.length, g.cfg, startAt, queued);
+    await db.$transaction([
+      db.duelSession.deleteMany({ where: { roundId: rid } }),
+      ...matches.map((m, i) => db.duelSession.create({
+        data: {
+          roundId: rid, number: i + 1, label: m.label, pool: m.pool, ...slots[i], status: "PENDING",
+          entries: { create: m.teamIds.map((teamId, slot) => ({ teamId, slot })) },
+        },
+      })),
+      db.duelRound.update({ where: { id: rid }, data: { status: "CONFIRMED", startAt, confirmedAt: new Date(), confirmedBy } }),
+    ]);
+    console.warn(`[duel] ${confirmedBy} confirmed the group stage of ${ecId} (${matches.length} matches)`);
+    return NextResponse.json({ ok: true, matches: matches.length });
+  }
+
+  // Byes take no arena slot.
+  const playing = round.sessions.filter(s => s.entries.length > 1);
   const slots = scheduleRound(playing.length, g.cfg, startAt, queued);
   const now = new Date();
   const byes = round.sessions.filter(s => s.entries.length === 1);
@@ -48,10 +72,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     ]),
     db.duelRound.update({
       where: { id: rid },
-      data: { status: playing.length ? "CONFIRMED" : "DONE", startAt, confirmedAt: now, confirmedBy: g.session.name || g.session.email },
+      data: { status: playing.length ? "CONFIRMED" : "DONE", startAt, confirmedAt: now, confirmedBy },
     }),
   ]);
-  console.warn(`[duel] ${g.session.name || g.session.email} confirmed round ${round.number} of ${ecId}`);
+  console.warn(`[duel] ${confirmedBy} confirmed round ${round.number} of ${ecId}`);
   return NextResponse.json({ ok: true });
 }
 
@@ -69,6 +93,25 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (later) return duelErr("LATER_ROUND", "Pusingan seterusnya sudah wujud.", 409);
 
   const ids = round.sessions.map(s => s.id);
+  if (round.stage === "GROUP") {
+    // Fold the matches back into the groups they came from.
+    const groups = new Map<string, string[]>();
+    for (const s of round.sessions) {
+      const k = s.pool ?? s.label;
+      const list = groups.get(k) ?? [];
+      for (const e of s.entries) if (!list.includes(e.teamId)) list.push(e.teamId);
+      groups.set(k, list);
+    }
+    const sorted = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+    await db.$transaction([
+      db.duelSession.deleteMany({ where: { roundId: rid } }),
+      ...sorted.map(([label, teamIds], i) => db.duelSession.create({
+        data: { roundId: rid, number: i + 1, label, pool: label, entries: { create: teamIds.map((teamId, slot) => ({ teamId, slot })) } },
+      })),
+      db.duelRound.update({ where: { id: rid }, data: { status: "DRAFT", startAt: null, confirmedAt: null, confirmedBy: null } }),
+    ]);
+    return NextResponse.json({ ok: true });
+  }
   await db.$transaction([
     db.duelSession.updateMany({ where: { id: { in: ids } }, data: { status: "PENDING", scheduledAt: null, startedAt: null, pausedAt: null, pausedMs: 0, endedAt: null } }),
     db.duelEntry.updateMany({ where: { sessionId: { in: ids } }, data: { rank: null, points: null, advanced: false } }),
