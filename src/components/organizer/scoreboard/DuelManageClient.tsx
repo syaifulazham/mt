@@ -8,6 +8,10 @@ import {
 } from "lucide-react";
 import { DuelLinksDialog } from "@/components/organizer/scoreboard/DuelLinksDialog";
 import { TeamMergeDialog } from "@/components/organizer/judging/TeamMergeDialog";
+import { ScorecardForm } from "@/components/duel/ScorecardForm";
+import { QRCodeSVG } from "qrcode.react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { Scorecard, Tally } from "@/lib/duel-scorecard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -27,7 +31,11 @@ type Team = {
   /** A merged state team's registered teams. */
   members?: { id: string; name: string; contingentName: string; logoUrl: string | null }[];
 };
-type Entry = { id: string; teamId: string; slot: number; rank: number | null; points: number | null; advanced: boolean; team: Team };
+type Entry = {
+  id: string; teamId: string; slot: number; rank: number | null; points: number | null; advanced: boolean; team: Team;
+  /** Scorecard marks and their total, when the competition uses a scorecard. */
+  tally?: Tally | null; score?: number | null;
+};
 type Session = {
   id: string; number: number; label: string; pool: string | null; arena: number; wave: number; scheduledAt: string | null;
   status: string; startedAt: string | null; pausedAt: string | null; pausedMs: number; endedAt: string | null;
@@ -648,6 +656,14 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
     return list.find(s => ["RUNNING", "PAUSED", "ENDED"].includes(s.status)) ?? list.find(s => s.status === "PENDING") ?? null;
   };
   const control = (s: Session, action: string, extra?: object) => act(`${base}/sessions/${s.id}/control`, "POST", { action, ...extra });
+  // Arenas whose next session is waiting to start — Mula semua starts them together.
+  const startable = arenas.filter(a => current(a)?.status === "PENDING").length;
+  const [startingAll, setStartingAll] = useState(false);
+  const [cardLink, setCardLink] = useState<{ session: Session; slug: string; passcode: string } | null>(null);
+  async function openScorecard(s: Session) {
+    const j = await act(`${base}/sessions/${s.id}/scorecard-link`, "POST");
+    if (j) setCardLink({ session: s, slug: String(j.routeSlug), passcode: String(j.passcode) });
+  }
 
   return (
     <div className="space-y-5">
@@ -663,6 +679,12 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
         )}
         {round.status === "DONE" && round.isFinal && (
           <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600"><Trophy className="h-4 w-4" /> Pertandingan selesai</span>
+        )}
+        {canControl && round.status === "CONFIRMED" && startable > 1 && (
+          <Button size="sm" disabled={startingAll} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+            onClick={async () => { setStartingAll(true); await act(`${base}/rounds/${round.id}/start-all`, "POST"); setStartingAll(false); }}>
+            {startingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />} Mula semua ({startable} arena)
+          </Button>
         )}
         {role === "SUPER_ADMIN" && !started && isLast && round.status === "CONFIRMED" && (
           <Button size="sm" variant="outline" onClick={() => setReopen(true)} className="gap-1.5"><LockOpen className="h-3.5 w-3.5" /> Buka semula draf</Button>
@@ -715,6 +737,9 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
                         {role === "SUPER_ADMIN" && s.status !== "PENDING" && (
                           <CtlBtn icon={RotateCcw} label="Set semula masa" cls="bg-white/15 hover:bg-white/25" onClick={() => control(s, "reset")} />
                         )}
+                        {config.scorecard.enabled && s.status !== "DONE" && (
+                          <CtlBtn icon={QrCode} label="Kad skor" cls="bg-white/15 hover:bg-white/25" onClick={() => openScorecard(s)} />
+                        )}
                       </div>
                     )}
                   </div>
@@ -762,6 +787,7 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
                           <TeamAvatar flagUrl={e.team.flagUrl} logoUrl={e.team.logoUrl} name={e.team.contingentName} className="h-5 w-5" />
                           {e.rank != null && <b>{round.stage === "GROUP" ? (s.entries.every(x => x.rank === 1) ? "S" : e.rank === 1 ? "M" : "K") : `#${e.rank}`}</b>} {e.team.name}
                           {e.points != null && <span className="text-zinc-400">· {e.points}m</span>}
+                          {e.score != null && <span className="text-violet-500">· skor {e.score}</span>}
                         </span>
                       ))}
                     </div>
@@ -787,12 +813,21 @@ function LiveRound({ base, round, config, offset, role, canConfig, canControl, a
         </table>
       </section>
 
-      {ranking && ranking.entries.length === 2 && (
+      {cardLink && (
+        <ScorecardLinkDialog title={sessionName(round, cardLink.session)} slug={cardLink.slug} passcode={cardLink.passcode} onClose={() => setCardLink(null)} />
+      )}
+      {ranking && config.scorecard.enabled && (
+        <ScorecardDialog key={ranking.id} session={ranking} round={round} card={config.scorecard}
+          allowDraw={round.stage === "GROUP" && config.allowDraw} advance={config.advance}
+          onClose={() => setRanking(null)}
+          onSave={async (ranks, tallies) => { const ok = await act(`${base}/sessions/${ranking.id}/ranks`, "POST", { ranks, tallies }); if (ok) setRanking(null); }} />
+      )}
+      {ranking && !config.scorecard.enabled && ranking.entries.length === 2 && (
         <MatchDialog key={ranking.id} session={ranking} round={round} allowDraw={round.stage === "GROUP" && config.allowDraw}
           onClose={() => setRanking(null)}
           onSave={async ranks => { const ok = await act(`${base}/sessions/${ranking.id}/ranks`, "POST", { ranks }); if (ok) setRanking(null); }} />
       )}
-      {ranking && ranking.entries.length !== 2 && (
+      {ranking && !config.scorecard.enabled && ranking.entries.length !== 2 && (
         <RankDialog key={ranking.id} session={ranking} round={round} advance={config.advance}
           onClose={() => setRanking(null)}
           onSave={async ranks => { const ok = await act(`${base}/sessions/${ranking.id}/ranks`, "POST", { ranks }); if (ok) setRanking(null); }} />
@@ -1175,6 +1210,52 @@ function LeagueTables({ league, advance, selected, onToggle }: {
 }
 
 /** 1 vs 1 result: pick the winner (or a draw in the group stage). */
+/** A duel's scorecard link: QR code of /scorecard/<slug> with its 5-character passcode, for a marshal's phone. */
+function ScorecardLinkDialog({ title, slug, passcode, onClose }: { title: string; slug: string; passcode: string; onClose: () => void }) {
+  const url = `${typeof window !== "undefined" ? window.location.origin : ""}/scorecard/${slug}`;
+  const [copied, setCopied] = useState(false);
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm space-y-4 px-6 pb-6 text-center">
+        <DialogHeader className="px-0 text-left">
+          <DialogTitle>Kad skor · {title}</DialogTitle>
+          <DialogDescription>Imbas untuk menanda kad skor perlawanan ini di telefon, kemudian simpan keputusannya.</DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-center rounded-xl border bg-white p-4"><QRCodeSVG value={url} size={240} level="M" marginSize={1} /></div>
+        <p className="break-all font-mono text-[11px] text-zinc-500">{url}</p>
+        <div className="rounded-xl bg-rose-50 py-3">
+          <p className="text-[11px] uppercase tracking-widest text-rose-500">Kod laluan</p>
+          <p className="font-mono text-4xl font-black tracking-[0.35em] text-rose-900">{passcode}</p>
+        </div>
+        <Button variant="outline" className="w-full gap-1.5" onClick={async () => {
+          try { await navigator.clipboard.writeText(`${url}\nKod laluan: ${passcode}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* blocked */ }
+        }}>
+          {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <QrCode className="h-4 w-4" />} Salin pautan & kod laluan
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** The duel scorecard as a dialog (ScorecardForm). */
+function ScorecardDialog({ session, round, card, allowDraw, advance, onClose, onSave }: {
+  session: Session; round: Round; card: Scorecard; allowDraw: boolean; advance: number;
+  onClose: () => void; onSave: (ranks: Record<string, number>, tallies: Record<string, Tally>) => Promise<void>;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="max-h-[94vh] w-full max-w-5xl space-y-4 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div>
+          <p className="text-lg font-bold text-zinc-900">Kad skor · {sessionName(round, session)}</p>
+          <p className="text-xs text-zinc-500">Tanda mata dan penalti setiap pasukan. Kedudukan mengikut jumlah markah; hilang kelayakan sentiasa di bawah.</p>
+        </div>
+        <ScorecardForm entries={session.entries} card={card} stage={round.stage} isFinal={round.isFinal}
+          allowDraw={allowDraw} advance={advance} onSave={onSave} onCancel={onClose} />
+      </div>
+    </div>
+  );
+}
+
 function MatchDialog({ session, round, allowDraw, onClose, onSave }: {
   session: Session; round: Round; allowDraw: boolean; onClose: () => void; onSave: (ranks: Record<string, number>) => Promise<void>;
 }) {

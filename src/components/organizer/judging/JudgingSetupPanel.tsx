@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Check, Gavel, Loader2, Lock, LockOpen, Plus, Search, Swords, Tag, Users, X } from "lucide-react";
+import { Check, Gavel, Loader2, Lock, LockOpen, Plus, Search, Sparkles, Swords, Tag, Users, X } from "lucide-react";
 import { TeamMergeDialog } from "@/components/organizer/judging/TeamMergeDialog";
+import { JudgingTemplateAiDialog } from "@/components/organizer/judging/JudgingTemplateAiDialog";
+import { DuelScorecardEditor } from "@/components/organizer/judging/DuelScorecardEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -58,6 +60,7 @@ export function JudgingSetupPanel({
   const base = `/api/v2/organizer/events/${eventId}/competitions/${ecId}`;
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
   const isDuel = method === "DUEL";
   const locked = !!resultConfig.configLockedAt;
   const canWrite = canWriteRole && !locked;
@@ -199,8 +202,12 @@ export function JudgingSetupPanel({
       </div>
 
       {isDuel ? (
-        <DuelConfigForm base={base} canWrite={canWrite} config={parseDuelConfig(duelConfig)}
-          onSaved={cfg => onMethodChange("DUEL", cfg)} />
+        <div className="space-y-3">
+          <DuelConfigForm base={base} canWrite={canWrite} config={parseDuelConfig(duelConfig)}
+            onSaved={cfg => onMethodChange("DUEL", cfg)} />
+          <DuelScorecardEditor base={base} canWrite={canWrite} config={parseDuelConfig(duelConfig)}
+            onSaved={cfg => onMethodChange("DUEL", cfg)} />
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-zinc-500 mr-1">Templat</span>
@@ -227,6 +234,16 @@ export function JudgingSetupPanel({
             );
           })}
           {canWrite && <TemplatePicker exclude={templates.map(t => t.id)} busy={busy === "add"} onPick={addTemplate} />}
+          {canWrite && (
+            <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}
+              className="h-6 gap-1 rounded-full border-violet-300 bg-gradient-to-r from-violet-50 to-fuchsia-50 px-2.5 text-xs text-violet-700">
+              <Sparkles className="h-3 w-3" /> Pembantu AI
+            </Button>
+          )}
+          {aiOpen && (
+            <JudgingTemplateAiDialog base={base} competition={competition} onClose={() => setAiOpen(false)}
+              onCreated={t => onTemplatesChange([...templates, t])} />
+          )}
         </div>
       )}
       {resultConfig.resultScope !== "STATE" && (
@@ -402,6 +419,8 @@ function DuelConfigForm({ base, canWrite, config, onSaved }: {
     perSession: league ? 2 : Number(f.perSession), advance: league ? 1 : Number(f.advance), arenas: Number(f.arenas),
     groupSize: Number(f.groupSize), groupAdvance: Number(f.groupAdvance), allowDraw,
     durationSec: parseMmss(f.duration), breakSec: parseMmss(f.brk),
+    // Saved by its own editor; carried so saving these settings keeps it.
+    scorecard: config.scorecard,
   };
   const invalid =
     !(next.perSession >= 2) ? "Peserta/sesi sekurang-kurangnya 2." :

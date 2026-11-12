@@ -2108,6 +2108,7 @@ model DuelSession {
 
   round   DuelRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
   entries DuelEntry[]
+  scorecardLink DuelScorecardLink?
 
   @@index([roundId])
   @@map("duel_sessions")
@@ -2121,6 +2122,9 @@ model DuelEntry {
   rank      Int?
   points    Int?
   advanced  Boolean @default(false)
+  /// Scorecard marks (item id → count / option id) and their total, when the competition uses a scorecard.
+  tally     Json?
+  score     Float?
 
   session DuelSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   team    Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -2217,6 +2221,24 @@ model SpecialAwardWinner {
 
   @@index([awardId])
   @@map("special_award_winners")
+}
+
+/// A duel's scorecard link: /scorecard/<routeSlug> + a 5-character passcode
+/// lets a marshal mark that one session's scorecard on a phone and save its
+/// result (src/app/api/duel-scorecard). One per session, created on demand.
+model DuelScorecardLink {
+  id                 String    @id @default(cuid())
+  sessionId          String    @unique
+  eventCompetitionId String
+  routeSlug          String    @unique
+  passcode           String
+  lastUsedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  session DuelSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([eventCompetitionId])
+  @@map("duel_scorecard_links")
 }
 
 model DuelDisplayEndpoint {

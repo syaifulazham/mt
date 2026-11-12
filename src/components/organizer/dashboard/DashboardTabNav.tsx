@@ -40,10 +40,12 @@ export function DashboardTabNav({ role }: { role?: string }) {
             </Link>
           );
         })}
-        {/* Stats Snapshot is Super Admin only; the notice shows to everyone */}
-        {role === "SUPER_ADMIN" && <StatsSnapshotMenu />}
+        {/* Stats Snapshot is Super Admin only; the snapshot marker shows to everyone */}
+        <div className="ml-auto flex items-center gap-2">
+          <SnapshotNotice />
+          {role === "SUPER_ADMIN" && <StatsSnapshotMenu />}
+        </div>
       </nav>
-      <SnapshotNotice />
     </div>
   );
 }

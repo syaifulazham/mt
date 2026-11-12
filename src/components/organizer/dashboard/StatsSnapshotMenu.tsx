@@ -28,7 +28,7 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return j as T;
 }
 
-/** Notice for every organizer while the dashboard shows a snapshot. */
+/** Marker for every organizer while the dashboard shows a snapshot: an icon, details on hover. */
 export function SnapshotNotice() {
   const [active, setActive] = useState<Snapshot | null>(null);
   useEffect(() => {
@@ -39,13 +39,12 @@ export function SnapshotNotice() {
     return () => { alive = false; window.removeEventListener("dashboard-source-changed", onChange); };
   }, []);
   if (!active) return null;
+  const note = `Data snapshot${active.label ? ` "${active.label}"` : ""} · ${fmtWhen(active.completedAt ?? active.createdAt)} — bukan data langsung`;
   return (
-    <div className="border-b border-amber-200 bg-amber-50">
-      <p className="mx-auto flex max-w-6xl items-center gap-2 px-6 py-2 text-xs text-amber-800">
-        <Database className="h-3.5 w-3.5 shrink-0" />
-        Showing snapshot data{active.label ? ` "${active.label}"` : ""} taken {fmtWhen(active.completedAt ?? active.createdAt)} — not live.
-      </p>
-    </div>
+    <span title={note} aria-label={note} role="img"
+      className="inline-flex h-7 w-7 shrink-0 cursor-help items-center justify-center rounded-full border border-amber-300 bg-amber-50 text-amber-700">
+      <Database className="h-3.5 w-3.5" />
+    </span>
   );
 }
 
@@ -145,7 +144,7 @@ export function StatsSnapshotMenu() {
   return (
     <>
       <button onClick={openModal}
-        className={cn("ml-auto my-2 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+        className={cn("my-2 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
           usingSnapshot ? "border-amber-300 bg-amber-50 text-amber-800" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
         <Camera className="h-3.5 w-3.5" /> Stats Snapshot
       </button>

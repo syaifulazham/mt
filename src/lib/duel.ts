@@ -8,6 +8,7 @@
  * (src/lib/duel-server.ts loads the rows; this file only computes).
  */
 import type { SharedRankMode } from "@/lib/sharedRank";
+import { EMPTY_SCORECARD, parseScorecard, type Scorecard } from "@/lib/duel-scorecard";
 
 /** NATIONAL: one bracket for everyone. STATE: each state runs its own bracket and standings. */
 export type DuelScope = "NATIONAL" | "STATE";
@@ -31,12 +32,15 @@ export type DuelConfig = {
   arenas: number;
   durationSec: number;
   breakSec: number;
+  /** Per-duel scorecard (src/lib/duel-scorecard.ts); when enabled, results are entered on it. */
+  scorecard: Scorecard;
 };
 
 export const DUEL_DEFAULTS: DuelConfig = {
   scope: "NATIONAL", format: "ELIMINATION", perSession: 4, advance: 2,
   groupSize: 4, groupAdvance: 2, allowDraw: true,
   arenas: 2, durationSec: 180, breakSec: 60,
+  scorecard: EMPTY_SCORECARD,
 };
 
 /** Group-stage match points. */
@@ -66,6 +70,7 @@ export function parseDuelConfig(json: unknown): DuelConfig {
     arenas: int(o.arenas, 1, 20, DUEL_DEFAULTS.arenas),
     durationSec: int(o.durationSec, 10, 4 * 3600, DUEL_DEFAULTS.durationSec),
     breakSec: int(o.breakSec, 0, 3600, DUEL_DEFAULTS.breakSec),
+    scorecard: parseScorecard(o.scorecard),
   };
 }
 

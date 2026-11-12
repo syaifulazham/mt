@@ -4,6 +4,8 @@ import * as state from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/d
 import * as rounds from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/duel/rounds/route";
 import * as round from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/duel/rounds/[rid]/route";
 import * as confirm from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/duel/rounds/[rid]/confirm/route";
+import * as startAll from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/duel/rounds/[rid]/start-all/route";
+import * as scorecardLink from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/duel/sessions/[sid]/scorecard-link/route";
 import * as control from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/duel/sessions/[sid]/control/route";
 import * as ranks from "@/app/api/v2/organizer/events/[id]/competitions/[ecId]/duel/sessions/[sid]/ranks/route";
 
@@ -19,6 +21,8 @@ const ROUTES: [RegExp, Mod, string[]][] = [
   [/^duel\/rounds$/, rounds as unknown as Mod, []],
   [/^duel\/rounds\/([\w-]+)$/, round as unknown as Mod, ["rid"]],
   [/^duel\/rounds\/([\w-]+)\/confirm$/, confirm as unknown as Mod, ["rid"]],
+  [/^duel\/rounds\/([\w-]+)\/start-all$/, startAll as unknown as Mod, ["rid"]],
+  [/^duel\/sessions\/([\w-]+)\/scorecard-link$/, scorecardLink as unknown as Mod, ["sid"]],
   [/^duel\/sessions\/([\w-]+)\/control$/, control as unknown as Mod, ["sid"]],
   [/^duel\/sessions\/([\w-]+)\/ranks$/, ranks as unknown as Mod, ["sid"]],
 ];

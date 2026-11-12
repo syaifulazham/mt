@@ -175,6 +175,7 @@ export async function loadRounds(ecId: string) {
       replayUrl: s.replayStatus === "READY" ? s.replayUrl : null,
       entries: s.entries.map(e => ({
         id: e.id, teamId: e.teamId, slot: e.slot, rank: e.rank, points: e.points, advanced: e.advanced,
+        tally: (e.tally ?? null) as Record<string, number | string> | null, score: e.score,
         team: lead.get(e.teamId) ?? teamDto(e.team as TeamRow),
       })),
     })),
