@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { roundTime } from "@/lib/judgingTime";
+import { roundTime, timeScore } from "@/lib/judgingTime";
 import { db } from "@/lib/db";
 import { activeMerges, hiddenMembers } from "@/lib/team-merge-server";
 import { contingentStateId, taskLockMap, teamLocked } from "@/lib/judgingStatus";
@@ -49,18 +49,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (lock.locked)
     return NextResponse.json({ error: "JUDGING_LOCKED", message: lock.message, judging: locks.national, locks }, { status: 423 });
 
+  // TIME: the points come from the time (maxScore at 0 s down to 0 at maxTime), never from the client.
+  const criterion = await db.judgingCriterion.findUnique({ where: { id: criterionId }, select: { type: true, maxScore: true, maxTime: true } });
+  if (!criterion) return NextResponse.json({ error: "CRITERION_NOT_FOUND" }, { status: 404 });
+  const points = criterion.type === "TIME" ? timeScore(criterion, time) : score ?? null;
+
   const saved = await db.judgingScore.upsert({
     where: { judgingTaskId_teamId_criterionId: { judgingTaskId: task.id, teamId, criterionId } },
     create: {
       judgingTaskId: task.id,
       teamId,
       criterionId,
-      score: score ?? null,
+      score: points,
       timeSeconds: time,
       optionIds: optionIds ?? [],
     },
     update: {
-      score: score ?? null,
+      score: points,
       timeSeconds: time,
       optionIds: optionIds ?? [],
     },

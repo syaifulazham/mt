@@ -10,7 +10,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { formatTime, roundTime } from "@/lib/judgingTime";
+import { formatTime, roundTime, timeScore } from "@/lib/judgingTime";
+
+/** Seconds in a TIME draft (minutes + seconds boxes), or null when empty. */
+const draftSeconds = (d: { timeMinutes: number | string; timeSeconds: number | string }, precision: number | null | undefined) => {
+  const m = d.timeMinutes === "" ? 0 : Number(d.timeMinutes);
+  const s = d.timeSeconds === "" ? 0 : Number(d.timeSeconds);
+  return roundTime(m * 60 + s, precision ?? 0) || null;
+};
 import type { TaskJudgingState, TaskLockMap } from "@/lib/judgingStatus";
 
 // ── Types (mirrored from JudgingBoardClient) ───────────────────────────────────
@@ -176,6 +183,12 @@ function CriterionInput({
               <span className="text-xs text-zinc-400">saat</span>
             </div>
           </div>
+          {criterion.maxScore != null && criterion.maxTime != null && (
+            <p className="ml-auto pb-5 text-xs text-zinc-500">
+              Markah: <span className="font-bold text-violet-600">{timeScore(criterion, draftSeconds(draft, criterion.timePrecision)) ?? "—"}</span>
+              <span className="text-zinc-400"> / {criterion.maxScore}</span>
+            </p>
+          )}
         </div>
       )}
 
@@ -367,7 +380,8 @@ export function JudgingTeamClient({ slug, teamId }: { slug: string; teamId: stri
   const criterions = data.template.criterions;
   const totalScore = criterions.reduce((sum, c) => {
     const d = draft[c.id];
-    if (!d || c.type === "TIME") return sum;
+    if (!d) return sum;
+    if (c.type === "TIME") return sum + (timeScore(c, draftSeconds(d, c.timePrecision)) ?? 0);
     if (c.type === "NUMBER") return sum + (d.score === "" ? 0 : Number(d.score));
     return sum + c.options.filter(o => d.optionIds.includes(o.id)).reduce((s, o) => s + o.weight, 0);
   }, 0);

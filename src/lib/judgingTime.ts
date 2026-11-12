@@ -64,3 +64,14 @@ export function formatDuration(sec: number): string {
   const s = (t - m * 60).toFixed(p);
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
+
+/**
+ * Points for a TIME criterion: `maxScore` at 0 s, falling linearly to 0 at
+ * `maxTime` (and 0 beyond it), to 2 decimals — e.g. max 100, maxTime 2.000 s,
+ * 1.020 s → 49. Null when there is no time, or the criterion has no maxScore /
+ * maxTime (then the time only breaks ties).
+ */
+export function timeScore(c: { maxScore: number | null; maxTime: number | null }, sec: number | null | undefined): number | null {
+  if (sec == null || !(sec > 0) || c.maxScore == null || c.maxTime == null || !(c.maxTime > 0)) return null;
+  return Math.round(Math.max(0, c.maxScore * (1 - sec / c.maxTime)) * 100) / 100;
+}

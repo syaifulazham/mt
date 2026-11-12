@@ -56,7 +56,8 @@ const EDU_LABEL: Record<string, string> = {
 function totalScore(criterions: Criterion[], teamScores: ScoreRow[]): number {
   return criterions.reduce((sum, c) => {
     const s = teamScores.find(r => r.criterionId === c.id);
-    if (!s || c.type === "TIME") return sum;
+    // TIME rows carry their points too (maxScore at 0 s down to 0 at maxTime).
+    if (!s) return sum;
     return sum + (s.score ?? 0);
   }, 0);
 }
