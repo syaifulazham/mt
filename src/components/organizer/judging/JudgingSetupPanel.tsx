@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Check, Gavel, Loader2, Lock, LockOpen, Plus, Search, Swords, Tag, Users, X } from "lucide-react";
 import { TeamMergeDialog } from "@/components/organizer/judging/TeamMergeDialog";
@@ -303,6 +304,18 @@ function TemplatePicker({ exclude, busy, onPick }: { exclude: string[]; busy: bo
   const [q, setQ] = useState("");
   const [all, setAll] = useState<SetupTemplate[] | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Drawn on <body> at the button's spot: the competition card clips overflow,
+  // so an in-card dropdown was cut off. Opens upwards when there's no room below.
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const place = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = window.innerHeight - r.bottom;
+    setPos(below >= 340 || below >= r.top
+      ? { left: r.left, top: r.bottom + 6 }
+      : { left: r.left, bottom: window.innerHeight - r.top + 6 });
+  };
 
   useEffect(() => {
     if (!open || all) return;
@@ -312,9 +325,19 @@ function TemplatePicker({ exclude, busy, onPick }: { exclude: string[]; busy: bo
 
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const close = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !panelRef.current?.contains(t)) setOpen(false);
+    };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    // Follow the button when the page scrolls or resizes.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
   }, [open]);
 
   const list = useMemo(() => {
@@ -324,11 +347,12 @@ function TemplatePicker({ exclude, busy, onPick }: { exclude: string[]; busy: bo
 
   return (
     <div className="relative" ref={ref}>
-      <Button size="sm" variant="outline" className="h-6 gap-1 rounded-full border-dashed border-violet-300 px-2.5 text-xs text-violet-600" onClick={() => setOpen(o => !o)} disabled={busy}>
+      <Button size="sm" variant="outline" className="h-6 gap-1 rounded-full border-dashed border-violet-300 px-2.5 text-xs text-violet-600" onClick={() => { if (!open) place(); setOpen(o => !o); }} disabled={busy}>
         {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Tambah templat
       </Button>
-      {open && (
-        <div className="absolute left-0 top-8 z-30 w-80 rounded-xl border bg-white shadow-lg">
+      {open && pos && createPortal(
+        <div ref={panelRef} style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom }}
+          className="z-50 w-80 rounded-xl border bg-white shadow-lg">
           <div className="relative border-b p-2">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
             <Input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Cari nama atau kod…" className="h-8 pl-7 text-xs" />
@@ -344,7 +368,8 @@ function TemplatePicker({ exclude, busy, onPick }: { exclude: string[]; busy: bo
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -5,7 +5,9 @@ import Link from "next/link";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Globe2, School, Users, UserCog, Trophy, Lock, Search,
   CheckCircle2, AlertCircle,
+  FileSpreadsheet,
 } from "lucide-react";
+import { BulkParticipantDialog } from "@/components/organizer/events/BulkParticipantDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -319,6 +321,7 @@ function SchoolPanel({
   const [busy, setBusy]       = useState<string | null>(null);
 
   const [participantForm, setParticipantForm] = useState<Partial<Participant> | null>(null);
+  const [bulkOpen, setBulkOpen]               = useState(false);
   const [trainerForm, setTrainerForm]         = useState<Partial<Trainer> | null>(null);
   const [teamForm, setTeamForm]               = useState<Partial<Team> | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; description: string; run: () => Promise<void> } | null>(null);
@@ -394,7 +397,8 @@ function SchoolPanel({
       <div className="p-4">
         {tab === "participants" && (
           <>
-            <div className="flex justify-end mb-3">
+            <div className="flex justify-end gap-2 mb-3">
+              <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)}><FileSpreadsheet className="h-3.5 w-3.5" /> Daftar pukal</Button>
               <Button size="sm" onClick={() => setParticipantForm({})}><Plus className="h-3.5 w-3.5" /> Tambah peserta</Button>
             </div>
             <Table
@@ -523,6 +527,10 @@ function SchoolPanel({
         )}
       </div>
 
+      {bulkOpen && (
+        <BulkParticipantDialog url={`${base}/participants/bulk`} schoolName={schoolName}
+          onClose={() => setBulkOpen(false)} onDone={() => { void refresh(); }} />
+      )}
       {participantForm && (
         <ParticipantDialog
           initial={participantForm}

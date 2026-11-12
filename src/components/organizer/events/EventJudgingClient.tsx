@@ -5,8 +5,9 @@ import Link from "next/link";
 import {
   ArrowLeft, Gavel, Plus, Trash2, Loader2, Copy, Check,
   Eye, EyeOff, ChevronDown, ChevronRight, Tag, ExternalLink,
-  Lock, LockOpen, Search, X,
+  Lock, LockOpen, Search, X, QrCode,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,6 +110,39 @@ function getSchoolLevels(ec: CompetitionBlock): SchoolLevel[] {
 
 // ── TaskRow ────────────────────────────────────────────────────────────────────
 
+/** A judging task's link as a QR code with its passcode in large type — for judges to scan off the screen. */
+function JudgingQrDialog({ task, url, onClose }: { task: TaskItem; url: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copyBoth() {
+    try {
+      await navigator.clipboard.writeText(`${url}\nKod laluan: ${task.passcode}`);
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked */ }
+  }
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm space-y-4 px-6 pb-6 text-center">
+        <DialogHeader className="px-0 text-left">
+          <DialogTitle>{task.label || "Tugas penghakiman"}</DialogTitle>
+          <p className="text-sm text-zinc-500">{task.judgingTemplate.name} · <span className="font-mono">{task.judgingTemplate.code}</span></p>
+        </DialogHeader>
+        <div className="flex justify-center rounded-xl border bg-white p-4">
+          <QRCodeSVG value={url} size={256} level="M" marginSize={1} />
+        </div>
+        <p className="break-all font-mono text-[11px] text-zinc-500">{url}</p>
+        <div className="rounded-xl bg-violet-50 py-3">
+          <p className="text-[11px] uppercase tracking-widest text-violet-500">Kod laluan</p>
+          <p className="font-mono text-3xl font-black tracking-[0.3em] text-violet-900">{task.passcode}</p>
+        </div>
+        {task.status === "CLOSED" && <p className="text-xs text-amber-700">Tugas ini ditutup — hakim tidak boleh log masuk sehingga dibuka semula.</p>}
+        <Button variant="outline" className="w-full gap-1.5" onClick={copyBoth}>
+          {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />} Salin pautan & kod laluan
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TaskRow({
   task, ecId, eventId, canWrite, isSuperAdmin, onDelete, onStatusChange, onReopened,
 }: {
@@ -137,6 +171,7 @@ function TaskRow({
   const [copiedPass, setCopiedPass] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
   const [toggling,   setToggling]   = useState(false);
+  const [showQr,     setShowQr]     = useState(false);
 
   const judgeUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/judging/${task.routeSlug}`;
 
@@ -198,6 +233,10 @@ function TaskRow({
           <Link href={`/judging/${task.routeSlug}`} target="_blank" className="p-0.5 rounded hover:bg-zinc-200 shrink-0">
             <ExternalLink className="h-3.5 w-3.5 text-zinc-400" />
           </Link>
+          <button onClick={() => setShowQr(true)} title="Kod QR & kod laluan" className="p-0.5 rounded hover:bg-zinc-200 shrink-0">
+            <QrCode className="h-3.5 w-3.5 text-violet-500" />
+          </button>
+          {showQr && <JudgingQrDialog task={task} url={judgeUrl} onClose={() => setShowQr(false)} />}
         </div>
       </td>
       <td className="px-4 py-3">

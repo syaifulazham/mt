@@ -173,13 +173,15 @@ export function DuelManageClient({ event, ecId, competition, role, link }: {
           </Link>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-900">
-            <Swords className="h-5 w-5 text-rose-500" />
-            <span className="font-mono text-zinc-400">{competition.code}</span> {competition.name}
+          <h1 className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xl font-bold leading-tight text-zinc-900">
+            <Swords className="h-5 w-5 shrink-0 self-center text-rose-500" />
+            <span className="font-mono text-zinc-400">{competition.code}</span>
+            <span>{competition.name}</span>
           </h1>
-          <p className="text-sm text-zinc-500">{event.name}</p>
+          <p className="mt-0.5 text-sm text-zinc-500">{event.name}</p>
         </div>
-        <div className="flex flex-wrap gap-2 text-[11px]">
+        {/* Its own row under the title, so the title never squeezes. */}
+        <div className="flex w-full flex-wrap gap-2 text-[11px]">
           {[
             isState ? "Skop: Negeri" : "Skop: Kebangsaan",
             ...(config.format === "LEAGUE"

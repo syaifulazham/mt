@@ -3,12 +3,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft, Check, Copy, ExternalLink, Gavel, Loader2, Lock, MonitorPlay, Plus, Swords, Trash2, Trophy, Users,
+  ArrowLeft, Check, Copy, ExternalLink, Gavel, Loader2, Lock, MonitorPlay, Plus, Search, Swords, Trash2, Trophy, Users, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
+import { wildcardMatcher } from "@/lib/wildcardFilter";
 
 export type ScoreboardCard = {
   id: string; code: string; name: string; participationType: string;
@@ -30,6 +31,11 @@ export function ScoreboardClient({ event, cards, canManageDisplays }: {
   canManageDisplays: boolean;
 }) {
   const duels = cards.filter(c => c.method === "DUEL");
+  // Plain text matches anywhere in the code or name; with * or ? it is a
+  // wildcard over the whole code, name or "code name" (e.g. 4.*, *Robot*, ?.1K).
+  const [filter, setFilter] = useState("");
+  const matches = wildcardMatcher(filter);
+  const shown = cards.filter(c => matches(c.code) || matches(c.name) || matches(`${c.code} ${c.name}`));
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <div className="flex items-start gap-4">
@@ -47,11 +53,31 @@ export function ScoreboardClient({ event, cards, canManageDisplays }: {
         </Link>
       </div>
 
+      {cards.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <input value={filter} onChange={e => setFilter(e.target.value)}
+              placeholder="Tapis kod atau nama pertandingan… (cth. 4.*, *Robot*, ?.1K)"
+              title="Teks biasa sepadan di mana-mana. * = sebarang aksara, ? = satu aksara."
+              className="w-full rounded-lg border bg-white py-2 pl-9 pr-8 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+            {filter && (
+              <button onClick={() => setFilter("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600" title="Kosongkan">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {filter && <span className="text-xs text-zinc-500">{shown.length} daripada {cards.length} pertandingan</span>}
+        </div>
+      )}
+
       {cards.length === 0 ? (
         <p className="rounded-xl border border-dashed p-10 text-center text-sm text-zinc-400">Tiada pertandingan dalam acara ini.</p>
+      ) : shown.length === 0 ? (
+        <p className="rounded-xl border border-dashed p-10 text-center text-sm text-zinc-400">Tiada pertandingan sepadan dengan “{filter}”.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map(c => <CompetitionTile key={c.id} card={c} slug={event.slug} />)}
+          {shown.map(c => <CompetitionTile key={c.id} card={c} slug={event.slug} />)}
         </div>
       )}
 
