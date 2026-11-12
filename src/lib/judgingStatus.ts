@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { hiddenMembers, mergesByEc } from "@/lib/team-merge-server";
 import {
   HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME, isForeignCountry,
 } from "@/lib/countries";
@@ -414,13 +415,16 @@ export async function eventJudgingProgress(eventId: string) {
       SELECT DISTINCT "judgingTaskId" AS "taskId", "teamId" AS "unitId"
       FROM judging_scores WHERE "judgingTaskId" IN (${Prisma.join(taskIds)})`,
   ]);
+  // Teams merged into a state team are judged under its lead: not counted apart.
+  const merges = await mergesByEc(ecs.map(ec => ec.id));
   return buildProgress("event", ecs.map((ec) => {
     const ids = new Set(ec.judgingTasks.map(t => t.id));
+    const hidden = hiddenMembers(merges.get(ec.id));
     return {
       id: ec.id,
       lifecycle: ec,
       tasks: ec.judgingTasks,
-      units: teams.filter(t => t.competitionId === ec.competitionId).map(t => ({ unitId: t.teamId, stateId: t.stateId })),
+      units: teams.filter(t => t.competitionId === ec.competitionId && !hidden.has(t.teamId)).map(t => ({ unitId: t.teamId, stateId: t.stateId })),
       scored: scored.filter(x => ids.has(x.taskId)),
     };
   }));

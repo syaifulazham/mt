@@ -10,12 +10,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const g = await duelGuard(id, ecId);
   if ("res" in g) return g.res;
   const { ec, cfg, session } = g;
-  const [pool, rounds] = await Promise.all([duelPool(ec.eventId, ec.competitionId), loadRounds(ec.id)]);
+  const [pool, rounds] = await Promise.all([duelPool(ec.eventId, ec.competitionId, ec.id), loadRounds(ec.id)]);
   const now = Date.now();
   const mode = parseSharedRankMode(ec.event.sharedRankMode);
   return NextResponse.json({
     ec: { id: ec.id, judgingMethod: ec.judgingMethod, competition: ec.competition, event: ec.event },
     config: cfg,
+    // Merged state teams (Penghakiman → Gabungan negeri); national brackets only.
+    merge: { enabled: ec.mergeByState && cfg.scope !== "STATE", max: ec.mergeMax },
     role: session.role,
     pool,
     groups: duelGroups(cfg.scope, pool, rounds),

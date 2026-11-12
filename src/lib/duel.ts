@@ -69,6 +69,7 @@ export function parseDuelConfig(json: unknown): DuelConfig {
   };
 }
 
+
 /** Session sizes for n teams: "even" 13/4 → 4,3,3,3; "fill" 13/4 → 4,4,4,1. */
 export function sessionSizes(n: number, perSession: number, split: DuelSplit): number[] {
   if (n <= 0) return [];

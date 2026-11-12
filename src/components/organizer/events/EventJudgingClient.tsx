@@ -60,6 +60,9 @@ type CompetitionBlock = JudgingState & {
   /** "SCORE" or "DUEL" (src/lib/duel.ts). */
   judgingMethod: string;
   duelConfig: unknown;
+  /** Merged state teams (src/lib/team-merge-server.ts). */
+  mergeByState: boolean;
+  mergeMax: number;
   /** Effective result scope (src/lib/resultScope.ts). */
   resultScope: ResultScope;
   /** Judging setup frozen while set. */
@@ -346,6 +349,9 @@ function CompetitionCard({
             templateTaskCount={Object.fromEntries(tasksByTemplate.map(({ template, tasks }) => [template.id, tasks.length]))}
             onTemplatesChange={templates => onSetupChanged(ec.id, { judgingTemplates: templates.map(judgingTemplate => ({ judgingTemplate })) })}
             onMethodChange={(judgingMethod: string, duelConfig: DuelConfig) => onSetupChanged(ec.id, { judgingMethod, duelConfig })}
+            merge={{ mergeByState: ec.mergeByState, mergeMax: ec.mergeMax }}
+            onMergeChange={m => onSetupChanged(ec.id, m)}
+            competition={{ name: ec.competition.name, code: ec.competition.code }}
           />
           {ec.judgingTemplates.length === 0 ? (
             ec.judgingMethod !== "DUEL" && (

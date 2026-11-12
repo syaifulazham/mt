@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle, ArrowLeft, Check, Clock, Flag, Loader2, Lock, LockOpen, Pause, Play, RotateCcw, Search,
-  Shuffle, Square, Swords, Trash2, Trophy, Users,
+  Shuffle, Square, Swords, Trash2, Trophy, Users, QrCode,
 } from "lucide-react";
+import { DuelLinksDialog } from "@/components/organizer/scoreboard/DuelLinksDialog";
+import { TeamMergeDialog } from "@/components/organizer/judging/TeamMergeDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -22,6 +24,8 @@ type Team = {
   stateId: string | null; stateName: string | null; flagUrl: string | null;
   /** Pool teams only: attendance recorded (team or a member). */
   attended?: boolean;
+  /** A merged state team's registered teams. */
+  members?: { id: string; name: string; contingentName: string; logoUrl: string | null }[];
 };
 type Entry = { id: string; teamId: string; slot: number; rank: number | null; points: number | null; advanced: boolean; team: Team };
 type Session = {
@@ -50,6 +54,8 @@ type State = {
   standings: Record<string, Standing[]>;
   /** Group tables and knockout qualifiers per bracket (LEAGUE format), null before the group stage is confirmed. */
   league: Record<string, League | null>;
+  /** Merged state teams in force (the pool and entries already show them). */
+  merge?: { enabled: boolean; max: number };
   serverNow: number;
 };
 
@@ -74,10 +80,19 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-export function DuelManageClient({ event, ecId, competition, role }: {
+export function DuelManageClient({ event, ecId, competition, role, link }: {
   event: { id: string; name: string; slug: string }; ecId: string; competition: { name: string; code: string }; role: string;
+  /** Replica through a duel control link (/duel-control/<slug>): its API and passcode; organizer-only parts are hidden. */
+  link?: { slug: string; passcode: string; label: string | null; onLock: () => void };
 }) {
-  const base = `/api/v2/organizer/events/${event.id}/competitions/${ecId}/duel`;
+  const base = link ? `/api/duel-control/${link.slug}/duel` : `/api/v2/organizer/events/${event.id}/competitions/${ecId}/duel`;
+  const passcode = link?.passcode;
+  const authHeaders = useMemo((): Record<string, string> => (passcode ? { "x-duel-passcode": passcode } : {}), [passcode]);
+  // Latest lock callback without restarting the poll when the parent re-renders.
+  const lockRef = useRef(link?.onLock);
+  useEffect(() => { lockRef.current = link?.onLock; });
+  const [linksOpen, setLinksOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [data, setData] = useState<State | null>(null);
   const [offset, setOffset] = useState(0);
   const [tab, setTab] = useState<string | null>(null);
@@ -91,13 +106,14 @@ export function DuelManageClient({ event, ecId, competition, role }: {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(base, { cache: "no-store" });
+      const res = await fetch(base, { cache: "no-store", headers: authHeaders });
+      if (lockRef.current && (res.status === 403 || res.status === 404)) { lockRef.current(); return; }
       if (!res.ok) return;
       const j: State = await res.json();
       setOffset(j.serverNow - Date.now());
       setData(j);
     } catch { /* keep the last good state */ }
-  }, [base]);
+  }, [base, authHeaders]);
 
   useEffect(() => {
     let stop = false, timer: ReturnType<typeof setTimeout>;
@@ -113,13 +129,13 @@ export function DuelManageClient({ event, ecId, competition, role }: {
   const act = useCallback(async (url: string, method: string, body?: unknown) => {
     setErr("");
     const res = await fetch(url, {
-      method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body),
+      method, headers: { "Content-Type": "application/json", ...authHeaders }, body: body === undefined ? undefined : JSON.stringify(body),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) { setErr(j.message ?? j.error ?? "Gagal"); await load(); return null; }
     await load();
     return j;
-  }, [load]);
+  }, [load, authHeaders]);
 
   if (!data) {
     return <div className="p-10 text-center text-sm text-zinc-400"><Loader2 className="mr-1 inline h-4 w-4 animate-spin" /> Memuatkan…</div>;
@@ -151,9 +167,11 @@ export function DuelManageClient({ event, ecId, competition, role }: {
     <AvatarPreference value={preferFor(config.scope)}>
     <div className="mx-auto max-w-7xl space-y-5 p-6">
       <div className="flex flex-wrap items-start gap-4">
-        <Link href={`/organizer/events/${event.slug}/manage/scoreboard`} className="mt-1 flex shrink-0 items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700">
-          <ArrowLeft className="h-3.5 w-3.5" /> Scoreboard
-        </Link>
+        {!link && (
+          <Link href={`/organizer/events/${event.slug}/manage/scoreboard`} className="mt-1 flex shrink-0 items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700">
+            <ArrowLeft className="h-3.5 w-3.5" /> Scoreboard
+          </Link>
+        )}
         <div className="min-w-0 flex-1">
           <h1 className="flex items-center gap-2 text-xl font-bold text-zinc-900">
             <Swords className="h-5 w-5 text-rose-500" />
@@ -167,10 +185,32 @@ export function DuelManageClient({ event, ecId, competition, role }: {
             ...(config.format === "LEAGUE"
               ? ["Liga kumpulan → kalah mati", `${config.groupSize} pasukan/kumpulan`, `${config.groupAdvance} layak/kumpulan`]
               : [`${config.perSession} pasukan/sesi`, `${config.advance} mara/sesi`]),
+            ...(data.merge?.enabled ? [`Gabungan negeri · maks ${data.merge.max}`] : []),
             `${config.arenas} arena`,
             `${clock(config.durationSec * 1000)} /duel`,
           ].map(t => <span key={t} className="rounded-full border bg-white px-2.5 py-1 text-zinc-600">{t}</span>)}
-          <Link href={`/organizer/events/${event.slug}/manage/judging`} className="rounded-full border border-rose-200 px-2.5 py-1 font-medium text-rose-600 hover:bg-rose-50">Tetapan</Link>
+          {link ? (
+            <>
+              <span className="rounded-full bg-violet-100 px-2.5 py-1 font-medium text-violet-700">
+                {link.label || "Pautan kawalan"} · {canConfig ? "akses penuh" : "kawalan arena"}
+              </span>
+              <button onClick={link.onLock} className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-zinc-600 hover:bg-zinc-50"><Lock className="h-3 w-3" /> Kunci</button>
+            </>
+          ) : (
+            <>
+              {canConfig && data.merge?.enabled && (
+                <button onClick={() => setMergeOpen(true)} className="flex items-center gap-1 rounded-full border border-violet-200 px-2.5 py-1 font-medium text-violet-700 hover:bg-violet-50">
+                  <Users className="h-3 w-3" /> Gabungan negeri
+                </button>
+              )}
+              {canConfig && (
+                <button onClick={() => setLinksOpen(true)} className="flex items-center gap-1 rounded-full border border-violet-200 px-2.5 py-1 font-medium text-violet-700 hover:bg-violet-50">
+                  <QrCode className="h-3 w-3" /> Pautan kawalan
+                </button>
+              )}
+              <Link href={`/organizer/events/${event.slug}/manage/judging`} className="rounded-full border border-rose-200 px-2.5 py-1 font-medium text-rose-600 hover:bg-rose-50">Tetapan</Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -218,6 +258,17 @@ export function DuelManageClient({ event, ecId, competition, role }: {
         </p>
       )}
 
+      {active === "draw" && !last && data.merge?.enabled && !link && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3">
+          <Users className="h-4 w-4 text-violet-600" />
+          <p className="flex-1 text-xs text-violet-900">
+            Gabungan negeri aktif — cabutan menggunakan pasukan gabungan (cth. JOHOR A).{" "}
+            {registered.some(t => t.members) ? `${registered.filter(t => t.members).length} gabungan` : "Belum ada gabungan disimpan"}
+            {registered.some(t => !t.members) ? ` · ${registered.filter(t => !t.members).length} pasukan tidak digabung.` : "."}
+          </p>
+          {canConfig && <Button size="sm" variant="outline" className="h-8 border-violet-300 bg-white" onClick={() => setMergeOpen(true)}>Susun gabungan</Button>}
+        </div>
+      )}
       {active === "draw" && !last && registered.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm">
           <div className="w-auto"><Toggle on={withAbsent} onChange={setIncludeAbsent} label="Termasuk pasukan yang belum hadir" /></div>
@@ -258,7 +309,12 @@ export function DuelManageClient({ event, ecId, competition, role }: {
           onNext={() => setTab("draw")}
         />
       )}
-      {active === "standings" && <Standings league={league} rounds={rounds} standings={data.standings[gKey] ?? []} finished={finished} event={event} ecId={ecId} />}
+      {mergeOpen && (
+        <TeamMergeDialog apiBase={`/api/v2/organizer/events/${event.id}/competitions/${ecId}/merges`} competition={competition}
+          onClose={() => setMergeOpen(false)} onSaved={load} />
+      )}
+      {linksOpen && <DuelLinksDialog apiBase={`/api/v2/organizer/events/${event.id}/competitions/${ecId}/duel-links`} competition={competition} onClose={() => setLinksOpen(false)} />}
+      {active === "standings" && <Standings certs={!link} league={league} rounds={rounds} standings={data.standings[gKey] ?? []} finished={finished} event={event} ecId={ecId} />}
     </div>
     </AvatarPreference>
   );
@@ -823,13 +879,13 @@ function RankDialog({ session, round, advance, onClose, onSave }: {
 
 // ── Standings ────────────────────────────────────────────────────────────────
 
-function Standings({ league, rounds, standings, finished, event, ecId }: {
-  league: boolean; rounds: Round[]; standings: Standing[]; finished: boolean; event: { id: string; slug: string }; ecId: string;
+function Standings({ certs, league, rounds, standings, finished, event, ecId }: {
+  certs: boolean; league: boolean; rounds: Round[]; standings: Standing[]; finished: boolean; event: { id: string; slug: string }; ecId: string;
 }) {
-  const certCounts = useTeamCertCounts(event.id, ecId);
+  const certCounts = useTeamCertCounts(certs ? event.id : "", certs ? ecId : "");
   const played = rounds.filter(r => r.status !== "DRAFT");
   if (league && standings.length > 0 && played.length > 0) {
-    return <LeagueStandings rounds={played} standings={standings} finished={finished} certCounts={certCounts} event={event} ecId={ecId} />;
+    return <LeagueStandings certs={certs} rounds={played} standings={standings} finished={finished} certCounts={certCounts} event={event} ecId={ecId} />;
   }
   if (standings.length === 0 || played.length === 0) {
     return <p className="rounded-xl border border-dashed p-10 text-center text-sm text-zinc-400">Kedudukan dipaparkan selepas cabutan disahkan.</p>;
@@ -849,7 +905,7 @@ function Standings({ league, rounds, standings, finished, event, ecId }: {
               <th className="px-4 py-2 text-left">Pasukan</th>
               {played.map(r => <th key={r.id} className="w-20 px-2 py-2 text-center">{r.isFinal ? "Akhir" : `P${r.number}`}</th>)}
               <th className="w-20 px-4 py-2 text-right">Jumlah</th>
-              <th className="w-20 px-4 py-2 text-center">Sijil</th>
+              {certs && <th className="w-20 px-4 py-2 text-center">Sijil</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -874,9 +930,11 @@ function Standings({ league, rounds, standings, finished, event, ecId }: {
                   <td key={r.id} className="px-2 py-2.5 text-center font-mono text-zinc-600">{s.perRound[r.number] ?? (r.number <= s.reached ? "–" : "")}</td>
                 ))}
                 <td className="px-4 py-2.5 text-right font-mono text-base font-bold text-zinc-900">{s.total}</td>
-                <td className="px-4 py-2.5 text-center">
-                  <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={s.teamId} count={certCounts[s.teamId]} />
-                </td>
+                {certs && (
+                  <td className="px-4 py-2.5 text-center">
+                    {s.team.members ? <span className="text-[11px] text-zinc-300" title="Pasukan gabungan — sijil ikut pasukan asal">—</span> : <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={s.teamId} count={certCounts[s.teamId]} />}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -1172,8 +1230,8 @@ function MatchDialog({ session, round, allowDraw, onClose, onSave }: {
   );
 }
 
-function LeagueStandings({ rounds, standings, finished, certCounts, event, ecId }: {
-  rounds: Round[]; standings: Standing[]; finished: boolean; certCounts: Record<string, number>;
+function LeagueStandings({ certs, rounds, standings, finished, certCounts, event, ecId }: {
+  certs: boolean; rounds: Round[]; standings: Standing[]; finished: boolean; certCounts: Record<string, number>;
   event: { id: string; slug: string }; ecId: string;
 }) {
   const ko = rounds.filter(r => r.stage !== "GROUP");
@@ -1194,7 +1252,7 @@ function LeagueStandings({ rounds, standings, finished, certCounts, event, ecId 
               <th className="w-24 px-2 py-2 text-center">M-S-K</th>
               <th className="w-16 px-2 py-2 text-center">Mata</th>
               {ko.map(r => <th key={r.id} className="w-24 px-2 py-2 text-center">{roundName(r)}</th>)}
-              <th className="w-20 px-4 py-2 text-center">Sijil</th>
+              {certs && <th className="w-20 px-4 py-2 text-center">Sijil</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -1231,9 +1289,11 @@ function LeagueStandings({ rounds, standings, finished, certCounts, event, ecId 
                     </td>
                   );
                 })}
-                <td className="px-4 py-2.5 text-center">
-                  <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={s.teamId} count={certCounts[s.teamId]} />
-                </td>
+                {certs && (
+                  <td className="px-4 py-2.5 text-center">
+                    {s.team.members ? <span className="text-[11px] text-zinc-300" title="Pasukan gabungan — sijil ikut pasukan asal">—</span> : <TeamCertCell eventSlug={event.slug} ecId={ecId} teamId={s.teamId} count={certCounts[s.teamId]} />}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

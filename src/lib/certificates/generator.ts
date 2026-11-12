@@ -317,7 +317,9 @@ export async function resolveRecipients(
           // gets two certificates on the same template, never one overwritten.
           key: `${intl ? "win-intl" : "win"}:${cfg.eventId}:${r.code}:${pid}`,
           participantId: pid, name: p?.name ?? e.members.find(m => m.id === pid)?.name ?? "", ic: p?.ic ?? null,
-          contingentId: e.contingentId, contingentName: e.contingentName,
+          // A merged state team's members each keep their own contingent.
+          contingentId: e.members.find(m => m.id === pid)?.contingentId ?? e.contingentId,
+          contingentName: e.members.find(m => m.id === pid)?.contingentName ?? e.contingentName,
           schoolName: p?.school_name ?? null, stateName: e.stateName ?? p?.state_name ?? null,
           countryName: e.countryName ?? p?.country_name ?? null,
           teamId: e.teamId, teamName: e.teamName,

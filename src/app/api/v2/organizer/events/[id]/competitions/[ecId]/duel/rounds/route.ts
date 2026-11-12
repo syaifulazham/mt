@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const number = last?.status === "DRAFT" ? last.number : (last?.number ?? 0) + 1;
   const league = cfg.format === "LEAGUE" || rounds.some(r => r.stage === "GROUP");
   const pickPool = async () => {
-    const pool = await duelPool(ec.eventId, ec.competitionId);
+    const pool = await duelPool(ec.eventId, ec.competitionId, ec.id);
     const pick = Array.isArray(body.teamIds) ? new Set<string>(body.teamIds) : null;
     const inGroup = pool.filter(t => groupKeyOf(cfg.scope, t) === groupKey);
     // Picked teams may include registered teams not yet present; by default only attended ones.

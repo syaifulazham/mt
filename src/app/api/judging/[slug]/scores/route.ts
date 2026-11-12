@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { roundTime } from "@/lib/judgingTime";
 import { db } from "@/lib/db";
+import { activeMerges, hiddenMembers } from "@/lib/team-merge-server";
 import { contingentStateId, taskLockMap, teamLocked } from "@/lib/judgingStatus";
 
 // POST /api/judging/[slug]/scores
@@ -32,6 +33,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (task.status === "CLOSED") return NextResponse.json({ error: "TASK_CLOSED" }, { status: 403 });
   if (task.passcode !== passcode.trim().toUpperCase())
     return NextResponse.json({ error: "WRONG_PASSCODE" }, { status: 401 });
+
+  // A team merged into a state team is judged under the merge's lead.
+  if (hiddenMembers(await activeMerges(task.eventCompetition.id)).has(teamId))
+    return NextResponse.json({ error: "TEAM_MERGED", message: "Pasukan ini bertanding dalam gabungan negeri — nilai pasukan gabungan." }, { status: 409 });
 
   // Locked nationally (task or competition) or for the team's state: no new or changed scores.
   const team = await db.team.findUnique({

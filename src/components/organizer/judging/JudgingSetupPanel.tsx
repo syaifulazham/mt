@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Gavel, Loader2, Lock, LockOpen, Plus, Search, Swords, Tag, X } from "lucide-react";
+import { Check, Gavel, Loader2, Lock, LockOpen, Plus, Search, Swords, Tag, Users, X } from "lucide-react";
+import { TeamMergeDialog } from "@/components/organizer/judging/TeamMergeDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -27,8 +28,12 @@ export type SetupTemplate = {
  */
 export function JudgingSetupPanel({
   eventId, eventSlug, ecId, canWrite: canWriteRole, canLock, isSuperAdmin, method, duelConfig, templates, templateTaskCount,
-  resultConfig, defaultScope, onTemplatesChange, onMethodChange, onResultConfigChange,
+  resultConfig, defaultScope, onTemplatesChange, onMethodChange, onResultConfigChange, merge, onMergeChange, competition,
 }: {
+  /** Merged state teams (any method): the setting and its change. */
+  merge: { mergeByState: boolean; mergeMax: number };
+  onMergeChange: (m: { mergeByState: boolean; mergeMax: number }) => void;
+  competition: { name: string; code: string };
   eventId: string;
   eventSlug: string;
   ecId: string;
@@ -223,7 +228,72 @@ export function JudgingSetupPanel({
           {canWrite && <TemplatePicker exclude={templates.map(t => t.id)} busy={busy === "add"} onPick={addTemplate} />}
         </div>
       )}
+      {resultConfig.resultScope !== "STATE" && (
+        <MergeSettings base={base} canWrite={canWrite} merge={merge} onChange={onMergeChange} competition={competition} isDuel={isDuel} />
+      )}
       {err && <p className="text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
+/**
+ * Gabungan negeri: a state's registered teams compete as merged state teams
+ * (JOHOR, or JOHOR A / JOHOR B), at most `mergeMax` each — judged and ranked as
+ * one (Skor) or drawn as one (Duel). Arranged in TeamMergeDialog.
+ */
+function MergeSettings({ base, canWrite, merge, onChange, competition, isDuel }: {
+  base: string; canWrite: boolean; merge: { mergeByState: boolean; mergeMax: number };
+  onChange: (m: { mergeByState: boolean; mergeMax: number }) => void; competition: { name: string; code: string }; isDuel: boolean;
+}) {
+  const [max, setMax] = useState(String(merge.mergeMax));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [open, setOpen] = useState(false);
+
+  async function patch(body: { mergeByState?: boolean; mergeMax?: number }) {
+    setBusy(true); setErr("");
+    try {
+      const res = await fetch(`${base}/merges`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message ?? j.error ?? "Gagal");
+      onChange(j);
+      setMax(String(j.mergeMax));
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
+    finally { setBusy(false); }
+  }
+
+  const n = Number(max);
+  const maxDirty = merge.mergeByState && n !== merge.mergeMax;
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2">
+      <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-700">
+        <input type="checkbox" checked={merge.mergeByState} disabled={!canWrite || busy}
+          onChange={e => patch({ mergeByState: e.target.checked })} className="accent-violet-600" />
+        <Users className="h-3.5 w-3.5 text-violet-600" /> Gabungan negeri
+      </label>
+      {merge.mergeByState && (
+        <>
+          <label className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+            Pasukan maks / gabungan
+            <Input value={max} disabled={!canWrite || busy} onChange={e => setMax(e.target.value)}
+              className="h-7 w-14 bg-white text-sm" inputMode="numeric" />
+          </label>
+          {maxDirty && canWrite && (
+            <Button size="sm" className="h-7 bg-violet-600 text-xs hover:bg-violet-700" disabled={busy || !(Number.isInteger(n) && n >= 1 && n <= 32)}
+              onClick={() => patch({ mergeMax: n })}>Simpan</Button>
+          )}
+          <Button size="sm" variant="outline" className="h-7 gap-1 border-violet-300 bg-white text-xs text-violet-700" onClick={() => setOpen(true)}>
+            Susun gabungan
+          </Button>
+        </>
+      )}
+      {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
+      <p className="flex-1 text-[11px] text-zinc-500">
+        Pasukan negeri yang sama bertanding sebagai satu pasukan bernama negeri (JOHOR; jika dipecah JOHOR A, JOHOR B)
+        {isDuel ? " — dicabut sebagai satu pasukan." : " — dinilai sekali dan disenaraikan sebagai satu pasukan dalam keputusan."}
+      </p>
+      {err && <p className="w-full text-xs text-red-600">{err}</p>}
+      {open && <TeamMergeDialog apiBase={`${base}/merges`} competition={competition} onClose={() => setOpen(false)} onSaved={() => {}} />}
     </div>
   );
 }

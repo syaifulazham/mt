@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { activeMerges, hiddenMembers, mergeByLead } from "@/lib/team-merge-server";
 import { INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME, contingentStateId, taskLockMap } from "@/lib/judgingStatus";
 
 const ONLINE_SCOPES = ["ONLINE_NATIONAL", "ONLINE_STATE", "ONLINE_ZONE", "ONLINE_OPEN"];
@@ -58,6 +59,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     orderBy: { name: "asc" },
   });
 
+  const teamDto = (t: (typeof teams)[number]) => ({
+    id: t.id,
+    name: t.name,
+    contingent: t.contingent.name,
+    contingentType: t.contingent.contingentType,
+    stateId: contingentStateId(t.contingent),
+    stateName: contingentStateId(t.contingent) === INTERNATIONAL_SCOPE_ID ? INTERNATIONAL_SCOPE_NAME
+      : t.contingent.state?.name ?? t.contingent.school?.state?.name ?? t.contingent.higherInstitution?.state?.name ?? null,
+    memberCount: t.members.length,
+    members: t.members.map(m => ({
+      name: m.participant.name,
+      gender: m.participant.gender,
+      eduLevel: m.participant.eduLevel,
+      age: m.participant.age,
+      classGrade: m.participant.classGrade,
+      className: m.participant.className,
+    })),
+  });
+
+  // Merged state teams: judged once, as the merge, under its lead team's id.
+  const merges = await activeMerges(ec.id);
+  const hidden = hiddenMembers(merges), leads = mergeByLead(merges);
+  const byId = new Map(teams.map(t => [t.id, t]));
+  const listed = teams.filter(t => !hidden.has(t.id)).map(t => {
+    const m = leads.get(t.id);
+    if (!m) return teamDto(t);
+    const parts = m.teamIds.map(id => byId.get(id)).filter((x): x is (typeof teams)[number] => !!x).map(teamDto);
+    return {
+      ...teamDto(t),
+      name: m.name,
+      contingent: parts.map(x => `${x.name} (${x.contingent})`).join(" · "),
+      memberCount: parts.reduce((a, x) => a + x.memberCount, 0),
+      members: parts.flatMap(x => x.members),
+      mergedTeams: parts.map(x => ({ id: x.id, name: x.name, contingent: x.contingent })),
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+
   return NextResponse.json({
     task: {
       id: task.id,
@@ -88,23 +126,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     isOnline,
     judging: locks.national,
     locks,
-    teams: teams.map(t => ({
-      id: t.id,
-      name: t.name,
-      contingent: t.contingent.name,
-      contingentType: t.contingent.contingentType,
-      stateId: contingentStateId(t.contingent),
-      stateName: contingentStateId(t.contingent) === INTERNATIONAL_SCOPE_ID ? INTERNATIONAL_SCOPE_NAME
-        : t.contingent.state?.name ?? t.contingent.school?.state?.name ?? t.contingent.higherInstitution?.state?.name ?? null,
-      memberCount: t.members.length,
-      members: t.members.map(m => ({
-        name: m.participant.name,
-        gender: m.participant.gender,
-        eduLevel: m.participant.eduLevel,
-        age: m.participant.age,
-        classGrade: m.participant.classGrade,
-        className: m.participant.className,
-      })),
-    })),
+    teams: listed,
   });
 }

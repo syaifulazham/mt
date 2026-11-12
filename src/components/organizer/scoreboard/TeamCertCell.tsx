@@ -8,6 +8,8 @@ import { Award } from "lucide-react";
 export function useTeamCertCounts(eventId: string, ecId: string) {
   const [counts, setCounts] = useState<Record<string, number>>({});
   useEffect(() => {
+    // No ids = disabled (e.g. a duel control link, which has no organizer session).
+    if (!eventId || !ecId) return;
     let stop = false;
     const load = async () => {
       try {

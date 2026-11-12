@@ -701,6 +701,9 @@ model EventCompetition {
   judgingVerifiedBy       String?
   // "SCORE" (judging templates) or "DUEL" (drawn sessions ranked round by round, src/lib/duel.ts)
   judgingMethod           String    @default("SCORE")
+  /// Registered teams of one state compete as merged state teams (TeamMerge), at most mergeMax each.
+  mergeByState            Boolean   @default(false)
+  mergeMax                Int       @default(3)
   duelConfig              Json? // { perSession, advance, arenas, durationSec, breakSec }
   // Results ranked "NATIONAL" (one list) or "STATE" (per state); null = event scope default (src/lib/resultScope.ts)
   resultScope             String?
@@ -715,6 +718,8 @@ model EventCompetition {
   judgingTemplates     EventCompetitionJudgingTemplate[]
   judgingTasks         JudgingTask[]
   duelRounds           DuelRound[]
+  duelControlEndpoints DuelControlEndpoint[]
+  teamMerges           TeamMerge[]
   webcraftAiJudgements WebcraftAiJudgement[]
 
   @@unique([eventId, competitionId])
@@ -2107,6 +2112,49 @@ model DuelEntry {
   @@unique([sessionId, teamId])
   @@index([teamId])
   @@map("duel_entries")
+}
+
+/// A passcode link replicating one competition's duel manager (/duel-control/<slug>),
+/// so arena marshals can run it without an organizer account. FULL also allows
+/// drawing and confirming rounds; CONTROL is arena control and results only.
+model DuelControlEndpoint {
+  id                 String    @id @default(cuid())
+  eventCompetitionId String
+  routeSlug          String    @unique
+  passcode           String
+  label              String?
+  access             String    @default("CONTROL") // CONTROL | FULL
+  active             Boolean   @default(true)
+  createdBy          String?
+  lastUsedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+
+  @@index([eventCompetitionId])
+  @@map("duel_control_endpoints")
+}
+
+/// A merged state team (EventCompetition.mergeByState, national results only):
+/// several registered teams of one state compete as one ("JOHOR A"), in duels
+/// and score judging alike. The first of `teamIds` is the lead — the team id
+/// duel entries and judging scores carry for the merged team — so merges are
+/// frozen once a duel round is confirmed or any score is recorded.
+model TeamMerge {
+  id                 String   @id @default(cuid())
+  eventCompetitionId String
+  name               String
+  stateId            String?
+  position           Int      @default(0)
+  teamIds            String[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+
+  @@index([eventCompetitionId])
+  @@map("team_merges")
 }
 
 model DuelDisplayEndpoint {

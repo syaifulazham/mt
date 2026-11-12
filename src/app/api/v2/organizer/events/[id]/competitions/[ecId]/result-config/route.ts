@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id: eventId, ecId } = await params;
   const ec = await db.eventCompetition.findFirst({
     where: { id: ecId, eventId },
-    select: { id: true, resultScope: true, judgingMethod: true, duelConfig: true, configLockedAt: true, event: { select: { scope: true } } },
+    select: { id: true, resultScope: true, judgingMethod: true, duelConfig: true, configLockedAt: true, mergeByState: true, event: { select: { scope: true } } },
   });
   if (!ec) return err("NOT_FOUND", "Pertandingan tidak dijumpai.", 404);
   const body = await req.json().catch(() => ({})) as { resultScope?: unknown; locked?: unknown };
@@ -43,6 +43,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (ec.judgingMethod === "DUEL" && body.resultScope !== current
         && await db.duelRound.count({ where: { eventCompetitionId: ecId } }))
         return err("SCOPE_LOCKED", "Skop tidak boleh ditukar selepas cabutan duel dibuat. Buang draf/pusingan dahulu.", 409);
+      // Merged state teams compete in one national list.
+      if (body.resultScope === "STATE" && ec.mergeByState)
+        return err("MERGE_ON", "Matikan Gabungan negeri dahulu — pasukan gabungan hanya untuk keputusan Kebangsaan.", 409);
       data.resultScope = body.resultScope;
       if (ec.duelConfig !== null || ec.judgingMethod === "DUEL")
         data.duelConfig = { ...parseDuelConfig(ec.duelConfig), scope: body.resultScope };

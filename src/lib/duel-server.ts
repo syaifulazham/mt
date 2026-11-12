@@ -4,6 +4,8 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { duelStandings, leagueQualifiers, leagueTables, parseDuelConfig, remainingMs, roundTitle, type DrawTeam } from "@/lib/duel";
 import { isStreamLive } from "@/lib/cf-stream";
+import { currentDuelEndpoint } from "@/lib/duel-control";
+import { activeMerges, type MergeRow } from "@/lib/team-merge-server";
 
 /** Draw, confirm, reopen and config. */
 export const DUEL_CONFIG_ROLES = ["SUPER_ADMIN", "ADMIN"];
@@ -38,6 +40,8 @@ export type DuelTeam = {
   id: string; name: string;
   contingentId: string; contingentName: string; logoUrl: string | null;
   stateId: string | null; stateName: string | null; flagUrl: string | null; countryIso2: string | null;
+  /** A merged state team: its registered teams (the first is the lead, whose id it carries). */
+  members?: { id: string; name: string; contingentName: string; logoUrl: string | null }[];
 };
 /** A pool team: `attended` once its attendance (team or any member) is recorded. */
 export type DuelPoolTeam = DuelTeam & { attended: boolean };
@@ -59,7 +63,7 @@ export async function loadDuelEc(eventId: string, ecId: string) {
   return db.eventCompetition.findFirst({
     where: { id: ecId, eventId },
     select: {
-      id: true, eventId: true, competitionId: true, judgingMethod: true, duelConfig: true,
+      id: true, eventId: true, competitionId: true, judgingMethod: true, duelConfig: true, mergeByState: true, mergeMax: true,
       resultScope: true, configLockedAt: true,
       competition: { select: { name: true, code: true, participationType: true } },
       event: { select: { name: true, slug: true, scope: true, sharedRankMode: true } },
@@ -72,7 +76,14 @@ export async function loadDuelEc(eventId: string, ecId: string) {
  * flagged with whether it has attended. Draws default to attended teams; the
  * organizer may include the rest to draw before attendance is taken.
  */
-export async function duelPool(eventId: string, competitionId: string): Promise<DuelPoolTeam[]> {
+export async function duelPool(eventId: string, competitionId: string, ecId: string | null): Promise<DuelPoolTeam[]> {
+  const raw = await duelTeams(eventId, competitionId);
+  const merges = ecId ? await activeMerges(ecId) : null;
+  return merges ? mergePool(raw, merges) : raw;
+}
+
+/** Every registered team, unmerged (the merge editor's pool). */
+export async function duelTeams(eventId: string, competitionId: string): Promise<DuelPoolTeam[]> {
   const teams = await db.team.findMany({
     where: { competitionId, status: "ACTIVE", teamEvents: { some: { eventId } } },
     select: {
@@ -90,8 +101,38 @@ export async function duelPool(eventId: string, competitionId: string): Promise<
   });
 }
 
+/** A merged state team as a duel team: the lead's id, the merge's name, its members underneath. */
+function mergedTeam(m: MergeRow, members: DuelTeam[], state: StateRef | undefined): DuelTeam {
+  const first = members[0];
+  return {
+    id: m.teamIds[0], name: m.name,
+    // Its own "contingent", so no-same-contingent rules never clash it.
+    contingentId: `merge:${m.id}`, contingentName: members.map(t => t.name).join(" · "), logoUrl: null,
+    stateId: m.stateId ?? first?.stateId ?? null,
+    stateName: state?.name ?? first?.stateName ?? null,
+    flagUrl: state?.flagUrl ?? first?.flagUrl ?? null,
+    countryIso2: first?.countryIso2 ?? null,
+    members: members.map(t => ({ id: t.id, name: t.name, contingentName: t.contingentName, logoUrl: t.logoUrl })),
+  };
+}
+
+/** Pool with merged teams in place of their members (attended once any member is). */
+export function mergePool(raw: DuelPoolTeam[], merges: MergeRow[]): DuelPoolTeam[] {
+  const byId = new Map(raw.map(t => [t.id, t]));
+  const taken = new Set<string>();
+  const units: DuelPoolTeam[] = [];
+  for (const m of merges) {
+    const members = m.teamIds.map(id => byId.get(id)).filter((t): t is DuelPoolTeam => !!t);
+    m.teamIds.forEach(id => taken.add(id));
+    if (!members.length) continue;
+    units.push({ ...mergedTeam(m, members, undefined), attended: members.some(t => t.attended) });
+  }
+  return [...units, ...raw.filter(t => !taken.has(t.id))];
+}
+
 /** Every round of the competition with sessions, entries and team details. */
 export async function loadRounds(ecId: string) {
+  const merges = await activeMerges(ecId);
   const rounds = await db.duelRound.findMany({
     where: { eventCompetitionId: ecId },
     orderBy: [{ groupKey: "asc" }, { number: "asc" }],
@@ -102,6 +143,21 @@ export async function loadRounds(ecId: string) {
       },
     },
   });
+  // Merged state teams: entries carry the lead's id, shown as the merge.
+  const lead = new Map<string, DuelTeam>();
+  if (merges?.length) {
+    const ids = [...new Set(merges.flatMap(m => m.teamIds))];
+    const [teams, states] = await Promise.all([
+      db.team.findMany({ where: { id: { in: ids } }, select: TEAM_SELECT }),
+      db.state.findMany({ where: { id: { in: merges.map(m => m.stateId).filter((x): x is string => !!x) } }, select: { id: true, name: true, flagUrl: true } }),
+    ]);
+    const byId = new Map(teams.map(t => [t.id, teamDto(t as TeamRow)]));
+    const stateById = new Map(states.map(st => [st.id, st]));
+    for (const m of merges) {
+      const members = m.teamIds.map(id => byId.get(id)).filter((t): t is DuelTeam => !!t);
+      lead.set(m.teamIds[0], mergedTeam(m, members, m.stateId ? stateById.get(m.stateId) : undefined));
+    }
+  }
   return rounds.map(r => ({
     id: r.id, groupKey: r.groupKey, number: r.number, stage: r.stage, isFinal: r.isFinal, status: r.status, split: r.split,
     noSameContingent: r.noSameContingent, noSameState: r.noSameState,
@@ -115,7 +171,7 @@ export async function loadRounds(ecId: string) {
       replayUrl: s.replayStatus === "READY" ? s.replayUrl : null,
       entries: s.entries.map(e => ({
         id: e.id, teamId: e.teamId, slot: e.slot, rank: e.rank, points: e.points, advanced: e.advanced,
-        team: teamDto(e.team as TeamRow),
+        team: lead.get(e.teamId) ?? teamDto(e.team as TeamRow),
       })),
     })),
   }));
@@ -226,7 +282,10 @@ export { parseDuelConfig };
  * `roles` limits writes; reads only need an organizer session.
  */
 export async function duelGuard(eventId: string, ecId: string, roles?: string[]) {
-  const session = await getOrganizerSession();
+  // A duel control link (/duel-control/<slug>) acts on its own competition only.
+  const link = currentDuelEndpoint();
+  if (link && link.ecId !== ecId) return { res: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }) };
+  const session = link ?? await getOrganizerSession();
   if (!session) return { res: NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 }) };
   if (roles && !roles.includes(session.role)) return { res: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }) };
   const ec = await loadDuelEc(eventId, ecId);

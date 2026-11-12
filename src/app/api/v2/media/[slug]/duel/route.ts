@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { authMedia } from "@/lib/media-endpoint";
 import { isStreamLive, streamConfigured } from "@/lib/cf-stream";
 import { isLeagueRound, parseDuelConfig, roundTitle, sessionTitle } from "@/lib/duel";
+import { activeMerges } from "@/lib/team-merge-server";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
             select: {
               id: true, label: true, arena: true, scheduledAt: true, status: true,
               streamPlaybackUrl: true, streamHeartbeatAt: true, replayStatus: true,
-              entries: { orderBy: { slot: "asc" }, select: { team: { select: { name: true, contingent: { select: { name: true, shortName: true } } } } } },
+              entries: { orderBy: { slot: "asc" }, select: { teamId: true, team: { select: { name: true, contingent: { select: { name: true, shortName: true } } } } } },
             },
           },
         },
@@ -41,6 +42,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const stateIds = [...new Set(ecs.flatMap(ec => ec.duelRounds.map(r => r.groupKey)).filter(Boolean))];
   const stateName = new Map((await db.state.findMany({ where: { id: { in: stateIds } }, select: { id: true, name: true } })).map(st => [st.id, st.name]));
   const rank = (st: string) => (st === "RUNNING" || st === "PAUSED" ? 0 : st === "PENDING" ? 1 : st === "ENDED" ? 2 : 3);
+
+  // Merged state teams: entries carry the lead team's id.
+  const mergeOf = new Map<string, { name: string; contingent: string }>();
+  for (const ec of ecs) for (const m of (await activeMerges(ec.id)) ?? []) mergeOf.set(m.teamIds[0], { name: m.name, contingent: `${m.teamIds.length} pasukan` });
 
   const now = Date.now();
   const competitions = ecs.map(ec => {
@@ -57,7 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
         group: r.groupKey ? stateName.get(r.groupKey) ?? "Tiada negeri" : null,
         arena: s.arena, scheduledAt: s.scheduledAt, status: s.status,
         live: isStreamLive(s, now), replayStatus: s.replayStatus,
-        teams: s.entries.map(e => ({ name: e.team.name, contingent: e.team.contingent.shortName || e.team.contingent.name })),
+        teams: s.entries.map(e => mergeOf.get(e.teamId) ?? { name: e.team.name, contingent: e.team.contingent.shortName || e.team.contingent.name }),
       }))).sort((x, y) => rank(x.status) - rank(y.status)),
     };
   });

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { verifiedStatesBy } from "@/lib/judgingStatus";
 import { compareScoreTime, parseSharedRankMode, withSharedRanks, type SharedRankMode } from "@/lib/sharedRank";
 import { HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, isForeignCountry } from "@/lib/countries";
+import { hiddenMembers, mergeByLead, mergesByEc } from "@/lib/team-merge-server";
 import { defaultResultScope, resolveResultScope, type ResultScope } from "@/lib/resultScope";
 
 // Competition rankings from judging scores — shared by the public results
@@ -35,7 +36,10 @@ export interface RankingEntry {
   countryCode: string | null;
   totalScore: number;
   bestTime: number | null;
-  members: { id: string; name: string }[];
+  /** A merged state team's members carry their own contingent (certificates print it). */
+  members: { id: string; name: string; contingentId?: string; contingentName?: string }[];
+  /** Set for a merged state team ("JOHOR A"): its registered teams. */
+  mergedTeams?: { id: string; name: string; contingentName: string }[];
 }
 
 export interface CompetitionResult {
@@ -188,13 +192,20 @@ export async function computeCompetitionResults(
     },
   });
 
+  const mergeMap = await mergesByEc(eventCompetitions.map(ec => ec.id));
   for (const ec of eventCompetitions) {
     const scoreMap = new Map<string, Agg>();
     for (const task of ec.judgingTasks)
       for (const s of task.scores) addScore(scoreMap, s.teamId, s.score, s.timeSeconds);
 
-    const teams = scoreMap.size === 0 ? [] : await db.team.findMany({
-      where: { id: { in: [...scoreMap.keys()] } },
+    // Merged state teams rank once, under the lead's id and the merge's name.
+    const merges = mergeMap.get(ec.id);
+    const hidden = hiddenMembers(merges), leads = mergeByLead(merges);
+    for (const id of hidden) scoreMap.delete(id);
+    const memberIds = [...leads.entries()].filter(([lead]) => scoreMap.has(lead)).flatMap(([, m]) => m.teamIds);
+
+    const allTeams = scoreMap.size === 0 ? [] : await db.team.findMany({
+      where: { id: { in: [...new Set([...scoreMap.keys(), ...memberIds])] } },
       select: {
         id: true, name: true,
         members: { select: { participant: { select: { id: true, name: true } } } },
@@ -211,8 +222,26 @@ export async function computeCompetitionResults(
       resultScope: resolveResultScope(ec, eventScope),
       judgingVerifiedAt: ec.judgingVerifiedAt,
       verifiedStateIds: [],
-      ...rankSplit(teams.map((team) => {
+      ...rankSplit(allTeams.filter(t => scoreMap.has(t.id)).map((team) => {
         const agg = scoreMap.get(team.id) ?? { totalScore: 0, bestTime: null };
+        const merge = leads.get(team.id);
+        if (merge) {
+          const parts = merge.teamIds.map(id => allTeams.find(t => t.id === id)).filter((t): t is (typeof allTeams)[number] => !!t);
+          return {
+            teamId: team.id,
+            teamName: merge.name,
+            ...contingentFields(team.contingent),
+            contingentName: [...new Set(parts.map(t => t.contingent.name))].join(" · "),
+            contingentShortName: null,
+            contingentLogo: null,
+            totalScore: agg.totalScore,
+            bestTime: agg.bestTime,
+            members: parts.flatMap(t => t.members.map(m => ({
+              id: m.participant.id, name: m.participant.name, contingentId: t.contingent.id, contingentName: t.contingent.name,
+            }))),
+            mergedTeams: parts.map(t => ({ id: t.id, name: t.name, contingentName: t.contingent.name })),
+          };
+        }
         return {
           teamId: team.id,
           teamName: team.name,
