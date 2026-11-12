@@ -39,7 +39,9 @@ type Module = {
 };
 
 /** `gutter`: leave the card's right side, run up the gap to the next column and enter the target from below — for a target in the same column with another card in between. */
-type EdgeDef    = { from: string; to: string; color: string; dashed?: boolean; arcDir?: 1 | -1; route?: "gutter" };
+/** `lane`: leave the side facing `lane` (an x between columns), run along it and enter the target's side facing it; `fromDy`/`toDy` shift the ends from the cards' centres, so two edges can share a gap without crossing. */
+type Lane       = { x: number; fromDy?: number; toDy?: number };
+type EdgeDef    = { from: string; to: string; color: string; dashed?: boolean; arcDir?: 1 | -1; route?: "gutter"; lane?: Lane };
 type ArrowEntry = { d: string; color: string; dashed?: boolean; id: string };
 
 // ─── Main flow ───────────────────────────────────────────────────────────────
@@ -145,6 +147,20 @@ const INTERNATIONAL_MODULE: Module = {
   pos: { x: COL[0], y: ROW[2] },
 };
 const INTERNATIONAL_COLOR = "#0284c7";
+
+// Anugerah Tambahan: awards beside the ranked places, fed by judging and shown
+// with the results — both indirect (dashed). Bottom of the middle column; its
+// two edges share the gap left of Penghakiman / Keputusan on separate lanes.
+const AWARDS_MODULE: Module = {
+  icon: Award,
+  title: "Anugerah Tambahan",
+  description: "Anugerah selain tempat utama — daripada templat penghakiman atau pemenang dipilih manual.",
+  color: "text-fuchsia-600", bg: "bg-fuchsia-50", border: "border-fuchsia-100",
+  href: "awards",
+  pos: { x: COL[1], y: ROW[3] },
+};
+const AWARDS_COLOR = "#c026d3";
+const GAP_L = COL[1] + CARD_W; // left edge of the gap between the middle and right columns
 const INTERNATIONAL_ROLES: OrganizerRole[] = ["SUPER_ADMIN", "ADMIN"];
 
 const MAIN_CONNECTIONS: EdgeDef[] = [
@@ -165,6 +181,9 @@ const MAIN_CONNECTIONS: EdgeDef[] = [
   // International registration feeds Pra-Pendaftaran. Skipped when the card
   // isn't rendered (other roles).
   { from: "international",        to: "preregistration",      color: INTERNATIONAL_COLOR, route: "gutter" },
+  // Indirect: Penghakiman → Anugerah Tambahan → Keputusan, on two lanes of one gap.
+  { from: "judging",              to: "awards",               color: AWARDS_COLOR, dashed: true, lane: { x: GAP_L + 20, toDy: -30 } },
+  { from: "awards",               to: "results",              color: AWARDS_COLOR, dashed: true, lane: { x: GAP_L + 40, fromDy: 30 } },
 ];
 
 // ─── Walk-in section ─────────────────────────────────────────────────────────
@@ -282,6 +301,7 @@ function buildPath(
   containerRect: DOMRect,
   arcDir?: 1 | -1,
   route?: "gutter",
+  lane?: Lane,
 ): string {
   function rel(el: Element) {
     const r = el.getBoundingClientRect();
@@ -297,6 +317,14 @@ function buildPath(
 
   const f = rel(fromEl);
   const t = rel(toEl);
+
+  if (lane) {
+    const x1 = lane.x < f.l ? f.l : f.r, y1 = f.cy + (lane.fromDy ?? 0);
+    const x2 = lane.x < t.l ? t.l : t.r, y2 = t.cy + (lane.toDy ?? 0);
+    const r = 10, sx = Math.sign(lane.x - x1), ex = Math.sign(x2 - lane.x), sy = Math.sign(y2 - y1) || 1;
+    return `M ${x1} ${y1} H ${lane.x - sx * r} Q ${lane.x} ${y1} ${lane.x} ${y1 + sy * r} V ${y2 - sy * r} `
+      + `Q ${lane.x} ${y2} ${lane.x + ex * r} ${y2} H ${x2}`;
+  }
 
   if (route === "gutter") {
     const gx = f.r + (COL[1] - CARD_W) / 2; // middle of the gap between columns
@@ -481,7 +509,7 @@ function useArrows(connections: EdgeDef[]) {
       const toEl   = wrap.querySelector(`[data-module="${conn.to}"]`);
       if (!fromEl || !toEl) continue;
       next.push({
-        d: buildPath(fromEl, toEl, cr, conn.arcDir, conn.route),
+        d: buildPath(fromEl, toEl, cr, conn.arcDir, conn.route, conn.lane),
         color: conn.color,
         dashed: conn.dashed,
         id: `${conn.from}--${conn.to}`,
@@ -543,11 +571,13 @@ export function EventManageClient({
     ...(showInternational
       ? [internationalLow ? { ...INTERNATIONAL_MODULE, pos: { x: COL[0], y: ROW[3] } } : INTERNATIONAL_MODULE]
       : []),
+    AWARDS_MODULE,
   ];
   const legend = [
     ...LEGEND,
     ...(hasWebcraft ? [{ color: WEBCRAFT_COLOR, label: "Penghakiman Webcraft", dashed: true }] : []),
     ...(showInternational ? [{ color: INTERNATIONAL_COLOR, label: "Penyertaan antarabangsa", dashed: false }] : []),
+    { color: AWARDS_COLOR, label: "Anugerah tambahan", dashed: true },
   ];
 
   const mainColors   = [...new Set(MAIN_CONNECTIONS.map(c => c.color))];
@@ -558,7 +588,8 @@ export function EventManageClient({
   // Spans both canvases, for the arrows into Pengumuman.
   const { wrapRef: crossWrapRef,  arrows: crossArrows,  svgH: crossSvgH  } = useArrows(CROSS_CONNECTIONS);
 
-  const mainH   = (internationalLow ? ROW[3] : ROW[2]) + CARD_H + 24;
+  // Row 3 always holds Anugerah Tambahan.
+  const mainH   = ROW[3] + CARD_H + 24;
   const walkinH = ROW[1] + CARD_H + 24;
 
   return (

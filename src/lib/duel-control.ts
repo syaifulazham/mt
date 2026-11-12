@@ -43,6 +43,7 @@ const EP_SELECT = {
       eventId: true,
       event: { select: { id: true, name: true, slug: true } },
       competition: { select: { name: true, code: true } },
+      splitLabel: true,
     },
   },
 } as const;

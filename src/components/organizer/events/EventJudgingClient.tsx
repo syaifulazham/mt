@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { EventJudgingProgress, JudgingRow } from "@/lib/judgingStatus";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
 import { JudgingSetupPanel } from "@/components/organizer/judging/JudgingSetupPanel";
+import { CompetitionSplitBar } from "@/components/organizer/judging/CompetitionSplitBar";
 import { JudgingGlobalSettings } from "@/components/organizer/judging/JudgingGlobalSettings";
 import type { SharedRankMode } from "@/lib/sharedRank";
 import { defaultResultScope, type ResultScope } from "@/lib/resultScope";
@@ -63,6 +64,10 @@ type CompetitionBlock = JudgingState & {
   /** Merged state teams (src/lib/team-merge-server.ts). */
   mergeByState: boolean;
   mergeMax: number;
+  /** Judging split (src/lib/competition-split.ts): "" = not split; parentId set on added splits. */
+  splitLabel: string;
+  parentId: string | null;
+  countInMedals: boolean;
   /** Effective result scope (src/lib/resultScope.ts). */
   resultScope: ResultScope;
   /** Judging setup frozen while set. */
@@ -308,6 +313,9 @@ function CompetitionCard({
               <span className="font-mono text-zinc-400 mr-1.5">{ec.competition.code}</span>
               {ec.competition.name}
             </span>
+            {ec.splitLabel && (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">{ec.splitLabel}</span>
+            )}
             {locked && (
               <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", chip.cls)}>{chip.label}</span>
             )}
@@ -332,6 +340,13 @@ function CompetitionCard({
 
       {isExpanded && (
         <div className="border-t divide-y">
+          <CompetitionSplitBar
+            base={`/api/v2/organizer/events/${event.id}/competitions/${ec.id}`}
+            ec={{ id: ec.id, splitLabel: ec.splitLabel, parentId: ec.parentId, countInMedals: ec.countInMedals }}
+            competition={{ code: ec.competition.code, name: ec.competition.name }}
+            canWrite={canWriteRole}
+            onChange={patch => onSetupChanged(ec.id, patch)}
+          />
           <JudgingSetupPanel
             eventId={event.id}
             eventSlug={event.slug}
@@ -574,8 +589,11 @@ export function EventJudgingClient({
   }
   const orderedLevels = LEVEL_ORDER.filter(l => grouped.has(l));
 
+  // Splits of a competition sit together: the original first, then the added ones by label.
   const byCode = (a: CompetitionBlock, b: CompetitionBlock) =>
-    a.competition.code.localeCompare(b.competition.code);
+    a.competition.code.localeCompare(b.competition.code)
+    || Number(!!a.parentId) - Number(!!b.parentId)
+    || a.splitLabel.localeCompare(b.splitLabel);
   grouped.forEach(list => list.sort(byCode));
   ungrouped.sort(byCode);
 

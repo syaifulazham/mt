@@ -139,6 +139,7 @@ async function fetchEntity(type: string, id: string) {
           state: { select: { id: true, name: true } },
           zone:  { select: { id: true, name: true } },
           eventCompetitions: {
+            where: { parentId: null },
             include: {
               competition: { select: { id: true, name: true, code: true } },
             },

@@ -130,7 +130,7 @@ export async function POST(
   if (!eventId) return NextResponse.json({ error: "MISSING_EVENT_ID" }, { status: 400 });
 
   const ec = await db.eventCompetition.findFirst({
-    where: { eventId, competitionId: team.competitionId },
+    where: { eventId, competitionId: team.competitionId, parentId: null },
   });
   if (!ec) return NextResponse.json({ error: "EVENT_NOT_ELIGIBLE" }, { status: 400 });
 

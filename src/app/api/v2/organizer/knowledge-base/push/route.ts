@@ -20,6 +20,7 @@ async function buildEventMd(entityId: string) {
       state: { select: { name: true } },
       zone:  { select: { name: true } },
       eventCompetitions: {
+        where: { parentId: null },
         include: {
           competition: { select: { name: true, code: true, participationType: true } },
         },
@@ -80,6 +81,7 @@ async function buildCompetitionMd(entityId: string) {
     where: { id: entityId },
     include: {
       eventCompetitions: {
+        where: { parentId: null },
         include: {
           event: { select: { name: true, slug: true, startDate: true, status: true } },
         },

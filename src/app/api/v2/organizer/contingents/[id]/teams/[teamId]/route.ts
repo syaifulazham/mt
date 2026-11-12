@@ -47,7 +47,7 @@ export async function GET(
               id: true,
               name: true,
               eventCompetitions: {
-                where: { competition: { teams: { some: { id: teamId } } } },
+                where: { parentId: null, competition: { teams: { some: { id: teamId } } } },
                 select: {
                   eptimEduCourseId: true,
                   eptimEduCourseTitle: true,

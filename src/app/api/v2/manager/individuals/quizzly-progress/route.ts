@@ -34,6 +34,7 @@ export async function GET() {
 
   const ecs = await db.eventCompetition.findMany({
     where: {
+      parentId: null,
       quizzlySessionId: { not: null },
       event:            { status: { notIn: ["DRAFT", "ARCHIVE", "CANCELLED"] } },
       competition:      { thirdPartyIntegration: "asiaspark-quizzly", participationType: "INDIVIDUAL" },

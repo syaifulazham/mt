@@ -60,7 +60,7 @@ function bestRun(runs: CsiResult[]): CsiCaseProgress {
 
 export async function csiMonitor(eventId: string): Promise<CsiMonitorCompetition[]> {
   const ecs = await db.eventCompetition.findMany({
-    where:  { eventId, eptimCsiCompetitionId: { not: null } },
+    where:  { eventId, parentId: null, eptimCsiCompetitionId: { not: null } },
     select: {
       id: true, competitionId: true, eptimCsiCompetitionId: true, eptimCsiCompetitionName: true, eptimCsiCases: true,
       competition: { select: { code: true, name: true } },

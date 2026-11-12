@@ -78,7 +78,7 @@ export default async function ManagerIndividualsPage({
       id: true, name: true, status: true, scope: true, stateId: true, zoneId: true,
       startDate: true, endDate: true,
       eventCompetitions: {
-        where:   { competition: { participationType: "INDIVIDUAL" } },
+        where:   { parentId: null, competition: { participationType: "INDIVIDUAL" } },
         select:  {
           id: true, quizzlySessionId: true,
           competition: { select: { id: true, code: true, name: true, thirdPartyIntegration: true } },

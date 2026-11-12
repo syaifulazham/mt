@@ -16,6 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       theme:        { select: { id: true, name: true, color: true } },
       targetGroups: { include: { targetGroup: true } },
       eventCompetitions: {
+        where: { parentId: null },
         include: { event: { select: { id: true, name: true, slug: true, startDate: true, status: true, scope: true } } },
         orderBy: { createdAt: "asc" },
       },

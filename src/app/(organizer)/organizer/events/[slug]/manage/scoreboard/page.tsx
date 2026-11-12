@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { competitionTitle } from "@/lib/competition-split";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
@@ -22,6 +23,7 @@ export default async function ScoreboardPage({ params }: { params: Promise<{ slu
         select: {
           id: true, judgingMethod: true, judgingStatus: true,
           competition: { select: { name: true, code: true, participationType: true } },
+          splitLabel: true,
           _count: { select: { judgingTasks: true } },
         },
       },
@@ -33,7 +35,7 @@ export default async function ScoreboardPage({ params }: { params: Promise<{ slu
   const cards = await Promise.all(event.eventCompetitions.map(async ec => ({
     id: ec.id,
     code: ec.competition.code,
-    name: ec.competition.name,
+    name: competitionTitle(ec.competition.name, ec.splitLabel),
     participationType: ec.competition.participationType,
     method: ec.judgingMethod,
     judgingStatus: ec.judgingStatus,

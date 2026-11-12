@@ -175,7 +175,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Verify the event has this competition
   const ec = await db.eventCompetition.findFirst({
-    where: { eventId, competitionId: team.competitionId },
+    where: { eventId, competitionId: team.competitionId, parentId: null },
   });
   if (!ec) return NextResponse.json({ error: "EVENT_NOT_ELIGIBLE" }, { status: 400 });
 

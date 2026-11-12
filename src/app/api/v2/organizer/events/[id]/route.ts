@@ -21,6 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         },
       },
       eventCompetitions: {
+        where: { parentId: null },
         orderBy: { createdAt: "asc" },
         include: {
           competition: {

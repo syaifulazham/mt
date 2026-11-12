@@ -52,7 +52,8 @@ export async function computeMedalTally(eventId: string, opts: { includeUnverifi
     db.state.findMany({ select: { id: true, name: true, flagUrl: true } }),
   ]);
   const all: (CompetitionResult & { walkIn: boolean })[] = [
-    ...regular.map((c) => ({ ...c, walkIn: false })),
+    // A judging split switched off for the tally (Penghakiman → Kira dalam Medal Tally) is left out.
+    ...regular.filter((c) => c.countInMedals).map((c) => ({ ...c, walkIn: false })),
     ...walkIn.map((c) => ({ ...c, walkIn: true })),
   ];
 

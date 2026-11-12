@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { competitionTitle } from "@/lib/competition-split";
 import { db } from "@/lib/db";
 import { activeMerges, hiddenMembers, mergeByLead } from "@/lib/team-merge-server";
 import { INTERNATIONAL_SCOPE_ID, INTERNATIONAL_SCOPE_NAME, contingentStateId, taskLockMap } from "@/lib/judgingStatus";
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       routeSlug: task.routeSlug,
     },
     event: ec.event,
-    competition: ec.competition,
+    competition: { ...ec.competition, name: competitionTitle(ec.competition.name, ec.splitLabel) },
     template: {
       id: task.judgingTemplate.id,
       name: task.judgingTemplate.name,

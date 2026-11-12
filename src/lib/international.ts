@@ -173,6 +173,7 @@ export async function loadEventCompetitions(eventId: string) {
     select: {
       id: true,
       eventCompetitions: {
+        where: { parentId: null },
         select: {
           competition: {
             select: {

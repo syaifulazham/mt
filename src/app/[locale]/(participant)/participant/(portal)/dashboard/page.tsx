@@ -158,6 +158,7 @@ export default async function DashboardPage() {
 
   const quizzlyLinks = await db.eventCompetition.findMany({
     where: {
+      parentId: null,
       quizzlySessionId: { not: null },
       competition: { thirdPartyIntegration: "asiaspark-quizzly" },
       event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
@@ -220,6 +221,7 @@ export default async function DashboardPage() {
   ) {
     const links = await db.eventCompetition.findMany({
       where: {
+        parentId: null,
         competition: { thirdPartyIntegration: integration, participationType: "INDIVIDUAL" },
         event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
       },
@@ -307,7 +309,7 @@ export default async function DashboardPage() {
               event: {
                 select: {
                   id: true, name: true, startDate: true, endDate: true,
-                  eventCompetitions: { select: { id: true, competitionId: true, droneChallenges: true } },
+                  eventCompetitions: { where: { parentId: null }, select: { id: true, competitionId: true, droneChallenges: true } },
                 },
               },
             },

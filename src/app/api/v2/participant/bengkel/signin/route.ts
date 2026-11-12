@@ -99,8 +99,9 @@ export async function POST(req: NextRequest) {
   // Resolve courseId: event-specific first, then competition-level fallback
   let courseId: string | null = null;
   if (eventId) {
-    const ec = await db.eventCompetition.findUnique({
-      where: { eventId_competitionId: { eventId, competitionId: team.competitionId } },
+    // The original row (not a judging split) carries the course.
+    const ec = await db.eventCompetition.findFirst({
+      where: { eventId, competitionId: team.competitionId, parentId: null },
       select: { eptimEduCourseId: true },
     });
     courseId = ec?.eptimEduCourseId ?? team.competition.eptimEduCourseId ?? null;

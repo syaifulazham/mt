@@ -67,6 +67,7 @@ export default async function TeamPage() {
                   endDate: true,
                   status: true,
                   eventCompetitions: {
+                    where: { parentId: null },
                     select: {
                       competitionId: true,
                       eptimEduCourseId: true,

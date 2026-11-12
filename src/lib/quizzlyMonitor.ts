@@ -49,7 +49,7 @@ const TG_SELECT = { id: true, name: true, schoolLevel: true, ppki: true, classGr
 
 async function loadEc(eventId: string, ecId?: string) {
   return db.eventCompetition.findMany({
-    where:   { eventId, quizzlySessionId: { not: null }, ...(ecId ? { id: ecId } : {}) },
+    where:   { eventId, parentId: null, quizzlySessionId: { not: null }, ...(ecId ? { id: ecId } : {}) },
     select:  {
       id: true, competitionId: true, quizzlySessionId: true, quizzlySessionTitle: true,
       quizzlyAssignBy: true, quizzlyQuizMap: true,

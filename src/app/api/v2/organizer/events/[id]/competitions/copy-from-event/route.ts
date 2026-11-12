@@ -21,7 +21,7 @@ export async function POST(
     return NextResponse.json({ error: "SAME_EVENT" }, { status: 400 });
 
   const sourceEcs = await db.eventCompetition.findMany({
-    where: { eventId: sourceEventId },
+    where: { eventId: sourceEventId, parentId: null },
     select: { competitionId: true },
   });
   if (sourceEcs.length === 0)

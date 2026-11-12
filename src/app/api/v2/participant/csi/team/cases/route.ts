@@ -20,7 +20,7 @@ async function resolve(participantId: string, teamId: string, eventId: string) {
   if (!membership) return { error: NextResponse.json({ error: "NOT_MEMBER" }, { status: 403 }) } as const;
 
   const ec = await db.eventCompetition.findFirst({
-    where: { eventId, competitionId: membership.team.competitionId },
+    where: { eventId, competitionId: membership.team.competitionId, parentId: null },
     select: { eptimCsiCompetitionId: true, eptimCsiCompetitionName: true, eptimCsiCases: true },
   });
 

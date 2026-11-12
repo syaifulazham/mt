@@ -39,7 +39,7 @@ export async function GET(
     where: { id: eventId },
     select: {
       id: true, scope: true, stateId: true, zoneId: true,
-      eventCompetitions: { select: { competitionId: true } },
+      eventCompetitions: { where: { parentId: null }, select: { competitionId: true } },
     },
   });
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });

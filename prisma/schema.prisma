@@ -426,6 +426,7 @@ model Participant {
   droneChallenges       ParticipantDroneChallenge[]
 
   @@index([contingentId])
+  specialAwardWins SpecialAwardWinner[]
   @@map("contestants")
 }
 
@@ -598,6 +599,7 @@ model Event {
   walkInJudgingEndpoints WalkInJudgingEndpoint[]
   teamEvents             TeamEvent[]
   resultsEndpoints       ResultsEndpoint[]
+  specialAwards          SpecialAward[]
   duelDisplayEndpoints   DuelDisplayEndpoint[]
   medalTallyEndpoints    MedalTallyEndpoint[]
   announcementEndpoints  AnnouncementEndpoint[]
@@ -710,9 +712,20 @@ model EventCompetition {
   // Judging setup (method, templates, duel config, result scope) frozen while set
   configLockedAt          DateTime?
   configLockedBy          String?
+  /// A competition judged as several (e.g. "Kereta Terpantas", "Pembentangan Terbaik"):
+  /// each split is a row of its own with its own judging, results and certificates,
+  /// sharing the competition's registered teams. The original row (parentId null)
+  /// stays the registration / integration anchor; added splits point at it.
+  /// "" = not split. See src/lib/competition-split.ts.
+  splitLabel              String    @default("")
+  parentId                String?
+  /// Its results feed the Medal Tally (one split of a competition may be left out).
+  countInMedals           Boolean   @default(true)
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
+  parent               EventCompetition?                 @relation("CompetitionSplits", fields: [parentId], references: [id], onDelete: Cascade)
+  splits               EventCompetition[]                @relation("CompetitionSplits")
   event                Event                             @relation(fields: [eventId], references: [id], onDelete: Cascade)
   competition          Competition                       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   judgingTemplates     EventCompetitionJudgingTemplate[]
@@ -720,9 +733,11 @@ model EventCompetition {
   duelRounds           DuelRound[]
   duelControlEndpoints DuelControlEndpoint[]
   teamMerges           TeamMerge[]
+  specialAwards        SpecialAward[]
   webcraftAiJudgements WebcraftAiJudgement[]
 
-  @@unique([eventId, competitionId])
+  @@unique([eventId, competitionId, splitLabel])
+  @@index([parentId])
   @@map("event_competitions")
 }
 
@@ -1053,6 +1068,7 @@ model Team {
   walkInRegistrations   WalkInRegistration[]
   walkInFormSubmissions WalkInFormSubmission[]
   duelEntries           DuelEntry[]
+  specialAwardWins      SpecialAwardWinner[]
 
   @@map("teams")
 }
@@ -2155,6 +2171,52 @@ model TeamMerge {
 
   @@index([eventCompetitionId])
   @@map("team_merges")
+}
+
+/// Anugerah Tambahan: an award beside a competition's ranked places (e.g. best
+/// speaker, best design). `basis` COMPETITION ties it to one event competition,
+/// CUSTOM to the event as a whole. With method TEMPLATE the winners are ranked
+/// live from the scores of the competition's tasks on `templateIds` (A, or
+/// A + B summed); with CUSTOM they are picked by hand (SpecialAwardWinner).
+model SpecialAward {
+  id                 String   @id @default(cuid())
+  eventId            String
+  name               String
+  basis              String   @default("COMPETITION") // COMPETITION | CUSTOM
+  recipientType      String   @default("TEAM") // TEAM | INDIVIDUAL
+  eventCompetitionId String?
+  method             String   @default("CUSTOM") // TEMPLATE | CUSTOM
+  templateIds        String[]
+  /// How many places are awarded (TEMPLATE: the top `places` ranks).
+  places             Int      @default(1)
+  position           Int      @default(0)
+  createdBy          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  event            Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventCompetition EventCompetition?    @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+  winners          SpecialAwardWinner[]
+
+  @@index([eventId])
+  @@map("special_awards")
+}
+
+/// A hand-picked winner of a CUSTOM-method special award: a team, or one participant.
+model SpecialAwardWinner {
+  id            String   @id @default(cuid())
+  awardId       String
+  rank          Int      @default(1)
+  teamId        String?
+  participantId String?
+  createdAt     DateTime @default(now())
+
+  award       SpecialAward @relation(fields: [awardId], references: [id], onDelete: Cascade)
+  team        Team?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  participant Participant? @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([awardId])
+  @@map("special_award_winners")
 }
 
 model DuelDisplayEndpoint {

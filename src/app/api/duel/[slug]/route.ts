@@ -1,4 +1,5 @@
 import { parseSharedRankMode } from "@/lib/sharedRank";
+import { competitionTitle } from "@/lib/competition-split";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { isLeagueRound, parseDuelConfig, remainingMs, roundTitle, sessionTitle } from "@/lib/duel";
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       eventId: endpoint.eventId, judgingMethod: "DUEL",
       ...(endpoint.competitionIds.length ? { id: { in: endpoint.competitionIds } } : {}),
     },
-    select: { id: true, duelConfig: true, competition: { select: { name: true, code: true } } },
+    select: { id: true, duelConfig: true, splitLabel: true, competition: { select: { name: true, code: true } } },
   });
   ecs.sort((a, b) => a.competition.code.localeCompare(b.competition.code, undefined, { numeric: true }));
   const now = Date.now();
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const competitions = await Promise.all(ecs.map(async ec => {
     const cfg = parseDuelConfig(ec.duelConfig);
     const all = (await loadRounds(ec.id)).filter(r => r.status !== "DRAFT");
-    const head = { id: ec.id, code: ec.competition.code, name: ec.competition.name, scope: cfg.scope, durationSec: cfg.durationSec, advance: cfg.advance };
+    const head = { id: ec.id, code: ec.competition.code, name: competitionTitle(ec.competition.name, ec.splitLabel), scope: cfg.scope, durationSec: cfg.durationSec, advance: cfg.advance };
     // Brackets: one national, or one per state (STATE scope), named from their teams.
     const keys = [...new Set(all.map(r => r.groupKey))];
     const nameOf = (key: string) => {

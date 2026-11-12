@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { competitionTitle } from "@/lib/competition-split";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
@@ -21,11 +22,12 @@ export default async function ScoreboardCompetitionPage({ params }: { params: Pr
       id: true, judgingMethod: true,
       event: { select: { id: true, name: true, slug: true } },
       competition: { select: { name: true, code: true } },
+      splitLabel: true,
     },
   });
   if (!ec) redirect(`/organizer/events/${slug}/manage/scoreboard`);
 
-  const props = { event: ec.event, ecId: ec.id, competition: ec.competition };
+  const props = { event: ec.event, ecId: ec.id, competition: { ...ec.competition, name: competitionTitle(ec.competition.name, ec.splitLabel) } };
   return (
     <OrganizerShell userName={session.name} role={session.role}>
       {ec.judgingMethod === "DUEL"

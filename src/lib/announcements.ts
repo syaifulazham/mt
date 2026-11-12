@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { competitionTitle } from "@/lib/competition-split";
 import { compareScoreTime, withSharedRanks, type SharedRankMode } from "@/lib/sharedRank";
 import { db } from "@/lib/db";
 import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
@@ -79,7 +80,7 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
     competition: { select: { code: true, name: true, targetGroups: { select: { targetGroup: { select: { schoolLevel: true } } } } } },
   } as const;
   const [ecs, wics, entries, event] = await Promise.all([
-    db.eventCompetition.findMany({ where: { eventId }, select }),
+    db.eventCompetition.findMany({ where: { eventId }, select: { ...select, splitLabel: true } }),
     db.eventWalkInCompetition.findMany({ where: { eventId }, select }),
     db.announcementEntry.findMany({ where: { eventId } }),
     db.event.findUnique({ where: { id: eventId }, select: { announcementMaxPlaces: true } }),
@@ -153,7 +154,7 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
     const e = entryBy.get(announceKey(x.kind, x.c.id, x.stateId));
     const item: AnnounceItem = {
       kind: x.kind, refId: x.c.id, stateId: x.stateId, stateName: x.stateId ? (stateNames.get(x.stateId) ?? "—") : null,
-      code: x.c.competition.code, name: x.c.competition.name, levels: levelsOf(x.c),
+      code: x.c.competition.code, name: competitionTitle(x.c.competition.name, "splitLabel" in x.c ? x.c.splitLabel : ""), levels: levelsOf(x.c),
       verifiedAt: iso(x.verifiedAt), verifiedBy: x.verifiedBy,
       greenLight: !!e?.greenLight, greenLitAt: iso(e?.greenLitAt ?? null), greenLitBy: e?.greenLitBy ?? null,
       announcedAt: iso(e?.announcedAt ?? null), announcedBy: e?.announcedBy ?? null,
@@ -174,7 +175,7 @@ export async function announcementBoard(eventId: string, opts: { withRankings?: 
     waiting: scoped.filter(x => x.status === "COMPLETED")
       .map(x => ({
         kind: x.kind, refId: x.c.id, stateId: x.stateId, stateName: x.stateId ? (stateNames.get(x.stateId) ?? "—") : null,
-        code: x.c.competition.code, name: x.c.competition.name, levels: levelsOf(x.c),
+        code: x.c.competition.code, name: competitionTitle(x.c.competition.name, "splitLabel" in x.c ? x.c.splitLabel : ""), levels: levelsOf(x.c),
         completedAt: iso(x.completedAt), completedBy: x.completedBy,
       }))
       .sort((a, b) => byTime(a.completedAt, b.completedAt) || a.code.localeCompare(b.code)),

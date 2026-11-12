@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { competitionTitle } from "@/lib/competition-split";
 import { db } from "@/lib/db";
 import { authMedia } from "@/lib/media-endpoint";
 import { isStreamLive, streamConfigured } from "@/lib/cf-stream";
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const ecs = await db.eventCompetition.findMany({
     where: { eventId: a.ep.eventId, judgingMethod: "DUEL" },
     select: {
-      id: true, duelConfig: true, competition: { select: { code: true, name: true } },
+      id: true, duelConfig: true, splitLabel: true, competition: { select: { code: true, name: true } },
       duelRounds: {
         where: { status: { not: "DRAFT" } },
         orderBy: [{ groupKey: "asc" }, { number: "desc" }],
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     const latest = new Map<string, (typeof ec.duelRounds)[number]>();
     for (const r of ec.duelRounds) if (!latest.has(r.groupKey)) latest.set(r.groupKey, r);
     return {
-      id: ec.id, code: ec.competition.code, name: ec.competition.name,
+      id: ec.id, code: ec.competition.code, name: competitionTitle(ec.competition.name, ec.splitLabel),
       scope: parseDuelConfig(ec.duelConfig).scope,
       sessions: [...latest.values()].flatMap(r => r.sessions.map(s => ({
         id: s.id,

@@ -3,6 +3,7 @@ import { verifiedStatesBy } from "@/lib/judgingStatus";
 import { compareScoreTime, parseSharedRankMode, withSharedRanks, type SharedRankMode } from "@/lib/sharedRank";
 import { HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, isForeignCountry } from "@/lib/countries";
 import { hiddenMembers, mergeByLead, mergesByEc } from "@/lib/team-merge-server";
+import { competitionTitle } from "@/lib/competition-split";
 import { defaultResultScope, resolveResultScope, type ResultScope } from "@/lib/resultScope";
 
 // Competition rankings from judging scores — shared by the public results
@@ -61,6 +62,10 @@ export interface CompetitionResult {
   foreignRankings: RankingEntry[];
   /** The event's shared-rank rule; re-rank per state/country with the same one. */
   rankMode: SharedRankMode;
+  /** Judging split (src/lib/competition-split.ts): its label ("" = not split), whether it is an added split, and whether it feeds the Medal Tally. */
+  splitLabel: string;
+  isSplit: boolean;
+  countInMedals: boolean;
 }
 
 type Agg = { totalScore: number; bestTime: number | null };
@@ -161,6 +166,7 @@ export async function computeCompetitionResults(
         resultScope: defaultResultScope(eventScope),
         judgingVerifiedAt: wc.judgingVerifiedAt,
         verifiedStateIds: [],
+        splitLabel: "", isSplit: false, countInMedals: true,
         ...rankSplit(registrations.map((reg) => {
           const agg = scoreMap.get(reg.id) ?? { totalScore: 0, bestTime: null };
           return {
@@ -215,7 +221,8 @@ export async function computeCompetitionResults(
 
     competitions.push({
       id: ec.id,
-      name: ec.competition.name,
+      name: competitionTitle(ec.competition.name, ec.splitLabel),
+      splitLabel: ec.splitLabel, isSplit: !!ec.parentId, countInMedals: ec.countInMedals,
       code: ec.competition.code,
       targetGroups: ec.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
       judgingStatus: ec.judgingStatus,

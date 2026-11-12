@@ -30,8 +30,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const { id: eventId } = await params;
 
+  // Judging splits are managed on Penghakiman; the event's competition list is the original rows.
   const rows = await db.eventCompetition.findMany({
-    where: { eventId },
+    where: { eventId, parentId: null },
     orderBy: { createdAt: "asc" },
     include: makeEcInclude(eventId),
   });

@@ -8,6 +8,10 @@ import { resolveResultScope, type ResultScope } from "@/lib/resultScope";
 import { flagEmoji, isForeignCountry } from "@/lib/countries";
 import { EventResultsClient } from "@/components/organizer/events/EventResultsClient";
 import { eventJudgingProgress, type JudgingRow } from "@/lib/judgingStatus";
+import { hiddenMembers, mergeByLead, mergesByEc } from "@/lib/team-merge-server";
+import { loadSpecialAwards } from "@/lib/special-awards";
+import { competitionTitle } from "@/lib/competition-split";
+import { SpecialAwardsSummary } from "@/components/organizer/awards/SpecialAwardsSummary";
 
 export const metadata: Metadata = { title: "Keputusan" };
 
@@ -25,7 +29,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
         select: {
           id: true,
           judgingStatus: true, judgingVerifiedAt: true, judgingVerifiedBy: true,
-          resultScope: true, judgingMethod: true, duelConfig: true,
+          resultScope: true, judgingMethod: true, duelConfig: true, splitLabel: true,
           competition: {
             select: {
               id: true,
@@ -82,6 +86,8 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
   const competitionRankings: CompetitionRankingOut[] = [];
   // Per-state judging rows ("Semua" + states with teams) for the verification table.
   const progress = new Map((await eventJudgingProgress(event.id)).map((p) => [p.id, p.rows]));
+  // Merged state teams rank once, under the lead team's id and the merge's name.
+  const merges = await mergesByEc(event.eventCompetitions.map((ec) => ec.id));
 
   for (const ec of event.eventCompetitions) {
     const targetGroup = ec.competition.targetGroups[0]?.targetGroup ?? null;
@@ -95,8 +101,10 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     };
 
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();
+    const hidden = hiddenMembers(merges.get(ec.id)), leads = mergeByLead(merges.get(ec.id));
     for (const task of ec.judgingTasks) {
       for (const s of task.scores) {
+        if (hidden.has(s.teamId)) continue;
         const cur = scoreMap.get(s.teamId) ?? { total: 0, minTime: null };
         cur.total += s.score ?? 0;
         if (s.timeSeconds != null) {
@@ -108,7 +116,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
     if (scoreMap.size === 0) {
       competitionRankings.push({
-        id: ec.competition.id, name: ec.competition.name, code: ec.competition.code,
+        id: ec.id, name: competitionTitle(ec.competition.name, ec.splitLabel), code: ec.competition.code,
         targetGroup, judging, rankings: [], stateGroups: [], resultScope,
       });
       continue;
@@ -155,7 +163,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       const sid = t.contingent.stateId ?? t.contingent.school?.stateId ?? t.contingent.higherInstitution?.stateId ?? null;
       return {
         teamId: t.id,
-        teamName: t.name,
+        teamName: leads.get(t.id)?.name ?? t.name,
         // Foreign teams are ranked here with everyone (the public board keeps them
         // to the Antara Bangsa view); the country tells them apart.
         contingentName: isForeignCountry(t.contingent.country)
@@ -213,10 +221,12 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     }
 
     competitionRankings.push({
-      id: ec.competition.id, name: ec.competition.name, code: ec.competition.code,
+      id: ec.id, name: competitionTitle(ec.competition.name, ec.splitLabel), code: ec.competition.code,
       targetGroup, judging, rankings, stateGroups, resultScope,
     });
   }
+
+  const specialAwards = await loadSpecialAwards(event.id);
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
@@ -227,6 +237,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
         canWrite={["SUPER_ADMIN", "ADMIN"].includes(session.role)}
         isSuperAdmin={session.role === "SUPER_ADMIN"}
       />
+      <SpecialAwardsSummary awards={specialAwards} eventSlug={event.slug} />
     </OrganizerShell>
   );
 }

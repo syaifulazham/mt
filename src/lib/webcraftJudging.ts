@@ -30,7 +30,7 @@ export type WebcraftRosterCompetition = {
  */
 export async function loadWebcraftRoster(eventId: string): Promise<WebcraftRosterCompetition[]> {
   const ecs = await db.eventCompetition.findMany({
-    where:   { eventId, competition: { thirdPartyIntegration: WEBCRAFT_INTEGRATION } },
+    where:   { eventId, parentId: null, competition: { thirdPartyIntegration: WEBCRAFT_INTEGRATION } },
     select:  { id: true, competition: { select: { id: true, code: true, name: true, participationType: true } } },
     orderBy: { competition: { code: "asc" } },
   });

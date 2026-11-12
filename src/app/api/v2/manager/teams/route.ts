@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
 
   const eventComps = eventIds.length > 0
     ? await db.eventCompetition.findMany({
-        where: { competitionId: { in: competitionIds }, eventId: { in: eventIds } },
+        where: { competitionId: { in: competitionIds }, eventId: { in: eventIds }, parentId: null },
         select: { eventId: true, competitionId: true, eptimEduCourseId: true, eptimEduCourseTitle: true },
       })
     : [];

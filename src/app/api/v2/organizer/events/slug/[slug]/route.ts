@@ -14,6 +14,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       state: { select: { id: true, name: true } },
       zone:  { select: { id: true, name: true } },
       eventCompetitions: {
+        where: { parentId: null },
         orderBy: { createdAt: "asc" },
         include: {
           competition: {

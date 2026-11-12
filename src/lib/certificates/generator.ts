@@ -171,8 +171,9 @@ async function pregenSlots(cfg: GeneratorConfig) {
   const from = Math.max(1, cfg.rankFrom ?? 1), to = Math.max(from, cfg.rankTo ?? 3);
   const codes = cfg.competitionCodes?.length ? cfg.competitionCodes : null;
   const event = await db.event.findUnique({ where: { id: cfg.eventId! }, select: { scope: true } });
+  // Pre-event slots are per competition (compId): judging splits share the original's.
   const ecs = (await db.eventCompetition.findMany({
-    where: { eventId: cfg.eventId! },
+    where: { eventId: cfg.eventId!, parentId: null },
     select: {
       resultScope: true, judgingMethod: true, duelConfig: true,
       competition: { select: { id: true, code: true, name: true, participationType: true, maxTeamSize: true } },
@@ -315,7 +316,8 @@ export async function resolveRecipients(
           // International awards are a separate achievement from the national /
           // state ones, so they get their own key: a Malaysian winner in both
           // gets two certificates on the same template, never one overwritten.
-          key: `${intl ? "win-intl" : "win"}:${cfg.eventId}:${r.code}:${pid}`,
+          // An added judging split keys on its own row, so its winners never overwrite the original's.
+          key: `${intl ? "win-intl" : "win"}:${cfg.eventId}:${r.code}${r.isSplit ? `~${r.id}` : ""}:${pid}`,
           participantId: pid, name: p?.name ?? e.members.find(m => m.id === pid)?.name ?? "", ic: p?.ic ?? null,
           // A merged state team's members each keep their own contingent.
           contingentId: e.members.find(m => m.id === pid)?.contingentId ?? e.contingentId,

@@ -73,3 +73,15 @@ Other load-bearing decisions:
 - Fonts live in `public/fonts/certificates/` (OFL) because `public/` is what the
   Docker runner copies; `helvetica` is kept only because imported mt25 templates
   rendered as Helvetica and must keep looking that way.
+
+## Competition splits
+
+One competition can be judged as several labelled event competitions
+("4.2R … — Kereta Terpantas", "4.2R … — Pembentangan Terbaik"), each with its own
+judging setup, results, certificates and Medal Tally switch (`countInMedals`).
+The original row (`parentId` null) is the **registration / integration anchor**:
+registration, the manager and participant portals, quizzes, LMS courses and the
+score syncs (CSI, Webcraft, drone) must only ever read it — add
+`parentId: null` to any such `eventCompetition` query or `eventCompetitions`
+include. Judging, scoreboard, results, certificates and awards include every
+split and show `competitionTitle(name, splitLabel)` (`src/lib/competition-split.ts`).

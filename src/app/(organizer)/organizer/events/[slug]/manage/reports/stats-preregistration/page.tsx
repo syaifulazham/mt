@@ -22,6 +22,7 @@ export default async function StatsPreregistrationPage({ params }: { params: Pro
     select: {
       id: true, name: true, slug: true,
       eventCompetitions: {
+        where: { parentId: null },
         select: {
           competition: {
             select: {

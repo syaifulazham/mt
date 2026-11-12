@@ -31,7 +31,7 @@ export async function POST(
 
   // Fetch all competitions linked to prerequisite events
   const sourceEcs = await db.eventCompetition.findMany({
-    where: { eventId: { in: prerequisiteIds } },
+    where: { eventId: { in: prerequisiteIds }, parentId: null },
     select: { competitionId: true },
     distinct: ["competitionId"],
   });

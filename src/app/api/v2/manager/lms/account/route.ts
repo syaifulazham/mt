@@ -57,7 +57,7 @@ async function buildDbCourseNames(contingentIds: string[]): Promise<Map<string, 
   const eventIds = [...new Set(teams.flatMap((t) => t.teamEvents.map((te) => te.eventId)))];
   if (eventIds.length > 0) {
     const ecs = await db.eventCompetition.findMany({
-      where: { competitionId: { in: compIds }, eventId: { in: eventIds }, eptimEduCourseId: { not: null } },
+      where: { competitionId: { in: compIds }, eventId: { in: eventIds }, parentId: null, eptimEduCourseId: { not: null } },
       select: { competitionId: true, eptimEduCourseId: true, eptimEduCourseTitle: true },
     });
     for (const ec of ecs) {

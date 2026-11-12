@@ -74,7 +74,7 @@ export async function GET() {
       participationPolicy: true,
       winnerExclusionRank: true,
       eventCompetitions: {
-        where: { competitionId: { in: competitionIds } },
+        where: { parentId: null, competitionId: { in: competitionIds } },
         select: { competitionId: true },
       },
       teamEvents: {

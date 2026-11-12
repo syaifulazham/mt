@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { duelStandings, leagueQualifiers, leagueTables, parseDuelConfig, remainingMs, roundTitle, type DrawTeam } from "@/lib/duel";
 import { isStreamLive } from "@/lib/cf-stream";
 import { currentDuelEndpoint } from "@/lib/duel-control";
+import { competitionTitle } from "@/lib/competition-split";
 import { activeMerges, type MergeRow } from "@/lib/team-merge-server";
 
 /** Draw, confirm, reopen and config. */
@@ -60,15 +61,18 @@ function teamDto(t: TeamRow): DuelTeam {
 export const asDrawTeam = (t: DuelTeam): DrawTeam => ({ id: t.id, contingentId: t.contingentId, stateId: t.stateId });
 
 export async function loadDuelEc(eventId: string, ecId: string) {
-  return db.eventCompetition.findFirst({
+  const ec = await db.eventCompetition.findFirst({
     where: { id: ecId, eventId },
     select: {
       id: true, eventId: true, competitionId: true, judgingMethod: true, duelConfig: true, mergeByState: true, mergeMax: true,
       resultScope: true, configLockedAt: true,
       competition: { select: { name: true, code: true, participationType: true } },
       event: { select: { name: true, slug: true, scope: true, sharedRankMode: true } },
+      splitLabel: true,
     },
   });
+  // A judging split shows as "Name — Label" everywhere the duel goes.
+  return ec && { ...ec, competition: { ...ec.competition, name: competitionTitle(ec.competition.name, ec.splitLabel) } };
 }
 
 /**

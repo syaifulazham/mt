@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { competitionTitle } from "@/lib/competition-split";
 import { authDuelControl, findDuelControl } from "@/lib/duel-control";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const ep = await findDuelControl(slug);
   if (!ep) return NextResponse.json({ error: "NOT_FOUND", message: "Pautan tidak wujud atau telah ditutup." }, { status: 404 });
   const ec = ep.eventCompetition;
-  return NextResponse.json({ label: ep.label, eventName: ec.event.name, competition: ec.competition });
+  return NextResponse.json({ label: ep.label, eventName: ec.event.name, competition: { ...ec.competition, name: competitionTitle(ec.competition.name, ec.splitLabel) } });
 }
 
 // POST — check the passcode (header x-duel-passcode); returns what the replica page needs.
