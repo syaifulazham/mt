@@ -32,7 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
   const { id } = await params;
-  const { format, chunkBy, sort, filters, chunk, token } = parseDownloadParams(req.nextUrl.searchParams);
+  const { format, chunkBy, sort, filters, chunk, token, split } = parseDownloadParams(req.nextUrl.searchParams);
   const fail = (error: string, status: number) => { setProgress(token, { finished: true, error }); return NextResponse.json({ error }, { status }); };
 
   const job = await db.certGeneratorJob.findUnique({ where: { id }, select: { id: true, templateId: true } });
@@ -87,16 +87,38 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     for (const [k, list] of [...groups.entries()].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))) {
       const byVersion = new Map<string, typeof certs>();
       for (const c of list) byVersion.set(c.templateVersionId, [...(byVersion.get(c.templateVersionId) ?? []), c]);
-      for (const [vid, part] of byVersion)
-        files.push([`${k}${byVersion.size > 1 ? ` (v${versions.get(vid)!.version})` : ""}.pdf`, part]);
+      for (const [vid, list2] of byVersion)
+        files.push([`${k}${byVersion.size > 1 ? ` (v${versions.get(vid)!.version})` : ""}.pdf`, list2]);
     }
   }
 
-  setProgress(token, { done: 0, total: files.length, certs: certs.length, finished: false, error: null });
+  // Further splits of this ZIP (after failed downloads), applied in order. Each
+  // takes whole files when there are enough of them, otherwise runs of pages —
+  // a PDF cut across parts is named "… (bahagian n).pdf".
+  for (const { part, parts } of split) {
+    const sliceOf = <T,>(list: T[]) => {
+      const size = Math.ceil(list.length / parts);
+      return list.slice((part - 1) * size, part * size);
+    };
+    if (files.length >= parts) {
+      files.splice(0, files.length, ...sliceOf(files));
+    } else {
+      const whole = new Map(files.map(([path, list]) => [path, list.length]));
+      const regrouped = new Map<string, typeof certs>();
+      for (const { path, c } of sliceOf(files.flatMap(([path, list]) => list.map(c => ({ path, c })))))
+        regrouped.set(path, [...(regrouped.get(path) ?? []), c]);
+      files.splice(0, files.length, ...[...regrouped.entries()].map(([path, list]): [string, typeof certs] =>
+        [list.length < (whole.get(path) ?? 0) ? path.replace(/\.pdf$/, ` (bahagian ${part}).pdf`) : path, list]));
+    }
+  }
+  if (files.length === 0) return fail("Bahagian ini kosong.", 404);
+  const partCerts = files.reduce((n, [, list]) => n + list.length, 0);
+
+  setProgress(token, { done: 0, total: files.length, certs: partCerts, finished: false, error: null });
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      let failed = false, done = 0;
+      let failed = false, done = 0, current = "";
       const zip = new Zip((err, chunk, final) => {
         if (err) { failed = true; controller.error(err); return; }
         controller.enqueue(chunk);
@@ -105,6 +127,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       try {
         for (const [path, list] of files) {
           if (req.signal.aborted || failed) break;
+          current = path;
           const v = versions.get(list[0].templateVersionId)!;
           const baseAsset = { url: v.baseAssetUrl, type: v.baseAssetType };
           const config = v.config as CertConfig;
@@ -126,15 +149,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         setProgress(token, req.signal.aborted || failed ? { finished: true, error: "Muat turun dibatalkan." } : { finished: true });
       } catch (e) {
         console.error(`[certificates] bulk download of job ${id} failed:`, e);
-        setProgress(token, { finished: true, error: "Gagal menjana sijil." });
+        // Name the file and the reason, so the organizer can see what to fix.
+        const why = e instanceof Error ? e.message : String(e);
+        setProgress(token, { finished: true, error: `Gagal menjana ${current || "sijil"}: ${why}`.slice(0, 300) });
         if (!failed) controller.error(e);
       }
     },
   });
 
-  const part = chunkBy !== "none" && chunk !== null ? `_${clean(chunk).replace(/ /g, "_")}` : "";
-  const zipName = `${clean(templateName).replace(/ /g, "_")}_${format}${part}.zip`;
-  console.warn(`[certificates] ${session.name || session.email} downloaded ${certs.length} certificates of job ${id} as ${format}${part} (${files.length} files)`);
+  const suffix = (chunkBy !== "none" && chunk !== null ? `_${clean(chunk).replace(/ /g, "_")}` : "")
+    + split.map(x => `_bahagian-${x.part}-${x.parts}`).join("");
+  const zipName = `${clean(templateName).replace(/ /g, "_")}_${format}${suffix}.zip`;
+  console.warn(`[certificates] ${session.name || session.email} downloaded ${partCerts} certificates of job ${id} as ${format}${suffix} (${files.length} files)`);
   return new NextResponse(stream, {
     headers: {
       "Content-Type": "application/zip",

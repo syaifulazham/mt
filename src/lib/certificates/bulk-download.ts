@@ -66,7 +66,13 @@ export function parseDownloadParams(sp: URLSearchParams) {
     q: sp.get("q")?.trim() ?? "", states: list(sp.get("states")), targetGroups: list(sp.get("targetGroups")), competitions: list(sp.get("competitions")),
   };
   const sort = (SORTS as readonly string[]).includes(sp.get("sort") ?? "") ? sp.get("sort") as CertSort : "competition";
-  return { format, chunkBy, sort, filters, chunk: sp.get("chunk"), token: sp.get("token") };
+  // Further splits of one ZIP (after failed downloads), applied in order:
+  // "2/4,1/2" = part 2 of 4, then part 1 of 2 of that.
+  const split = (sp.get("split") ?? "").split(",").flatMap(s => {
+    const [p, n] = s.split("/").map(Number);
+    return Number.isInteger(p) && Number.isInteger(n) && n >= 2 && n <= 50 && p >= 1 && p <= n ? [{ part: p, parts: n }] : [];
+  }).slice(0, 6);
+  return { format, chunkBy, sort, filters, chunk: sp.get("chunk"), token: sp.get("token"), split };
 }
 
 /** The job's certificates that may be downloaded (not revoked), narrowed by the search text. */

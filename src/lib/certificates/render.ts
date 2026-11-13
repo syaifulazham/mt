@@ -239,6 +239,10 @@ async function drawCertificatePage(ctx: {
       if (value) value = `${el.prefix ?? ""}${value}${el.suffix ?? ""}`;
     }
 
+    // Tabs, line breaks and other control characters (e.g. a name pasted with a
+    // trailing tab) have no glyph in any font and make pdf-lib throw, failing the
+    // whole PDF — print them as single spaces.
+    value = value.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/ {2,}/g, " ").trim();
     value = applyTransform(value, el.style.transform);
     if (!value) continue;
 

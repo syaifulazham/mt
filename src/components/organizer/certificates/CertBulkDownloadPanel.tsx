@@ -14,7 +14,8 @@ type Plan = {
   facets: { states: Count[]; targetGroups: Count[]; competitions: Count[]; contingents: number };
 };
 type Advice = { format: ZipFormat; chunkBy: ChunkBy; sort: CertSort; reason: string; tips: string[]; source: "ai" | "rules" };
-type Run = Chunk & { state: "waiting" | "running" | "done" | "failed"; done: number; total: number; error?: string };
+/** One ZIP of a download; `part`/`parts` when a failed ZIP was split further. */
+type Run = Chunk & { state: "waiting" | "running" | "done" | "failed"; done: number; total: number; error?: string; split?: { part: number; parts: number }[] };
 
 const FORMATS: { key: ZipFormat; label: string; hint: string }[] = [
   { key: "single",      label: "Setiap sijil",      hint: "Satu PDF bagi setiap sijil (dalam folder pertandingan). Fail besar — setiap PDF membawa latar templat sendiri." },
@@ -145,7 +146,10 @@ export function CertBulkDownloadPanel({ jobId, query }: { jobId: string; query: 
     // A hidden frame per ZIP: the browser saves it as a normal download (nothing held in memory).
     const frame = document.createElement("iframe");
     frame.style.display = "none";
-    frame.src = `${api}?${q.query({ token, ...(q.chunked && { chunk: run.key }) })}`;
+    frame.src = `${api}?${q.query({
+      token, ...(q.chunked && { chunk: run.key }),
+      ...(run.split?.length && { split: run.split.map(x => `${x.part}/${x.parts}`).join(",") }),
+    })}`;
     frameRef.current?.appendChild(frame);
 
     const began = Date.now();
@@ -187,6 +191,28 @@ export function CertBulkDownloadPanel({ jobId, query }: { jobId: string; query: 
     const queue: Run[] = plan.chunks.map(c => ({ ...c, state: "waiting", done: 0, total: c.files }));
     setRuns(queue);
     await runQueue(queue, queue.map((_, i) => i));
+  }
+
+  /**
+   * Splits a failed ZIP into `n` smaller ZIPs (whole PDFs, or runs of pages
+   * when it holds fewer PDFs than parts) and downloads them. A part that fails
+   * can be split again.
+   */
+  async function splitRun(index: number, n: number) {
+    if (!runs || !runQueryRef.current) return;
+    const r = runs[index];
+    const name = r.label.replace(/ \(bahagian [^)]*\)$/, "");
+    const path = (r.split ?? []).map(x => `${x.part}/${x.parts}`);
+    const subs: Run[] = Array.from({ length: n }, (_, k) => ({
+      ...r,
+      split: [...(r.split ?? []), { part: k + 1, parts: n }],
+      label: `${name} (bahagian ${[...path, `${k + 1}/${n}`].join(" › ")})`,
+      certs: Math.ceil(r.certs / n), files: Math.max(1, Math.ceil(r.files / n)),
+      state: "waiting", done: 0, total: Math.max(1, Math.ceil(r.files / n)), error: undefined,
+    }));
+    const list = [...runs.slice(0, index), ...subs, ...runs.slice(index + 1)];
+    setRuns(list);
+    await runQueue(list, subs.map((_, k) => index + k));
   }
 
   /** Retries one failed ZIP, or (no index) every failed one. */
@@ -333,12 +359,22 @@ export function CertBulkDownloadPanel({ jobId, query }: { jobId: string; query: 
                 <span className={cn("w-40 shrink-0 text-right font-mono text-[10px]", r.state === "failed" ? "text-red-600" : "text-zinc-500")} title={r.error}>
                   {r.state === "failed" ? r.error : r.state === "waiting" ? "menunggu" : `${r.done}/${r.total} PDF · ${r.certs.toLocaleString()} sijil`}
                 </span>
-                <span className="w-20 shrink-0 text-right">
+                <span className="w-44 shrink-0 text-right">
                   {r.state === "failed" && !running && (
-                    <button type="button" onClick={() => void retry(i)} title={`Muat turun semula ${r.label}`}
-                      className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium text-[#085782] hover:bg-sky-50">
-                      <RotateCcw className="h-3 w-3" /> Cuba semula
-                    </button>
+                    <span className="inline-flex items-center gap-1">
+                      <button type="button" onClick={() => void retry(i)} title={`Muat turun semula ${r.label}`}
+                        className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium text-[#085782] hover:bg-sky-50">
+                        <RotateCcw className="h-3 w-3" /> Cuba semula
+                      </button>
+                      {r.certs > 1 && (
+                        <select value="" onChange={e => { const n = Number(e.target.value); if (n) void splitRun(i, n); }}
+                          title="Pecahkan ZIP ini kepada bahagian yang lebih kecil dan muat turun semula"
+                          className="h-5 rounded border bg-white px-1 text-[10px] font-medium text-[#085782] hover:bg-sky-50">
+                          <option value="">Pecah…</option>
+                          {[2, 4, 8].filter(n => n <= r.certs).map(n => <option key={n} value={n}>{n} bahagian</option>)}
+                        </select>
+                      )}
+                    </span>
                   )}
                 </span>
               </li>
