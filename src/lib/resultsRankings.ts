@@ -4,6 +4,8 @@ import { compareScoreTime, parseSharedRankMode, withSharedRanks, type SharedRank
 import { HOME_COUNTRY_ISO2, INTERNATIONAL_SCOPE_ID, isForeignCountry } from "@/lib/countries";
 import { hiddenMembers, mergeByLead, mergesByEc } from "@/lib/team-merge-server";
 import { competitionTitle } from "@/lib/competition-split";
+import { duelStandings } from "@/lib/duel";
+import { loadRounds } from "@/lib/duel-server";
 import { defaultResultScope, resolveResultScope, type ResultScope } from "@/lib/resultScope";
 
 // Competition rankings from judging scores — shared by the public results
@@ -37,6 +39,8 @@ export interface RankingEntry {
   countryCode: string | null;
   totalScore: number;
   bestTime: number | null;
+  /** Duel competitions: the team's final position in its bracket (ranks follow it, not the total). */
+  order?: number | null;
   /** A merged state team's members carry their own contingent (certificates print it). */
   members: { id: string; name: string; contingentId?: string; contingentName?: string }[];
   /** Set for a merged state team ("JOHOR A"): its registered teams. */
@@ -66,6 +70,8 @@ export interface CompetitionResult {
   splitLabel: string;
   isSplit: boolean;
   countInMedals: boolean;
+  /** "SCORE" (judging templates: totals are marks) or "DUEL" (Kedudukan Akhir: totals are duel points). */
+  judgingMethod: string;
 }
 
 type Agg = { totalScore: number; bestTime: number | null };
@@ -122,6 +128,16 @@ function contingentFields(c: ContingentRow) {
 }
 
 /**
+ * A duel competition's Kedudukan Akhir (confirmed rounds only), every bracket:
+ * one national list, or one per state — positions are within the bracket.
+ */
+async function duelFinalStandings(ecId: string, mode: SharedRankMode) {
+  const rounds = (await loadRounds(ecId)).filter(r => r.status !== "DRAFT");
+  const keys = [...new Set(rounds.map(r => r.groupKey))];
+  return keys.flatMap(k => duelStandings(rounds.filter(r => r.groupKey === k), mode));
+}
+
+/**
  * Results of an event's competitions. `ids` limits to those EventCompetition /
  * EventWalkInCompetition ids (null = all of the event's).
  */
@@ -166,7 +182,7 @@ export async function computeCompetitionResults(
         resultScope: defaultResultScope(eventScope),
         judgingVerifiedAt: wc.judgingVerifiedAt,
         verifiedStateIds: [],
-        splitLabel: "", isSplit: false, countInMedals: true,
+        splitLabel: "", isSplit: false, countInMedals: true, judgingMethod: "SCORE",
         ...rankSplit(registrations.map((reg) => {
           const agg = scoreMap.get(reg.id) ?? { totalScore: 0, bestTime: null };
           return {
@@ -201,8 +217,18 @@ export async function computeCompetitionResults(
   const mergeMap = await mergesByEc(eventCompetitions.map(ec => ec.id));
   for (const ec of eventCompetitions) {
     const scoreMap = new Map<string, Agg>();
-    for (const task of ec.judgingTasks)
-      for (const s of task.scores) addScore(scoreMap, s.teamId, s.score, s.timeSeconds);
+    // Duel: the Kedudukan Akhir — duel points as the total, the position (per
+    // bracket, with the duel's own tie-breaks) deciding the rank.
+    const orderOf = new Map<string, number>();
+    if (ec.judgingMethod === "DUEL") {
+      for (const s of await duelFinalStandings(ec.id, mode)) {
+        scoreMap.set(s.teamId, { totalScore: s.total, bestTime: null });
+        orderOf.set(s.teamId, s.position);
+      }
+    } else {
+      for (const task of ec.judgingTasks)
+        for (const s of task.scores) addScore(scoreMap, s.teamId, s.score, s.timeSeconds);
+    }
 
     // Merged state teams rank once, under the lead's id and the merge's name.
     const merges = mergeMap.get(ec.id);
@@ -222,7 +248,7 @@ export async function computeCompetitionResults(
     competitions.push({
       id: ec.id,
       name: competitionTitle(ec.competition.name, ec.splitLabel),
-      splitLabel: ec.splitLabel, isSplit: !!ec.parentId, countInMedals: ec.countInMedals,
+      splitLabel: ec.splitLabel, isSplit: !!ec.parentId, countInMedals: ec.countInMedals, judgingMethod: ec.judgingMethod,
       code: ec.competition.code,
       targetGroups: ec.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
       judgingStatus: ec.judgingStatus,
@@ -243,6 +269,7 @@ export async function computeCompetitionResults(
             contingentLogo: null,
             totalScore: agg.totalScore,
             bestTime: agg.bestTime,
+            order: orderOf.get(team.id) ?? null,
             members: parts.flatMap(t => t.members.map(m => ({
               id: m.participant.id, name: m.participant.name, contingentId: t.contingent.id, contingentName: t.contingent.name,
             }))),
@@ -255,6 +282,7 @@ export async function computeCompetitionResults(
           ...contingentFields(team.contingent),
           totalScore: agg.totalScore,
           bestTime: agg.bestTime,
+          order: orderOf.get(team.id) ?? null,
           members: team.members.map(m => ({ id: m.participant.id, name: m.participant.name })),
         };
       }), mode),

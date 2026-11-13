@@ -39,6 +39,8 @@ type CompetitionRanking = {
   stateGroups: StateGroup[];
   /** Penghakiman → Konfigurasi keputusan: the view each competition opens in. */
   resultScope: "NATIONAL" | "STATE";
+  /** "DUEL": the rankings are the duel's Kedudukan Akhir; totals are duel points. */
+  judgingMethod?: string;
 };
 
 type Endpoint = {
@@ -387,13 +389,14 @@ export function EventResultsClient({
     ? (activeRanking?.stateGroups.length ?? 0) > 0
     : (activeRanking?.rankings.length ?? 0) > 0;
 
+  const isDuel = activeRanking?.judgingMethod === "DUEL";
   // Shared table headers
   const thead = (
     <tr className="border-b bg-zinc-50/40 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
       <th className="px-4 py-2.5 text-center w-12">#</th>
       <th className="px-4 py-2.5">Pasukan</th>
       <th className="px-4 py-2.5">Kontinjen</th>
-      <th className="px-4 py-2.5 text-center w-24">Markah</th>
+      <th className="px-4 py-2.5 text-center w-24">{isDuel ? "Mata" : "Markah"}</th>
       <th className="px-4 py-2.5 text-center w-20">Masa</th>
       <th className="px-4 py-2.5 text-center w-16">Pilih</th>
     </tr>
@@ -415,7 +418,7 @@ export function EventResultsClient({
         <td className="px-4 py-3">
           <ContingentCell name={r.contingentName} logo={r.contingentLogo} />
         </td>
-        <td className="px-4 py-3 text-center font-bold text-rose-700">{r.totalScore.toFixed(1)}</td>
+        <td className="px-4 py-3 text-center font-bold text-rose-700">{isDuel ? r.totalScore : r.totalScore.toFixed(1)}</td>
         <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
           {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
         </td>
@@ -507,7 +510,7 @@ export function EventResultsClient({
 
         {!activeRanking || !hasData ? (
           <div className="py-12 text-center text-sm text-zinc-400">
-            Tiada markah direkodkan lagi untuk pertandingan ini.
+            {isDuel ? "Belum ada pusingan duel yang disahkan untuk pertandingan ini." : "Tiada markah direkodkan lagi untuk pertandingan ini."}
           </div>
         ) : useStateGroups ? (
           <div className="overflow-x-auto">

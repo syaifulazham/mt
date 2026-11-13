@@ -39,11 +39,16 @@ export function withSharedRanks<T>(
   });
 }
 
-/** Higher total first; ties go to the best (lowest) time, no time last. */
+/**
+ * Higher total first; ties go to the best (lowest) time, no time last.
+ * Entries that carry an `order` (a duel's final position, decided by its own
+ * tie-breaks) are compared by it instead: lower first, equal = shared rank.
+ */
 export function compareScoreTime(
-  a: { totalScore: number; bestTime: number | null },
-  b: { totalScore: number; bestTime: number | null },
+  a: { totalScore: number; bestTime: number | null; order?: number | null },
+  b: { totalScore: number; bestTime: number | null; order?: number | null },
 ): number {
+  if (a.order != null && b.order != null) return a.order - b.order;
   if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
   if (a.bestTime === null && b.bestTime === null) return 0;
   if (a.bestTime === null) return 1;

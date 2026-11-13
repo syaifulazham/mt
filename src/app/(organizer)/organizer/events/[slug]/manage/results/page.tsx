@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { parseSharedRankMode, withSharedRanks } from "@/lib/sharedRank";
+import { compareScoreTime, parseSharedRankMode, withSharedRanks } from "@/lib/sharedRank";
+import { computeCompetitionResults } from "@/lib/resultsRankings";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
@@ -81,6 +82,8 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     stateGroups: StateGroup[];
     /** Penghakiman → Konfigurasi keputusan: the view the page opens in. */
     resultScope: ResultScope;
+    /** "DUEL": rankings are the Kedudukan Akhir (totals are duel points). */
+    judgingMethod: string;
   };
 
   const competitionRankings: CompetitionRankingOut[] = [];
@@ -88,6 +91,10 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
   const progress = new Map((await eventJudgingProgress(event.id)).map((p) => [p.id, p.rows]));
   // Merged state teams rank once, under the lead team's id and the merge's name.
   const merges = await mergesByEc(event.eventCompetitions.map((ec) => ec.id));
+
+  // Duel competitions rank by their Kedudukan Akhir (src/lib/resultsRankings.ts), not by judging marks.
+  const duelIds = event.eventCompetitions.filter((ec) => ec.judgingMethod === "DUEL").map((ec) => ec.id);
+  const duelResults = new Map((duelIds.length ? await computeCompetitionResults(event.id, false, duelIds) : []).map((r) => [r.id, r]));
 
   for (const ec of event.eventCompetitions) {
     const targetGroup = ec.competition.targetGroups[0]?.targetGroup ?? null;
@@ -99,6 +106,41 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
       statusUrl:  `/api/v2/organizer/events/${event.id}/competitions/${ec.id}/judging-status`,
       rows:       progress.get(ec.id) ?? [],
     };
+
+    const duel = duelResults.get(ec.id);
+    if (duel) {
+      const entries = [...duel.rankings, ...duel.foreignRankings];
+      const selected = new Map((entries.length ? await db.teamEvent.findMany({
+        where: { eventId: event.id, teamId: { in: entries.map((e) => e.teamId) } }, select: { teamId: true, selected: true },
+      }) : []).map((te) => [te.teamId, te.selected]));
+      const toRow = (e: (typeof entries)[number], rank: number): RankEntry => ({
+        teamId: e.teamId, teamName: e.teamName,
+        contingentName: e.countryName ? `${e.contingentName} · ${e.countryName}` : e.contingentName,
+        contingentLogo: e.contingentLogo, totalScore: e.totalScore, bestTime: null, rank,
+        selected: selected.get(e.teamId) ?? false,
+      });
+      // One list in final-position order (foreign teams after, by their position).
+      const ordered = [...entries].sort(compareScoreTime);
+      const rankings = withSharedRanks(ordered, compareScoreTime, rankMode).map((e) => toRow(e, e.rank));
+      const byState = new Map<string, { stateName: string; list: typeof entries }>();
+      for (const e of ordered) {
+        if (!e.stateId) continue;
+        const g = byState.get(e.stateId) ?? { stateName: e.stateName ?? e.stateId, list: [] };
+        g.list.push(e);
+        byState.set(e.stateId, g);
+      }
+      const stateGroups: StateGroup[] = [...byState.entries()]
+        .map(([stateId, g]) => {
+          const teams = withSharedRanks(g.list, compareScoreTime, rankMode).map((e) => toRow(e, e.rank));
+          return { stateId, stateName: g.stateName, bestScore: teams[0]?.totalScore ?? 0, teams };
+        })
+        .sort((a, b) => a.stateName.localeCompare(b.stateName));
+      competitionRankings.push({
+        id: ec.id, name: competitionTitle(ec.competition.name, ec.splitLabel), code: ec.competition.code,
+        targetGroup, judging, rankings, stateGroups, resultScope, judgingMethod: "DUEL",
+      });
+      continue;
+    }
 
     const scoreMap = new Map<string, { total: number; minTime: number | null }>();
     const hidden = hiddenMembers(merges.get(ec.id)), leads = mergeByLead(merges.get(ec.id));
@@ -117,7 +159,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
     if (scoreMap.size === 0) {
       competitionRankings.push({
         id: ec.id, name: competitionTitle(ec.competition.name, ec.splitLabel), code: ec.competition.code,
-        targetGroup, judging, rankings: [], stateGroups: [], resultScope,
+        targetGroup, judging, rankings: [], stateGroups: [], resultScope, judgingMethod: ec.judgingMethod,
       });
       continue;
     }
@@ -222,7 +264,7 @@ export default async function EventResultsPage({ params }: { params: Promise<{ s
 
     competitionRankings.push({
       id: ec.id, name: competitionTitle(ec.competition.name, ec.splitLabel), code: ec.competition.code,
-      targetGroup, judging, rankings, stateGroups, resultScope,
+      targetGroup, judging, rankings, stateGroups, resultScope, judgingMethod: ec.judgingMethod,
     });
   }
 

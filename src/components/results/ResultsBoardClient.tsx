@@ -71,6 +71,8 @@ type RankEntry = {
   /** Foreign teams only (Antara Bangsa view). */
   countryName?: string | null; countryCode?: string | null;
   totalScore: number; bestTime: number | null;
+  /** Duel competitions: the final position — the total is duel points, shown whole. */
+  order?: number | null;
   members: { id: string; name: string }[];
 };
 
@@ -585,6 +587,11 @@ const PODIUM_CONFIG = [
   { pos: 3, height: "h-16", bg: "from-orange-400/30 to-orange-600/20", border: "border-orange-300/30", label: "text-orange-200", icon: "🥉" },
 ];
 
+/** A total as shown: duel points whole, marks to one decimal. */
+const fmtScore = (e: { totalScore: number; order?: number | null }) => (e.order != null ? String(e.totalScore) : e.totalScore.toFixed(1));
+/** "Mata" for a duel's Kedudukan Akhir, "Markah" otherwise. */
+const scoreLabel = (rows: { order?: number | null }[]) => (rows.some(r => r.order != null) ? "Mata" : "Markah");
+
 function Podium({ rankings, onSelect }: { rankings: RankEntry[]; onSelect: (e: RankEntry) => void }) {
   const top3 = [rankings[1], rankings[0], rankings[2]]; // silver, gold, bronze order
 
@@ -609,7 +616,7 @@ function Podium({ rankings, onSelect }: { rankings: RankEntry[]; onSelect: (e: R
                 {team.contingentShortName ?? team.contingentName}
               </p>
               <p className={cn("font-black text-2xl drop-shadow", pos === 1 ? "text-amber-300" : pos === 2 ? "text-slate-200" : "text-orange-300")}>
-                {team.totalScore.toFixed(1)}
+                {fmtScore(team)}
               </p>
               {team.bestTime != null && (
                 <p className="text-[11px] text-sky-300 font-mono">{fmtTime(team.bestTime)}</p>
@@ -643,7 +650,7 @@ function RankingsTable({ rankings, onSelect }: { rankings: RankEntry[]; onSelect
             <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider w-12">#</th>
             <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Pasukan</th>
             <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Kontinjen</th>
-            <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">Markah</th>
+            <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">{scoreLabel(rankings)}</th>
             <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">Masa</th>
           </tr>
         </thead>
@@ -662,7 +669,7 @@ function RankingsTable({ rankings, onSelect }: { rankings: RankEntry[]; onSelect
                   <span className="text-white/70 text-sm truncate max-w-[180px]">{r.contingentName}</span>
                 </div>
               </td>
-              <td className="px-4 py-3 text-right font-bold text-rose-300">{r.totalScore.toFixed(1)}</td>
+              <td className="px-4 py-3 text-right font-bold text-rose-300">{fmtScore(r)}</td>
               <td className="px-4 py-3 text-right font-mono text-sky-300 text-xs">
                 {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
               </td>
@@ -694,7 +701,7 @@ function InternationalBoard({ rankings, onSelect }: { rankings: RankEntry[]; onS
             <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Negara</th>
             <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Pasukan</th>
             <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider">Kontinjen</th>
-            <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">Markah</th>
+            <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">{scoreLabel(rankings)}</th>
             <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-white/40 uppercase tracking-wider w-20">Masa</th>
           </tr>
         </thead>
@@ -715,7 +722,7 @@ function InternationalBoard({ rankings, onSelect }: { rankings: RankEntry[]; onS
                   <span className="text-white/70 text-sm truncate max-w-[180px]">{r.contingentShortName ?? r.contingentName}</span>
                 </div>
               </td>
-              <td className="px-4 py-3 text-right font-bold text-rose-300">{r.totalScore.toFixed(1)}</td>
+              <td className="px-4 py-3 text-right font-bold text-rose-300">{fmtScore(r)}</td>
               <td className="px-4 py-3 text-right font-mono text-sky-300 text-xs">{r.bestTime != null ? fmtTime(r.bestTime) : "—"}</td>
             </tr>
           ))}
