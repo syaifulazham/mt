@@ -600,6 +600,7 @@ model Event {
   teamEvents             TeamEvent[]
   resultsEndpoints       ResultsEndpoint[]
   specialAwards          SpecialAward[]
+  internationalLinks     InternationalLink[]
   duelDisplayEndpoints   DuelDisplayEndpoint[]
   medalTallyEndpoints    MedalTallyEndpoint[]
   announcementEndpoints  AnnouncementEndpoint[]
@@ -2242,6 +2243,30 @@ model DuelScorecardLink {
 
   @@index([eventCompetitionId])
   @@map("duel_scorecard_links")
+}
+
+/// A passcode link (/intl/<routeSlug>, 6-character passcode) that lets a third
+/// party handle an event's international registration without an organizer
+/// account. Scope ALL reaches every foreign school; OWN only the schools
+/// created through the link (`contingentIds`). Acceptance stays with organizers.
+model InternationalLink {
+  id            String    @id @default(cuid())
+  eventId       String
+  routeSlug     String    @unique
+  passcode      String
+  label         String?
+  scope         String    @default("ALL") // ALL | OWN
+  contingentIds String[]
+  active        Boolean   @default(true)
+  createdBy     String?
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("international_links")
 }
 
 model DuelDisplayEndpoint {

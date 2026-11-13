@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOrganizerSession } from "@/lib/auth/session";
+import { currentInternationalLink } from "@/lib/international-link";
 import { foldEmail, isValidEmail } from "@/lib/email";
 import { ageFromBirthDate, parseBirthDate } from "@/lib/participantAge";
 import { matchesTargetGroup } from "@/lib/targetGroupMatch";
@@ -89,8 +90,17 @@ import { isForeignCountry } from "@/lib/countries";
 
 export const INTERNATIONAL_ROLES = ["SUPER_ADMIN", "ADMIN"] as const;
 
+/** False only for an OWN-scoped registration link asking for a school it did not create. */
+export function linkMayReach(contingentId: string): boolean {
+  const link = currentInternationalLink();
+  return !link || link.scope === "ALL" || link.contingentIds.includes(contingentId);
+}
+
 /** The session when the caller may manage international registration, else a 401/403 response. */
 export async function requireInternationalAdmin() {
+  // A third-party registration link (/intl/<slug>) acts as an ADMIN of its own event's international page.
+  const link = currentInternationalLink();
+  if (link) return { session: link } as const;
   const session = await getOrganizerSession();
   if (!session) return { error: NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 }) } as const;
   if (!(INTERNATIONAL_ROLES as readonly string[]).includes(session.role))
@@ -111,6 +121,8 @@ export async function loadForeignContingent(contingentId: string) {
   if (!c) return { error: NextResponse.json({ error: "CONTINGENT_NOT_FOUND" }, { status: 404 }) } as const;
   if (c.contingentType !== "INTERNATIONAL" || !isForeignCountry(c.country))
     return { error: NextResponse.json({ error: "NOT_A_FOREIGN_CONTINGENT" }, { status: 400 }) } as const;
+  // An OWN-scoped link only reaches the schools created through it.
+  if (!linkMayReach(contingentId)) return { error: NextResponse.json({ error: "CONTINGENT_NOT_FOUND" }, { status: 404 }) } as const;
   return { contingent: c } as const;
 }
 

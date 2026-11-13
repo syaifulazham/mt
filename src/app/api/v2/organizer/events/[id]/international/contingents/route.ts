@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { isForeignCountry, requireInternationalAdmin } from "@/lib/international";
+import { currentInternationalLink } from "@/lib/international-link";
 
 /**
  * POST { name, shortName?, countryId } — create a foreign school, stored as an
@@ -24,5 +25,11 @@ export async function POST(req: NextRequest) {
     data:   { name, shortName, contingentType: "INTERNATIONAL", countryId },
     select: { id: true, name: true, shortName: true, countryId: true },
   });
+  // Created through a registration link: remembered, so an OWN-scoped link can reach it.
+  const link = currentInternationalLink();
+  if (link) {
+    await db.internationalLink.update({ where: { id: link.linkId }, data: { contingentIds: { push: contingent.id } } });
+    link.contingentIds.push(contingent.id);
+  }
   return NextResponse.json({ data: contingent }, { status: 201 });
 }

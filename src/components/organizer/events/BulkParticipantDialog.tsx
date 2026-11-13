@@ -32,8 +32,10 @@ const SAMPLE = [
  * they can't be, or "Guna pembantu AI" is ticked, Gemini reads the text. Every
  * row is previewed with its check before anything is saved.
  */
-export function BulkParticipantDialog({ url, schoolName, onClose, onDone }: {
+export function BulkParticipantDialog({ url, schoolName, headers, onClose, onDone }: {
   url: string; schoolName: string; onClose: () => void; onDone: () => void;
+  /** Extra request headers (a registration link's passcode). */
+  headers?: Record<string, string>;
 }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -73,7 +75,7 @@ export function BulkParticipantDialog({ url, schoolName, onClose, onDone }: {
     try {
       const input = await readInput();
       const res = await fetch(url, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({ action: "preview", ...input, useAi }),
       });
       const j = await res.json().catch(() => ({}));
@@ -88,7 +90,7 @@ export function BulkParticipantDialog({ url, schoolName, onClose, onDone }: {
     setBusy("save"); setErr("");
     try {
       const res = await fetch(url, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({ action: "import", participants: rows.filter(r => !r.error).map(r => r.input) }),
       });
       const j = await res.json().catch(() => ({}));

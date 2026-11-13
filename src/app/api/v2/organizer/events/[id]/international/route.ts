@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { HOME_COUNTRY_ISO2, requireInternationalAdmin } from "@/lib/international";
+import { HOME_COUNTRY_ISO2, linkMayReach, requireInternationalAdmin } from "@/lib/international";
 
 /**
  * GET — Foreign countries and their schools (INTERNATIONAL contingents) for the
@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const event = await db.event.findUnique({ where: { id: eventId }, select: { id: true } });
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
 
-  const [countries, contingents] = await Promise.all([
+  const [countries, allContingents] = await Promise.all([
     db.country.findMany({
       where:   { codeIso2: { not: HOME_COUNTRY_ISO2 } },
       select:  { id: true, name: true, codeIso2: true },
@@ -33,6 +33,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       orderBy: { name: "asc" },
     }),
   ]);
+
+  // An OWN-scoped registration link lists only the schools created through it.
+  const contingents = allContingents.filter((c) => linkMayReach(c.id));
 
   const enrolled = await db.teamEvent.findMany({
     where:  { eventId, team: { contingentId: { in: contingents.map((c) => c.id) } } },

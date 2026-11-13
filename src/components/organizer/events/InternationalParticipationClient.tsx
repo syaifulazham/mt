@@ -5,8 +5,9 @@ import Link from "next/link";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Globe2, School, Users, UserCog, Trophy, Lock, Search,
   CheckCircle2, AlertCircle,
-  FileSpreadsheet,
+  FileSpreadsheet, UserRound, KeyRound,
 } from "lucide-react";
+import { InternationalLinksDialog } from "@/components/organizer/events/InternationalLinksDialog";
 import { BulkParticipantDialog } from "@/components/organizer/events/BulkParticipantDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,14 +77,25 @@ function errorText(e: { error?: string; detail?: string } | null | undefined): s
   return e.detail ? `${base}: ${e.detail}` : base;
 }
 
+// Link mode (/intl/<slug>): every request carries the link's passcode. One page
+// load is either the organizer page or one link, so module scope is enough.
+let linkPasscode = "";
+export const INTL_LINK_LOCKED_EVENT = "intl-link-locked";
+/** Set by the link page when it unlocks (and cleared when it locks), before this client mounts. */
+export const setInternationalLinkPasscode = (code: string) => { linkPasscode = code; };
+const authHeaders = (): Record<string, string> => (linkPasscode ? { "x-intl-passcode": linkPasscode } : {});
+
 async function api<T = unknown>(url: string, method = "GET", body?: unknown): Promise<{ ok: true; data: T } | { ok: false; message: string }> {
   try {
     const res = await fetch(url, {
       method,
-      headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      headers: { ...authHeaders(), ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
       body:    body !== undefined ? JSON.stringify(body) : undefined,
     });
     const json = await res.json().catch(() => null);
+    // The link was closed, deleted or re-keyed: back to the passcode screen.
+    if (linkPasscode && (json?.error === "WRONG_PASSCODE" || (res.status === 404 && json?.error === "NOT_FOUND")))
+      window.dispatchEvent(new Event(INTL_LINK_LOCKED_EVENT));
     if (!res.ok) return { ok: false, message: errorText(json) };
     return { ok: true, data: (json?.data ?? json) as T };
   } catch {
@@ -107,8 +119,13 @@ const selectCls = "flex h-10 w-full rounded-md border border-input bg-background
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export function InternationalParticipationClient({ event }: { event: { id: string; name: string; slug: string } }) {
-  const base = `/api/v2/organizer/events/${event.id}/international`;
+export function InternationalParticipationClient({ event, link }: {
+  event: { id: string; name: string; slug: string };
+  /** Third-party registration link (/intl/<slug>): its API and passcode; organizer-only parts are hidden. */
+  link?: { slug: string; passcode: string; label: string | null; scope: string; onLock: () => void };
+}) {
+  const base = link ? `/api/intl-link/${link.slug}/international` : `/api/v2/organizer/events/${event.id}/international`;
+  const [linksOpen, setLinksOpen] = useState(false);
 
   const [countries, setCountries]   = useState<Country[]>([]);
   const [schools, setSchools]       = useState<SchoolRow[]>([]);
@@ -177,24 +194,42 @@ export function InternationalParticipationClient({ event }: { event: { id: strin
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-start gap-4">
-        <Link
-          href={`/organizer/events/${event.slug}/manage`}
-          className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Kembali
-        </Link>
+        {!link && (
+          <Link
+            href={`/organizer/events/${event.slug}/manage`}
+            className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Kembali
+          </Link>
+        )}
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-zinc-900 flex items-center gap-2">
             <Globe2 className="h-5 w-5 text-sky-600" /> Penyertaan Antarabangsa
           </h1>
           <p className="text-sm text-zinc-500 mt-0.5">
             {event.name} · Negara → Sekolah → Peserta &amp; Jurulatih → Pasukan → Daftar ke acara.
-            Pasukan yang didaftarkan akan muncul dalam{" "}
-            <Link href={`/organizer/events/${event.slug}/manage/preregistration`} className="text-blue-600 hover:underline">
-              Pra-Pendaftaran
-            </Link>.
+            {link ? "Penyertaan yang didaftarkan akan disemak dan diterima oleh penganjur." : (
+              <>
+                Pasukan yang didaftarkan akan muncul dalam{" "}
+                <Link href={`/organizer/events/${event.slug}/manage/preregistration`} className="text-blue-600 hover:underline">
+                  Pra-Pendaftaran
+                </Link>.
+              </>
+            )}
           </p>
         </div>
+        {link ? (
+          <div className="flex shrink-0 items-center gap-2 text-xs">
+            <span className="rounded-full bg-sky-100 px-2.5 py-1 font-medium text-sky-700">
+              {link.label || "Pautan pihak ketiga"}{link.scope === "OWN" && " · sekolah sendiri"}
+            </span>
+            <button onClick={link.onLock} className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-zinc-600 hover:bg-zinc-50"><Lock className="h-3 w-3" /> Kunci</button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-sky-200 text-sky-700" onClick={() => setLinksOpen(true)}>
+            <KeyRound className="h-3.5 w-3.5" /> Pautan pihak ketiga
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -262,7 +297,7 @@ export function InternationalParticipationClient({ event }: { event: { id: strin
               <SchoolPanel
                 key={school.id}
                 base={`${base}/contingents/${school.id}`}
-                acceptanceUrl={`/api/v2/organizer/events/${event.id}/preregistration/teams`}
+                acceptanceUrl={link ? null : `/api/v2/organizer/events/${event.id}/preregistration/teams`}
                 schoolName={school.name}
                 onChanged={loadOverview}
               />
@@ -298,20 +333,23 @@ export function InternationalParticipationClient({ event }: { event: { id: strin
         confirmLabel="Padam"
         onConfirm={removeSchool}
       />
+      {linksOpen && !link && (
+        <InternationalLinksDialog apiBase={`/api/v2/organizer/events/${event.id}/international/links`} eventName={event.name} onClose={() => setLinksOpen(false)} />
+      )}
     </div>
   );
 }
 
 // ─── School panel (tabs) ─────────────────────────────────────────────────────
 
-type Tab = "participants" | "trainers" | "teams";
+type Tab = "participants" | "trainers" | "teams" | "individual";
 
 function SchoolPanel({
   base, acceptanceUrl, schoolName, onChanged,
 }: {
   base: string;
-  /** Pra-Pendaftaran's teams endpoint — its PATCH { teamId, acceptance } is the one place acceptance is set. */
-  acceptanceUrl: string;
+  /** Pra-Pendaftaran's teams endpoint — its PATCH { teamId, acceptance } is the one place acceptance is set. Null through a registration link: acceptance is the organizers' call, shown read-only. */
+  acceptanceUrl: string | null;
   schoolName: string;
   onChanged: () => void;
 }) {
@@ -346,6 +384,7 @@ function SchoolPanel({
 
   // Optimistic, reverted on failure — as Pra-Pendaftaran does it.
   async function updateAcceptance(teamId: string, acceptance: string) {
+    if (!acceptanceUrl) return;
     const setEntry = (value: string) => setDetail((d) => d && {
       ...d,
       teams: d.teams.map((t) => (t.id === teamId && t.entry ? { ...t, entry: { ...t.entry, acceptance: value } } : t)),
@@ -360,10 +399,43 @@ function SchoolPanel({
     return <div className="flex items-center gap-2 text-sm text-zinc-500 p-4"><Loader2 className="h-4 w-4 animate-spin" /> Memuatkan…</div>;
 
   const compById = new Map(detail.competitions.map((c) => [c.id, c]));
+  // An individual entry is a team of one; it lives on its own tab, not among the teams.
+  const isIndividual = (competitionId: string) => compById.get(competitionId)?.participationType === "INDIVIDUAL";
+  const teamRows = detail.teams.filter((t) => !isIndividual(t.competitionId));
+  const individualComps = detail.competitions.filter((c) => c.participationType === "INDIVIDUAL");
+  const individualEntries = detail.teams.filter((t) => isIndividual(t.competitionId) && t.entry).length;
+
+  /**
+   * Withdraw an individual entry: the team of one goes with it, so the
+   * participant is free again; when it can't be deleted (also in another
+   * event, or already scored) only this event's entry is removed.
+   */
+  async function withdrawIndividual(teamId: string) {
+    setBusy(`e-${teamId}`);
+    const gone = await api(`${base}/teams/${teamId}`, "DELETE");
+    const r = gone.ok ? gone : await api(`${base}/teams/${teamId}/enroll`, "DELETE");
+    setBusy(null);
+    if (!r.ok) setError(r.message);
+    await refresh();
+  }
+
+  /** Enter one participant in an individual competition of this event (a team of one, PENDING). */
+  async function registerIndividual(competitionId: string, participantIds: string[]) {
+    setBusy(`i-${competitionId}`);
+    let failed: string | null = null;
+    for (const pid of participantIds) {
+      const r = await api(`${base}/teams`, "POST", { competitionId, memberIds: [pid], enroll: true });
+      if (!r.ok) { failed = r.message; break; }
+    }
+    setBusy(null);
+    if (failed) setError(failed);
+    await refresh();
+  }
   const tabs: { key: Tab; label: string; icon: React.ElementType; count: number }[] = [
     { key: "participants", label: "Peserta",               icon: Users,   count: detail.participants.length },
     { key: "trainers",     label: "Jurulatih / Pengurus",  icon: UserCog, count: detail.trainers.length },
-    { key: "teams",        label: "Pasukan & Penyertaan",  icon: Trophy,  count: detail.teams.length },
+    { key: "teams",        label: "Pasukan & Penyertaan",  icon: Trophy,  count: teamRows.length },
+    { key: "individual",   label: "Pertandingan Individu", icon: UserRound, count: individualEntries },
   ];
 
   return (
@@ -455,7 +527,7 @@ function SchoolPanel({
         {tab === "teams" && (
           <>
             <div className="flex justify-end mb-3">
-              <Button size="sm" onClick={() => setTeamForm({})} disabled={detail.competitions.length === 0}>
+              <Button size="sm" onClick={() => setTeamForm({})} disabled={detail.competitions.every((c) => c.participationType === "INDIVIDUAL")}>
                 <Plus className="h-3.5 w-3.5" /> Daftar pasukan
               </Button>
             </div>
@@ -463,7 +535,7 @@ function SchoolPanel({
             <Table
               head={["Pertandingan", "Pasukan", "Ahli", "Jurulatih", "Penyertaan acara", ""]}
               empty="Belum ada pasukan."
-              rows={detail.teams.map((t) => {
+              rows={teamRows.map((t) => {
                 const comp = compById.get(t.competitionId);
                 return [
                   <span key="c" className="text-xs"><span className="font-mono text-zinc-500">{comp?.code}</span> {comp?.name}</span>,
@@ -475,9 +547,10 @@ function SchoolPanel({
                       <>
                         <select
                           aria-label="Status penyertaan"
+                          disabled={!acceptanceUrl}
                           value={t.entry.acceptance}
                           onChange={(e) => updateAcceptance(t.id, e.target.value)}
-                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border cursor-pointer appearance-none text-center ${ACCEPTANCE_STYLE[t.entry.acceptance] ?? ACCEPTANCE_STYLE.PENDING}`}
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border appearance-none text-center disabled:opacity-100 ${acceptanceUrl ? "cursor-pointer" : "cursor-default"} ${ACCEPTANCE_STYLE[t.entry.acceptance] ?? ACCEPTANCE_STYLE.PENDING}`}
                         >
                           {ACCEPTANCE_VALUES.map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
@@ -525,10 +598,84 @@ function SchoolPanel({
             />
           </>
         )}
+        {tab === "individual" && (
+          <div className="space-y-4">
+            {individualComps.length === 0 && <Empty>Acara ini tiada pertandingan individu.</Empty>}
+            {individualComps.map((c) => {
+              // Each participant's team-of-one for this competition, if any.
+              const teamOf = new Map(detail.teams.filter((t) => t.competitionId === c.id).map((t) => [t.members[0]?.id, t]));
+              const eligible = new Set(c.eligibleParticipantIds);
+              const rows = detail.participants.filter((p) => eligible.has(p.id) || teamOf.get(p.id)?.entry);
+              const open = rows.filter((p) => !teamOf.get(p.id)?.entry && eligible.has(p.id)).map((p) => p.id);
+              const registered = rows.length - open.length;
+              const notEligible = detail.participants.length - rows.length;
+              return (
+                <div key={c.id} className="rounded-lg border border-zinc-200">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-800"><span className="font-mono text-zinc-500">{c.code}</span> {c.name}</span>
+                    <span className="text-[11px] text-zinc-500">{registered} didaftar · {open.length} layak belum didaftar</span>
+                    {open.length > 1 && (
+                      <Button size="sm" variant="outline" className="ml-auto h-7 px-2 text-xs" disabled={busy === `i-${c.id}`}
+                        onClick={() => registerIndividual(c.id, open)}>
+                        {busy === `i-${c.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                        Daftar semua yang layak ({open.length})
+                      </Button>
+                    )}
+                  </div>
+                  <Table
+                    head={["Peserta", "Tahap / darjah", "Penyertaan acara", ""]}
+                    empty={detail.participants.length === 0 ? "Tambah peserta dahulu." : "Tiada peserta yang layak (kumpulan sasaran) untuk pertandingan ini."}
+                    rows={rows.map((p) => {
+                      const t = teamOf.get(p.id);
+                      return [
+                        <span key="n" className="font-medium text-zinc-800">{p.name}</span>,
+                        `${EDU_LABEL[p.eduLevel] ?? p.eduLevel}${p.classGrade ? ` · ${p.classGrade}` : ""}`,
+                        t?.entry ? (
+                          <div key="e" className="flex items-center gap-2">
+                            <select
+                              aria-label="Status penyertaan"
+                              disabled={!acceptanceUrl}
+                              value={t.entry.acceptance}
+                              onChange={(e) => updateAcceptance(t.id, e.target.value)}
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border appearance-none text-center disabled:opacity-100 ${acceptanceUrl ? "cursor-pointer" : "cursor-default"} ${ACCEPTANCE_STYLE[t.entry.acceptance] ?? ACCEPTANCE_STYLE.PENDING}`}
+                            >
+                              {ACCEPTANCE_VALUES.map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                            {t.entry.selected && <span className="text-[11px] text-zinc-400">dipilih</span>}
+                          </div>
+                        ) : <span key="e" className="text-[11px] text-zinc-400">Belum didaftar</span>,
+                        t?.entry ? (
+                          t.entry.selected
+                            ? <span key="l" title="Dipilih dalam Pra-Pendaftaran — dikunci" className="text-zinc-400"><Lock className="h-3.5 w-3.5" /></span>
+                            : (
+                              <button key="w" className="text-xs text-red-600 hover:underline disabled:opacity-50" disabled={busy === `e-${t.id}`}
+                                onClick={() => withdrawIndividual(t.id)}>
+                                Tarik balik
+                              </button>
+                            )
+                        ) : (
+                          <Button key="r" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={busy === `i-${c.id}`}
+                            onClick={() => registerIndividual(c.id, [p.id])}>
+                            <CheckCircle2 className="h-3 w-3" /> Daftar
+                          </Button>
+                        ),
+                      ];
+                    })}
+                  />
+                  {notEligible > 0 && (
+                    <p className="border-t border-zinc-100 px-3 py-1.5 text-[11px] text-zinc-400">
+                      {notEligible} peserta lain tidak layak (kumpulan sasaran pertandingan ini).
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {bulkOpen && (
-        <BulkParticipantDialog url={`${base}/participants/bulk`} schoolName={schoolName}
+        <BulkParticipantDialog url={`${base}/participants/bulk`} schoolName={schoolName} headers={authHeaders()}
           onClose={() => setBulkOpen(false)} onDone={() => { void refresh(); }} />
       )}
       {participantForm && (
@@ -814,7 +961,8 @@ function TeamDialog({
           onChange={(e) => { setCompetitionId(e.target.value); setMemberIds([]); }}
         >
           <option value="">— Pilih —</option>
-          {detail.competitions.map((c) => (
+          {/* Individual competitions are registered on the Pertandingan Individu tab. */}
+          {detail.competitions.filter((c) => c.participationType !== "INDIVIDUAL" || c.id === competitionId).map((c) => (
             <option key={c.id} value={c.id}>
               {c.code} {c.name} ({c.participationType === "INDIVIDUAL" ? "individu" : `pasukan ${c.minTeamSize}–${c.maxTeamSize}`})
             </option>
