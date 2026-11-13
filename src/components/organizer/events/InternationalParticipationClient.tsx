@@ -431,30 +431,39 @@ function SchoolPanel({
     if (failed) setError(failed);
     await refresh();
   }
-  const tabs: { key: Tab; label: string; icon: React.ElementType; count: number }[] = [
-    { key: "participants", label: "Peserta",               icon: Users,   count: detail.participants.length },
-    { key: "trainers",     label: "Jurulatih / Pengurus",  icon: UserCog, count: detail.trainers.length },
-    { key: "teams",        label: "Pasukan & Penyertaan",  icon: Trophy,  count: teamRows.length },
-    { key: "individual",   label: "Pertandingan Individu", icon: UserRound, count: individualEntries },
+  // Short labels so the four fit the panel; the full name is the tooltip.
+  const tabs: { key: Tab; label: string; title: string; icon: React.ElementType; count: number }[] = [
+    { key: "participants", label: "Peserta",   title: "Peserta",               icon: Users,     count: detail.participants.length },
+    { key: "trainers",     label: "Jurulatih", title: "Jurulatih / Pengurus",  icon: UserCog,   count: detail.trainers.length },
+    { key: "teams",        label: "Pasukan",   title: "Pasukan & Penyertaan",  icon: Trophy,    count: teamRows.length },
+    { key: "individual",   label: "Individu",  title: "Pertandingan Individu", icon: UserRound, count: individualEntries },
   ];
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white">
       <div className="px-4 pt-4">
         <h2 className="font-semibold text-zinc-900">{schoolName}</h2>
-        <div className="mt-3 flex gap-1 border-b border-zinc-100 overflow-x-auto">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                tab === t.key ? "border-blue-600 text-blue-700 font-medium" : "border-transparent text-zinc-500 hover:text-zinc-800"
-              }`}
-            >
-              <t.icon className="h-3.5 w-3.5" /> {t.label}
-              <span className="text-[10px] rounded-full bg-zinc-100 px-1.5 text-zinc-500">{t.count}</span>
-            </button>
-          ))}
+        {/* Segmented control: equal-width segments that wrap two-by-two on a narrow panel instead of scrolling. */}
+        <div role="tablist" className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1 sm:grid-cols-4">
+          {tabs.map((t) => {
+            const on = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                role="tab"
+                aria-selected={on}
+                title={t.title}
+                onClick={() => setTab(t.key)}
+                className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-sm transition-all ${
+                  on ? "bg-white font-semibold text-blue-700 shadow-sm ring-1 ring-black/5" : "text-zinc-500 hover:bg-white/60 hover:text-zinc-800"
+                }`}
+              >
+                <t.icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{t.label}</span>
+                <span className={`shrink-0 rounded-full px-1.5 text-[10px] font-semibold ${on ? "bg-blue-100 text-blue-700" : "bg-white/80 text-zinc-500"}`}>{t.count}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

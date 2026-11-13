@@ -106,6 +106,8 @@ type GradeStat = { eduLevel: string; classGrade: string; count: number };
 
 type StateStat = {
   stateName:         string;
+  /** A foreign school's row: `stateName` is its country (listed last, in yellow). */
+  isInternational?:  boolean;
   schoolContingents: number;
   primarySchools:    number;
   secondarySchools:  number;
@@ -239,8 +241,12 @@ function StateTable({ rows }: { rows: StateStat[] }) {
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={r.stateName} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}>
-                <td className="px-3 py-2 font-medium text-zinc-700">{r.stateName}</td>
+              <tr key={`${r.isInternational ? "intl" : "state"}:${r.stateName}`}
+                className={r.isInternational ? "bg-amber-50" : i % 2 === 0 ? "bg-white" : "bg-zinc-50/50"}>
+                <td className="px-3 py-2 font-medium text-zinc-700">
+                  {r.stateName}
+                  {r.isInternational && <span className="ml-1.5 rounded bg-amber-200/70 px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-800">Antarabangsa</span>}
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums text-zinc-600">{r.schoolContingents}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{r.primarySchools}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-violet-700">{r.secondarySchools}</td>

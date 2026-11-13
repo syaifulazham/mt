@@ -21,6 +21,8 @@ type GradeRow = {
 
 type StateRow = {
   state_name:         string | null;
+  /** A foreign school's row: `state_name` is its country. */
+  is_international:   boolean;
   school_contingents: bigint;
   primary_schools:    bigint;
   secondary_schools:  bigint;
@@ -85,9 +87,13 @@ export async function GET(
         ORDER BY p."eduLevel",
                  CASE WHEN p."eduLevel" = 'YOUTH' THEN 'Belia' ELSE p."classGrade" END
       `,
+      // Foreign schools (a contingent of another country) are grouped by their
+      // country and listed after the Malaysian states and the no-state row.
       db.$queryRaw<StateRow[]>`
         SELECT
-          COALESCE(s.name, sch_state.name, hi_state.name)                                                              AS state_name,
+          CASE WHEN st_co."codeIso2" IS NOT NULL AND st_co."codeIso2" <> 'MY' THEN st_co.name
+               ELSE COALESCE(s.name, sch_state.name, hi_state.name) END                                                AS state_name,
+          (st_co."codeIso2" IS NOT NULL AND st_co."codeIso2" <> 'MY')                                                  AS is_international,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont."contingentType" = 'SCHOOL')                                      AS school_contingents,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont."contingentType" = 'SCHOOL' AND p."eduLevel" = 'PRIMARY')         AS primary_schools,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont."contingentType" = 'SCHOOL' AND p."eduLevel" = 'SECONDARY')       AS secondary_schools,
@@ -96,9 +102,10 @@ export async function GET(
           COUNT(DISTINCT p.id) FILTER (WHERE p.gender = 'MALE')                                                        AS male,
           COUNT(DISTINCT p.id) FILTER (WHERE p.gender = 'FEMALE')                                                      AS female
         ${fromJoins}
+        LEFT JOIN countries st_co ON st_co.id = cont."countryId"
         WHERE 1=1
-        GROUP BY COALESCE(s.name, sch_state.name, hi_state.name)
-        ORDER BY COALESCE(s.name, sch_state.name, hi_state.name)
+        GROUP BY 1, 2
+        ORDER BY is_international, state_name NULLS LAST
       `,
     ]);
 
@@ -121,6 +128,7 @@ export async function GET(
       })),
       byState: stateRows.map((r) => ({
         stateName:         r.state_name ?? "–",
+        isInternational:   r.is_international,
         schoolContingents: Number(r.school_contingents),
         primarySchools:    Number(r.primary_schools),
         secondarySchools:  Number(r.secondary_schools),
