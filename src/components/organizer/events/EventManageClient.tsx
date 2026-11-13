@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
   LayoutDashboard, Scale, Award, Globe, Globe2, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles, Medal,
-  Camera, Images, Swords,
+  Camera, Images, Swords, BookOpen,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -616,6 +616,17 @@ export function EventManageClient({
           )}
         </div>
       </div>
+
+      {/* Manual Pengguna: judging through to the MC announcement */}
+      <Link href={`/organizer/events/${event.slug}/manage/manual`}
+        className="group flex items-center gap-4 rounded-xl border border-sky-100 bg-gradient-to-r from-sky-50 to-white px-4 py-3 shadow-sm transition-colors hover:border-sky-300">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600"><BookOpen className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-zinc-900">Manual Pengguna: Penghakiman hingga Pengumuman</span>
+          <span className="block text-xs text-zinc-500">Langkah demi langkah — sediakan pertandingan, penilaian Skor / Duel, sahkan keputusan, paparan awam dan pengumuman MC.</span>
+        </span>
+        <span className="shrink-0 text-xs font-semibold text-sky-700 group-hover:underline">Baca manual →</span>
+      </Link>
 
       {/* Main flow + walk-in, in one wrapper so the Pengumuman arrows can cross between them */}
       <div ref={crossWrapRef} className="relative space-y-8">
