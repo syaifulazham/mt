@@ -7,7 +7,7 @@ import { ensureIndividualEntry, singleParticipationConflict } from "@/lib/indivi
 import { resolveLaunchLink, type ArenaClient } from "@/lib/arena-client";
 import { fc1 } from "@/lib/eptim-fc1";
 import { droneArena } from "@/lib/eptim-drone";
-import { ensureFc1Account, isFc1UserMissing, repairFc1Account } from "@/lib/fc1Participant";
+import { ensureFc1Account, isFc1UserMissing, repairFc1Account, resolveFc1Uuid } from "@/lib/fc1Participant";
 import { ensureDroneParticipantAccount } from "@/lib/droneTeam";
 
 // The participant-side flow for INDIVIDUAL arena competitions — Eptim FC-1 and
@@ -22,6 +22,8 @@ const VISIBLE_EVENT_STATUSES = ["PUBLISHED", "ACTIVE"];
 type ArenaChallengeRef = { id: string; name: string; challenge_mode: string; status: string };
 type RegRow = { id: string; launchCode: string | null; launchUrl: string | null };
 type RegKey = { participantId: string; eventCompetitionId: string; challengeId: string };
+/** A partner player: our userid, its sector, and the partner's own id (uuid) when MT knows it. */
+type Account = { userid: string; contingentId: string; userUuid?: string | null };
 
 export type IndividualArena = {
   integration: "eptim-fc1" | "eptim-drone";
@@ -29,15 +31,17 @@ export type IndividualArena = {
   client: ArenaClient;
   /** Which EventCompetition column holds the organizer's picks. */
   picksOf: (ec: { fc1Challenges: Prisma.JsonValue; droneChallenges: Prisma.JsonValue }) => Prisma.JsonValue;
-  ensureAccount: (participantId: string) => Promise<{ userid: string; contingentId: string }>;
+  ensureAccount: (participantId: string) => Promise<Account>;
   /**
    * Self-heal for a partner that lost a player MT created: `isUserMissing`
    * recognises its "user not found", `repairAccount` re-provisions the player
    * and its challenge registrations. Absent = no repair for this integration.
    */
   isUserMissing?: (e: unknown) => boolean;
-  repairAccount?: (participantId: string) => Promise<{ userid: string; contingentId: string }>;
-  existingUserid: (participantId: string) => Promise<string | null>;
+  repairAccount?: (participantId: string) => Promise<Account>;
+  /** The partner's own id for the player, looked up (and stored) when missing. Absent = userid only. */
+  resolveUuid?: (participantId: string) => Promise<string | null>;
+  existingAccount: (participantId: string) => Promise<{ userid: string; userUuid?: string | null } | null>;
   regs: {
     find:     (key: RegKey) => Promise<RegRow | null>;
     upsert:   (tx: Prisma.TransactionClient, key: RegKey, challengeName: string, now: Date) => Promise<RegRow>;
@@ -53,8 +57,11 @@ export const FC1_INDIVIDUAL: IndividualArena = {
   ensureAccount: ensureFc1Account,
   isUserMissing: isFc1UserMissing,
   repairAccount: repairFc1Account,
-  existingUserid: async (participantId) =>
-    (await db.participantFc1Access.findUnique({ where: { participantId }, select: { fc1UserId: true } }))?.fc1UserId ?? null,
+  resolveUuid: resolveFc1Uuid,
+  existingAccount: async (participantId) => {
+    const a = await db.participantFc1Access.findUnique({ where: { participantId }, select: { fc1UserId: true, fc1Uuid: true } });
+    return a && { userid: a.fc1UserId, userUuid: a.fc1Uuid };
+  },
   regs: {
     find: (k) => db.participantFc1Challenge.findUnique({
       where:  { participantId_eventCompetitionId_challengeId: k },
@@ -78,8 +85,10 @@ export const DRONE_INDIVIDUAL: IndividualArena = {
   client: droneArena,
   picksOf: (ec) => ec.droneChallenges,
   ensureAccount: ensureDroneParticipantAccount,
-  existingUserid: async (participantId) =>
-    (await db.droneAccess.findUnique({ where: { participantId }, select: { droneUserId: true } }))?.droneUserId ?? null,
+  existingAccount: async (participantId) => {
+    const a = await db.droneAccess.findUnique({ where: { participantId }, select: { droneUserId: true } });
+    return a && { userid: a.droneUserId };
+  },
   regs: {
     find: (k) => db.participantDroneChallenge.findUnique({
       where:  { participantId_eventCompetitionId_challengeId: k },
@@ -149,18 +158,18 @@ export async function loadIndividualChallengeAccess(
  * Run a partner call for a player; if the partner says the player doesn't exist
  * (it lost an account MT created), re-provision it once and retry.
  */
-async function withUserRepair<T>(arena: IndividualArena, participantId: string, call: () => Promise<T>): Promise<T> {
+async function withUserRepair<T>(arena: IndividualArena, participantId: string, acct: Account, call: (a: Account) => Promise<T>): Promise<T> {
   try {
-    return await call();
+    return await call(acct);
   } catch (e: unknown) {
     if (!arena.repairAccount || !arena.isUserMissing?.(e)) throw e;
-    await arena.repairAccount(participantId);
-    return call();
+    // The repaired account carries the partner's own id, which the retry then uses.
+    return call(await arena.repairAccount(participantId));
   }
 }
 
-function launchLinkFor(arena: IndividualArena, row: RegRow, userid: string, contingentId: string) {
-  return resolveLaunchLink(arena.client, row, userid, contingentId, (fresh) => arena.regs.saveLink(row.id, fresh));
+function launchLinkFor(arena: IndividualArena, row: RegRow, acct: Account) {
+  return resolveLaunchLink(arena.client, row, acct.userid, acct.contingentId, (fresh) => arena.regs.saveLink(row.id, fresh), acct.userUuid);
 }
 
 /** Stable reference MT sends as `external_ref`, so partner rows trace back here. */
@@ -208,21 +217,27 @@ export function individualRegisterHandler(arena: IndividualArena) {
         { status: 409 },
       );
 
-    let userid: string;
-    let contingentId: string;
+    let acct: Account;
     try {
-      ({ userid, contingentId } = await arena.ensureAccount(participant.id));
-      await withUserRepair(arena, participant.id, () =>
-        arena.client.withSectorRepair(userid, contingentId, () => arena.client.registerChallenge({
-          challengeId: body.challengeId, userid, externalRef: externalRef(ec.id, participant.id),
-        })));
+      acct = await arena.ensureAccount(participant.id);
+      const register = (a: Account) =>
+        arena.client.withSectorRepair(a.userid, a.contingentId, () => arena.client.registerChallenge({
+          challengeId: body.challengeId, userid: a.userid, userUuid: a.userUuid, externalRef: externalRef(ec.id, participant.id),
+        }), a.userUuid);
+      try {
+        await register(acct);
+      } catch (e: unknown) {
+        if (!arena.repairAccount || !arena.isUserMissing?.(e)) throw e;
+        acct = await arena.repairAccount(participant.id);
+        await register(acct);
+      }
     } catch (e: unknown) {
       const err = e as { message?: string; status?: number; detail?: string };
       console.error(
         `[${arena.integration}] registerChallenge failed for participant ${participant.id} challenge ${body.challengeId}:`,
         err.message, "| upstream:", err.detail ?? "—",
       );
-      if (err.status === 422) return NextResponse.json({ error: err.message }, { status: 422 });
+      if (err.status === 422 || err.status === 409) return NextResponse.json({ error: err.message }, { status: err.status });
       if (err.status === 404)
         return NextResponse.json(
           { error: `Akaun atau cabaran tidak ditemui di ${arena.label}. Cuba lagi, atau hubungi penganjur.` },
@@ -244,7 +259,7 @@ export function individualRegisterHandler(arena: IndividualArena) {
 
     // The registration stands even if the link can't be issued right now; the
     // dashboard offers "Mohon pautan baharu".
-    const link = await launchLinkFor(arena, row, userid, contingentId).catch((e: unknown) => {
+    const link = await launchLinkFor(arena, row, acct).catch((e: unknown) => {
       console.error(`[${arena.integration}] launch link after register failed for participant ${participant.id}:`, (e as Error).message);
       return null;
     });
@@ -270,19 +285,27 @@ export function individualLinkHandler(arena: IndividualArena) {
     if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
     const { participant } = access;
 
-    const [userid, row] = await Promise.all([
-      arena.existingUserid(participant.id),
+    const [existing, row] = await Promise.all([
+      arena.existingAccount(participant.id),
       arena.regs.find({ participantId: participant.id, ...body }),
     ]);
-    if (!userid || !row) return NextResponse.json({ error: "Daftar cabaran ini dahulu." }, { status: 409 });
+    if (!existing || !row) return NextResponse.json({ error: "Daftar cabaran ini dahulu." }, { status: 409 });
+    const acct: Account = { userid: existing.userid, contingentId: participant.contingentId, userUuid: existing.userUuid };
 
     try {
-      const attempts = await withUserRepair(arena, participant.id, () => arena.client.attempts(body.challengeId, userid));
-      if (attempts.completed)
+      // The attempts check is by userid only. When the partner can't find the
+      // player that way, the check is skipped (unknown) rather than blocking the
+      // link — the launch itself goes by the partner's own id.
+      const attempts = await arena.client.attempts(body.challengeId, acct.userid).catch((e: unknown) => {
+        if (arena.isUserMissing?.(e)) return null;
+        throw e;
+      });
+      if (attempts?.completed)
         return NextResponse.json({ error: "Anda telah menyelesaikan cabaran ini." }, { status: 409 });
-      if (attempts.attempts_remaining === 0)
+      if (attempts?.attempts_remaining === 0)
         return NextResponse.json({ error: "Cubaan untuk cabaran ini telah habis." }, { status: 409 });
-      const link = await withUserRepair(arena, participant.id, () => launchLinkFor(arena, row, userid, participant.contingentId));
+      if (!attempts && !acct.userUuid && arena.resolveUuid) acct.userUuid = await arena.resolveUuid(participant.id);
+      const link = await withUserRepair(arena, participant.id, acct, (a) => launchLinkFor(arena, row, a));
       return NextResponse.json({ link });
     } catch (e: unknown) {
       const err = e as { message?: string; status?: number; detail?: string };

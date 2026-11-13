@@ -1561,6 +1561,9 @@ model ParticipantFc1Access {
   participantId String   @unique
   fc1UserId     String // the `userid` sent to FC-1 (IC digits)
   fc1Password   String
+  /// FC-1's own id (uuid) for the player. Sent as `user_id` where the API takes it,
+  /// because FC-1's lookup by `userid` has failed for existing players ("User not found").
+  fc1Uuid       String?
   createdAt     DateTime @default(now())
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)

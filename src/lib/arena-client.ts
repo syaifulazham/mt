@@ -95,6 +95,14 @@ export function createArenaClient(config: ArenaClientConfig) {
 
   const tolerate409 = (e: { status?: number }) => { if (e.status !== 409) throw e; };
 
+  /**
+   * How a player is named in a request body. The partner accepts exactly one of
+   * `user_id` (its own uuid) or `userid` (ours, which it maps to a synthetic
+   * email and looks up). The uuid is direct, so it is sent whenever MT knows it:
+   * FC-1's lookup by userid has answered "User not found" for players that exist.
+   */
+  const player = (userid: string, userUuid?: string | null) => (userUuid ? { user_id: userUuid } : { userid });
+
   return {
     configured: () => !!BASE_URL && !!API_KEY,
 
@@ -120,19 +128,38 @@ export function createArenaClient(config: ArenaClientConfig) {
     createSector: (input: { sector_name: string; custom_id: string; region?: string; other_details?: Record<string, unknown> }) =>
       req("/sectors", { method: "POST", body: input }),
 
-    assignMember: (sectorCustomId: string, userid: string) =>
-      req(`/sectors/${encodeURIComponent(sectorCustomId)}/members`, { method: "POST", body: { userid } }),
+    /** `userUuid` (the partner's own player id) is sent instead of the userid when known — see `player`. */
+    assignMember: (sectorCustomId: string, userid: string, userUuid?: string | null) =>
+      req(`/sectors/${encodeURIComponent(sectorCustomId)}/members`, { method: "POST", body: player(userid, userUuid) }),
+
+    /** Members of a sector, with the partner's own ids — how a player's uuid is found when lookup by userid fails. */
+    async sectorUsers(sectorCustomId: string): Promise<{ id: string; email: string | null; full_name: string | null }[]> {
+      const json = await req<{ users?: { id: string; email: string | null; full_name: string | null }[] }>(
+        `/sectors/${encodeURIComponent(sectorCustomId)}/users`,
+      );
+      return json.users ?? [];
+    },
+
+    /**
+     * The partner's own id of the sector member whose synthetic email is
+     * `<userid>@<partner domain>` (matched on the part before the @), or null.
+     */
+    async memberUuid(sectorCustomId: string, userid: string): Promise<string | null> {
+      const users = await this.sectorUsers(sectorCustomId);
+      const want = userid.toLowerCase();
+      return users.find(u => (u.email ?? "").split("@")[0].toLowerCase() === want)?.id ?? null;
+    },
 
     /**
      * Runs a call that needs sector membership. On a 403 (player in no sector of
      * the event) the membership is restored and the call retried once.
      */
-    async withSectorRepair<T>(userid: string, sectorCustomId: string, call: () => Promise<T>): Promise<T> {
+    async withSectorRepair<T>(userid: string, sectorCustomId: string, call: () => Promise<T>, userUuid?: string | null): Promise<T> {
       try {
         return await call();
       } catch (e: unknown) {
         if ((e as { status?: number }).status !== 403) throw e;
-        await req(`/sectors/${encodeURIComponent(sectorCustomId)}/members`, { method: "POST", body: { userid } })
+        await req(`/sectors/${encodeURIComponent(sectorCustomId)}/members`, { method: "POST", body: player(userid, userUuid) })
           .catch(tolerate409);
         return call();
       }
@@ -144,10 +171,10 @@ export function createArenaClient(config: ArenaClientConfig) {
      * Single-use, 5-minute launch code that signs the player into the partner
      * web app without a password. Server-only: it needs the API key.
      */
-    async launchUrl(userid: string): Promise<{ code: string; url: string; expiresAt: string }> {
+    async launchUrl(userid: string, userUuid?: string | null): Promise<{ code: string; url: string; expiresAt: string }> {
       if (!APP_URL) throw Object.assign(new Error(`${env.appUrl} not configured`), { status: 503 });
       const json = await req<{ user_id: string; launch_code: string; launch_path: string; expires_at: string }>(
-        "/auth/launch", { method: "POST", body: { userid } },
+        "/auth/launch", { method: "POST", body: player(userid, userUuid) },
       );
       const path = json.launch_path || `/?launch=${encodeURIComponent(json.launch_code)}`;
       return { code: json.launch_code, url: `${APP_URL}${path.startsWith("/") ? "" : "/"}${path}`, expiresAt: json.expires_at };
@@ -183,12 +210,12 @@ export function createArenaClient(config: ArenaClientConfig) {
      * harmless — which is what lets the local write happen after this call
      * without a window that could leave the two sides disagreeing for good.
      */
-    async registerChallenge(input: { challengeId: string; userid: string; externalRef?: string }):
+    async registerChallenge(input: { challengeId: string; userid: string; userUuid?: string | null; externalRef?: string }):
       Promise<{ registration: ArenaRegistration; alreadyRegistered: boolean }> {
       try {
         const registration = await req<ArenaRegistration>(
           `/challenges/${encodeURIComponent(input.challengeId)}/registrations`,
-          { method: "POST", body: { userid: input.userid, ...(input.externalRef ? { external_ref: input.externalRef } : {}) } },
+          { method: "POST", body: { ...player(input.userid, input.userUuid), ...(input.externalRef ? { external_ref: input.externalRef } : {}) } },
         );
         return { registration, alreadyRegistered: false };
       } catch (e: unknown) {
@@ -281,12 +308,13 @@ export async function resolveLaunchLink(
   userid: string,
   sectorCustomId: string,
   persist: (fresh: { code: string; url: string; expiresAt: Date }) => Promise<unknown>,
+  userUuid?: string | null,
 ): Promise<{ url: string; expiresAt: string }> {
   if (stored.launchCode && stored.launchUrl) {
     const st = await client.launchStatus(stored.launchCode).catch(() => null);
     if (st?.status === "valid") return { url: client.rehostLaunchUrl(stored.launchUrl), expiresAt: st.expires_at };
   }
-  const fresh = await client.withSectorRepair(userid, sectorCustomId, () => client.launchUrl(userid));
+  const fresh = await client.withSectorRepair(userid, sectorCustomId, () => client.launchUrl(userid, userUuid), userUuid);
   await persist({ code: fresh.code, url: fresh.url, expiresAt: new Date(fresh.expiresAt) });
   return { url: fresh.url, expiresAt: fresh.expiresAt };
 }
