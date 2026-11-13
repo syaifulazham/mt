@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { stateFilterKey } from "@/lib/stateFilter";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
@@ -24,6 +25,8 @@ type StateRow = {
   state_name:         string | null;
   /** A foreign school's row: `state_name` is its country. */
   is_international:   boolean;
+  state_id:           string | null;
+  country_id:         string | null;
   school_contingents: bigint;
   primary_schools:    bigint;
   secondary_schools:  bigint;
@@ -95,6 +98,8 @@ export async function GET(
           CASE WHEN st_co."codeIso2" IS NOT NULL AND st_co."codeIso2" <> 'MY' THEN st_co.name
                ELSE COALESCE(s.name, sch_state.name, hi_state.name) END                                                AS state_name,
           (st_co."codeIso2" IS NOT NULL AND st_co."codeIso2" <> 'MY')                                                  AS is_international,
+          MIN(COALESCE(s.id, sch_state.id, hi_state.id))                                                               AS state_id,
+          MIN(st_co.id)                                                                                                 AS country_id,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont."contingentType" = 'SCHOOL')                                      AS school_contingents,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont."contingentType" = 'SCHOOL' AND p."eduLevel" = 'PRIMARY')         AS primary_schools,
           COUNT(DISTINCT cont.id) FILTER (WHERE cont."contingentType" = 'SCHOOL' AND p."eduLevel" = 'SECONDARY')       AS secondary_schools,
@@ -132,6 +137,8 @@ export async function GET(
       byState: stateRows.map((r) => ({
         stateName:         r.state_name ?? "–",
         isInternational:   r.is_international,
+        // The Negeri filter's value for this row (src/lib/stateFilter.ts).
+        filterKey:         stateFilterKey({ isInternational: r.is_international, stateId: r.state_id, countryId: r.country_id }),
         schoolContingents: Number(r.school_contingents),
         primarySchools:    Number(r.primary_schools),
         secondarySchools:  Number(r.secondary_schools),

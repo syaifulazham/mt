@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { StateFilterOptions } from "@/components/organizer/events/StateFilterOptions";
 import Link from "next/link";
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight, BarChart2,
@@ -64,6 +65,8 @@ type StateStat  = {
   stateName: string; schoolContingents: number; primarySchools: number;
   /** A foreign school's row: `stateName` is its country (listed last, in yellow). */
   isInternational?: boolean;
+  /** The Negeri filter's value for this row. */
+  filterKey?: string;
   secondarySchools: number; teams: number; participants: number;
   male: number; female: number; teamsAttended: number;
 };
@@ -533,7 +536,7 @@ export function EventAttendanceConfirmedClient({ event }: { event: EventSummary 
           <select value={stateId} onChange={e => setStateId(e.target.value)}
             className="text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white">
             <option value="">Semua Negeri</option>
-            {states.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <StateFilterOptions rows={stats?.byState} states={states} />
           </select>
         )}
 

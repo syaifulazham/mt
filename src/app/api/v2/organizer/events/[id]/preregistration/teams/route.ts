@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { stateFilterSql } from "@/lib/stateFilter";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
@@ -42,9 +43,7 @@ export async function GET(
   try {
     const extraConditions = Prisma.sql`
       ${competitionId ? Prisma.sql`AND c.id = ${competitionId}` : Prisma.empty}
-      ${stateId
-        ? Prisma.sql`AND COALESCE(s.id, sch_state.id, hi_state.id) = ${stateId}`
-        : Prisma.empty}
+      ${stateFilterSql(stateId)}
       ${targetGroupId
         ? Prisma.sql`AND EXISTS (
             SELECT 1
