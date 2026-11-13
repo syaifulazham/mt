@@ -11,7 +11,7 @@ import { formatDuration } from "@/lib/judgingTime";
 import { cn } from "@/lib/utils";
 
 type Winner = {
-  rank: number; teamId: string | null; teamName: string | null; participantId: string | null; participantName: string | null;
+  rank: number; custom?: boolean; teamId: string | null; teamName: string | null; participantId: string | null; participantName: string | null;
   contingentName: string | null; stateName: string | null; score: number | null; bestTime: number | null;
 };
 type AwardRow = {
@@ -304,12 +304,23 @@ type Candidate = { id: string; name: string; sub: string; code: string | null };
 
 function WinnerPicker({ api, award, onClose, onSaved }: { api: string; award: AwardRow; onClose: () => void; onSaved: () => void }) {
   const individual = award.recipientType === "INDIVIDUAL";
-  const [picks, setPicks] = useState<{ rank: number; id: string; name: string; sub: string }[]>(
-    award.winners.map(w => ({
-      rank: w.rank, id: (individual ? w.participantId : w.teamId) ?? "",
-      name: (individual ? w.participantName : w.teamName) ?? "", sub: [individual ? w.teamName : null, w.contingentName].filter(Boolean).join(" · "),
-    })).filter(p => p.id),
+  // A pick is a record (team / participant id) or a name typed by hand (custom: id is a local key).
+  const [picks, setPicks] = useState<{ rank: number; id: string; name: string; sub: string; custom?: boolean }[]>(
+    award.winners.map((w, i) => (w.custom
+      ? { rank: w.rank, id: `custom:${i}`, name: w.participantName ?? w.teamName ?? "", sub: w.contingentName ?? "", custom: true }
+      : {
+          rank: w.rank, id: (individual ? w.participantId : w.teamId) ?? "",
+          name: (individual ? w.participantName : w.teamName) ?? "", sub: [individual ? w.teamName : null, w.contingentName].filter(Boolean).join(" · "),
+        })).filter(p => p.id),
   );
+  const [customName, setCustomName] = useState("");
+  const [customNote, setCustomNote] = useState("");
+  function addCustom() {
+    const name = customName.trim();
+    if (!name) return;
+    setPicks(p => [...p, { rank, id: `custom:${Date.now()}`, name, sub: customNote.trim(), custom: true }].sort((a, b) => a.rank - b.rank));
+    setCustomName(""); setCustomNote("");
+  }
   const [rank, setRank] = useState(Math.min(award.places, (award.winners.length ? Math.max(...award.winners.map(w => w.rank)) : 0) + 1) || 1);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Candidate[] | null>(null);
@@ -329,7 +340,11 @@ function WinnerPicker({ api, award, onClose, onSaved }: { api: string; award: Aw
     setBusy(true); setErr("");
     const res = await fetch(`${api}/${award.id}/winners`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ winners: picks.map(p => ({ rank: p.rank, [individual ? "participantId" : "teamId"]: p.id })) }),
+      body: JSON.stringify({
+        winners: picks.map(p => (p.custom
+          ? { rank: p.rank, customName: p.name, customNote: p.sub || undefined }
+          : { rank: p.rank, [individual ? "participantId" : "teamId"]: p.id })),
+      }),
     });
     const j = await res.json().catch(() => ({}));
     setBusy(false);
@@ -378,6 +393,17 @@ function WinnerPicker({ api, award, onClose, onSaved }: { api: string; award: Aw
                 );
               })}
             </ul>
+            {/* A recipient with no record here — e.g. a teacher, a judge or a guest. */}
+            <div className="space-y-1.5 rounded-xl border border-dashed p-2.5">
+              <span className="text-[11px] font-semibold text-zinc-600">Atau taip nama penerima sendiri</span>
+              <Input value={customName} onChange={e => setCustomName(e.target.value)} maxLength={120} placeholder={individual ? "Nama penerima, cth. Pn. Aminah binti Ali" : "Nama pasukan / penerima"}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }} className="h-8 text-sm" />
+              <div className="flex gap-2">
+                <Input value={customNote} onChange={e => setCustomNote(e.target.value)} maxLength={160} placeholder="Keterangan (pilihan) — sekolah, organisasi…"
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }} className="h-8 flex-1 text-sm" />
+                <Button size="sm" variant="outline" className="h-8 gap-1" disabled={!customName.trim()} onClick={addCustom}><Plus className="h-3.5 w-3.5" /> Tambah</Button>
+              </div>
+            </div>
           </div>
           <div className="space-y-2">
             <span className="text-xs font-semibold text-zinc-600">Pemenang ({picks.length})</span>
@@ -390,7 +416,10 @@ function WinnerPicker({ api, award, onClose, onSaved }: { api: string; award: Aw
                     {Array.from({ length: award.places }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
                   </select>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-zinc-800">{p.name}</span>
+                    <span className="block truncate text-sm font-medium text-zinc-800">
+                      {p.name}
+                      {p.custom && <span className="ml-1.5 rounded bg-zinc-100 px-1 text-[10px] font-normal text-zinc-500">ditaip</span>}
+                    </span>
                     <span className="block truncate text-[11px] text-zinc-400">{p.sub}</span>
                   </span>
                   <button onClick={() => setPicks(ps => ps.filter(x => x.id !== p.id))} className="rounded p-1 text-zinc-400 hover:bg-red-50 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>

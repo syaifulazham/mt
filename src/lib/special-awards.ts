@@ -11,6 +11,8 @@ import { hiddenMembers, mergeByLead, mergesByEc } from "@/lib/team-merge-server"
 
 export type AwardWinner = {
   rank: number;
+  /** A recipient typed by hand: no team / participant record; `participantName` / `teamName` hold the name. */
+  custom?: boolean;
   teamId: string | null; teamName: string | null;
   participantId: string | null; participantName: string | null;
   contingentName: string | null; stateName: string | null;
@@ -96,6 +98,15 @@ export async function loadSpecialAwards(eventId: string): Promise<AwardDto[]> {
     out.push({
       ...base, warning: null,
       winners: a.winners.map(w => {
+        if (w.customName) {
+          const individual = a.recipientType === "INDIVIDUAL";
+          return {
+            rank: w.rank, custom: true,
+            teamId: null, teamName: individual ? null : w.customName,
+            participantId: null, participantName: individual ? w.customName : null,
+            contingentName: w.customNote, stateName: null, score: null, bestTime: null,
+          };
+        }
         if (w.team) {
           return {
             rank: w.rank, teamId: w.team.id, teamName: w.team.name, participantId: null, participantName: null,

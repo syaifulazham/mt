@@ -54,6 +54,8 @@ type EventDetail = EventListItem & {
   needManagerAcceptance: boolean;
   walkInUniqueParticipation: boolean;
   allowMultipleParticipation: boolean;
+  /** Foreign schools can be registered into this event (Penyertaan Antarabangsa). */
+  allowInternational: boolean;
   participationPolicy: "ALL" | "PREREQUISITE_SELECTED" | "ALL_EXCEPT_ZONE_WINNERS";
   winnerExclusionRank: number | null;
 };
@@ -1523,6 +1525,59 @@ function ParticipationModeSection({ event, canWrite, onSaved }: {
         {multiple
           ? "Seorang peserta boleh didaftarkan dalam lebih daripada satu pertandingan dalam acara ini — contohnya Asia Spark, di mana murid yang sama menduduki kuiz Sains, Matematik dan Teknologi."
           : "Seorang peserta hanya boleh didaftarkan dalam satu pertandingan dalam acara ini. Pengurus kontinjen tidak boleh menambah peserta yang sudah berdaftar dalam pasukan lain bagi acara yang sama."}
+      </p>
+      {saving && <p className="text-xs text-zinc-400">Menyimpan…</p>}
+      {err && <p className="text-xs text-red-500">{err}</p>}
+    </SectionCard>
+  );
+}
+
+/**
+ * "Penyertaan Antarabangsa" — whether foreign schools can be registered into
+ * this event: the event page then shows the International Participation card,
+ * and third-party registration links work. Off by default.
+ */
+function InternationalModeSection({ event, canWrite, onSaved }: {
+  event: EventDetail; canWrite: boolean;
+  onSaved: (u: Partial<EventDetail>) => void;
+}) {
+  const [on, setOn]         = useState(event.allowInternational);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr]       = useState("");
+
+  async function choose(next: boolean) {
+    if (!canWrite || next === on) return;
+    const prev = on;
+    setOn(next); setSaving(true); setErr("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${event.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowInternational: next }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan");
+      onSaved({ allowInternational: next });
+    } catch (e) {
+      setOn(prev);
+      setErr(e instanceof Error ? e.message : "Gagal");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <SectionCard title="Penyertaan Antarabangsa">
+      <div className="inline-flex rounded-lg border border-zinc-200 p-0.5">
+        {([[false, "Tidak dibuka"], [true, "Dibuka"]] as const).map(([value, label]) => (
+          <button key={String(value)} type="button" disabled={!canWrite || saving} onClick={() => choose(value)} aria-pressed={on === value}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+              on === value ? (value ? "bg-sky-600 text-white" : "bg-zinc-700 text-white") : "text-zinc-500 hover:text-zinc-700"
+            } ${!canWrite ? "opacity-60" : ""}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-zinc-500">
+        {on
+          ? "Sekolah luar negara boleh didaftarkan ke acara ini melalui kad International Participation di halaman acara, termasuk melalui pautan pihak ketiga."
+          : "Acara ini tidak menerima pendaftaran sekolah luar negara — kad International Participation tidak dipaparkan dan pautan pihak ketiga tidak berfungsi."}
       </p>
       {saving && <p className="text-xs text-zinc-400">Menyimpan…</p>}
       {err && <p className="text-xs text-red-500">{err}</p>}
@@ -3359,6 +3414,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
             <ManagerAcceptanceSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <ParticipationPolicySection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <ParticipationModeSection   event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
+            <InternationalModeSection   event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
             <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
             <WalkInCompetitionsSection event={selected} canWrite={canWrite} isSuperAdmin={role === "SUPER_ADMIN"} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} hasTechTriathlonKey={hasTechTriathlonKey} onSaved={handleSectionSaved} />

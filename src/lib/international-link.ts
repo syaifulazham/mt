@@ -46,9 +46,10 @@ export const INTL_LINK_SELECT = {
 
 /** An active link with its event, or null. */
 export function findInternationalLink(slug: string) {
+  // The event must still take international registration (switched on per event).
   return db.internationalLink.findFirst({
-    where:  { routeSlug: slug, active: true },
-    select: { ...INTL_LINK_SELECT, eventId: true, event: { select: { id: true, name: true, slug: true } } },
+    where:  { routeSlug: slug, active: true, event: { allowInternational: true } },
+    select: { ...INTL_LINK_SELECT, eventId: true, event: { select: { id: true, name: true, slug: true, allowInternational: true } } },
   });
 }
 

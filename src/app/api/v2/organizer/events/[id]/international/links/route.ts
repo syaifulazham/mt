@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireInternationalAdmin } from "@/lib/international";
+import { internationalClosed, requireInternationalAdmin } from "@/lib/international";
 import { INTL_LINK_SELECT, currentInternationalLink, genInternationalPasscode, genInternationalSlug } from "@/lib/international-link";
 
 type Params = { params: Promise<{ id: string }> };
@@ -27,8 +27,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const g = await guard();
   if ("error" in g) return g.error;
   const { id: eventId } = await params;
-  const event = await db.event.findUnique({ where: { id: eventId }, select: { id: true } });
-  if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
+  const closed = await internationalClosed(eventId);
+  if (closed) return closed;
   const body = await req.json().catch(() => ({})) as { label?: unknown; scope?: unknown };
   const link = await db.internationalLink.create({
     data: {

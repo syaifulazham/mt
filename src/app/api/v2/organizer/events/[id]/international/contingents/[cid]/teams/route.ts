@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureIndividualEntry } from "@/lib/individualEntry";
-import {
+import { internationalClosed,
   checkTeamPeople, loadEventCompetitions, loadForeignContingent, requireInternationalAdmin,
 } from "@/lib/international";
 
@@ -23,6 +23,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const guard = await requireInternationalAdmin();
   if ("error" in guard) return guard.error;
   const { id: eventId, cid } = await params;
+  const body0 = await req.clone().json().catch(() => null);
+  if (body0?.enroll === true) { const closed = await internationalClosed(eventId); if (closed) return closed; }
 
   const found = await loadForeignContingent(cid);
   if ("error" in found) return found.error;

@@ -22,6 +22,8 @@ const CANVAS_W = COL[2] + CARD_W; // 900
 
 type EventSummary = {
   id: string; name: string; slug: string; scope: string; status: string;
+  /** Penyertaan Antarabangsa switched on for this event (Acara → Penyertaan Antarabangsa). */
+  allowInternational?: boolean;
   startDate: Date | null; endDate: Date | null;
 };
 
@@ -35,6 +37,10 @@ type Module = {
   href?: string;
   /** Extra buttons on the card, each to a page under the event's manage path. */
   actions?: { label: string; href: string; icon: React.ElementType }[];
+  /** Replaces the "Buka" corner badge, e.g. an option not switched on for this event. */
+  badge?: { label: string; cls: string };
+  /** Shown dimmed: an option the event has not switched on. */
+  muted?: boolean;
   pos: { x: number; y: number };
 };
 
@@ -452,9 +458,9 @@ function ModuleCard({ mod, eventSlug }: { mod: Module; eventSlug: string }) {
       )}
       <div className="absolute top-3 right-3 pointer-events-none">
         <span className={`text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-          mod.href ? "bg-blue-100 text-blue-600" : "bg-zinc-100 text-zinc-400"
+          mod.badge?.cls ?? (mod.href ? "bg-blue-100 text-blue-600" : "bg-zinc-100 text-zinc-400")
         }`}>
-          {mod.href ? "Buka" : "Akan Datang"}
+          {mod.badge?.label ?? (mod.href ? "Buka" : "Akan Datang")}
         </span>
       </div>
     </>
@@ -466,7 +472,7 @@ function ModuleCard({ mod, eventSlug }: { mod: Module; eventSlug: string }) {
       <div
         data-module={mod.href}
         style={posStyle}
-        className={`relative rounded-xl border ${mod.border} bg-white p-5 flex flex-col gap-3 hover:shadow-md transition-shadow`}
+        className={`relative rounded-xl border ${mod.muted ? "border-dashed border-zinc-200 bg-zinc-50/80 opacity-80" : `${mod.border} bg-white`} p-5 flex flex-col gap-3 hover:shadow-md transition-shadow`}
       >
         <Link href={`/organizer/events/${eventSlug}/manage/${mod.href}`} aria-label={mod.title} className="absolute inset-0 rounded-xl" />
         {inner}
@@ -478,7 +484,7 @@ function ModuleCard({ mod, eventSlug }: { mod: Module; eventSlug: string }) {
       href={`/organizer/events/${eventSlug}/manage/${mod.href}`}
       data-module={mod.href}
       style={posStyle}
-      className={`relative rounded-xl border ${mod.border} bg-white p-5 flex flex-col gap-3 hover:shadow-md transition-shadow`}
+      className={`relative rounded-xl border ${mod.muted ? "border-dashed border-zinc-200 bg-zinc-50/80 opacity-80" : `${mod.border} bg-white`} p-5 flex flex-col gap-3 hover:shadow-md transition-shadow`}
     >
       {inner}
     </Link>
@@ -549,7 +555,12 @@ export function EventManageClient({
   const end   = fmtDate(event.endDate);
   const isOnline = ONLINE_SCOPES.includes(event.scope);
   const hasMedalTally = MEDAL_TALLY_SCOPES.includes(event.scope);
+  // An option on every event: shown dimmed and "Tidak dibuka" until the event switches it on.
   const showInternational = INTERNATIONAL_ROLES.includes(role);
+  const internationalModule: Module = event.allowInternational
+    ? INTERNATIONAL_MODULE
+    : { ...INTERNATIONAL_MODULE, muted: true, badge: { label: "Tidak dibuka", cls: "bg-zinc-200 text-zinc-500" },
+        description: "Tidak dibuka untuk acara ini — buka untuk mendaftar sekolah luar negara." };
   // The bottom-left slot is taken by Kehadiran Individu on physical Webcraft events.
   const internationalLow = showInternational && hasWebcraft && !isOnline;
 
@@ -569,7 +580,7 @@ export function EventManageClient({
       : INDIVIDUAL_ATTENDANCE_MODULE]),
     ...(hasWebcraft ? [WEBCRAFT_JUDGING_MODULE] : []),
     ...(showInternational
-      ? [internationalLow ? { ...INTERNATIONAL_MODULE, pos: { x: COL[0], y: ROW[3] } } : INTERNATIONAL_MODULE]
+      ? [internationalLow ? { ...internationalModule, pos: { x: COL[0], y: ROW[3] } } : internationalModule]
       : []),
     AWARDS_MODULE,
   ];

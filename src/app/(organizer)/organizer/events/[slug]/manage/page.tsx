@@ -25,7 +25,7 @@ export default async function EventManagePage({
   const [event, hasWebcraft, hasCsi, hasQuizzly] = await Promise.all([
     db.event.findUnique({
       where: { slug },
-      select: { id: true, name: true, slug: true, scope: true, status: true, startDate: true, endDate: true },
+      select: { id: true, name: true, slug: true, scope: true, status: true, startDate: true, endDate: true, allowInternational: true },
     }),
     eventHasWebcraft(slug),
     eventHasCsi(slug),

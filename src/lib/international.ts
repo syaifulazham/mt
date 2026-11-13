@@ -109,6 +109,18 @@ export async function requireInternationalAdmin() {
 }
 
 /**
+ * Refusal when the event does not take international registration (switched
+ * on per event), else null. Called by the event-level international routes.
+ */
+export async function internationalClosed(eventId: string) {
+  const ev = await db.event.findUnique({ where: { id: eventId }, select: { allowInternational: true } });
+  if (!ev) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
+  if (!ev.allowInternational)
+    return NextResponse.json({ error: "INTERNATIONAL_CLOSED", message: "Penyertaan antarabangsa tidak dibuka untuk acara ini." }, { status: 403 });
+  return null;
+}
+
+/**
  * Loads a contingent this tool may edit: INTERNATIONAL with a foreign country.
  * Returns an error response otherwise, so local contingents can never be
  * changed from here.
@@ -116,12 +128,14 @@ export async function requireInternationalAdmin() {
 export async function loadForeignContingent(contingentId: string) {
   const c = await db.contingent.findUnique({
     where:  { id: contingentId },
-    select: { id: true, name: true, contingentType: true, country: { select: { id: true, name: true, codeIso2: true } } },
+    select: { id: true, name: true, contingentType: true, internationalEventId: true, country: { select: { id: true, name: true, codeIso2: true } } },
   });
   if (!c) return { error: NextResponse.json({ error: "CONTINGENT_NOT_FOUND" }, { status: 404 }) } as const;
   if (c.contingentType !== "INTERNATIONAL" || !isForeignCountry(c.country))
     return { error: NextResponse.json({ error: "NOT_A_FOREIGN_CONTINGENT" }, { status: 400 }) } as const;
-  // An OWN-scoped link only reaches the schools created through it.
+  // A registration link only reaches its own event's schools (OWN: only the ones it created).
+  const link = currentInternationalLink();
+  if (link && c.internationalEventId !== link.eventId) return { error: NextResponse.json({ error: "CONTINGENT_NOT_FOUND" }, { status: 404 }) } as const;
   if (!linkMayReach(contingentId)) return { error: NextResponse.json({ error: "CONTINGENT_NOT_FOUND" }, { status: 404 }) } as const;
   return { contingent: c } as const;
 }

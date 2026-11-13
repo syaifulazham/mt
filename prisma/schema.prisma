@@ -316,6 +316,9 @@ model Contingent {
   stateId             String?
   zoneId              String?
   countryId           String?
+  /// Foreign schools (Penyertaan Antarabangsa) belong to the event they were registered for:
+  /// that event's international page lists them, no other. Null for local contingents.
+  internationalEventId String?
   status              ContingentStatus @default(ACTIVE)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -578,6 +581,11 @@ model Event {
   // Pre-registered path: may one participant enter several competitions of this
   // event? false = "Penyertaan Tunggal Sahaja" (the long-standing rule).
   allowMultipleParticipation Boolean             @default(false)
+  /// Foreign schools can be registered into this event (Penyertaan Antarabangsa page and its third-party links).
+  allowInternational         Boolean             @default(false)
+  /// Countries added on this event's Penyertaan Antarabangsa page (Country ids); the
+  /// countries of its schools are listed too.
+  internationalCountryIds    String[]            @default([])
   participationPolicy        ParticipationPolicy @default(ALL)
   winnerExclusionRank        Int?
   /// Penghakiman → Tetapan global: how tied teams affect the next rank.
@@ -2213,13 +2221,16 @@ model SpecialAward {
   @@map("special_awards")
 }
 
-/// A hand-picked winner of a CUSTOM-method special award: a team, or one participant.
+/// A hand-picked winner of a CUSTOM-method special award: a team, one participant, or a name typed by hand.
 model SpecialAwardWinner {
   id            String   @id @default(cuid())
   awardId       String
   rank          Int      @default(1)
   teamId        String?
   participantId String?
+  /// A recipient typed by hand (no team / participant record): their name and an optional line (school, organisation).
+  customName    String?
+  customNote    String?
   createdAt     DateTime @default(now())
 
   award       SpecialAward @relation(fields: [awardId], references: [id], onDelete: Cascade)

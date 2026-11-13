@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import {
+import { internationalClosed,
   checkTeamPeople, loadEventCompetitions, loadForeignContingent, requireInternationalAdmin,
 } from "@/lib/international";
 
@@ -30,6 +30,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const guard = await requireInternationalAdmin();
   if ("error" in guard) return guard.error;
   const { id: eventId, cid, tid } = await params;
+  const closed = await internationalClosed(eventId);
+  if (closed) return closed;
 
   const found = await loadTeam(cid, tid);
   if ("error" in found) return found.error;
