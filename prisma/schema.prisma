@@ -722,6 +722,9 @@ model EventCompetition {
   parentId                String?
   /// Its results feed the Medal Tally (one split of a competition may be left out).
   countInMedals           Boolean   @default(true)
+  /// Run online within an otherwise physical event: its teams don't come to the
+  /// venue, so they are left out of attendance (Log Kehadiran, counters, dashboard).
+  isOnline                Boolean   @default(false)
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
@@ -22,6 +23,7 @@ export async function GET(
   // Find all teams registered to this event, joined to contingent + trainer count
   const teamEvents = await db.teamEvent.findMany({
     where: {
+      ...onsiteOnly(eventId),
       eventId,
       acceptance: "ACCEPT",
       ...(q

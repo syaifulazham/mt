@@ -38,6 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     quizzlySessionId, quizzlySessionTitle, quizzlyAssignBy, quizzlyQuizMap,
     fc1EventId, fc1Challenges,
     droneEventId, droneChallenges,
+    isOnline,
   } = await req.json();
 
   if (quizzlyAssignBy !== undefined && quizzlyAssignBy !== null
@@ -50,6 +51,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const updated = await db.eventCompetition.update({
     where: { id: ecId },
     data: {
+      // Played online in this event: its teams are left out of attendance (src/lib/onlineCompetition.ts).
+      ...(isOnline            !== undefined && { isOnline:            isOnline === true }),
       ...(picName             !== undefined && { picName:             picName?.trim()    || null }),
       ...(picContact          !== undefined && { picContact:          picContact?.trim() || null }),
       ...(maxTeams            !== undefined && { maxTeams:            Number(maxTeams)   || 0    }),

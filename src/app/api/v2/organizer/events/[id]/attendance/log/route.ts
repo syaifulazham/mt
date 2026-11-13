@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
@@ -14,7 +15,7 @@ import { db } from "@/lib/db";
 async function resolveResult(eventId: string, contingentId?: string, teamId?: string) {
   if (contingentId) {
     const teamEvents = await db.teamEvent.findMany({
-      where: { eventId, team: { contingentId } },
+      where: { ...onsiteOnly(eventId), eventId, team: { contingentId } },
       select: { team: { select: { _count: { select: { members: true } } } } },
     });
     const participants = teamEvents.reduce((s, te) => s + te.team._count.members, 0);
@@ -31,7 +32,7 @@ async function resolveResult(eventId: string, contingentId?: string, teamId?: st
   }
   if (teamId) {
     const te = await db.teamEvent.findFirst({
-      where: { eventId, teamId },
+      where: { ...onsiteOnly(eventId), eventId, teamId },
       select: {
         team: {
           select: {
@@ -71,12 +72,12 @@ export async function POST(
 
   if (contingentId) {
     await db.teamEvent.updateMany({
-      where: { eventId, team: { contingentId }, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, team: { contingentId }, acceptance: "ACCEPT" },
       data:  { attendedAt: now },
     });
   } else if (teamId) {
     await db.teamEvent.updateMany({
-      where: { eventId, teamId, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, teamId, acceptance: "ACCEPT" },
       data:  { attendedAt: now },
     });
   }
@@ -102,12 +103,12 @@ export async function DELETE(
 
   if (contingentId) {
     await db.teamEvent.updateMany({
-      where: { eventId, team: { contingentId }, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, team: { contingentId }, acceptance: "ACCEPT" },
       data:  { attendedAt: null },
     });
   } else if (teamId) {
     await db.teamEvent.updateMany({
-      where: { eventId, teamId, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, teamId, acceptance: "ACCEPT" },
       data:  { attendedAt: null },
     });
   }

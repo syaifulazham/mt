@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
@@ -26,7 +27,7 @@ export async function GET(
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
 
   const teamEvents = await db.teamEvent.findMany({
-    where: { eventId, acceptance: "ACCEPT", team: { status: "ACTIVE" } },
+    where: { ...onsiteOnly(eventId), eventId, acceptance: "ACCEPT", team: { status: "ACTIVE" } },
     select: {
       id: true,
       attendedAt: true,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
@@ -43,6 +44,7 @@ export async function POST(
   // Mark all teams of this contingent in this event as attended
   const { count } = await db.teamEvent.updateMany({
     where: {
+      ...onsiteOnly(eventId),
       eventId,
       team: { contingentId: contingent.id },
     },
@@ -55,7 +57,7 @@ export async function POST(
 
   // Compute participant count (sum member counts across teams in this event)
   const teamEvents = await db.teamEvent.findMany({
-    where: { eventId, team: { contingentId: contingent.id } },
+    where: { ...onsiteOnly(eventId), eventId, team: { contingentId: contingent.id } },
     select: { team: { select: { _count: { select: { members: true } } } } },
   });
 

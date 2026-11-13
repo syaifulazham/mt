@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { db } from "@/lib/db";
 
 /**
@@ -47,7 +48,7 @@ export async function POST(
   const now = new Date();
 
   const { count } = await db.teamEvent.updateMany({
-    where: { eventId: endpoint.eventId, team: { contingentId: contingent.id }, acceptance: "ACCEPT" },
+    where: { ...onsiteOnly(endpoint.eventId), eventId: endpoint.eventId, team: { contingentId: contingent.id }, acceptance: "ACCEPT" },
     data: { attendedAt: now },
   });
 
@@ -55,7 +56,7 @@ export async function POST(
     return NextResponse.json({ error: "NO_TEAMS_REGISTERED" }, { status: 404 });
 
   const teamEvents = await db.teamEvent.findMany({
-    where: { eventId: endpoint.eventId, team: { contingentId: contingent.id }, acceptance: "ACCEPT" },
+    where: { ...onsiteOnly(endpoint.eventId), eventId: endpoint.eventId, team: { contingentId: contingent.id }, acceptance: "ACCEPT" },
     select: { team: { select: { _count: { select: { members: true } } } } },
   });
   const participants = teamEvents.reduce((s, te) => s + te.team._count.members, 0);

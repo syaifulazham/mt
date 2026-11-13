@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { db } from "@/lib/db";
 
 async function resolveEndpoint(code: string, passcode: string) {
@@ -32,12 +33,12 @@ export async function POST(
 
   if (body.contingentId) {
     await db.teamEvent.updateMany({
-      where: { eventId, team: { contingentId: body.contingentId }, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, team: { contingentId: body.contingentId }, acceptance: "ACCEPT" },
       data: { attendedAt: now },
     });
   } else if (body.teamId) {
     await db.teamEvent.updateMany({
-      where: { eventId, teamId: body.teamId, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, teamId: body.teamId, acceptance: "ACCEPT" },
       data: { attendedAt: now },
     });
   } else {
@@ -65,12 +66,12 @@ export async function DELETE(
 
   if (body.contingentId) {
     await db.teamEvent.updateMany({
-      where: { eventId, team: { contingentId: body.contingentId }, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, team: { contingentId: body.contingentId }, acceptance: "ACCEPT" },
       data: { attendedAt: null },
     });
   } else if (body.teamId) {
     await db.teamEvent.updateMany({
-      where: { eventId, teamId: body.teamId, acceptance: "ACCEPT" },
+      where: { ...onsiteOnly(eventId), eventId, teamId: body.teamId, acceptance: "ACCEPT" },
       data: { attendedAt: null },
     });
   } else {

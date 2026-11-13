@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { db } from "@/lib/db";
 
 // GET /api/v2/attendance/[code]/search?q=&passcode=
@@ -23,6 +24,7 @@ export async function GET(
 
   const teamEvents = await db.teamEvent.findMany({
     where: {
+      ...onsiteOnly(endpoint.eventId),
       eventId: endpoint.eventId,
       acceptance: "ACCEPT",
       ...(q ? {

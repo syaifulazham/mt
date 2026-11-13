@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { db } from "@/lib/db";
 
 async function resolveEndpoint(code: string, passcode: string) {
@@ -106,6 +107,7 @@ export async function POST(
 
   const teamEvents = await db.teamEvent.findMany({
     where: {
+      ...onsiteOnly(resolved.eventId),
       eventId: resolved.eventId,
       acceptance: "ACCEPT",
       team: { members: { some: { participantId } } },

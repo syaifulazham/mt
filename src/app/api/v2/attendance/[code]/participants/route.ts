@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { onsiteOnly } from "@/lib/onlineCompetition";
 import { db } from "@/lib/db";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
 
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   const contains = { contains: fragment, mode: "insensitive" as const };
   const teamEvents = await db.teamEvent.findMany({
     where: {
+      ...onsiteOnly(endpoint.eventId),
       eventId: endpoint.eventId,
       acceptance: "ACCEPT",
       OR: [

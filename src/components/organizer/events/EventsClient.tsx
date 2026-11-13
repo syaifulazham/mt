@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin, ChevronDown,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin, ChevronDown, MapPin, Wifi,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -106,6 +106,8 @@ type QuizzlyQuizAssignment = {
 
 type EventCompLink = {
   id: string; competitionId: string;
+  /** Played online in this (physical) event: its teams are left out of attendance. */
+  isOnline: boolean;
   picName: string | null; picContact: string | null; maxTeams: number;
   eptimEduCourseId:    string | null;
   eptimEduCourseTitle: string | null;
@@ -1751,6 +1753,19 @@ function PrerequisiteSection({ event, canWrite, onSaved, onCompetitionsCopied }:
 
 function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: string; canWrite: boolean; refreshKey?: number }) {
   const [links,   setLinks]   = useState<EventCompLink[]>([]);
+  const [modeBusy, setModeBusy] = useState<string | null>(null);
+
+  /** Bersemuka / Dalam talian for one competition of this event. */
+  async function setOnline(link: EventCompLink, isOnline: boolean) {
+    if (link.isOnline === isOnline) return;
+    setModeBusy(link.id);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${link.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isOnline }),
+      });
+      if (res.ok) setLinks(prev => prev.map(l => (l.id === link.id ? { ...l, isOnline } : l)));
+    } finally { setModeBusy(null); }
+  }
   const [loading, setLoading] = useState(true);
   const [view,    setView]    = useState<"list" | "form">("list");
 
@@ -1986,6 +2001,23 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                         <span className="font-mono text-zinc-400 mr-1.5">{link.competition.code}</span>
                         {link.competition.name}
                       </p>
+                      {/* Bersemuka / Dalam talian — online competitions are left out of Log Kehadiran */}
+                      <div className="mt-1 flex items-center gap-2">
+                        <div className="inline-flex overflow-hidden rounded-md border bg-white text-[11px] font-medium"
+                          title="Dalam talian: pemain pertandingan ini tidak dimasukkan dalam Log Kehadiran, kaunter kehadiran dan dashboard kehadiran.">
+                          {([[false, "Bersemuka", MapPin], [true, "Dalam talian", Wifi]] as const).map(([v, label, Icon], i) => (
+                            <button key={label} type="button" disabled={!canWrite || modeBusy === link.id} onClick={() => setOnline(link, v)}
+                              className={`flex items-center gap-1 px-2 py-0.5 transition-colors ${i > 0 ? "border-l" : ""} ${
+                                link.isOnline === v
+                                  ? (v ? "bg-sky-600 text-white" : "bg-zinc-800 text-white")
+                                  : "text-zinc-500 hover:bg-zinc-50"} ${!canWrite ? "cursor-default" : ""}`}>
+                              <Icon className="h-3 w-3" /> {label}
+                            </button>
+                          ))}
+                        </div>
+                        {modeBusy === link.id && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
+                        {link.isOnline && <span className="text-[11px] text-sky-700">tiada dalam Log Kehadiran</span>}
+                      </div>
                       {/* EptimEdu course badge / link button */}
                       <div className="mt-1">
                         {canWrite ? (
