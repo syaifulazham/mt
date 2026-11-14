@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { ISO_COUNTRIES, flagEmoji } from "@/lib/countries";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Users, UserCheck, Trophy,
@@ -48,6 +49,8 @@ type ContingentDetail = {
   updatedAt: string;
   state: StateRef | null;
   zone: ZoneRef | null;
+  /** International contingents: the country (optional). */
+  country: { id: string; name: string; codeIso2: string } | null;
   school: SchoolDetail | null;
   higherInstitution: HIDetail | null;
   stateName: string | null;
@@ -2556,8 +2559,26 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (res.ok) setDetail((prev) => prev ? { ...prev, shortName: json.shortName ?? prev.shortName } : prev);
+      if (res.ok) setDetail((prev) => prev ? {
+        ...prev,
+        shortName: "shortName" in body ? json.shortName ?? null : prev.shortName,
+        country:   "countryIso2" in body ? json.country ?? null : prev.country,
+      } : prev);
     } finally { setSavingField(false); }
+  }
+
+  // country inline edit (International contingents)
+  const [editingCountry, setEditingCountry] = useState(false);
+  const [countryDraft,   setCountryDraft]   = useState("");
+  function submitCountry() {
+    const current = detail?.country?.codeIso2 ?? "";
+    setEditingCountry(false);
+    if (countryDraft === current) return;
+    const name = ISO_COUNTRIES.find(([c]) => c === countryDraft)?.[2];
+    setPendingField({
+      label: countryDraft ? `Set the country to ${name}.` : `Clear the country (currently ${detail?.country?.name}).`,
+      body: { countryIso2: countryDraft || null },
+    });
   }
 
   function openShortNameEdit() {
@@ -2706,6 +2727,38 @@ export function ContingentOrgDetailClient({ contingentId }: { contingentId: stri
                 : <span className="text-red-600">Suspended</span>
             } />
             <Dl label="State" value={detail.stateName ? `${detail.stateName}${detail.stateCode ? ` (${detail.stateCode})` : ""}` : null} />
+            {detail.contingentType === "INTERNATIONAL" && (
+              <div>
+                <dt className="text-xs text-zinc-400 font-medium uppercase tracking-wide flex items-center gap-1.5">
+                  Country <span className="normal-case tracking-normal text-zinc-300">(optional)</span>
+                  {!editingCountry && (
+                    <button onClick={() => { setCountryDraft(detail.country?.codeIso2 ?? ""); setEditingCountry(true); }} className="text-zinc-300 hover:text-zinc-600 transition-colors">
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
+                </dt>
+                <dd className="mt-0.5">
+                  {editingCountry ? (
+                    <div className="flex items-center gap-1.5">
+                      <select value={countryDraft} onChange={(e) => setCountryDraft(e.target.value)} autoFocus
+                        onKeyDown={(e) => { if (e.key === "Enter") submitCountry(); if (e.key === "Escape") setEditingCountry(false); }}
+                        className="h-7 min-w-0 flex-1 rounded-md border bg-white px-1.5 text-sm">
+                        <option value="">— None —</option>
+                        {[...ISO_COUNTRIES].sort((a, b) => a[2].localeCompare(b[2])).map(([iso2, , name]) => (
+                          <option key={iso2} value={iso2}>{flagEmoji(iso2)} {name}</option>
+                        ))}
+                      </select>
+                      <button onClick={submitCountry} className="text-green-600 hover:text-green-700"><Check className="h-4 w-4" /></button>
+                      <button onClick={() => setEditingCountry(false)} className="text-zinc-400 hover:text-zinc-600"><X className="h-4 w-4" /></button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-zinc-800">
+                      {detail.country ? `${flagEmoji(detail.country.codeIso2)} ${detail.country.name}` : <span className="text-zinc-300">—</span>}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            )}
             <Dl label="Zone" value={detail.zoneName} />
             <Dl label="Locality" value={detail.locality} />
             <Dl label="Registered" value={new Date(detail.createdAt).toLocaleDateString("en-MY", { year: "numeric", month: "long", day: "numeric" })} />

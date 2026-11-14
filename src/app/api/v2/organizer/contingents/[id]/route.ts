@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { findIsoCountry } from "@/lib/countries";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
@@ -48,6 +49,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         },
       },
       zone:              { select: { id: true, name: true } },
+      country:           { select: { id: true, name: true, codeIso2: true } },
       school:            { select: schoolSelect },
       higherInstitution: { select: hiSelect },
       managers: {
@@ -141,13 +143,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
 
-  const existing = await db.contingent.findUnique({ where: { id }, select: { id: true } });
+  const existing = await db.contingent.findUnique({ where: { id }, select: { id: true, contingentType: true } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await req.json();
   const { schoolId, higherInstitutionId, clearInstitution, name, shortName } = body;
 
   const data: Record<string, unknown> = {};
+
+  // Country (optional) — International contingents only. Matched by either ISO
+  // code so an existing countries row is reused; "" / null clears it.
+  if ("countryIso2" in body) {
+    if (existing.contingentType !== "INTERNATIONAL")
+      return NextResponse.json({ error: "Negara hanya untuk kontinjen jenis International." }, { status: 400 });
+    const raw = String(body.countryIso2 ?? "").trim();
+    if (!raw) data.countryId = null;
+    else {
+      const iso = findIsoCountry(raw);
+      if (!iso) return NextResponse.json({ error: "Negara tidak dikenali." }, { status: 400 });
+      const row = await db.country.findFirst({
+        where: { OR: [{ codeIso2: iso.codeIso2 }, { codeIso3: iso.codeIso3 }] }, select: { id: true, isActive: true },
+      }) ?? await db.country.create({ data: { name: iso.name, codeIso2: iso.codeIso2, codeIso3: iso.codeIso3 }, select: { id: true, isActive: true } });
+      if (!row.isActive) await db.country.update({ where: { id: row.id }, data: { isActive: true } });
+      data.countryId = row.id;
+    }
+  }
 
   if (clearInstitution) {
     data.schoolId = null;
@@ -169,6 +189,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data,
     select: {
       id: true, name: true, shortName: true, contingentType: true,
+      country:           { select: { id: true, name: true, codeIso2: true } },
       school:            { select: schoolSelect },
       higherInstitution: { select: hiSelect },
     },
