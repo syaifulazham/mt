@@ -803,8 +803,10 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
     }
   }
 
-  // Step 1: fetch prerequisite teams and show picker
-  async function handleLoadFromPrerequisite() {
+  // Step 1: fetch prerequisite teams and show picker. From the tally banner
+  // (`missingOnly`) only the teams not yet registered are listed, none ticked,
+  // optionally for one prerequisite event, so they can be loaded selectively.
+  async function handleLoadFromPrerequisite(opts: { missingOnly?: boolean; prereqId?: string } = {}) {
     if (!event.prerequisites?.length) return;
     setPrereqModal({ phase: "loading" });
     try {
@@ -813,12 +815,17 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
       );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Ralat");
-      const groups: PrereqGroup[] = json.groups ?? [];
-      // Pre-select all teams not yet registered
+      let groups: PrereqGroup[] = json.groups ?? [];
+      if (opts.prereqId) groups = groups.filter(g => g.id === opts.prereqId);
+      if (opts.missingOnly)
+        groups = groups.map(g => ({ ...g, teams: g.teams.filter(t => !t.alreadyRegistered) })).filter(g => g.teams.length > 0);
+      // Pre-select all teams not yet registered — except when picking selectively.
       const initialSelected = new Set<string>();
-      for (const g of groups) {
-        for (const t of g.teams) {
-          if (!t.alreadyRegistered) initialSelected.add(t.id);
+      if (!opts.missingOnly) {
+        for (const g of groups) {
+          for (const t of g.teams) {
+            if (!t.alreadyRegistered) initialSelected.add(t.id);
+          }
         }
       }
       setPrereqModal({ phase: "picking", groups, selectedIds: initialSelected });
@@ -1262,7 +1269,7 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
         {/* Load from prerequisite (teams tab) */}
         {listTab === "teams" && (event.prerequisites?.length ?? 0) > 0 && (
           <button
-            onClick={handleLoadFromPrerequisite}
+            onClick={() => handleLoadFromPrerequisite()}
             disabled={prereqModal?.phase === "loading" || isCompleted}
             title={`Daftar pasukan terpilih dari acara prasyarat (${event.prerequisites!.map(p => p.prerequisite.name).join(", ")})`}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 border border-indigo-200 transition-colors"
@@ -1419,7 +1426,10 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                     <span className="font-medium">{p.name}:</span>
                     {p.missingCount === 0
                       ? <span className="text-green-700">lengkap ({p.registeredCount}/{p.selectedCount})</span>
-                      : <span>{p.registeredCount}/{p.selectedCount} didaftarkan — <span className="font-semibold">{p.missingCount} belum</span></span>
+                      : <span>{p.registeredCount}/{p.selectedCount} didaftarkan — <span className="font-semibold">{p.missingCount} belum</span>
+                          <button onClick={() => handleLoadFromPrerequisite({ missingOnly: true, prereqId: p.id })}
+                            className="ml-2 underline underline-offset-2 text-amber-800 hover:text-amber-950 font-medium">pilih</button>
+                        </span>
                     }
                   </li>
                 ))}
@@ -1430,14 +1440,25 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
             {loadMissingResult
               ? <span className="text-xs text-green-700 font-medium">{loadMissingResult.added} pasukan ditambah ✓</span>
               : (
-                <button
-                  onClick={handleLoadMissing}
-                  disabled={loadingMissing}
-                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 font-medium transition-colors"
-                >
-                  {loadingMissing && <Loader2 className="h-3 w-3 animate-spin" />}
-                  Muat sekarang
-                </button>
+                <>
+                  <button
+                    onClick={() => handleLoadFromPrerequisite({ missingOnly: true })}
+                    disabled={loadingMissing}
+                    title="Pilih pasukan yang belum didaftarkan untuk dimuatkan"
+                    className="text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 disabled:opacity-50 font-medium transition-colors"
+                  >
+                    Pilih…
+                  </button>
+                  <button
+                    onClick={handleLoadMissing}
+                    disabled={loadingMissing}
+                    title="Muat semua pasukan yang belum didaftarkan"
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 font-medium transition-colors"
+                  >
+                    {loadingMissing && <Loader2 className="h-3 w-3 animate-spin" />}
+                    Muat semua
+                  </button>
+                </>
               )
             }
             <button
@@ -2024,6 +2045,11 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
 
                   {/* Team list */}
                   <div className="overflow-y-auto flex-1 divide-y">
+                    {groups.length === 0 && (
+                      <p className="px-5 py-8 text-center text-sm text-zinc-400">
+                        Tiada pasukan untuk dimuatkan{prereqStateFilter.length > 0 ? " — mungkin ditapis oleh penapis negeri." : "."}
+                      </p>
+                    )}
                     {groups.map(g => {
                       const groupPickable = g.teams.filter(t => !t.alreadyRegistered);
                       const groupAllSel = groupPickable.length > 0 && groupPickable.every(t => selectedIds.has(t.id));
@@ -2166,7 +2192,7 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                     Tutup
                   </button>
                   <button
-                    onClick={handleLoadFromPrerequisite}
+                    onClick={() => handleLoadFromPrerequisite()}
                     className="flex-1 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500 transition-colors"
                   >
                     Cuba Lagi
