@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Globe2, School, Users, UserCog, Trophy, Lock, Search,
-  CheckCircle2, AlertCircle,
+  CheckCircle2, AlertCircle, Copy, Link2, RefreshCw, Check,
   FileSpreadsheet, UserRound, KeyRound,
 } from "lucide-react";
 import { InternationalLinksDialog } from "@/components/organizer/events/InternationalLinksDialog";
@@ -42,7 +42,12 @@ type Team = {
 type Competition = {
   id: string; code: string; name: string; participationType: "TEAM" | "INDIVIDUAL";
   minTeamSize: number; maxTeamSize: number; eligibleParticipantIds: string[];
+  /** Runs on Asia Spark Quizzly: entered participants get a quiz link (organizers only). */
+  quizzly?: boolean;
+  /** Stored quiz links, by participant id. */
+  quizLinks?: Record<string, QuizLink>;
 };
+type QuizLink = { token: string; startUrl: string | null; quizTitle: string | null; expiresAt: string | null };
 type SchoolDetail = {
   contingent: { id: string; name: string };
   participants: Participant[]; trainers: Trainer[]; teams: Team[]; competitions: Competition[];
@@ -357,6 +362,7 @@ function SchoolPanel({
   const [detail, setDetail]   = useState<SchoolDetail | null>(null);
   const [error, setError]     = useState<string | null>(null);
   const [busy, setBusy]       = useState<string | null>(null);
+  const [copied, setCopied]   = useState<string | null>(null);
 
   const [participantForm, setParticipantForm] = useState<Partial<Participant> | null>(null);
   const [bulkOpen, setBulkOpen]               = useState(false);
@@ -402,7 +408,8 @@ function SchoolPanel({
   // An individual entry is a team of one; it lives on its own tab, not among the teams.
   const isIndividual = (competitionId: string) => compById.get(competitionId)?.participationType === "INDIVIDUAL";
   const teamRows = detail.teams.filter((t) => !isIndividual(t.competitionId));
-  const individualComps = detail.competitions.filter((c) => c.participationType === "INDIVIDUAL");
+  const individualComps = detail.competitions.filter((c) => c.participationType === "INDIVIDUAL")
+    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   const individualEntries = detail.teams.filter((t) => isIndividual(t.competitionId) && t.entry).length;
 
   /**
@@ -431,6 +438,26 @@ function SchoolPanel({
     if (failed) setError(failed);
     await refresh();
   }
+  /** Fetch (or, with `regenerate`, re-issue) a participant's quiz link and copy it. */
+  async function quizLink(competitionId: string, participantId: string, regenerate: boolean) {
+    setBusy(`q-${competitionId}-${participantId}`);
+    const r = await api<QuizLink>(`${base}/quizzly-link`, "POST", { competitionId, participantId, regenerate });
+    setBusy(null);
+    if (!r.ok) { setError(r.message); return; }
+    setDetail((d) => d && {
+      ...d,
+      competitions: d.competitions.map((c) => c.id === competitionId
+        ? { ...c, quizLinks: { ...c.quizLinks, [participantId]: r.data } } : c),
+    });
+    await copyAndFlash(`${competitionId}-${participantId}`, r.data);
+  }
+  async function copyAndFlash(key: string, link: QuizLink) {
+    if (await copyQuizLink(link)) {
+      setCopied(key);
+      setTimeout(() => setCopied((k) => (k === key ? null : k)), 1800);
+    }
+  }
+
   // Short labels so the four fit the panel; the full name is the tooltip.
   const tabs: { key: Tab; label: string; title: string; icon: React.ElementType; count: number }[] = [
     { key: "participants", label: "Peserta",   title: "Peserta",               icon: Users,     count: detail.participants.length },
@@ -651,6 +678,20 @@ function SchoolPanel({
                               {ACCEPTANCE_VALUES.map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                             {t.entry.selected && <span className="text-[11px] text-zinc-400">dipilih</span>}
+                            {c.quizzly && acceptanceUrl && (
+                              <QuizLinkControls
+                                link={c.quizLinks?.[p.id] ?? null}
+                                busy={busy === `q-${c.id}-${p.id}`}
+                                copied={copied === `${c.id}-${p.id}`}
+                                onCopy={(l) => void copyAndFlash(`${c.id}-${p.id}`, l)}
+                                onGet={() => quizLink(c.id, p.id, false)}
+                                onRegenerate={() => setConfirm({
+                                  title: "Jana semula pautan kuiz?",
+                                  description: `Kod baharu akan dikeluarkan untuk ${p.name} dan disalin. Quizzly tidak membenarkan kod lama dibatalkan — ia masih boleh digunakan sehingga tamat tempohnya.`,
+                                  run: () => quizLink(c.id, p.id, true),
+                                })}
+                              />
+                            )}
                           </div>
                         ) : <span key="e" className="text-[11px] text-zinc-400">Belum didaftar</span>,
                         t?.entry ? (
@@ -746,6 +787,49 @@ function SchoolPanel({
 }
 
 // ─── Dialogs ─────────────────────────────────────────────────────────────────
+
+/** Copies the quiz link; true when it reached the clipboard (else it is shown to copy by hand). */
+async function copyQuizLink(link: QuizLink): Promise<boolean> {
+  const text = link.startUrl ?? link.token;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    window.prompt("Salin pautan kuiz:", text);
+    return false;
+  }
+}
+
+/** A registered participant's Asia Spark quiz link: copy it, or issue a new code. */
+function QuizLinkControls({ link, busy, copied, onGet, onCopy, onRegenerate }: {
+  link: QuizLink | null; busy: boolean; copied: boolean;
+  onGet: () => void; onCopy: (link: QuizLink) => void; onRegenerate: () => void;
+}) {
+  const expired = !!link?.expiresAt && new Date(link.expiresAt) <= new Date();
+  if (!link || expired)
+    return (
+      <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy} onClick={onGet}
+        title={expired ? "Kod lama telah tamat tempoh" : "Keluarkan kod kuiz dan salin pautannya"}>
+        {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
+        {expired ? "Jana pautan baharu" : "Jana pautan kuiz"}
+      </Button>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white pl-2 text-[11px]"
+      title={`${link.quizTitle ?? "Kuiz"}${link.expiresAt ? ` · sah hingga ${new Date(link.expiresAt).toLocaleString("ms-MY")}` : ""}`}>
+      <span className="font-mono text-zinc-600">{link.token}</span>
+      {copied && <span className="text-emerald-600">Disalin</span>}
+      <button className="p-1 text-zinc-500 hover:text-zinc-900 disabled:opacity-50" disabled={busy} aria-label="Salin pautan kuiz"
+        title="Salin pautan kuiz" onClick={() => onCopy(link)}>
+        {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+      </button>
+      <button className="p-1 pr-1.5 text-zinc-500 hover:text-zinc-900 disabled:opacity-50" disabled={busy} aria-label="Jana semula pautan"
+        title="Jana semula pautan" onClick={onRegenerate}>
+        {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+      </button>
+    </span>
+  );
+}
 
 type SaveFn<T> = (body: T) => Promise<string | null>;
 

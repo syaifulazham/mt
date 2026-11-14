@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { matchesTargetGroup } from "@/lib/targetGroupMatch";
 import { loadEventCompetitions, loadForeignContingent, requireInternationalAdmin } from "@/lib/international";
+import { currentInternationalLink } from "@/lib/international-link";
 
 type Params = { params: Promise<{ id: string; cid: string }> };
 
@@ -48,6 +49,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
     }),
   ]);
 
+  // Asia Spark Quizzly competitions: each one's stored quiz links, keyed by
+  // participant. Organizers only — a registration link never sees codes.
+  const quizzlyEcs = currentInternationalLink() ? [] : await db.eventCompetition.findMany({
+    where: {
+      eventId, parentId: null, competitionId: { in: [...competitions.keys()] },
+      competition: { thirdPartyIntegration: "asiaspark-quizzly" },
+    },
+    select: { id: true, competitionId: true },
+  });
+  const quizzlyTokens = quizzlyEcs.length && participants.length ? await db.participantQuizzlyToken.findMany({
+    where: { eventCompetitionId: { in: quizzlyEcs.map((e) => e.id) }, participantId: { in: participants.map((p) => p.id) } },
+    select: { participantId: true, eventCompetitionId: true, token: true, startUrl: true, quizTitle: true, expiresAt: true },
+  }) : [];
+  const quizzlyByComp = new Map(quizzlyEcs.map((e) => [e.competitionId, e.id]));
+
   return NextResponse.json({
     data: {
       contingent: found.contingent,
@@ -72,6 +88,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
         return {
           id: c.id, code: c.code, name: c.name, participationType: c.participationType,
           minTeamSize: c.minTeamSize, maxTeamSize: c.maxTeamSize,
+          quizzly: quizzlyByComp.has(c.id),
+          quizLinks: Object.fromEntries(quizzlyTokens
+            .filter((t) => t.eventCompetitionId === quizzlyByComp.get(c.id))
+            .map((t) => [t.participantId, {
+              token: t.token, startUrl: t.startUrl, quizTitle: t.quizTitle, expiresAt: t.expiresAt?.toISOString() ?? null,
+            }])),
           eligibleParticipantIds: participants
             .filter((p) => groups.length === 0 || groups.some((g) => matchesTargetGroup(p, g)))
             .map((p) => p.id),
