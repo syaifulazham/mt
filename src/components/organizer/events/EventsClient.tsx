@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin, ChevronDown, MapPin, Wifi,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin, ChevronDown, MapPin, Wifi, Lock,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -110,6 +110,8 @@ type EventCompLink = {
   id: string; competitionId: string;
   /** Played online in this (physical) event: its teams are left out of attendance. */
   isOnline: boolean;
+  /** Participant portal: PUBLIC (open to all; self-registration) or RESTRICTED (registered only). */
+  portalAccess: "PUBLIC" | "RESTRICTED";
   picName: string | null; picContact: string | null; maxTeams: number;
   eptimEduCourseId:    string | null;
   eptimEduCourseTitle: string | null;
@@ -1811,6 +1813,19 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
   const [modeBusy, setModeBusy] = useState<string | null>(null);
 
   /** Bersemuka / Dalam talian for one competition of this event. */
+  /** Public / Restricted on the participant portal. */
+  async function setPortalAccess(link: EventCompLink, portalAccess: EventCompLink["portalAccess"]) {
+    if (link.portalAccess === portalAccess) return;
+    setPublishBusy(link.id);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${link.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ portalAccess }),
+      });
+      if (res.ok) setLinks(prev => prev.map(l => (l.id === link.id ? { ...l, portalAccess } : l)));
+    } finally { setPublishBusy(null); }
+  }
+  const [publishBusy, setPublishBusy] = useState<string | null>(null);
+
   async function setOnline(link: EventCompLink, isOnline: boolean) {
     if (link.isOnline === isOnline) return;
     setModeBusy(link.id);
@@ -2072,6 +2087,25 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                         </div>
                         {modeBusy === link.id && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
                         {link.isOnline && <span className="text-[11px] text-sky-700">tiada dalam Log Kehadiran</span>}
+                        {/* Participant portal access (individual competitions only): Public (open to all; self-registration) / Restricted (registered only) */}
+                        {link.competition.participationType === "INDIVIDUAL" && (
+                        <div className="ml-auto flex items-center gap-1.5">
+                          {publishBusy === link.id && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
+                          <div className="inline-flex overflow-hidden rounded-md border bg-white text-[11px] font-medium">
+                            {([["PUBLIC", "Public", Globe2, "Public: dibuka kepada semua peserta yang layak di portal peserta — mereka boleh mendaftar sendiri."],
+                               ["RESTRICTED", "Restricted", Lock, "Restricted: hanya peserta yang telah didaftarkan dalam acara ini melihatnya di portal peserta — tiada pendaftaran sendiri."]] as const)
+                              .map(([v, label, Icon, tip], i) => (
+                              <button key={v} type="button" title={tip} disabled={!canWrite || publishBusy === link.id} onClick={() => setPortalAccess(link, v)}
+                                className={`flex items-center gap-1 px-2 py-0.5 transition-colors ${i > 0 ? "border-l" : ""} ${
+                                  link.portalAccess === v
+                                    ? (v === "PUBLIC" ? "bg-emerald-600 text-white" : "bg-amber-500 text-white")
+                                    : "text-zinc-500 hover:bg-zinc-50"} ${!canWrite ? "cursor-default" : ""}`}>
+                                <Icon className="h-3 w-3" /> {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        )}
                       </div>
                       {/* EptimEdu course badge / link button */}
                       <div className="mt-1">

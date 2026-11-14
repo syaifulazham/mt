@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { PORTAL_ACCESS } from "@/lib/portalAccess";
 import { Prisma } from "@prisma/client";
 
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
@@ -38,21 +39,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     quizzlySessionId, quizzlySessionTitle, quizzlyAssignBy, quizzlyQuizMap,
     fc1EventId, fc1Challenges,
     droneEventId, droneChallenges,
-    isOnline,
+    isOnline, portalAccess,
   } = await req.json();
 
+  if (portalAccess !== undefined && !(PORTAL_ACCESS as readonly string[]).includes(portalAccess))
+    return NextResponse.json({ error: "INVALID_PORTAL_ACCESS" }, { status: 400 });
   if (quizzlyAssignBy !== undefined && quizzlyAssignBy !== null
       && !["target_group", "grade"].includes(quizzlyAssignBy))
     return NextResponse.json({ error: "INVALID_QUIZZLY_ASSIGN_BY" }, { status: 400 });
 
-  const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId } });
+  const ec = await db.eventCompetition.findFirst({ where: { id: ecId, eventId }, include: { competition: { select: { participationType: true } } } });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  // Public / Restricted is about self-registration, which only individual competitions have.
+  if (portalAccess !== undefined && ec.competition.participationType !== "INDIVIDUAL")
+    return NextResponse.json({ error: "PORTAL_ACCESS_INDIVIDUAL_ONLY" }, { status: 400 });
 
   const updated = await db.eventCompetition.update({
     where: { id: ecId },
     data: {
       // Played online in this event: its teams are left out of attendance (src/lib/onlineCompetition.ts).
       ...(isOnline            !== undefined && { isOnline:            isOnline === true }),
+      // Participant portal: PUBLIC (self-registration) or RESTRICTED (registered only) — src/lib/portalAccess.ts.
+      ...(portalAccess        !== undefined && { portalAccess }),
       ...(picName             !== undefined && { picName:             picName?.trim()    || null }),
       ...(picContact          !== undefined && { picContact:          picContact?.trim() || null }),
       ...(maxTeams            !== undefined && { maxTeams:            Number(maxTeams)   || 0    }),

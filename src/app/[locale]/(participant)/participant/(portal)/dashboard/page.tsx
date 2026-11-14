@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
+import { isRestricted, participantEntryKeys } from "@/lib/portalAccess";
 import { DashboardClient } from "@/components/participant/DashboardClient";
 import type { SlotScheduleConfig } from "@/lib/walkin-slots";
 import { matchingTargetGroups } from "@/lib/targetGroupMatch";
@@ -156,6 +157,14 @@ export default async function DashboardPage() {
     return { id, title, enrolled: false };
   };
 
+  // Restricted competitions (EventCompetition.portalAccess) show only to
+  // participants already entered in them; public ones to every eligible one.
+  const entryKeys = await participantEntryKeys(session.participantId);
+  // Individual arena cards are individual by construction.
+  const portalVisible = (ec: { portalAccess: string; event: { id: string }; competition: { id: string; participationType?: string } }) =>
+    !isRestricted(ec.portalAccess, ec.competition.participationType ?? "INDIVIDUAL")
+    || entryKeys.has(`${ec.event.id}:${ec.competition.id}`);
+
   const quizzlyLinks = await db.eventCompetition.findMany({
     where: {
       parentId: null,
@@ -166,6 +175,7 @@ export default async function DashboardPage() {
     select: {
       id: true,
       quizzlySessionTitle: true,
+      portalAccess: true,
       quizzlyAssignBy: true,
       quizzlyQuizMap: true,
       eptimEduCourseId: true, eptimEduCourseTitle: true,
@@ -226,7 +236,7 @@ export default async function DashboardPage() {
         event: { status: { in: ["PUBLISHED", "ACTIVE"] } },
       },
       select: {
-        id: true, fc1Challenges: true, droneChallenges: true,
+        id: true, fc1Challenges: true, droneChallenges: true, portalAccess: true,
         eptimEduCourseId: true, eptimEduCourseTitle: true,
         event: { select: { id: true, name: true, slug: true, startDate: true, endDate: true, allowMultipleParticipation: true } },
         competition: {
@@ -249,6 +259,7 @@ export default async function DashboardPage() {
       const picks = integration === "eptim-fc1" ? ec.fc1Challenges : ec.droneChallenges;
       const challenges = (picks as ArenaChallengeRef[] | null) ?? [];
       if (challenges.length === 0) return null;
+      if (!portalVisible(ec)) return null;
       const matched = matchingTargetGroups(participant!, ec.competition.targetGroups.map((t) => t.targetGroup));
       if (matched.length === 0) return null;
       const regs = new Map(registrations.filter((r) => r.eventCompetitionId === ec.id).map((r) => [r.challengeId, r]));
@@ -371,6 +382,7 @@ export default async function DashboardPage() {
   }
 
   const quizzlyData = quizzlyLinks.flatMap((ec) => {
+    if (!portalVisible(ec)) return [];
     const groups  = ec.competition.targetGroups.map((tg) => tg.targetGroup);
     const matched = matchingTargetGroups(participant, groups);
     if (matched.length === 0) return [];

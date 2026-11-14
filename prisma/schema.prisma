@@ -715,6 +715,9 @@ model EventCompetition {
   /// Registered teams of one state compete as merged state teams (TeamMerge), at most mergeMax each.
   mergeByState            Boolean   @default(false)
   mergeMax                Int       @default(3)
+  /// Participant portal: "PUBLIC" (open to all eligible; self-registration) or
+  /// "RESTRICTED" (only those already registered; no self-registration). src/lib/portalAccess.ts
+  portalAccess            String    @default("PUBLIC")
   duelConfig              Json? // { perSession, advance, arenas, durationSec, breakSec }
   // Results ranked "NATIONAL" (one list) or "STATE" (per state); null = event scope default (src/lib/resultScope.ts)
   resultScope             String?

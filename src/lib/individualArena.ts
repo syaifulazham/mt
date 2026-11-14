@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
+import { isEnteredInEventCompetition, isRestricted, RESTRICTED_MESSAGE } from "@/lib/portalAccess";
 import { matchingTargetGroups } from "@/lib/targetGroupMatch";
 import { ensureIndividualEntry, singleParticipationConflict } from "@/lib/individualEntry";
 import { resolveLaunchLink, type ArenaClient } from "@/lib/arena-client";
@@ -124,7 +125,7 @@ export async function loadIndividualChallengeAccess(
   const ec = await db.eventCompetition.findUnique({
     where: { id: eventCompetitionId },
     select: {
-      id: true, eventId: true, competitionId: true, fc1Challenges: true, droneChallenges: true,
+      id: true, eventId: true, competitionId: true, fc1Challenges: true, droneChallenges: true, portalAccess: true,
       event: { select: { status: true } },
       competition: {
         select: {
@@ -150,6 +151,9 @@ export async function loadIndividualChallengeAccess(
 
   if (matchingTargetGroups(participant, ec.competition.targetGroups.map((t) => t.targetGroup)).length === 0)
     return { error: "NOT_ELIGIBLE", status: 403 } as const;
+  // Restricted: no self-registration — only participants already entered may register challenges.
+  if (isRestricted(ec.portalAccess, ec.competition.participationType) && !(await isEnteredInEventCompetition(participant.id, ec.eventId, ec.competitionId)))
+    return { error: RESTRICTED_MESSAGE, status: 403 } as const;
 
   return { participant, ec, challenge } as const;
 }

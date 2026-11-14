@@ -3,6 +3,7 @@ import { getParticipantSession } from "@/lib/auth/participant-session";
 import { db } from "@/lib/db";
 import { matchingTargetGroups } from "@/lib/targetGroupMatch";
 import { ensureIndividualEntry, singleParticipationConflict } from "@/lib/individualEntry";
+import { isEnteredInEventCompetition, isRestricted, RESTRICTED_MESSAGE } from "@/lib/portalAccess";
 import {
   quizzlyConfigured, quizzlyErrorMessage, quizzlyGetSession, quizzlyIssueToken, quizzlyResolveSessionQuizSetId,
   quizzlyTokenStatus, quizzlyTokenWindow, resolveQuizzlyAssignment,
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
   const ec = await db.eventCompetition.findUnique({
     where: { id: eventCompetitionId },
     select: {
-      id: true, eventId: true, competitionId: true,
+      id: true, eventId: true, competitionId: true, portalAccess: true,
       quizzlySessionId: true, quizzlyAssignBy: true, quizzlyQuizMap: true,
       event: { select: { status: true } },
       competition: {
@@ -60,6 +61,9 @@ export async function POST(req: NextRequest) {
     },
   });
   if (!ec) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  // Restricted: no self-registration — only participants already entered get a code.
+  if (isRestricted(ec.portalAccess, ec.competition.participationType) && !(await isEnteredInEventCompetition(participant.id, ec.eventId, ec.competitionId)))
+    return NextResponse.json({ error: RESTRICTED_MESSAGE }, { status: 403 });
   if (ec.competition.thirdPartyIntegration !== "asiaspark-quizzly" || !ec.quizzlySessionId)
     return NextResponse.json({ error: "NOT_INTEGRATED" }, { status: 409 });
   if (!VISIBLE_EVENT_STATUSES.includes(ec.event.status as (typeof VISIBLE_EVENT_STATUSES)[number]))
