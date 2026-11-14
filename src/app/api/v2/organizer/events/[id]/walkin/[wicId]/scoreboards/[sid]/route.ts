@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { genScoreboardPasscode, SCOREBOARD_PASSCODE_RE } from "@/lib/vb-scoreboard";
+import { genScoreboardPasscode, parseEventOverride, SCOREBOARD_PASSCODE_RE } from "@/lib/vb-scoreboard";
 
 const ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 type Params = { params: Promise<{ id: string; wicId: string; sid: string }> };
-const SELECT = { id: true, routeSlug: true, passcode: true, label: true, active: true, createdAt: true } as const;
+const SELECT = { id: true, routeSlug: true, passcode: true, label: true, vibeBlocksEventId: true, active: true, createdAt: true } as const;
 
 async function guard(params: Params["params"]) {
   const session = await getOrganizerSession();
@@ -20,12 +20,15 @@ async function guard(params: Params["params"]) {
   return { row };
 }
 
-/** PATCH { label?, active?, passcode? } — passcode: "" removes it, "new" generates one, else the given value. */
+/** PATCH { label?, active?, passcode?, vibeBlocksEventId? } — passcode: "" removes it, "new" generates one, else the given value. vibeBlocksEventId: "" = back to the competition's own event. */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const g = await guard(params);
   if ("res" in g) return g.res;
-  const body = (await req.json().catch(() => ({}))) as { label?: unknown; active?: unknown; passcode?: unknown };
-  const data: { label?: string | null; active?: boolean; passcode?: string | null } = {};
+  const body = (await req.json().catch(() => ({}))) as { label?: unknown; active?: unknown; passcode?: unknown; vibeBlocksEventId?: unknown };
+  const data: { label?: string | null; active?: boolean; passcode?: string | null; vibeBlocksEventId?: string | null } = {};
+  const ev = await parseEventOverride(body.vibeBlocksEventId);
+  if ("error" in ev) return NextResponse.json({ error: "INVALID_EVENT", message: ev.error }, { status: 400 });
+  if (ev.value !== undefined) data.vibeBlocksEventId = ev.value;
   if (body.label !== undefined) data.label = typeof body.label === "string" && body.label.trim() ? body.label.trim().slice(0, 80) : null;
   if (typeof body.active === "boolean") data.active = body.active;
   if (body.passcode !== undefined) {

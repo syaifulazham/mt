@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, ExternalLink, KeyRound, Loader2, MonitorPlay, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, ExternalLink, KeyRound, Loader2, MonitorPlay, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -9,10 +9,18 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 // big-screen boards fed by VibeBlocks' event-wide leaderboard, each with an
 // optional passcode.
 
-type Board = { id: string; routeSlug: string; passcode: string | null; label: string | null; active: boolean; createdAt: string };
+type Board = {
+  id: string; routeSlug: string; passcode: string | null; label: string | null;
+  /** Another VibeBlocks event shown instead of the competition's own. */
+  vibeBlocksEventId: string | null;
+  active: boolean; createdAt: string;
+};
+type VbEvent = { event_id: string; name: string; status: string };
 
-export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated }: {
+export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated, ownEventId }: {
   eventId: string; wicId: string; canWrite: boolean;
+  /** The competition's own VibeBlocks event_id (shown when a link has no override). */
+  ownEventId?: string | null;
   /** The VibeBlocks event exists; boards show nothing until it does. */
   eventCreated: boolean;
 }) {
@@ -26,6 +34,15 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated }: 
   const [passcode, setPasscode] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<Board | null>(null);
+  const [vbEventId, setVbEventId] = useState("");
+  const [editingEv, setEditingEv] = useState<string | null>(null);
+  const [evDraft, setEvDraft] = useState("");
+  // VibeBlocks events, as suggestions for the event ID fields.
+  const [vbEvents, setVbEvents] = useState<VbEvent[]>([]);
+  useEffect(() => {
+    fetch(`/api/v2/organizer/events/${eventId}/walkin/vibeblocks-events?provider=vibeblocks`)
+      .then((r) => (r.ok ? r.json() : null)).then((j) => setVbEvents(j?.events ?? [])).catch(() => {});
+  }, [eventId]);
 
   const load = useCallback(async () => {
     const res = await fetch(base, { cache: "no-store" });
@@ -48,10 +65,11 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated }: 
   async function create() {
     const ok = await call("new", base, "POST", {
       label,
+      ...(vbEventId.trim() ? { vibeBlocksEventId: vbEventId.trim() } : {}),
       // Omitted → generated; "" → open link.
       ...(usePasscode ? (passcode.trim() ? { passcode: passcode.trim() } : {}) : { passcode: "" }),
     });
-    if (ok) { setAdding(false); setLabel(""); setPasscode(""); setUsePasscode(true); }
+    if (ok) { setAdding(false); setLabel(""); setPasscode(""); setUsePasscode(true); setVbEventId(""); }
   }
 
   const urlOf = (b: Board) => `${typeof window !== "undefined" ? window.location.origin : ""}/live/${b.routeSlug}`;
@@ -76,13 +94,19 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated }: 
       </div>
       <p className="text-[11px] text-zinc-500">
         Paparan skrin besar: kemajuan, perlanggaran, masa, penalti dan jumlah masa setiap peserta, terus daripada papan pendahulu VibeBlocks (dikemas kini setiap 5 saat).
-        {!eventCreated && <span className="text-amber-700"> Cipta acara VibeBlocks dahulu — papan kosong sehingga itu.</span>}
+        {!eventCreated && <span className="text-amber-700"> Acara VibeBlocks pertandingan ini belum dicipta — isi event ID acara lain, atau cipta acara dahulu.</span>}
       </p>
 
       {adding && (
         <div className="rounded-lg border border-dashed border-zinc-300 p-3 space-y-2">
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label (cth. Skrin Dewan A)" maxLength={80}
             className="h-8 w-full rounded-md border px-2 text-sm" />
+          <div>
+            <input value={vbEventId} onChange={(e) => setVbEventId(e.target.value.trim())} list={`vb-events-${wicId}`} maxLength={64}
+              placeholder={`Event ID VibeBlocks (pilihan) — lalai: ${ownEventId ?? "acara pertandingan ini"}`}
+              className="h-8 w-full rounded-md border px-2 font-mono text-sm" />
+            <p className="mt-0.5 text-[11px] text-zinc-400">Isi untuk memaparkan acara VibeBlocks lain (event ID daripada aplikasi rakan).</p>
+          </div>
           <label className="flex items-center gap-2 text-xs text-zinc-700">
             <input type="checkbox" checked={usePasscode} onChange={(e) => setUsePasscode(e.target.checked)} />
             Lindungi dengan passcode
@@ -112,6 +136,30 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated }: 
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-zinc-800 truncate">{b.label || "Papan skor"}</p>
                 <p className="text-[11px] text-zinc-500 font-mono truncate">/live/{b.routeSlug}</p>
+                {editingEv === b.id ? (
+                  <div className="mt-1 flex items-center gap-1">
+                    <input value={evDraft} autoFocus onChange={(e) => setEvDraft(e.target.value.trim())} list={`vb-events-${wicId}`} maxLength={64}
+                      placeholder={ownEventId ?? "event ID"} className="h-7 min-w-0 flex-1 rounded-md border px-2 font-mono text-xs"
+                      onKeyDown={(e) => { if (e.key === "Escape") setEditingEv(null); }} />
+                    <Button size="sm" className="h-7 px-2 text-[11px]" disabled={busy === `e-${b.id}`}
+                      onClick={async () => { if (await call(`e-${b.id}`, `${base}/${b.id}`, "PATCH", { vibeBlocksEventId: evDraft })) setEditingEv(null); }}>
+                      {busy === `e-${b.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : "Simpan"}
+                    </Button>
+                    <button className="p-1 text-zinc-400 hover:text-zinc-700" onClick={() => setEditingEv(null)}><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                ) : (
+                  <p className="mt-0.5 flex items-center gap-1 text-[11px] text-zinc-500">
+                    Acara:{" "}
+                    <code className={`font-mono ${b.vibeBlocksEventId ? "text-indigo-700" : ""}`}>{b.vibeBlocksEventId ?? ownEventId ?? "—"}</code>
+                    {!b.vibeBlocksEventId && <span className="text-zinc-400">(pertandingan ini)</span>}
+                    {canWrite && (
+                      <button className="p-0.5 text-zinc-400 hover:text-zinc-700" title="Tukar acara VibeBlocks"
+                        onClick={() => { setEditingEv(b.id); setEvDraft(b.vibeBlocksEventId ?? ""); }}>
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                  </p>
+                )}
               </div>
               <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-mono ${b.passcode ? "bg-amber-50 text-amber-800" : "bg-zinc-100 text-zinc-500"}`}>
                 <KeyRound className="h-3 w-3" /> {b.passcode ?? "tiada"}
@@ -151,6 +199,10 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated }: 
           ))}
         </div>
       )}
+
+      <datalist id={`vb-events-${wicId}`}>
+        {vbEvents.map((e) => <option key={e.event_id} value={e.event_id}>{e.name} · {e.status}</option>)}
+      </datalist>
 
       <ConfirmDialog
         open={!!toDelete}

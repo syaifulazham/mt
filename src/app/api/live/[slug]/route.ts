@@ -12,7 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const endpoint = await db.walkInScoreboardEndpoint.findUnique({
     where: { routeSlug: slug },
-    select: { walkInCompetitionId: true, passcode: true, label: true, active: true },
+    select: { walkInCompetitionId: true, vibeBlocksEventId: true, passcode: true, label: true, active: true },
   });
   if (!endpoint) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (!endpoint.active) return NextResponse.json({ error: "ENDPOINT_CLOSED" }, { status: 403 });
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   }
 
   try {
-    const data = await loadScoreboard(endpoint.walkInCompetitionId);
+    const data = await loadScoreboard(endpoint.walkInCompetitionId, endpoint.vibeBlocksEventId);
     return NextResponse.json({ label: endpoint.label, ...data });
   } catch (e: unknown) {
     if (e instanceof ScoreboardUnavailable) return NextResponse.json({ error: "UNAVAILABLE", message: e.message }, { status: 409 });

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { genScoreboardPasscode, genScoreboardSlug, SCOREBOARD_PASSCODE_RE } from "@/lib/vb-scoreboard";
+import { genScoreboardPasscode, genScoreboardSlug, parseEventOverride, SCOREBOARD_PASSCODE_RE } from "@/lib/vb-scoreboard";
 import { asGameProvider } from "@/lib/game-provider";
 
 // Live scoreboard links (/live/<slug>) of a VibeBlocks walk-in competition.
 const SCOREBOARD_ROLES = ["SUPER_ADMIN", "ADMIN", "OPERATOR"];
 type Params = { params: Promise<{ id: string; wicId: string }> };
 
-const SELECT = { id: true, routeSlug: true, passcode: true, label: true, active: true, createdAt: true } as const;
+const SELECT = { id: true, routeSlug: true, passcode: true, label: true, vibeBlocksEventId: true, active: true, createdAt: true } as const;
 
 async function loadWic(eventId: string, wicId: string) {
   const wic = await db.eventWalkInCompetition.findUnique({
@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ data });
 }
 
-/** POST { label?, passcode? } — passcode "" for an open link; omitted → a generated one. */
+/** POST { label?, passcode?, vibeBlocksEventId? } — passcode "" for an open link; omitted → a generated one. vibeBlocksEventId: another VibeBlocks event to show. */
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!wic.useVibeblocks || asGameProvider(wic.vibeBlocksProvider) !== "vibeblocks")
     return NextResponse.json({ error: "NOT_VIBEBLOCKS", message: "Papan skor langsung hanya untuk pertandingan VibeBlocks." }, { status: 400 });
 
-  const body = (await req.json().catch(() => ({}))) as { label?: unknown; passcode?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { label?: unknown; passcode?: unknown; vibeBlocksEventId?: unknown };
   const label = typeof body.label === "string" && body.label.trim() ? body.label.trim().slice(0, 80) : null;
   let passcode: string | null;
   if (body.passcode === undefined) passcode = genScoreboardPasscode();
@@ -45,8 +45,11 @@ export async function POST(req: NextRequest, { params }: Params) {
   else if (typeof body.passcode === "string" && SCOREBOARD_PASSCODE_RE.test(body.passcode.trim())) passcode = body.passcode.trim().toUpperCase();
   else return NextResponse.json({ error: "INVALID_PASSCODE", message: "Passcode mesti 4–32 huruf atau nombor." }, { status: 400 });
 
+  const ev = await parseEventOverride(body.vibeBlocksEventId);
+  if ("error" in ev) return NextResponse.json({ error: "INVALID_EVENT", message: ev.error }, { status: 400 });
+
   const created = await db.walkInScoreboardEndpoint.create({
-    data: { walkInCompetitionId: wicId, routeSlug: await genScoreboardSlug(), passcode, label },
+    data: { walkInCompetitionId: wicId, routeSlug: await genScoreboardSlug(), passcode, label, vibeBlocksEventId: ev.value ?? null },
     select: SELECT,
   });
   return NextResponse.json({ data: created }, { status: 201 });

@@ -1,6 +1,6 @@
 import { randomInt } from "crypto";
 import { db } from "@/lib/db";
-import { vibeBlocksConfigured, vibeBlocksGetEvent, vibeBlocksLeaderboard, parseVibeBlocksToken, type VibeBlocksError } from "@/lib/vibeblocks";
+import { VB_EVENT_ID_RE, vibeBlocksConfigured, vibeBlocksGetEvent, vibeBlocksLeaderboard, type VibeBlocksError } from "@/lib/vibeblocks";
 import { asGameProvider, isGameSchoolLevel, vibeBlocksStages } from "@/lib/game-provider";
 
 // Public live scoreboard of a VibeBlocks walk-in competition (/live/<slug>).
@@ -55,8 +55,15 @@ const cache = (globalThis as { __vbBoardCache?: Map<string, { at: number; data: 
 
 export class ScoreboardUnavailable extends Error {}
 
-export async function loadScoreboard(walkInCompetitionId: string): Promise<ScoreboardData> {
-  const hit = cache.get(walkInCompetitionId);
+/**
+ * The board for a walk-in competition's VibeBlocks event, or — with
+ * `eventIdOverride` — any other VibeBlocks event (an event_id from the partner
+ * app). Names are matched across every walk-in registration, so entries
+ * registered through mt show their participant whichever event they are in.
+ */
+export async function loadScoreboard(walkInCompetitionId: string, eventIdOverride?: string | null): Promise<ScoreboardData> {
+  const key = `${walkInCompetitionId}|${eventIdOverride ?? ""}`;
+  const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
 
   const wic = await db.eventWalkInCompetition.findUnique({
@@ -65,59 +72,71 @@ export async function loadScoreboard(walkInCompetitionId: string): Promise<Score
       useVibeblocks: true, vibeBlocksProvider: true, viblockChallengeId: true, vibeBlocksEventName: true,
       vibeBlocksCompetitionRound: true, vibeBlocksSchoolLevel: true,
       competition: { select: { code: true, name: true } },
-      registrations: {
-        where: { viblockToken: { not: null } },
-        select: {
-          id: true, viblockToken: true,
-          participant: { select: { name: true } },
-          team:        { select: { name: true } },
-          contingent:  { select: { name: true, shortName: true } },
-        },
-      },
     },
   });
   if (!wic?.useVibeblocks || asGameProvider(wic.vibeBlocksProvider) !== "vibeblocks")
     throw new ScoreboardUnavailable("Papan skor hanya untuk pertandingan VibeBlocks.");
-  if (!wic.viblockChallengeId) throw new ScoreboardUnavailable("Acara VibeBlocks belum dicipta.");
+  const eventId = eventIdOverride || wic.viblockChallengeId;
+  if (!eventId) throw new ScoreboardUnavailable("Acara VibeBlocks belum dicipta.");
   if (!vibeBlocksConfigured("vibeblocks")) throw new ScoreboardUnavailable("VibeBlocks API tidak dikonfigurasi.");
 
-  const [board, ev] = await Promise.all([
-    vibeBlocksLeaderboard(wic.viblockChallengeId),
-    vibeBlocksGetEvent(wic.viblockChallengeId).catch(() => null),
-  ]);
-
-  const byEntry = new Map<string, (typeof wic.registrations)[number]>();
-  const byReg = new Map(wic.registrations.map((r) => [r.id, r]));
-  for (const r of wic.registrations) {
-    const parsed = r.viblockToken ? parseVibeBlocksToken(r.viblockToken) : null;
-    if (parsed) byEntry.set(parsed.entryId, r);
+  let board: Awaited<ReturnType<typeof vibeBlocksLeaderboard>>;
+  let ev: Awaited<ReturnType<typeof vibeBlocksGetEvent>>;
+  try {
+    [board, ev] = await Promise.all([
+      vibeBlocksLeaderboard(eventId),
+      vibeBlocksGetEvent(eventId).catch(() => null),
+    ]);
+  } catch (e) {
+    if (isVibeBlocksError(e) && e.status === 404) throw new ScoreboardUnavailable(`Acara VibeBlocks "${eventId}" tidak dijumpai.`);
+    throw e;
   }
 
-  const round = (ev?.competition_round ?? wic.vibeBlocksCompetitionRound) === "final" ? "final" : "qualifier";
-  const levelRaw = ev ? ev.school_level : wic.vibeBlocksSchoolLevel;
+  // Registrations behind these entries: by entry_id (stored as "TOKEN:entry_id"), else partner_reference (the registration id).
+  const shown = board.rankings.filter((r) => r.is_used || r.status !== "ready");
+  const entryIds = shown.map((r) => r.entry_id);
+  const refs = shown.map((r) => r.partner_reference).filter((x): x is string => !!x);
+  const byEntryRows = entryIds.length
+    ? await db.$queryRaw<{ id: string; entryId: string }[]>`
+        SELECT id, split_part("viblockToken", ':', 2) AS "entryId" FROM walkin_registrations
+        WHERE "viblockToken" IS NOT NULL AND split_part("viblockToken", ':', 2) = ANY(${entryIds})`
+    : [];
+  const regIds = [...new Set([...byEntryRows.map((r) => r.id), ...refs])];
+  const regs = regIds.length ? await db.walkInRegistration.findMany({
+    where: { id: { in: regIds } },
+    select: {
+      id: true,
+      participant: { select: { name: true } },
+      team:        { select: { name: true } },
+      contingent:  { select: { name: true, shortName: true } },
+    },
+  }) : [];
+  const byReg = new Map(regs.map((r) => [r.id, r]));
+  const byEntry = new Map(byEntryRows.map((r) => [r.entryId, byReg.get(r.id)]));
+
+  const round = (ev?.competition_round ?? (eventIdOverride ? null : wic.vibeBlocksCompetitionRound)) === "final" ? "final" : "qualifier";
+  const levelRaw = ev ? ev.school_level : (eventIdOverride ? null : wic.vibeBlocksSchoolLevel);
   const totalStages = vibeBlocksStages(round, isGameSchoolLevel(levelRaw) ? levelRaw : null);
 
-  const rows: ScoreboardRow[] = board.rankings
-    // Unused codes haven't started: nothing to show yet.
-    .filter((r) => r.is_used || r.status !== "ready")
-    .map((r) => {
-      const reg = byEntry.get(r.entry_id) ?? (r.partner_reference ? byReg.get(r.partner_reference) : undefined);
-      const stages = r.completed_stage_count ?? 0;
-      return {
-        rank: r.rank,
-        name: reg?.team?.name ?? reg?.participant.name ?? "—",
-        contingent: reg ? (reg.contingent.shortName || reg.contingent.name) : null,
-        status: r.status,
-        completedStages: stages,
-        totalStages,
-        progress: Math.min(100, Math.round((stages / totalStages) * 100)),
-        collisions: r.collision_count ?? null,
-        elapsedMs: r.official_elapsed_ms,
-        penaltyMs: r.penalty_ms ?? null,
-        // ranked_elapsed_ms already includes the penalty.
-        totalMs: r.ranked_elapsed_ms ?? r.official_elapsed_ms,
-      };
-    });
+  const rows: ScoreboardRow[] = shown.map((r) => {
+    const reg = byEntry.get(r.entry_id) ?? (r.partner_reference ? byReg.get(r.partner_reference) : undefined);
+    const stages = r.completed_stage_count ?? 0;
+    return {
+      rank: r.rank,
+      // Entries registered outside mt carry no name: show their partner reference.
+      name: reg?.team?.name ?? reg?.participant.name ?? r.partner_reference ?? "—",
+      contingent: reg ? (reg.contingent.shortName || reg.contingent.name) : null,
+      status: r.status,
+      completedStages: stages,
+      totalStages,
+      progress: Math.min(100, Math.round((stages / totalStages) * 100)),
+      collisions: r.collision_count ?? null,
+      elapsedMs: r.official_elapsed_ms,
+      penaltyMs: r.penalty_ms ?? null,
+      // ranked_elapsed_ms already includes the penalty.
+      totalMs: r.ranked_elapsed_ms ?? r.official_elapsed_ms,
+    };
+  });
 
   const now = Date.now();
   const status: ScoreboardData["status"] = !ev ? "UNKNOWN"
@@ -128,11 +147,29 @@ export async function loadScoreboard(walkInCompetitionId: string): Promise<Score
 
   const data: ScoreboardData = {
     competition: wic.competition,
-    eventName: ev?.name ?? wic.vibeBlocksEventName ?? wic.viblockChallengeId,
+    eventName: ev?.name ?? (eventIdOverride ? eventId : wic.vibeBlocksEventName ?? eventId),
     status, rows, totalEntries: board.total_count, updatedAt: new Date().toISOString(),
   };
-  cache.set(walkInCompetitionId, { at: Date.now(), data });
+  cache.set(key, { at: Date.now(), data });
   return data;
 }
 
 export const isVibeBlocksError = (e: unknown): e is VibeBlocksError => e instanceof Error && "status" in e;
+
+/**
+ * A scoreboard's VibeBlocks event override from a request: undefined = not
+ * given, null = cleared (the competition's own event), else an event_id that
+ * exists on VibeBlocks. Returns an error message for an unusable value.
+ */
+export async function parseEventOverride(raw: unknown): Promise<{ value: string | null | undefined } | { error: string }> {
+  if (raw === undefined) return { value: undefined };
+  const id = typeof raw === "string" ? raw.trim() : "";
+  if (!id) return { value: null };
+  if (!VB_EVENT_ID_RE.test(id)) return { error: "Event ID VibeBlocks hanya huruf, nombor, _ atau - (maks. 64)." };
+  try {
+    if (!(await vibeBlocksGetEvent(id))) return { error: `Acara "${id}" tidak dijumpai di VibeBlocks.` };
+  } catch {
+    return { error: "Tidak dapat menyemak acara di VibeBlocks sekarang. Cuba lagi." };
+  }
+  return { value: id };
+}

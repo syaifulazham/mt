@@ -2592,7 +2592,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                     {/* Live scoreboard links — VibeBlocks only (event-wide leaderboard API) */}
                     {selectedWic.useVibeblocks && asGameProvider(selectedWic.vibeBlocksProvider) === "vibeblocks" && (
                       <VbScoreboardSection key={selectedWic.id} eventId={event.id} wicId={selectedWic.id}
-                        canWrite={canWrite} eventCreated={!!selectedWic.viblockChallengeId} />
+                        canWrite={canWrite} eventCreated={!!selectedWic.viblockChallengeId} ownEventId={selectedWic.viblockChallengeId} />
                     )}
 
                     {/* Drone Challenge */}
