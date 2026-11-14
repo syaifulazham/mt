@@ -1,4 +1,4 @@
-import { randomInt } from "crypto";
+import { createHash, randomInt } from "crypto";
 import { db } from "@/lib/db";
 import { VB_EVENT_ID_RE, vibeBlocksConfigured, vibeBlocksGetEvent, vibeBlocksLeaderboard, type VibeBlocksError } from "@/lib/vibeblocks";
 import { asGameProvider, isGameSchoolLevel, vibeBlocksStages } from "@/lib/game-provider";
@@ -25,6 +25,8 @@ export async function genScoreboardSlug() {
 export const SCOREBOARD_PASSCODE_RE = /^[A-Za-z0-9]{4,32}$/;
 
 export type ScoreboardRow = {
+  /** Stable per entry (a hash, not the entry_id), so the screen can animate a row as it moves. */
+  key: string;
   rank: number | null;
   name: string;
   contingent: string | null;
@@ -122,6 +124,7 @@ export async function loadScoreboard(walkInCompetitionId: string, eventIdOverrid
     const reg = byEntry.get(r.entry_id) ?? (r.partner_reference ? byReg.get(r.partner_reference) : undefined);
     const stages = r.completed_stage_count ?? 0;
     return {
+      key: createHash("sha1").update(r.entry_id).digest("hex").slice(0, 12),
       rank: r.rank,
       // Entries registered outside mt carry no name: show their partner reference.
       name: reg?.team?.name ?? reg?.participant.name ?? r.partner_reference ?? "—",
