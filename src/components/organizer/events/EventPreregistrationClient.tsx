@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { AddIndividualPanel } from "@/components/organizer/events/AddIndividualPanel";
 import { StateFilterOptions } from "@/components/organizer/events/StateFilterOptions";
 import Link from "next/link";
 import {
@@ -373,6 +374,8 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
   // "wildcard" = Tambah Wildcard (admins: any state, only teams not yet listed)
   const [addMode, setAddMode] = useState<"eligible" | "wildcard">("eligible");
   const isWildcard = addMode === "wildcard";
+  // Pasukan (existing teams) or Individu (participant + individual competition).
+  const [addKind, setAddKind] = useState<"team" | "individual">("team");
 
   // List tab toggle
   const [listTab, setListTab] = useState<"participants" | "teams" | "trainers">("teams");
@@ -887,6 +890,7 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
   // Add-teams modal: open (regular or wildcard)
   function openAddTeamsModal(mode: "eligible" | "wildcard" = addMode) {
     setAddMode(mode);
+    setAddKind("team");
     setAddSearchQ("");
     setAddSearchCompId("");
     setAddTeamsModal({ phase: "searching" });
@@ -2179,7 +2183,7 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
       {addTeamsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className={`bg-white rounded-2xl shadow-xl w-full mx-auto flex flex-col ${
-            addTeamsModal.phase === "picking" ? "max-w-2xl max-h-[90vh]" : "max-w-sm"
+            addTeamsModal.phase === "picking" ? "max-w-2xl max-h-[90vh]" : addKind === "individual" && addTeamsModal.phase === "searching" ? "max-w-lg max-h-[90vh] overflow-y-auto" : "max-w-sm"
           }`}>
 
             {/* Searching phase — search form */}
@@ -2199,6 +2203,20 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                   </button>
                 </div>
 
+                {/* Pasukan: existing teams · Individu: a participant + an individual competition */}
+                <div className="grid grid-cols-2 rounded-lg bg-zinc-100 p-0.5 text-xs font-medium">
+                  {([["team", "Pasukan"], ["individual", "Individu"]] as const).map(([k, label]) => (
+                    <button key={k} type="button" onClick={() => setAddKind(k)}
+                      className={`rounded-md py-1.5 transition-colors ${addKind === k ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {addKind === "individual" ? (
+                  <AddIndividualPanel eventId={event.id} wildcard={isWildcard}
+                    onClose={() => setAddTeamsModal(null)} onAdded={() => { loadTeams(); loadStats(); }} />
+                ) : (<>
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs font-medium text-zinc-600 block mb-1">Nama pasukan atau kontingen</label>
@@ -2244,6 +2262,7 @@ export function EventPreregistrationClient({ event, canAddWildcards = false }: {
                     <Search className="h-3.5 w-3.5" /> Cari
                   </button>
                 </div>
+                </>)}
               </div>
             )}
 
