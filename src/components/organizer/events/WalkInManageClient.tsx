@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, QrCode, X, Loader2, Globe2, Link2, Copy, Eye, EyeOff, Gavel, ChevronDown, Plus, Gamepad2, Lock, Unlock, RefreshCw, KeyRound, Trash2, Trophy, RotateCcw, Sparkles } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { WalkInFormSection } from "./WalkInFormSection";
+import { VbScoreboardSection } from "./VbScoreboardSection";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -2587,6 +2588,12 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                       </div>
                       );
                     })()}
+
+                    {/* Live scoreboard links — VibeBlocks only (event-wide leaderboard API) */}
+                    {selectedWic.useVibeblocks && asGameProvider(selectedWic.vibeBlocksProvider) === "vibeblocks" && (
+                      <VbScoreboardSection key={selectedWic.id} eventId={event.id} wicId={selectedWic.id}
+                        canWrite={canWrite} eventCreated={!!selectedWic.viblockChallengeId} />
+                    )}
 
                     {/* Drone Challenge */}
                     {selectedWic.useDronearena && (

@@ -202,6 +202,11 @@ export type VibeBlocksResultEntry = {
   status: "ready" | "in_progress" | "completed" | "timed_out";
   completed_stage_count: number;
   official_elapsed_ms: number | null;
+  /** Collision metrics (VibeBlocks API 1.9, 14 Nov 2026): null when not recorded. */
+  collision_count?: number | null;
+  penalty_ms?: number | null;
+  /** official_elapsed_ms + penalty_ms — never add the penalty again. */
+  ranked_elapsed_ms?: number | null;
   partner_reference: string | null;
   token_expires_at: string;
   consumed_at: string | null;
@@ -264,6 +269,20 @@ export async function vibeBlocksReplaceToken(
     `/v1/partner/events/${encodeURIComponent(eventId)}/entries/${encodeURIComponent(entryId)}/token`,
     { method: "PUT", body }, p,
   ));
+}
+
+export type VibeBlocksLeaderboardResponse = {
+  event_id: string;
+  rank_scope: "all_event_entries";
+  total_count: number;
+  ranked_count: number;
+  /** Every registered entry, in the platform's order (zero-stage entries last, rank null). */
+  rankings: VibeBlocksResultEntry[];
+};
+
+/** Event-wide leaderboard (GET …/leaderboard, VibeBlocks only): the app's own ranking, no entry IDs needed. */
+export async function vibeBlocksLeaderboard(eventId: string, p: GameProvider = "vibeblocks") {
+  return req<VibeBlocksLeaderboardResponse>(`/v1/partner/events/${encodeURIComponent(eventId)}/leaderboard`, undefined, p);
 }
 
 export async function vibeBlocksQueryResults(eventId: string, entryIds: string[], p: GameProvider = "vibeblocks") {
