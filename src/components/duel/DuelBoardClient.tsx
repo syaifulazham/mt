@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Lock, Maximize, Minimize } from "lucide-react";
 import { AvatarPreference, TeamAvatar, preferFor } from "@/components/duel/TeamAvatar";
 import { WhepVideo } from "@/components/duel/WhepVideo";
+import { SkyFx } from "@/components/live/SkyFx";
 import { cn } from "@/lib/utils";
 
 // Public big-screen duel board: "Jadual" (sessions + standings) or "Duel
@@ -51,7 +52,8 @@ const hhmm = (iso: string | null) => iso ? new Date(iso).toLocaleTimeString("ms-
 const roundName = (r: { number: number; isFinal: boolean; title?: string }) => r.title ?? (r.isFinal ? "Akhir" : `Pusingan ${r.number}`);
 
 const BG = {
-  background: "radial-gradient(ellipse at 20% 0%, #6d28d9 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, #0e7490 0%, transparent 45%), linear-gradient(135deg, #2e1065 0%, #4c1d95 45%, #3b0764 100%)",
+  // Same night sky as the VibeBlocks live scoreboard; SkyFx animates on top.
+  background: "radial-gradient(ellipse at 50% -15%, #1e3a8a 0%, #0b1a45 38%, #050b24 70%, #02040f 100%)",
   fontFamily: "'Rajdhani', sans-serif",
 };
 
@@ -146,11 +148,12 @@ export function DuelBoardClient({ slug }: { slug: string }) {
 
   if (status !== "ready" || !data) {
     return (
-      <main className="flex min-h-dvh w-full items-center justify-center p-4 text-white" style={BG}>
+      <main className="relative flex min-h-dvh w-full items-center justify-center overflow-hidden p-4 text-white" style={BG}>
         <style>{FONT_CSS}</style>
-        {status === "loading" && <Loader2 className="h-10 w-10 animate-spin text-white/40" />}
+        <SkyFx />
+        {status === "loading" && <Loader2 className="relative z-10 h-10 w-10 animate-spin text-white/40" />}
         {status === "passcode" && (
-          <form onSubmit={submitPasscode} className="w-full max-w-sm space-y-5 rounded-2xl border border-white/10 bg-white/5 p-8 text-center backdrop-blur">
+          <form onSubmit={submitPasscode} className="relative z-10 w-full max-w-sm space-y-5 rounded-2xl border border-white/15 bg-white/10 p-8 text-center backdrop-blur">
             <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="mx-auto h-16 w-auto" />
             <p className="db-exo flex items-center justify-center gap-2 text-lg font-bold uppercase tracking-wide"><Lock className="h-4 w-4" /> Paparan Duel</p>
             <input value={passcode} autoFocus maxLength={32} autoCapitalize="characters"
@@ -164,7 +167,7 @@ export function DuelBoardClient({ slug }: { slug: string }) {
           </form>
         )}
         {(status === "closed" || status === "notfound" || status === "error") && (
-          <div className="space-y-3 text-center">
+          <div className="relative z-10 space-y-3 text-center">
             <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="mx-auto h-20 w-auto opacity-70" />
             <p className="text-xl font-semibold">
               {status === "closed" ? "Paparan ini telah ditutup." : status === "notfound" ? "Pautan tidak dijumpai." : "Tidak dapat memuatkan paparan."}
@@ -190,9 +193,10 @@ export function DuelBoardClient({ slug }: { slug: string }) {
   const curRound = cur?.g?.rounds[cur.g.rounds.length - 1];
 
   return (
-    <main className={cn("flex h-dvh w-full flex-col overflow-hidden text-white", idle && "cursor-none")} style={BG}>
+    <main className={cn("relative flex h-dvh w-full flex-col overflow-hidden text-white", idle && "cursor-none")} style={BG}>
       <style>{FONT_CSS}</style>
-      <header className="flex shrink-0 items-center gap-[2vw] px-[3vw] pb-[1.5vh] pt-[2.5vh]">
+      <SkyFx />
+      <header className="relative z-10 flex shrink-0 items-center gap-[2vw] px-[3vw] pb-[1.5vh] pt-[2.5vh]">
         <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="w-auto" style={{ height: "min(8vh, 12vw)" }} />
         <Chevrons />
         <div className="min-w-0 flex-1 text-center">
@@ -211,7 +215,7 @@ export function DuelBoardClient({ slug }: { slug: string }) {
         </p>
       </header>
 
-      <div className="min-h-0 flex-1 px-[3vw] pb-[2vh]">
+      <div className="relative z-10 min-h-0 flex-1 px-[3vw] pb-[2vh]">
         {comps.length === 0 ? (
           <Empty text="Tiada pertandingan duel untuk dipaparkan." />
         ) : isLive ? (
@@ -223,7 +227,7 @@ export function DuelBoardClient({ slug }: { slug: string }) {
         ) : null}
       </div>
 
-      <footer className="flex shrink-0 items-center justify-between px-[3vw] pb-[1.5vh] text-white/40" style={{ fontSize: "min(1.8vh, 1.4vw)" }}>
+      <footer className="relative z-10 flex shrink-0 items-center justify-between px-[3vw] pb-[1.5vh] text-white/40" style={{ fontSize: "min(1.8vh, 1.4vw)" }}>
         <span className="uppercase tracking-widest">{data.event.name}{data.label ? ` · ${data.label}` : ""}</span>
         {!isLive && slides.length > 1 && (
           <span className="flex gap-1.5">
@@ -232,7 +236,7 @@ export function DuelBoardClient({ slug }: { slug: string }) {
         )}
       </footer>
 
-      <button onClick={toggleFull} className={cn("fixed bottom-4 right-4 rounded-full bg-white/10 p-3 transition-opacity hover:bg-white/20", idle && "pointer-events-none opacity-0")}>
+      <button onClick={toggleFull} className={cn("fixed bottom-4 right-4 z-20 rounded-full bg-white/10 p-3 transition-opacity hover:bg-white/20", idle && "pointer-events-none opacity-0")}>
         {isFull ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
       </button>
     </main>
@@ -267,7 +271,7 @@ function ScheduleView({ comp, bracket, page }: { comp: Comp; bracket: Bracket | 
           </span>
           <div className="mt-[1.5vh] grid gap-[0.8vh]" style={{ gridTemplateColumns: "auto minmax(0,1fr) auto" }}>
             {["#", "Pasukan", "Mata"].map(h => (
-              <span key={h} className="db-exo bg-[#0f0a2e] px-[0.8vw] py-[0.8vh] text-center font-bold uppercase" style={{ fontSize: "min(1.9vh, 1.4vw)" }}>{h}</span>
+              <span key={h} className="db-exo bg-[#050b24] px-[0.8vw] py-[0.8vh] text-center font-bold uppercase" style={{ fontSize: "min(1.9vh, 1.4vw)" }}>{h}</span>
             ))}
             {standings.map(t => (
               <Row3 key={`${t.position}-${t.name}`} pos={t.position} team={t} pts={t.total} gold={bracket.finished && t.position <= 3} />
@@ -393,7 +397,7 @@ function LiveView({ comps, now, serverNow }: { comps: Comp[]; now: number; serve
             <div className="flex min-h-0 flex-col overflow-hidden rounded-[2.5vh] border border-white/10 bg-white/10 shadow-2xl backdrop-blur-sm"
               style={{ containerType: "size" }}>
               {/* Header: arena, session · state, round, status */}
-              <div className="flex shrink-0 items-center gap-[2cqw] bg-[#0f0a2e]/70 px-[3cqw] py-[1.6cqh]">
+              <div className="flex shrink-0 items-center gap-[2cqw] bg-[#050b24]/70 px-[3cqw] py-[1.6cqh]">
                 <span className="db-exo font-black uppercase tracking-widest text-cyan-300" style={{ fontSize: "max(12px, 4.2cqmin)" }}>Arena {a.arena}</span>
                 <span className="db-exo rounded-full bg-gradient-to-r from-cyan-400 to-teal-300 px-[2cqw] font-black uppercase text-violet-950" style={{ fontSize: "max(11px, 3.6cqmin)" }}>
                   {s.label}{s.group ? ` · ${s.group}` : ""}
