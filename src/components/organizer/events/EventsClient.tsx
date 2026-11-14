@@ -2093,7 +2093,7 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                           {publishBusy === link.id && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
                           <div className="inline-flex overflow-hidden rounded-md border bg-white text-[11px] font-medium">
                             {([["PUBLIC", "Public", Globe2, "Public: dibuka kepada semua peserta yang layak di portal peserta — mereka boleh mendaftar sendiri."],
-                               ["RESTRICTED", "Restricted", Lock, "Restricted: hanya peserta yang telah didaftarkan dalam acara ini melihatnya di portal peserta — tiada pendaftaran sendiri."]] as const)
+                               ["RESTRICTED", "Limited", Lock, "Limited: hanya peserta yang telah didaftarkan dalam acara ini melihatnya di portal peserta — tiada pendaftaran sendiri."]] as const)
                               .map(([v, label, Icon, tip], i) => (
                               <button key={v} type="button" title={tip} disabled={!canWrite || publishBusy === link.id} onClick={() => setPortalAccess(link, v)}
                                 className={`flex items-center gap-1 px-2 py-0.5 transition-colors ${i > 0 ? "border-l" : ""} ${
