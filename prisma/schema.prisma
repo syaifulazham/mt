@@ -815,6 +815,12 @@ model WalkInScoreboardEndpoint {
   label               String?
   /// Another VibeBlocks event to show (an event_id from the partner app); null = the competition's own event.
   vibeBlocksEventId   String?
+  /// Names on one screen at most; more rotate through pages.
+  pageSize            Int      @default(12)
+  /// Seconds each page stays before the next.
+  pageSeconds         Int      @default(10)
+  /// Table header: "LABEL" (text) or "ICON" (icons only).
+  headerStyle         String   @default("LABEL")
   active              Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

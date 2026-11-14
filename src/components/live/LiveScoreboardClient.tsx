@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { animate, stagger } from "animejs";
 import { SkyFx } from "./SkyFx";
-import { Loader2, Lock, Maximize, Minimize } from "lucide-react";
+import { Activity, Clock, Gauge, Loader2, Lock, Maximize, Minimize, TimerReset, UserRound, Zap, type LucideIcon } from "lucide-react";
 
 // Public big-screen live scoreboard of a VibeBlocks walk-in competition.
 // Polls every 5 s (the server caches VibeBlocks for 5 s); a passcode, when the
@@ -12,9 +12,9 @@ import { Loader2, Lock, Maximize, Minimize } from "lucide-react";
 // the last good board on screen.
 
 const REFRESH_MS = 5_000;
-/** Rows per screen; more entries rotate through pages. */
-const PAGE_SIZE = 12;
-const PAGE_MS = 10_000;
+/** Fallbacks when the link has no paging set (names per screen, seconds per page). */
+const DEFAULT_PAGE_SIZE = 12;
+const DEFAULT_PAGE_SECONDS = 10;
 const FONT_CSS = `@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@500;700;800&family=Rajdhani:wght@500;600;700&family=Orbitron:wght@800;900&display=swap');
 .lb-exo{font-family:'Exo 2',sans-serif}
 .lb-title{font-family:'Orbitron','Exo 2',sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:.045em;
@@ -31,6 +31,11 @@ type Row = {
 };
 type Data = {
   label: string | null;
+  /** Names on one screen at most, and seconds per page (walk-in configuration). */
+  pageSize?: number;
+  pageSeconds?: number;
+  /** Table header as text labels or icons only. */
+  headerStyle?: "LABEL" | "ICON";
   competition: { code: string; name: string };
   eventName: string;
   status: "LIVE" | "UPCOMING" | "ENDED" | "CLOSED" | "UNKNOWN";
@@ -54,8 +59,47 @@ function barFill(r: Row): string {
   return "transparent";
 }
 
+/**
+ * Donut beside the total time: how much of it is real time taken and how
+ * much is collision penalty. Segments are stroke-dasharray arcs on a
+ * circumference of 100, drawn in by anime.js.
+ */
+function TimeDonut({ r }: { r: Row }) {
+  const total = r.totalMs ?? 0;
+  const pen = r.elapsedMs == null ? 0 : Math.min(r.penaltyMs ?? 0, total);
+  const timePct = total > 0 ? ((total - pen) / total) * 100 : 0;
+  const penPct = total > 0 ? (pen / total) * 100 : 0;
+  const done = r.progress >= 100;
+  const R = 15.9155; // 2πR = 100
+  return (
+    <svg viewBox="0 0 40 40" className="h-[1.35em] w-[1.35em] shrink-0 -rotate-90" aria-hidden>
+      <circle cx="20" cy="20" r={R} fill="none" stroke="rgba(255,255,255,.14)" strokeWidth="6" />
+      {total > 0 && (
+        <>
+          <circle data-donut data-len={timePct} data-off={0} cx="20" cy="20" r={R} fill="none"
+            stroke={done ? "#34d399" : "#fbbf24"} strokeWidth="6" strokeDasharray="0 100" strokeDashoffset="0" />
+          {penPct > 0 && (
+            <circle data-donut data-len={penPct} data-off={-timePct} cx="20" cy="20" r={R} fill="none"
+              stroke="#fb7185" strokeWidth="6" strokeDasharray="0 100" strokeDashoffset={-timePct} />
+          )}
+        </>
+      )}
+    </svg>
+  );
+}
+
 /** What a viewer would notice changing on a row (flashes it). */
 const sig = (r: Row) => `${r.progress}|${r.collisions}|${r.totalMs}|${r.penaltyMs}|${r.rank}`;
+
+/** Table columns: label, and the icon used when the header is set to icons. */
+const COLUMNS: { label: React.ReactNode; title: string; icon: LucideIcon }[] = [
+  { label: "Participant", title: "Participant", icon: UserRound },
+  { label: <>Progress<br />(completion)</>, title: "Progress (completion)", icon: Activity },
+  { label: "Time taken", title: "Time taken", icon: Clock },
+  { label: "Collisions", title: "Collisions", icon: Zap },
+  { label: "Penalty time", title: "Penalty time", icon: TimerReset },
+  { label: <>Total time<br />consumed</>, title: "Total time consumed", icon: Gauge },
+];
 
 /** m:ss, or h:mm:ss from an hour; "---" when there is no time yet. */
 function fmt(ms: number | null): string {
@@ -91,12 +135,14 @@ export function LiveScoreboardClient({ slug }: { slug: string }) {
   const prevTops = useRef<Map<string, number>>(new Map());
   const prevSig = useRef<Map<string, string>>(new Map());
   const shownPage = useRef<number | null>(null);
-  const pages = Math.max(1, Math.ceil((data?.rows.length ?? 0) / PAGE_SIZE));
+  const pageSize = data?.pageSize || DEFAULT_PAGE_SIZE;
+  const pageMs = (data?.pageSeconds || DEFAULT_PAGE_SECONDS) * 1000;
+  const pages = Math.max(1, Math.ceil((data?.rows.length ?? 0) / pageSize));
   useEffect(() => {
     if (pages <= 1) return;
-    const t = setInterval(() => setPage((p) => p + 1), PAGE_MS);
+    const t = setInterval(() => setPage((p) => p + 1), pageMs);
     return () => clearInterval(t);
-  }, [pages]);
+  }, [pages, pageMs]);
 
   const load = useCallback(async (code: string | null): Promise<Status> => {
     try {
@@ -145,7 +191,7 @@ export function LiveScoreboardClient({ slug }: { slug: string }) {
     const list = listRef.current;
     if (!list || status !== "ready" || !data) return;
     const rowsEl = [...list.querySelectorAll<HTMLElement>("[data-row]")];
-    const pageNow = page % Math.max(1, Math.ceil(data.rows.length / PAGE_SIZE));
+    const pageNow = page % Math.max(1, Math.ceil(data.rows.length / (data.pageSize || DEFAULT_PAGE_SIZE)));
     const fresh = shownPage.current !== pageNow;
     shownPage.current = pageNow;
 
@@ -168,6 +214,20 @@ export function LiveScoreboardClient({ slug }: { slug: string }) {
       }).map((el) => el.querySelector<HTMLElement>("[data-flash]")).filter((x): x is HTMLElement => !!x);
       if (flashing.length) animate(flashing, { opacity: [0.75, 0], duration: 1600, ease: "outQuad" });
     }
+
+    // Time / penalty donuts draw their arcs (from empty on a fresh page). The
+    // arc length is tweened as a number and written to stroke-dasharray.
+    list.querySelectorAll<SVGCircleElement>("[data-donut]").forEach((el, i) => {
+      const to = Number(el.dataset.len);
+      const from = fresh ? 0 : Number(el.dataset.drawn ?? 0);
+      const v = { len: from };
+      const paint = () => {
+        el.setAttribute("stroke-dasharray", `${v.len} ${100 - v.len}`);
+        el.dataset.drawn = String(v.len);
+      };
+      paint();
+      animate(v, { len: to, duration: fresh ? 1300 : 900, delay: fresh ? 400 + i * 60 : 0, ease: "outExpo", onUpdate: paint, onComplete: paint });
+    });
 
     // Progress bars ease to their value (from 0 on a fresh page).
     list.querySelectorAll<HTMLElement>("[data-bar]").forEach((el, i) => {
@@ -241,12 +301,12 @@ export function LiveScoreboardClient({ slug }: { slug: string }) {
 
   const st = STATUS_STYLE[data.status];
   const cur = page % pages;
-  const rows = data.rows.slice(cur * PAGE_SIZE, (cur + 1) * PAGE_SIZE);
-  const n = Math.max(rows.length, pages > 1 ? PAGE_SIZE : 1);
+  const rows = data.rows.slice(cur * pageSize, (cur + 1) * pageSize);
+  const n = Math.max(rows.length, pages > 1 ? pageSize : 1);
   // Every row fits on one screen; rows share what the header leaves.
   const rowH = `min(9vh, calc(58vh / ${n}))`;
   const font = `min(calc(${rowH} * 0.42), 3.2vw)`;
-  const grid = "minmax(0,2.2fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1.3fr)";
+  const grid = "minmax(0,2.2fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.3fr)";
 
   return (
     <main className={`relative flex h-dvh w-full flex-col overflow-hidden text-white ${idle ? "cursor-none" : ""}`} style={bg}>
@@ -277,12 +337,13 @@ export function LiveScoreboardClient({ slug }: { slug: string }) {
           {/* Table */}
           <div className="mt-[2.2vh] flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1vw]">
             <div className="grid items-center rounded-t-[1vw] bg-gradient-to-b from-[#123a78] to-[#0b2a5b] px-[1vw] text-center text-sky-100" style={{ gridTemplateColumns: grid, fontSize: `min(2.6vh, 1.8vw)`, minHeight: "min(9vh, 7vw)" }}>
-              <span>Participant</span>
-              <span className="leading-tight">Progress<br />(completion)</span>
-              <span>Collisions</span>
-              <span>Time taken</span>
-              <span>Penalty time</span>
-              <span className="leading-tight">Total time<br />consumed</span>
+              {COLUMNS.map((c, i) => data.headerStyle === "ICON" ? (
+                <span key={i} title={c.title} className="flex justify-center">
+                  <c.icon className="h-[1.6em] w-[1.6em] text-sky-200 drop-shadow-[0_0_8px_rgba(125,211,252,0.6)]" strokeWidth={2.2} />
+                </span>
+              ) : (
+                <span key={i} className="leading-tight">{c.label}</span>
+              ))}
             </div>
             <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-[0.7vh] pt-[0.7vh]">
               {rows.length === 0 && (
@@ -311,12 +372,13 @@ export function LiveScoreboardClient({ slug }: { slug: string }) {
                     </span>
                     <span className="w-[2.6em] shrink-0 text-right font-semibold" style={{ fontSize: "0.8em" }}>{r.progress}%</span>
                   </span>
-                  <span className="relative">{r.collisions ?? "---"}</span>
                   <span className="relative">{fmt(r.elapsedMs)}</span>
+                  <span className="relative">{r.collisions ?? "---"}</span>
                   <span className={`relative ${r.penaltyMs ? "text-rose-300" : ""}`}>{r.penaltyMs == null ? "---" : fmt(r.penaltyMs)}</span>
-                  <span className={`relative font-bold ${r.progress >= 100 ? "text-white" : "text-amber-300"}`}
-                    title={r.progress >= 100 ? "Selesai" : "Belum selesai — masa setakat ini"}>
-                    {r.elapsedMs == null ? "---" : fmt(r.totalMs)}
+                  <span className={`relative flex items-center justify-center gap-[0.4em] font-bold ${r.progress >= 100 ? "text-white" : "text-amber-300"}`}
+                    title={`${r.progress >= 100 ? "Selesai" : "Belum selesai — masa setakat ini"}${r.elapsedMs != null ? ` · masa ${fmt(r.elapsedMs)} + penalti ${fmt(r.penaltyMs ?? 0)}` : ""}`}>
+                    <TimeDonut r={r} />
+                    <span className="w-[3.2em] text-left">{r.elapsedMs == null ? "---" : fmt(r.totalMs)}</span>
                   </span>
                 </div>
               ))}

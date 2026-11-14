@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, ExternalLink, KeyRound, Loader2, MonitorPlay, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Copy, ExternalLink, KeyRound, Loader2, MonitorPlay, Pencil, Plus, Shapes, Trash2, Type, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -13,6 +13,10 @@ type Board = {
   id: string; routeSlug: string; passcode: string | null; label: string | null;
   /** Another VibeBlocks event shown instead of the competition's own. */
   vibeBlocksEventId: string | null;
+  /** Names on one screen at most, and seconds per page. */
+  pageSize: number; pageSeconds: number;
+  /** Table header: text labels or icons. */
+  headerStyle: "LABEL" | "ICON";
   active: boolean; createdAt: string;
 };
 type VbEvent = { event_id: string; name: string; status: string };
@@ -35,6 +39,11 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated, ow
   const [copied, setCopied] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<Board | null>(null);
   const [vbEventId, setVbEventId] = useState("");
+  const [pageSize, setPageSize] = useState("12");
+  const [pageSeconds, setPageSeconds] = useState("10");
+  const [headerStyle, setHeaderStyle] = useState<"LABEL" | "ICON">("LABEL");
+  const [editingPg, setEditingPg] = useState<string | null>(null);
+  const [pgDraft, setPgDraft] = useState({ size: "", secs: "" });
   const [editingEv, setEditingEv] = useState<string | null>(null);
   const [evDraft, setEvDraft] = useState("");
   // VibeBlocks events, as suggestions for the event ID fields.
@@ -66,10 +75,11 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated, ow
     const ok = await call("new", base, "POST", {
       label,
       ...(vbEventId.trim() ? { vibeBlocksEventId: vbEventId.trim() } : {}),
+      pageSize: Number(pageSize), pageSeconds: Number(pageSeconds), headerStyle,
       // Omitted → generated; "" → open link.
       ...(usePasscode ? (passcode.trim() ? { passcode: passcode.trim() } : {}) : { passcode: "" }),
     });
-    if (ok) { setAdding(false); setLabel(""); setPasscode(""); setUsePasscode(true); setVbEventId(""); }
+    if (ok) { setAdding(false); setLabel(""); setPasscode(""); setUsePasscode(true); setVbEventId(""); setPageSize("12"); setPageSeconds("10"); setHeaderStyle("LABEL"); }
   }
 
   const urlOf = (b: Board) => `${typeof window !== "undefined" ? window.location.origin : ""}/live/${b.routeSlug}`;
@@ -106,6 +116,24 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated, ow
               placeholder={`Event ID VibeBlocks (pilihan) — lalai: ${ownEventId ?? "acara pertandingan ini"}`}
               className="h-8 w-full rounded-md border px-2 font-mono text-sm" />
             <p className="mt-0.5 text-[11px] text-zinc-400">Isi untuk memaparkan acara VibeBlocks lain (event ID daripada aplikasi rakan).</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-700">
+            <label className="flex items-center gap-1.5">
+              Maks.
+              <input type="number" min={3} max={30} value={pageSize} onChange={(e) => setPageSize(e.target.value)}
+                className="h-8 w-16 rounded-md border px-2 text-sm tabular-nums" />
+              nama sepaparan
+            </label>
+            <label className="flex items-center gap-1.5">
+              Tukar halaman setiap
+              <input type="number" min={3} max={120} value={pageSeconds} onChange={(e) => setPageSeconds(e.target.value)}
+                className="h-8 w-16 rounded-md border px-2 text-sm tabular-nums" />
+              saat
+            </label>
+            <span className="flex items-center gap-1.5">
+              Pengepala
+              <HeaderToggle value={headerStyle} onChange={setHeaderStyle} />
+            </span>
           </div>
           <label className="flex items-center gap-2 text-xs text-zinc-700">
             <input type="checkbox" checked={usePasscode} onChange={(e) => setUsePasscode(e.target.checked)} />
@@ -160,6 +188,39 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated, ow
                     )}
                   </p>
                 )}
+                {/* Paging: names per screen, seconds per page */}
+                {editingPg === b.id ? (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-600">
+                    Maks.
+                    <input type="number" min={3} max={30} value={pgDraft.size} onChange={(e) => setPgDraft((d) => ({ ...d, size: e.target.value }))}
+                      className="h-7 w-14 rounded-md border px-1.5 text-xs tabular-nums" />
+                    nama · setiap
+                    <input type="number" min={3} max={120} value={pgDraft.secs} onChange={(e) => setPgDraft((d) => ({ ...d, secs: e.target.value }))}
+                      className="h-7 w-14 rounded-md border px-1.5 text-xs tabular-nums" />
+                    saat
+                    <Button size="sm" className="h-7 px-2 text-[11px]" disabled={busy === `g-${b.id}`}
+                      onClick={async () => { if (await call(`g-${b.id}`, `${base}/${b.id}`, "PATCH", { pageSize: Number(pgDraft.size), pageSeconds: Number(pgDraft.secs) })) setEditingPg(null); }}>
+                      {busy === `g-${b.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : "Simpan"}
+                    </Button>
+                    <button className="p-1 text-zinc-400 hover:text-zinc-700" onClick={() => setEditingPg(null)}><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                ) : (
+                  <p className="mt-0.5 flex items-center gap-1 text-[11px] text-zinc-500">
+                    Paparan: maks. <b className="font-semibold text-zinc-700">{b.pageSize}</b> nama, tukar setiap <b className="font-semibold text-zinc-700">{b.pageSeconds}</b> saat
+                    {canWrite && (
+                      <button className="p-0.5 text-zinc-400 hover:text-zinc-700" title="Tukar bilangan nama / tempoh halaman"
+                        onClick={() => { setEditingPg(b.id); setPgDraft({ size: String(b.pageSize), secs: String(b.pageSeconds) }); }}>
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                  </p>
+                )}
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500">
+                  Pengepala
+                  <HeaderToggle value={b.headerStyle} disabled={!canWrite || busy === `h-${b.id}`}
+                    onChange={(v) => { if (v !== b.headerStyle) void call(`h-${b.id}`, `${base}/${b.id}`, "PATCH", { headerStyle: v }); }} />
+                  {busy === `h-${b.id}` && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
+                </p>
               </div>
               <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-mono ${b.passcode ? "bg-amber-50 text-amber-800" : "bg-zinc-100 text-zinc-500"}`}>
                 <KeyRound className="h-3 w-3" /> {b.passcode ?? "tiada"}
@@ -214,5 +275,22 @@ export function VbScoreboardSection({ eventId, wicId, canWrite, eventCreated, ow
         onConfirm={async () => { if (toDelete) await call(`d-${toDelete.id}`, `${base}/${toDelete.id}`, "DELETE"); setToDelete(null); }}
       />
     </div>
+  );
+}
+
+/** Scoreboard table header: text labels or icons only. */
+function HeaderToggle({ value, onChange, disabled }: {
+  value: "LABEL" | "ICON"; onChange: (v: "LABEL" | "ICON") => void; disabled?: boolean;
+}) {
+  return (
+    <span className="inline-flex overflow-hidden rounded-md border bg-white text-[11px] font-medium">
+      {([["LABEL", "Label", Type], ["ICON", "Ikon", Shapes]] as const).map(([v, label, Icon], i) => (
+        <button key={v} type="button" disabled={disabled} onClick={() => onChange(v)}
+          className={`flex items-center gap-1 px-2 py-0.5 transition-colors ${i ? "border-l" : ""} ${
+            value === v ? "bg-indigo-600 text-white" : "text-zinc-500 hover:bg-zinc-50"} disabled:cursor-default`}>
+          <Icon className="h-3 w-3" /> {label}
+        </button>
+      ))}
+    </span>
   );
 }

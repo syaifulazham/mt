@@ -176,3 +176,33 @@ export async function parseEventOverride(raw: unknown): Promise<{ value: string 
   }
   return { value: id };
 }
+
+export const PAGE_SIZE_RANGE = [3, 30] as const;
+export const PAGE_SECONDS_RANGE = [3, 120] as const;
+
+/** Paging settings from a request: each undefined when not given; an error for out-of-range values. */
+export function parsePaging(body: { pageSize?: unknown; pageSeconds?: unknown }):
+  { pageSize?: number; pageSeconds?: number } | { error: string } {
+  const out: { pageSize?: number; pageSeconds?: number } = {};
+  if (body.pageSize !== undefined) {
+    const n = Number(body.pageSize);
+    if (!Number.isInteger(n) || n < PAGE_SIZE_RANGE[0] || n > PAGE_SIZE_RANGE[1])
+      return { error: `Bilangan nama sepaparan mesti ${PAGE_SIZE_RANGE[0]}–${PAGE_SIZE_RANGE[1]}.` };
+    out.pageSize = n;
+  }
+  if (body.pageSeconds !== undefined) {
+    const n = Number(body.pageSeconds);
+    if (!Number.isInteger(n) || n < PAGE_SECONDS_RANGE[0] || n > PAGE_SECONDS_RANGE[1])
+      return { error: `Tempoh setiap halaman mesti ${PAGE_SECONDS_RANGE[0]}–${PAGE_SECONDS_RANGE[1]} saat.` };
+    out.pageSeconds = n;
+  }
+  return out;
+}
+
+export const HEADER_STYLES = ["LABEL", "ICON"] as const;
+
+/** Header style from a request: undefined when not given; an error for anything else. */
+export function parseHeaderStyle(raw: unknown): { value?: string } | { error: string } {
+  if (raw === undefined) return {};
+  return (HEADER_STYLES as readonly unknown[]).includes(raw) ? { value: raw as string } : { error: "Gaya pengepala mesti LABEL atau ICON." };
+}

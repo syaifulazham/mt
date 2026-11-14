@@ -12,7 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const endpoint = await db.walkInScoreboardEndpoint.findUnique({
     where: { routeSlug: slug },
-    select: { walkInCompetitionId: true, vibeBlocksEventId: true, passcode: true, label: true, active: true },
+    select: { walkInCompetitionId: true, vibeBlocksEventId: true, pageSize: true, pageSeconds: true, headerStyle: true, passcode: true, label: true, active: true },
   });
   if (!endpoint) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   if (!endpoint.active) return NextResponse.json({ error: "ENDPOINT_CLOSED" }, { status: 403 });
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   try {
     const data = await loadScoreboard(endpoint.walkInCompetitionId, endpoint.vibeBlocksEventId);
-    return NextResponse.json({ label: endpoint.label, ...data });
+    return NextResponse.json({ label: endpoint.label, pageSize: endpoint.pageSize, pageSeconds: endpoint.pageSeconds, headerStyle: endpoint.headerStyle, ...data });
   } catch (e: unknown) {
     if (e instanceof ScoreboardUnavailable) return NextResponse.json({ error: "UNAVAILABLE", message: e.message }, { status: 409 });
     console.error("[live-board] leaderboard failed:", (e as Error).message, isVibeBlocksError(e) ? `status ${e.status} code ${e.code}` : "");
