@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft, ClipboardList, Users, BarChart3, Gavel, Trophy, UserPlus, ClipboardCheck,
   LayoutDashboard, Scale, Award, Globe, Globe2, Megaphone, Fingerprint, MonitorPlay, UserCheck, Sparkles, Medal,
-  Camera, Images, Swords, BookOpen,
+  Camera, Images, Swords, BookOpen, ListChecks,
 } from "lucide-react";
 import type { OrganizerRole } from "@/types";
 
@@ -639,6 +639,8 @@ export function EventManageClient({
         <span className="shrink-0 text-xs font-semibold text-sky-700 group-hover:underline">Baca manual →</span>
       </Link>
 
+      <ChecklistCard eventId={event.id} slug={event.slug} />
+
       {/* Main flow + walk-in, in one wrapper so the Pengumuman arrows can cross between them */}
       <div ref={crossWrapRef} className="relative space-y-8">
       <ArrowSvg arrows={crossArrows} height={crossSvgH} colors={[ANNOUNCE_COLOR]} />
@@ -733,5 +735,41 @@ export function EventManageClient({
         ))}
       </div>
     </div>
+  );
+}
+
+/** Senarai Semak Pertandingan: overall completeness, loaded after the page. */
+function ChecklistCard({ eventId, slug }: { eventId: string; slug: string }) {
+  const [sum, setSum] = useState<{ totals: { competitions: number; walkin: number; complete: number; verified: number; announced: number; percent: number }; todo: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/v2/organizer/events/${eventId}/checklist?summary=1`, { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null)).then(j => { if (alive && j) setSum(j); }).catch(() => {});
+    return () => { alive = false; };
+  }, [eventId]);
+  const t = sum?.totals;
+  const all = t ? t.competitions + t.walkin : 0;
+  return (
+    <Link href={`/organizer/events/${slug}/manage/checklist`}
+      className="group flex items-center gap-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-white px-4 py-3 shadow-sm transition-colors hover:border-indigo-300">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600"><ListChecks className="h-5 w-5" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-zinc-900">Senarai Semak Pertandingan</span>
+        <span className="block text-xs text-zinc-500">
+          {t
+            ? `${t.competitions} pertandingan${t.walkin ? ` + ${t.walkin} walk-in` : ""} · ${t.complete}/${all} selesai dinilai · ${t.verified}/${all} disahkan · ${t.announced}/${all} diumumkan${sum.todo ? ` · ${sum.todo} persediaan acara belum lengkap` : ""}`
+            : "Kemajuan setiap pertandingan dari pendaftaran hingga sijil, persediaan acara dan halaman penting."}
+        </span>
+        {t && (
+          <span className="mt-1.5 flex items-center gap-2">
+            <span className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-indigo-100">
+              <span className="block h-full rounded-full bg-indigo-500" style={{ width: `${t.percent}%` }} />
+            </span>
+            <span className="text-[11px] font-semibold tabular-nums text-indigo-700">{t.percent}%</span>
+          </span>
+        )}
+      </span>
+      <span className="shrink-0 text-xs font-semibold text-indigo-700 group-hover:underline">Buka senarai →</span>
+    </Link>
   );
 }
