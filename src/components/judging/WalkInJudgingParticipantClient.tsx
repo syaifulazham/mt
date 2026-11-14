@@ -183,7 +183,7 @@ function CriterionInput({
       )}
 
       {(criterion.type === "SINGLE_OPTION" || criterion.type === "MULTIPLE_OPTION") && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {criterion.options.map(o => {
             const selected = draft.optionIds.includes(o.id);
             return (
@@ -192,18 +192,19 @@ function CriterionInput({
                 type="button"
                 onClick={() => toggleOption(o.id)}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all w-full",
+                  "flex items-start gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all w-full h-full",
                   selected
                     ? "bg-violet-600 border-violet-600 text-white shadow-md"
                     : "bg-white border-zinc-200 text-zinc-600 hover:border-violet-300 hover:bg-violet-50",
                 )}
               >
                 {criterion.type === "MULTIPLE_OPTION"
-                  ? (selected ? <CheckSquare className="h-4 w-4 shrink-0" /> : <Square className="h-4 w-4 shrink-0" />)
-                  : <Star className={cn("h-4 w-4 shrink-0", selected ? "fill-white" : "")} />}
-                <span className="flex-1 text-left truncate">{o.label}</span>
+                  ? (selected ? <CheckSquare className="h-4 w-4 shrink-0 mt-0.5" /> : <Square className="h-4 w-4 shrink-0 mt-0.5" />)
+                  : <Star className={cn("h-4 w-4 shrink-0 mt-0.5", selected ? "fill-white" : "")} />}
+                {/* Full label, wrapped — judges must be able to read every option. */}
+                <span className="flex-1 min-w-0 text-left leading-snug whitespace-normal break-words">{o.label}</span>
                 <span className={cn(
-                  "text-xs px-1.5 py-0.5 rounded-full font-mono shrink-0",
+                  "text-xs px-1.5 py-0.5 rounded-full font-mono shrink-0 mt-px",
                   selected ? "bg-violet-500 text-violet-100" : "bg-zinc-100 text-zinc-500",
                 )}>
                   {o.weight}
