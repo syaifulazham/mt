@@ -22,7 +22,7 @@ export async function loadPreregEvent(eventId: string) {
           competition: {
             select: {
               id: true, code: true, name: true,
-              targetGroups: { select: { targetGroup: { select: { schoolLevel: true, ppki: true, classGrades: true, minAge: true, maxAge: true } } } },
+              targetGroups: { select: { targetGroup: { select: { name: true, schoolLevel: true, ppki: true, classGrades: true, minAge: true, maxAge: true } } } },
             },
           },
         },

@@ -7,11 +7,13 @@ import { CheckCircle2, Loader2, Search, UserPlus, X } from "lucide-react";
 // then one of the event's individual competitions they are eligible for; they
 // are entered as a team of one (PENDING), like any added team.
 
-type Comp = { id: string; code: string; name: string };
+type Comp = { id: string; code: string; name: string; targetGroups?: string[] };
 type Found = {
   id: string; name: string; idNo: string | null; eduLevel: string; classGrade: string | null;
   contingentName: string | null; stateName: string | null;
   competitions: (Comp & { entered: boolean })[];
+  /** Matched the search but can't be entered: outside the event's state / zone, or no competition fits their level / age. */
+  reason: "OUT_OF_SCOPE" | "NO_TARGET_GROUP" | null;
 };
 
 const EDU: Record<string, string> = { KINDERGARTEN: "Prasekolah", PRIMARY: "Rendah", SECONDARY: "Menengah", YOUTH: "Belia" };
@@ -91,7 +93,7 @@ export function AddIndividualPanel({ eventId, wildcard, onClose, onAdded }: {
         </div>
         {offered && (
           <p className="mt-1 text-[11px] text-zinc-400">
-            Pertandingan individu: {offered.map((c) => c.code).join(", ")}
+            Pertandingan individu: {offered.map((c) => `${c.code}${c.targetGroups?.length ? ` (${c.targetGroups.join(", ")})` : ""}`).join(", ")}
             {wildcard ? " · tanpa had negeri/zon" : ""}
           </p>
         )}
@@ -99,9 +101,23 @@ export function AddIndividualPanel({ eventId, wildcard, onClose, onAdded }: {
 
       {results && (
         <div className="max-h-56 overflow-y-auto rounded-lg border divide-y">
-          {results.length === 0 && <p className="px-4 py-6 text-center text-sm text-zinc-400">Tiada peserta layak ditemui untuk &ldquo;{q}&rdquo;.</p>}
+          {results.length === 0 && <p className="px-4 py-6 text-center text-sm text-zinc-400">Tiada peserta ditemui untuk &ldquo;{q}&rdquo;.</p>}
           {results.map((p) => {
             const open = p.competitions.filter((c) => !c.entered).length;
+            if (p.reason)
+              return (
+                <div key={p.id} className="flex w-full items-center gap-3 px-4 py-2 opacity-60" title={p.reason === "OUT_OF_SCOPE" ? "Kontinjen di luar negeri / zon acara — gunakan Wildcard" : "Tahap / darjah / umur peserta tidak sepadan dengan kumpulan sasaran pertandingan individu acara ini"}>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-zinc-700">{p.name}</p>
+                    <p className="truncate text-xs text-zinc-400">
+                      {p.contingentName ?? "—"} · {p.stateName ?? "—"} · {EDU[p.eduLevel] ?? p.eduLevel}{p.classGrade ? ` ${p.classGrade}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-amber-700">
+                    {p.reason === "OUT_OF_SCOPE" ? "di luar negeri/zon" : "tidak layak (kumpulan sasaran)"}
+                  </span>
+                </div>
+              );
             return (
               <button key={p.id} type="button" onClick={() => pick(p)}
                 className={`flex w-full items-center gap-3 px-4 py-2 text-left transition-colors ${picked?.id === p.id ? "bg-emerald-50" : "hover:bg-zinc-50"}`}>

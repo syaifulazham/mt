@@ -21,7 +21,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const ev = await loadPreregEvent(eventId);
   if (!ev) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
   // The event's individual competitions, so the dialog knows what it can offer.
-  const competitions = ev.individual.map(({ id, code, name }) => ({ id, code, name }));
+  const competitions = ev.individual.map(({ id, code, name, targetGroups }) => ({
+    id, code, name, targetGroups: targetGroups.map((t) => t.targetGroup.name),
+  }));
   if (q.length < 2 || competitions.length === 0) return NextResponse.json({ data: [], competitions });
 
   const digits = q.replace(/\D/g, "");
@@ -39,22 +41,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     take: 120,
   });
 
-  const data = found
-    .filter((p) => wildcard || ev.inScope(stateOf(p)?.id ?? null))
-    .map((p) => {
-      const entered = new Set(p.teamMembers.filter((m) => m.team.teamEvents.length).map((m) => m.team.competitionId));
-      const comps = eligibleCompetitions(ev, p);
-      return {
-        id: p.id, name: p.name,
-        idNo: p.ic ? `${p.ic.slice(0, 6)}••••${p.ic.slice(-2)}` : p.passport ?? null,
-        eduLevel: p.eduLevel, classGrade: p.classGrade,
-        contingentName: p.contingent?.name ?? null,
-        stateName: stateOf(p)?.name ?? p.contingent?.country?.name ?? null,
-        competitions: comps.map((c) => ({ id: c.id, code: c.code, name: c.name, entered: entered.has(c.id) })),
-      };
-    })
-    .filter((p) => p.competitions.length > 0)
-    .slice(0, 50);
+  const rows = found.map((p) => {
+    const entered = new Set(p.teamMembers.filter((m) => m.team.teamEvents.length).map((m) => m.team.competitionId));
+    const comps = eligibleCompetitions(ev, p);
+    const inScope = wildcard || ev.inScope(stateOf(p)?.id ?? null);
+    return {
+      id: p.id, name: p.name,
+      idNo: p.ic ? `${p.ic.slice(0, 6)}••••${p.ic.slice(-2)}` : p.passport ?? null,
+      eduLevel: p.eduLevel, classGrade: p.classGrade,
+      contingentName: p.contingent?.name ?? null,
+      stateName: stateOf(p)?.name ?? p.contingent?.country?.name ?? null,
+      competitions: inScope ? comps.map((c) => ({ id: c.id, code: c.code, name: c.name, entered: entered.has(c.id) })) : [],
+      // Why a participant who matched the search can't be entered.
+      reason: !inScope ? "OUT_OF_SCOPE" as const : comps.length === 0 ? "NO_TARGET_GROUP" as const : null,
+    };
+  });
+  // Entrants first; those who matched but can't be entered are shown with the reason.
+  const data = [...rows.filter((r) => !r.reason), ...rows.filter((r) => r.reason)].slice(0, 50);
 
   return NextResponse.json({ data, competitions });
 }
