@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!DUEL_CONFIG_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const kind = body.kind === "LIVE" ? "LIVE" : "SCHEDULE";
+  const kind = body.kind === "LIVE" || body.kind === "GROUPS" ? body.kind : "SCHEDULE";
   const passcode = typeof body.passcode === "string" && body.passcode.trim() ? body.passcode.trim().toUpperCase() : null;
   if (passcode && !PASSCODE_RE.test(passcode))
     return NextResponse.json({ error: "BAD_PASSCODE", message: "Passcode 6–32 huruf/nombor." }, { status: 400 });

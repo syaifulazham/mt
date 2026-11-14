@@ -2319,7 +2319,7 @@ model DuelDisplayEndpoint {
   routeSlug      String   @unique
   passcode       String?
   label          String?
-  kind           String   @default("SCHEDULE") // SCHEDULE | LIVE
+  kind           String   @default("SCHEDULE") // SCHEDULE | LIVE | GROUPS
   competitionIds String[] // event competition ids; empty = every duel competition
   status         String   @default("ACTIVE") // ACTIVE | CLOSED
   createdAt      DateTime @default(now())

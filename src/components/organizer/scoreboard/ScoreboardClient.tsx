@@ -25,6 +25,13 @@ type Display = {
 const noSubscribe = () => () => {};
 const useOrigin = () => useSyncExternalStore(noSubscribe, () => window.location.origin, () => "");
 
+/** Public duel display kinds: badge, form label and the name used when the link has no label. */
+const KIND: Record<string, { label: string; badge: string; fallback: string; cls: string }> = {
+  SCHEDULE: { label: "Jadual", badge: "JADUAL", fallback: "Jadual duel", cls: "bg-cyan-100 text-cyan-700" },
+  LIVE: { label: "Duel semasa", badge: "DUEL SEMASA", fallback: "Duel semasa", cls: "bg-rose-100 text-rose-700" },
+  GROUPS: { label: "Kumpulan", badge: "KUMPULAN", fallback: "Kedudukan kumpulan", cls: "bg-violet-100 text-violet-700" },
+};
+
 export function ScoreboardClient({ event, cards, canManageDisplays }: {
   event: { id: string; name: string; slug: string };
   cards: ScoreboardCard[];
@@ -179,7 +186,7 @@ function DisplayEndpoints({ eventId, duels, canManage }: { eventId: string; duel
     <section className="space-y-3 rounded-2xl border bg-white p-5 shadow-sm">
       <div>
         <h2 className="flex items-center gap-2 font-semibold text-zinc-800"><MonitorPlay className="h-4 w-4 text-rose-500" /> Paparan awam duel</h2>
-        <p className="text-xs text-zinc-500">Pautan untuk skrin besar: <b>Jadual</b> menunjukkan semua sesi dan kedudukan; <b>Duel semasa</b> menunjukkan sesi yang sedang berjalan dengan pemasa.</p>
+        <p className="text-xs text-zinc-500">Pautan untuk skrin besar: <b>Jadual</b> menunjukkan semua sesi dan kedudukan; <b>Duel semasa</b> menunjukkan sesi yang sedang berjalan dengan pemasa; <b>Kumpulan</b> menunjukkan kedudukan semua kumpulan peringkat liga.</p>
       </div>
 
       {items === null ? (
@@ -190,11 +197,11 @@ function DisplayEndpoints({ eventId, duels, canManage }: { eventId: string; duel
         <div className="divide-y rounded-xl border">
           {items.map(d => (
             <div key={d.id} className={cn("flex flex-wrap items-center gap-3 px-4 py-3", d.status === "CLOSED" && "opacity-60")}>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", d.kind === "LIVE" ? "bg-rose-100 text-rose-700" : "bg-cyan-100 text-cyan-700")}>
-                {d.kind === "LIVE" ? "DUEL SEMASA" : "JADUAL"}
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", KIND[d.kind]?.cls ?? KIND.SCHEDULE.cls)}>
+                {(KIND[d.kind] ?? KIND.SCHEDULE).badge}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-zinc-800">{d.label || (d.kind === "LIVE" ? "Duel semasa" : "Jadual duel")}</p>
+                <p className="truncate text-sm font-medium text-zinc-800">{d.label || (KIND[d.kind] ?? KIND.SCHEDULE).fallback}</p>
                 <p className="truncate font-mono text-[11px] text-zinc-400">{url(d)} · {compNames(d.competitionIds)}{d.passcode ? ` · passcode ${d.passcode}` : ""}</p>
               </div>
               <button onClick={() => copy(d)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" title="Salin pautan">
@@ -224,7 +231,7 @@ function DisplayEndpoints({ eventId, duels, canManage }: { eventId: string; duel
           <div className="grid gap-3 sm:grid-cols-[1fr_auto_10rem]">
             <Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Label (cth. Skrin Dewan A)" className="bg-white" />
             <div className="inline-flex rounded-lg border bg-white p-0.5">
-              {[["SCHEDULE", "Jadual"], ["LIVE", "Duel semasa"]].map(([k, l]) => (
+              {Object.entries(KIND).map(([k, { label: l }]) => (
                 <button key={k} type="button" onClick={() => setForm(f => ({ ...f, kind: k }))}
                   className={cn("rounded-md px-3 py-1 text-xs font-medium", form.kind === k ? "bg-rose-600 text-white" : "text-zinc-500 hover:bg-zinc-100")}>{l}</button>
               ))}

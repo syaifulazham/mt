@@ -3,7 +3,7 @@ import { competitionTitle } from "@/lib/competition-split";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { isLeagueRound, parseDuelConfig, remainingMs, roundTitle, sessionTitle } from "@/lib/duel";
-import { loadRounds, standingsOf, type DuelTeam } from "@/lib/duel-server";
+import { leagueOf, loadRounds, standingsOf, type DuelTeam } from "@/lib/duel-server";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +13,8 @@ const pubTeam = (t: DuelTeam) => ({
 
 // POST /api/duel/[slug] { passcode? } — public duel screen.
 // SCHEDULE: confirmed rounds, sessions and standings. LIVE: each arena's
-// running session with its clock, and what is next. Draft draws never leave
-// the server.
+// running session with its clock, and what is next. GROUPS: every league
+// group table (M / Mn / S / K / Mata). Draft draws never leave the server.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const body = (await req.json().catch(() => ({}))) as { passcode?: unknown };
@@ -78,6 +78,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         return { arena, live: live && dto(live), next: next && dto(next) };
       });
       return { ...head, arenas };
+    }
+
+    if (endpoint.kind === "GROUPS") {
+      const mode = parseSharedRankMode(endpoint.event.sharedRankMode);
+      return {
+        ...head, groupAdvance: cfg.groupAdvance,
+        leagues: groups.flatMap(g => {
+          const l = leagueOf(g.rounds, cfg.groupAdvance, mode);
+          if (!l) return [];
+          return [{
+            key: g.key, name: g.name, flagUrl: g.flagUrl, done: l.done,
+            tables: l.tables.map(t => ({
+              pool: t.pool, done: t.done,
+              rows: t.rows.map(r => ({ position: r.position, played: r.played, won: r.won, drawn: r.drawn, lost: r.lost, points: r.points, ...pubTeam(r.team) })),
+            })),
+          }];
+        }),
+      };
     }
 
     return {

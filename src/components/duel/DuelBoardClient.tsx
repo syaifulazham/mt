@@ -1,15 +1,16 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2, Lock, Maximize, Minimize } from "lucide-react";
 import { AvatarPreference, TeamAvatar, preferFor } from "@/components/duel/TeamAvatar";
 import { WhepVideo } from "@/components/duel/WhepVideo";
 import { SkyFx } from "@/components/live/SkyFx";
 import { cn } from "@/lib/utils";
 
-// Public big-screen duel board: "Jadual" (sessions + standings) or "Duel
-// semasa" (each arena's running session with a countdown). Polls every 3 s;
+// Public big-screen duel board: "Jadual" (sessions + standings), "Duel
+// semasa" (each arena's running session with a countdown) or "Kumpulan"
+// (every league group's table). Polls every 3 s;
 // the clock ticks locally between polls. A passcode, when the link has one, is
 // asked once and kept on this device.
 
@@ -17,9 +18,15 @@ const REFRESH_MS = 3_000;
 const ROTATE_MS = 15_000;
 /** Sessions per screen (2 × 2); more pages rotate on the slide timer. */
 const PAGE = 4;
+/** Group tables per screen (up to 5 × 2); more groups rotate on the slide timer. */
+const GROUP_PAGE = 10;
 
-const FONT_CSS = `@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap');
+const FONT_CSS = `@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;700;900&family=Rajdhani:wght@500;600;700&family=Orbitron:wght@800;900&display=swap');
 .db-exo{font-family:'Exo 2',sans-serif}
+.db-title{font-family:'Orbitron','Exo 2',sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:.045em;
+  color:#fff;-webkit-text-stroke:.1em #1e3a8a;paint-order:stroke fill;
+  text-shadow:0 0 .35em rgba(96,165,250,.75),0 0 1.1em rgba(56,189,248,.35),0 .1em .2em rgba(2,6,23,.6)}
+.db-title .db-code{color:#7dd3fc}
 @keyframes dbPulse{0%,100%{opacity:1}50%{opacity:.35}}`;
 
 type PubTeam = { name: string; contingent: string; state: string | null; flagUrl: string | null; logoUrl: string | null };
@@ -32,13 +39,19 @@ type Bracket = {
   finished: boolean;
   standings: (PubTeam & { position: number; total: number })[];
 };
+type LeagueRowPub = PubTeam & { position: number; played: number; won: number; drawn: number; lost: number; points: number };
+type GroupTable = { pool: string; done: boolean; rows: LeagueRowPub[] };
+type League = { key: string; name: string | null; flagUrl: string | null; done: boolean; tables: GroupTable[] };
 type Comp = {
   id: string; code: string; name: string; scope: "NATIONAL" | "STATE"; durationSec: number; advance: number;
   /** SCHEDULE: one bracket, or one per state. */
   groups?: Bracket[];
   arenas?: { arena: number; live: LiveSession | null; next: LiveSession | null }[];
+  /** GROUPS: one league per bracket (national, or one per state); top `groupAdvance` of each table qualify. */
+  leagues?: League[];
+  groupAdvance?: number;
 };
-type Data = { kind: "SCHEDULE" | "LIVE"; label: string | null; event: { name: string }; competitions: Comp[]; serverNow: number };
+type Data = { kind: "SCHEDULE" | "LIVE" | "GROUPS"; label: string | null; event: { name: string }; competitions: Comp[]; serverNow: number };
 type Status = "loading" | "ready" | "passcode" | "closed" | "notfound" | "error";
 
 const store = {
@@ -179,9 +192,19 @@ export function DuelBoardClient({ slug }: { slug: string }) {
   }
 
   const isLive = data.kind === "LIVE";
+  const isGroups = data.kind === "GROUPS";
   const comps = data.competitions;
+  // Groups: one league (competition, or competition × state) per slide, its tables paged by GROUP_PAGE.
+  const gSlides = !isGroups ? [] : comps.flatMap(c => {
+    const leagues: (League | null)[] = c.leagues?.length ? c.leagues : [null];
+    return leagues.flatMap(g => {
+      const pages = Math.max(1, Math.ceil((g?.tables.length ?? 0) / GROUP_PAGE));
+      return Array.from({ length: pages }, (_, p) => ({ c, g, p, pages }));
+    });
+  });
+  const gCur = gSlides.length ? gSlides[slide % gSlides.length] : null;
   // Schedule: one bracket (competition, or competition × state) per slide, its sessions paged by PAGE.
-  const slides = isLive ? [] : comps.flatMap(c => {
+  const slides = isLive || isGroups ? [] : comps.flatMap(c => {
     const brackets: (Bracket | null)[] = c.groups?.length ? c.groups : [null];
     return brackets.flatMap(g => {
       const r = g?.rounds[g.rounds.length - 1];
@@ -191,6 +214,10 @@ export function DuelBoardClient({ slug }: { slug: string }) {
   });
   const cur = slides.length ? slides[slide % slides.length] : null;
   const curRound = cur?.g?.rounds[cur.g.rounds.length - 1];
+  // A live link for a single competition is titled with it, like the schedule's slides.
+  const liveOne = isLive && comps.length === 1 ? comps[0] : null;
+  const titleComp = isLive ? liveOne : isGroups ? gCur?.c ?? null : cur?.c ?? null;
+  const dots = isGroups ? gSlides.length : slides.length;
 
   return (
     <main className={cn("relative flex h-dvh w-full flex-col overflow-hidden text-white", idle && "cursor-none")} style={BG}>
@@ -200,11 +227,12 @@ export function DuelBoardClient({ slug }: { slug: string }) {
         <img src="/logos-white/mt-logo-white.svg" alt="Techlympics" className="w-auto" style={{ height: "min(8vh, 12vw)" }} />
         <Chevrons />
         <div className="min-w-0 flex-1 text-center">
-          <p className="db-exo font-black uppercase leading-none tracking-wide" style={{ fontSize: "min(5.2vh, 4vw)" }}>
-            {isLive ? "Duel Semasa" : cur ? cur.c.name : "Jadual Duel"}
-          </p>
+          <FitTitle text={titleComp ? `${titleComp.code} ${titleComp.name}` : isLive ? "Duel Semasa" : "Jadual Duel"}>
+            {titleComp ? <><span className="db-code">{titleComp.code}</span> {titleComp.name}</> : isLive ? "Duel Semasa" : "Jadual Duel"}
+          </FitTitle>
           <p className="db-exo mt-[0.8vh] truncate font-bold uppercase tracking-[0.25em] text-cyan-300" style={{ fontSize: "min(3vh, 2.4vw)" }}>
-            {isLive ? data.event.name
+            {isLive ? (liveOne ? `Duel Semasa · ${data.event.name}` : data.event.name)
+              : isGroups ? (gCur ? `${gCur.g?.name ? `${gCur.g.name} · ` : ""}Peringkat Kumpulan${gCur.pages > 1 ? ` · ${gCur.p + 1}/${gCur.pages}` : ""}` : data.event.name)
               : curRound ? `${cur?.g?.name ? `${cur.g.name} · ` : ""}${roundName(curRound)}${cur && cur.pages > 1 ? ` · ${cur.p + 1}/${cur.pages}` : ""}`
               : data.event.name}
           </p>
@@ -220,7 +248,11 @@ export function DuelBoardClient({ slug }: { slug: string }) {
           <Empty text="Tiada pertandingan duel untuk dipaparkan." />
         ) : isLive ? (
           <LiveView comps={comps} now={now} serverNow={data.serverNow} />
-        ) : cur ? (
+        ) : isGroups ? (gCur && (
+          <AvatarPreference value={preferFor(gCur.c.scope)}>
+            <GroupsView comp={gCur.c} league={gCur.g} page={gCur.p} />
+          </AvatarPreference>
+        )) : cur ? (
           <AvatarPreference value={preferFor(cur.c.scope)}>
             <ScheduleView comp={cur.c} bracket={cur.g} page={cur.p} />
           </AvatarPreference>
@@ -229,9 +261,9 @@ export function DuelBoardClient({ slug }: { slug: string }) {
 
       <footer className="relative z-10 flex shrink-0 items-center justify-between px-[3vw] pb-[1.5vh] text-white/40" style={{ fontSize: "min(1.8vh, 1.4vw)" }}>
         <span className="uppercase tracking-widest">{data.event.name}{data.label ? ` · ${data.label}` : ""}</span>
-        {!isLive && slides.length > 1 && (
+        {!isLive && dots > 1 && (
           <span className="flex gap-1.5">
-            {slides.map((_, i) => <span key={i} className={cn("h-1.5 w-6 rounded-full", i === slide % slides.length ? "bg-cyan-300" : "bg-white/20")} />)}
+            {Array.from({ length: dots }, (_, i) => <span key={i} className={cn("h-1.5 w-6 rounded-full", i === slide % dots ? "bg-cyan-300" : "bg-white/20")} />)}
           </span>
         )}
       </footer>
@@ -243,8 +275,108 @@ export function DuelBoardClient({ slug }: { slug: string }) {
   );
 }
 
+/**
+ * The header title, always read in full: it shrinks to fit the header on one
+ * line, and only when that would take it below ~60 % of its size does it wrap
+ * onto two lines instead. Re-fits on resize (full screen) and once fonts load.
+ */
+const TITLE_SIZE = "min(5.2vh, 3.6vw)";
+function FitTitle({ text, children }: { text: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.fontSize = TITLE_SIZE;
+      el.style.whiteSpace = "nowrap";
+      const base = parseFloat(getComputedStyle(el).fontSize);
+      const ratio = el.clientWidth / el.scrollWidth;
+      if (ratio >= 1) return;
+      const scaled = base * ratio * 0.97;
+      if (scaled >= base * 0.6) { el.style.fontSize = `${scaled}px`; return; }
+      el.style.fontSize = `${base * 0.6}px`;
+      el.style.whiteSpace = "normal";
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el.parentElement ?? el);
+    document.fonts?.ready.then(fit).catch(() => {});
+    return () => ro.disconnect();
+  }, [text]);
+  return (
+    <p ref={ref} className="db-title overflow-hidden leading-[1.15] [overflow-wrap:anywhere]" style={{ fontSize: TITLE_SIZE }}>
+      {children}
+    </p>
+  );
+}
+
 function Empty({ text }: { text: string }) {
   return <div className="flex h-full items-center justify-center text-[3vh] font-semibold text-white/60">{text}</div>;
+}
+
+// ── Groups: every league table of one bracket, up to GROUP_PAGE per screen ──
+
+function GroupsView({ comp, league, page }: { comp: Comp; league: League | null; page: number }) {
+  if (!league) return <Empty text={`${comp.code} ${comp.name} — peringkat kumpulan belum disahkan.`} />;
+  const tables = league.tables.slice(page * GROUP_PAGE, page * GROUP_PAGE + GROUP_PAGE);
+  // Two rows at most: 1–3 side by side, 4 → 2 × 2, 5–6 → 3 × 2, 7–8 → 4 × 2, 9–10 → 5 × 2.
+  const n = tables.length;
+  const cols = n <= 3 ? Math.max(1, n) : n === 4 ? 2 : Math.ceil(n / 2);
+  const rows = Math.ceil(tables.length / cols);
+  const draws = league.tables.some(t => t.rows.some(x => x.drawn));
+  const advance = comp.groupAdvance ?? 0;
+  return (
+    <div className="grid h-full gap-x-[1.6vw] gap-y-[2.4vh] pt-[1vh]"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0,1fr))` }}>
+      {tables.map(t => <GroupCard key={t.pool} t={t} draws={draws} advance={advance} />)}
+    </div>
+  );
+}
+
+function GroupCard({ t, draws, advance }: { t: GroupTable; draws: boolean; advance: number }) {
+  // Sized by the card itself (container units), so 1–6 cards on a screen all read well.
+  const cols = `1.8em minmax(0,1fr) repeat(${draws ? 4 : 3}, 1.7em) 2.4em`;
+  const stats = (r: LeagueRowPub) => draws ? [r.played, r.won, r.drawn, r.lost] : [r.played, r.won, r.lost];
+  return (
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-[2vh] border border-white/10 bg-white/10 shadow-2xl backdrop-blur-sm" style={{ containerType: "size" }}>
+      <div className="flex shrink-0 items-center justify-between gap-2 bg-[#050b24]/70 px-[4cqw] py-[2.2cqh]">
+        <span className="db-exo rounded-full bg-gradient-to-r from-cyan-400 to-teal-300 px-[3cqw] font-black uppercase text-violet-950" style={{ fontSize: "max(11px, min(6.5cqh, 6cqw))" }}>
+          Kumpulan {t.pool}
+        </span>
+        <span className={cn("rounded-full px-[2cqw] font-bold uppercase", t.done ? "bg-white/15" : "bg-red-500")}
+          style={{ fontSize: "max(9px, min(4.2cqh, 3.8cqw))", ...(t.done ? {} : { animation: "dbPulse 1.4s infinite" }) }}>
+          {t.done ? "Selesai" : "Sedang berjalan"}
+        </span>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col px-[3cqw] pb-[2.5cqh] pt-[1.5cqh]" style={{ fontSize: "max(10px, min(5.6cqh, 5.2cqw))" }}>
+        <div className="grid shrink-0 items-center text-white/50" style={{ gridTemplateColumns: cols, fontSize: "0.72em" }}>
+          {["#", "Pasukan", "M", "Mn", ...(draws ? ["S"] : []), "K", "Mata"].map((h, i) => (
+            <span key={h} className={cn("db-exo py-[1cqh] font-bold uppercase", i === 1 ? "text-left" : "text-center")}>{h}</span>
+          ))}
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-[1.2cqh]">
+          {t.rows.map((r, i) => {
+            const q = i < advance;
+            return (
+              <div key={`${r.position}-${r.name}`} className={cn("grid min-h-0 flex-1 items-center rounded-[1cqh]", q ? "bg-gradient-to-r from-cyan-500/30 to-cyan-500/5" : "bg-white/5")}
+                style={{ gridTemplateColumns: cols, maxHeight: "18cqh" }}>
+                <span className={cn("db-exo text-center font-black", q ? "text-cyan-300" : "text-white/50")}>{r.position}</span>
+                <span className="flex min-w-0 items-center gap-[0.5em]">
+                  <TeamAvatar flagUrl={r.flagUrl} logoUrl={r.logoUrl} name={r.contingent} className="aspect-square h-[1.6em] w-auto" />
+                  <span className="min-w-0 leading-[1.1]">
+                    <span className="block truncate font-bold uppercase">{r.name}</span>
+                    <span className="block truncate text-white/50" style={{ fontSize: "0.62em" }}>{r.contingent}</span>
+                  </span>
+                </span>
+                {stats(r).map((v, j) => <span key={j} className="text-center tabular-nums text-white/70">{v}</span>)}
+                <span className="db-exo text-center font-black tabular-nums">{r.points}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Schedule: session cards (left) + standings table (right) ─────────────────
