@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { soloExemptCompetitionIds } from "@/lib/individualEntry";
 import { getZoneWinnerDetails, teamHasZoneWinner } from "@/lib/zoneWinners";
 
 // Resolve team and contingent — returns contingent's effective stateId
@@ -202,11 +203,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // "Penyertaan Tunggal Sahaja": reject if any member is already registered in
   // another team for this event. Events set to "Benarkan Penyertaan Berganda"
-  // skip the check.
-  if (!event.allowMultipleParticipation) {
+  // skip the check, as do competitions marked soloExempt (both ways).
+  const exempt = event.allowMultipleParticipation ? null : await soloExemptCompetitionIds(db, eventId);
+  if (exempt && !exempt.has(team.competitionId)) {
     const memberConflict = await db.teamMember.findFirst({
       where: {
-        team: { id: { not: id }, teamEvents: { some: { eventId } } },
+        team: { id: { not: id }, competitionId: { notIn: [...exempt] }, teamEvents: { some: { eventId } } },
         participant: { teamMembers: { some: { teamId: id } } },
       },
       select: { participant: { select: { name: true } } },

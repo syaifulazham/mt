@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     quizzlySessionId, quizzlySessionTitle, quizzlyAssignBy, quizzlyQuizMap,
     fc1EventId, fc1Challenges,
     droneEventId, droneChallenges,
-    isOnline, portalAccess,
+    isOnline, portalAccess, soloExempt,
   } = await req.json();
 
   if (portalAccess !== undefined && !(PORTAL_ACCESS as readonly string[]).includes(portalAccess))
@@ -61,6 +61,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(isOnline            !== undefined && { isOnline:            isOnline === true }),
       // Participant portal: PUBLIC (self-registration) or RESTRICTED (registered only) — src/lib/portalAccess.ts.
       ...(portalAccess        !== undefined && { portalAccess }),
+      // Outside the event's "Penyertaan Tunggal Sahaja" rule both ways — src/lib/individualEntry.ts.
+      ...(soloExempt          !== undefined && { soloExempt:          soloExempt === true }),
       ...(picName             !== undefined && { picName:             picName?.trim()    || null }),
       ...(picContact          !== undefined && { picContact:          picContact?.trim() || null }),
       ...(maxTeams            !== undefined && { maxTeams:            Number(maxTeams)   || 0    }),

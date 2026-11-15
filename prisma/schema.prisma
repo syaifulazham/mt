@@ -718,6 +718,11 @@ model EventCompetition {
   /// Participant portal: "PUBLIC" (open to all eligible; self-registration) or
   /// "RESTRICTED" (only those already registered; no self-registration). src/lib/portalAccess.ts
   portalAccess            String    @default("PUBLIC")
+  /// Exempt from the event's "Penyertaan Tunggal Sahaja" rule: entering it
+  /// neither is blocked by, nor blocks, the participant's other entries in the
+  /// event (e.g. an online Asia Spark quiz alongside a physical competition).
+  /// Read on the anchor row (parentId null). src/lib/individualEntry.ts
+  soloExempt              Boolean   @default(false)
   duelConfig              Json? // { perSession, advance, arenas, durationSec, breakSec }
   // Results ranked "NATIONAL" (one list) or "STATE" (per state); null = event scope default (src/lib/resultScope.ts)
   resultScope             String?

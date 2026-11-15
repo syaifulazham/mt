@@ -308,6 +308,8 @@ type Props = {
   quizzlyCompetitions: QuizzlyEntry[];
   /** Competitions the participant is already entered in, keyed by event id. */
   eventEntries: Record<string, { competitionId: string; label: string }[]>;
+  /** `eventId:competitionId` of competitions exempt from the single-entry rule. */
+  soloExempt: string[];
   fc1Competitions: Fc1Entry[];
   /** Individual Eptim Drone competitions — same card and flow as FC-1. */
   droneIndividual: Fc1Entry[];
@@ -967,6 +969,7 @@ export function DashboardClient({
   existingRegistrations,
   quizzlyCompetitions,
   eventEntries,
+  soloExempt,
   fc1Competitions,
   droneIndividual,
   droneTeams,
@@ -1078,6 +1081,8 @@ export function DashboardClient({
     } finally { setQuizzlyBusy(null); }
   }
 
+  const exemptKeys = new Set(soloExempt);
+
   /**
    * "Penyertaan Tunggal Sahaja": in an event that allows only one competition
    * per participant, the first token taken (or an existing entry, e.g. one a
@@ -1087,20 +1092,23 @@ export function DashboardClient({
    */
   function claimedBy(event: { id: string; allowMultipleParticipation: boolean }, competitionId: string): string | null {
     if (event.allowMultipleParticipation) return null;
+    // Exempt competitions (soloExempt) sit outside the rule both ways.
+    const counts = (cid: string) => cid !== competitionId && !exemptKeys.has(`${event.id}:${cid}`);
+    if (exemptKeys.has(`${event.id}:${competitionId}`)) return null;
     const label = (c: { code: string; name: string }) => `${c.code} ${c.name}`;
     // Live state first, so the lock appears the moment something is taken…
     const viaToken = quizzlyCompetitions.find(
-      (o) => o.event.id === event.id && o.competition.id !== competitionId && tokens[o.id],
+      (o) => o.event.id === event.id && counts(o.competition.id) && tokens[o.id],
     );
     if (viaToken) return label(viaToken.competition);
     for (const a of individualArenas) {
       const via = a.items.find(
-        (o) => o.event.id === event.id && o.competition.id !== competitionId && arenaHasReg(a.kind, o.id),
+        (o) => o.event.id === event.id && counts(o.competition.id) && arenaHasReg(a.kind, o.id),
       );
       if (via) return label(via.competition);
     }
     // …then what the server already knew, including manager-made entries.
-    return (eventEntries[event.id] ?? []).find((e) => e.competitionId !== competitionId)?.label ?? null;
+    return (eventEntries[event.id] ?? []).find((e) => counts(e.competitionId))?.label ?? null;
   }
 
   function lockedBy(q: QuizzlyEntry): string | null {

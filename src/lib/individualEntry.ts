@@ -22,18 +22,38 @@ export async function singleParticipationConflict(
   });
   if (!event || event.allowMultipleParticipation) return null;
 
+  // Competitions marked soloExempt sit outside the rule both ways: entering one
+  // is never blocked, and an entry in one never blocks anything else.
+  const exempt = await soloExemptCompetitionIds(tx, input.eventId);
+  if (input.exceptCompetitionId && exempt.has(input.exceptCompetitionId)) return null;
+  const skip = [...exempt, ...(input.exceptCompetitionId ? [input.exceptCompetitionId] : [])];
+
   const other = await tx.teamMember.findFirst({
     where: {
       participantId: input.participantId,
       team: {
-        ...(input.exceptTeamId        && { id:            { not: input.exceptTeamId } }),
-        ...(input.exceptCompetitionId && { competitionId: { not: input.exceptCompetitionId } }),
+        ...(input.exceptTeamId && { id: { not: input.exceptTeamId } }),
+        ...(skip.length > 0    && { competitionId: { notIn: skip } }),
         teamEvents: { some: { eventId: input.eventId } },
       },
     },
     select: { team: { select: { competition: { select: { code: true, name: true } } } } },
   });
   return other ? `${other.team.competition.code} ${other.team.competition.name}` : null;
+}
+
+/**
+ * Competitions of an event exempt from "Penyertaan Tunggal Sahaja"
+ * (EventCompetition.soloExempt, read on the registration anchor row).
+ * Callers pass `exceptCompetitionId` = the competition being entered, so that
+ * competition being exempt lets the entry through.
+ */
+export async function soloExemptCompetitionIds(tx: Tx, eventId: string): Promise<Set<string>> {
+  const rows = await tx.eventCompetition.findMany({
+    where:  { eventId, parentId: null, soloExempt: true },
+    select: { competitionId: true },
+  });
+  return new Set(rows.map((r) => r.competitionId));
 }
 
 /**

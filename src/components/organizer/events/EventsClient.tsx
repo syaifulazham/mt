@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Loader2, Search, Save, Sparkles, Navigation,
   UploadCloud, CheckCircle2, XCircle, Trophy, User, Phone,
   ArrowLeft, Check, CalendarDays, BookOpen, Link2, Unlink, AlertCircle, X, GitMerge, Settings, Globe2,
-  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin, ChevronDown, MapPin, Wifi, Lock,
+  Gavel, Copy, Network, Fingerprint, AlertTriangle, ListChecks, Joystick, Plane, Pin, ChevronDown, MapPin, Wifi, Lock, Layers,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -112,6 +112,8 @@ type EventCompLink = {
   isOnline: boolean;
   /** Participant portal: PUBLIC (open to all; self-registration) or RESTRICTED (registered only). */
   portalAccess: "PUBLIC" | "RESTRICTED";
+  /** Exempt from the event's single-participation rule (both ways). */
+  soloExempt: boolean;
   picName: string | null; picContact: string | null; maxTeams: number;
   eptimEduCourseId:    string | null;
   eptimEduCourseTitle: string | null;
@@ -1808,7 +1810,7 @@ function PrerequisiteSection({ event, canWrite, onSaved, onCompetitionsCopied }:
   );
 }
 
-function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: string; canWrite: boolean; refreshKey?: number }) {
+function CompetitionsSection({ eventId, canWrite, refreshKey, singleEntry }: { eventId: string; canWrite: boolean; refreshKey?: number; singleEntry: boolean }) {
   const [links,   setLinks]   = useState<EventCompLink[]>([]);
   const [modeBusy, setModeBusy] = useState<string | null>(null);
 
@@ -1825,6 +1827,17 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
     } finally { setPublishBusy(null); }
   }
   const [publishBusy, setPublishBusy] = useState<string | null>(null);
+
+  /** Exempt from "Penyertaan Tunggal Sahaja": entering it neither blocks nor is blocked by other entries. */
+  async function setSoloExempt(link: EventCompLink, soloExempt: boolean) {
+    setPublishBusy(link.id);
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/competitions/${link.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ soloExempt }),
+      });
+      if (res.ok) setLinks(prev => prev.map(l => (l.id === link.id ? { ...l, soloExempt } : l)));
+    } finally { setPublishBusy(null); }
+  }
 
   async function setOnline(link: EventCompLink, isOnline: boolean) {
     if (link.isOnline === isOnline) return;
@@ -2091,6 +2104,18 @@ function CompetitionsSection({ eventId, canWrite, refreshKey }: { eventId: strin
                         {link.competition.participationType === "INDIVIDUAL" && (
                         <div className="ml-auto flex items-center gap-1.5">
                           {publishBusy === link.id && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
+                          {(singleEntry || link.soloExempt) && (
+                            <button type="button" disabled={!canWrite || publishBusy === link.id}
+                              onClick={() => setSoloExempt(link, !link.soloExempt)}
+                              title={link.soloExempt
+                                ? "Penyertaan berganda: peserta boleh menyertai pertandingan ini walaupun sudah mendaftar pertandingan lain dalam acara ini (dan sebaliknya). Klik untuk ikut had satu penyertaan."
+                                : "Ikut had satu penyertaan acara ini. Klik untuk benarkan penyertaan berganda bagi pertandingan ini sahaja."}
+                              className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                                link.soloExempt ? "border-violet-600 bg-violet-600 text-white" : "bg-white text-zinc-500 hover:bg-zinc-50"
+                              } ${!canWrite ? "cursor-default" : ""}`}>
+                              <Layers className="h-3 w-3" /> Berganda
+                            </button>
+                          )}
                           <div className="inline-flex overflow-hidden rounded-md border bg-white text-[11px] font-medium">
                             {([["PUBLIC", "Public", Globe2, "Public: dibuka kepada semua peserta yang layak di portal peserta — mereka boleh mendaftar sendiri."],
                                ["RESTRICTED", "Limited", Lock, "Limited: hanya peserta yang telah didaftarkan dalam acara ini melihatnya di portal peserta — tiada pendaftaran sendiri."]] as const)
@@ -3450,7 +3475,7 @@ export function EventsClient({ role, hasViblockKey = false, hasDroneKey = false,
             <ParticipationModeSection   event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <InternationalModeSection   event={selected} canWrite={canWrite} onSaved={handleSectionSaved} />
             <PrerequisiteSection event={selected} canWrite={canWrite} onSaved={handleSectionSaved} onCompetitionsCopied={() => setCompRefreshKey(k => k + 1)} />
-            <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} />
+            <CompetitionsSection eventId={selected.id} canWrite={canWrite} refreshKey={compRefreshKey} singleEntry={!selected.allowMultipleParticipation} />
             <WalkInCompetitionsSection event={selected} canWrite={canWrite} isSuperAdmin={role === "SUPER_ADMIN"} hasViblockKey={hasViblockKey} hasDroneKey={hasDroneKey} hasVibeBlocksKey={hasVibeBlocksKey} hasTechTriathlonKey={hasTechTriathlonKey} onSaved={handleSectionSaved} />
           </div>
         )}

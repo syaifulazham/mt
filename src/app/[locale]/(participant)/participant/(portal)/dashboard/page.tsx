@@ -371,6 +371,12 @@ export default async function DashboardPage() {
       },
     },
   });
+  // Competitions exempt from "Penyertaan Tunggal Sahaja" (soloExempt): they
+  // neither lock nor are locked by the participant's other entries.
+  const soloExempt = entryEventIds.length === 0 ? [] : (await db.eventCompetition.findMany({
+    where:  { eventId: { in: entryEventIds }, parentId: null, soloExempt: true },
+    select: { eventId: true, competitionId: true },
+  })).map((r) => `${r.eventId}:${r.competitionId}`);
   const eventEntries: Record<string, { competitionId: string; label: string }[]> = {};
   for (const e of entries) {
     for (const te of e.team.teamEvents) {
@@ -558,6 +564,7 @@ export default async function DashboardPage() {
       existingRegistrations={existingRegistrations}
       quizzlyCompetitions={quizzlyData}
       eventEntries={eventEntries}
+      soloExempt={soloExempt}
       fc1Competitions={fc1Data}
       droneTeams={droneData}
       droneIndividual={droneIndividualData}

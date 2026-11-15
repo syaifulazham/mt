@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { soloExemptCompetitionIds } from "@/lib/individualEntry";
 
 // ── POST /api/v2/manager/teams/[id]/members  ─────────────────────────────────
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -47,15 +48,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Reject if the participant is already in another team registered for any
   // "Penyertaan Tunggal Sahaja" event this team has joined. Events set to
   // "Benarkan Penyertaan Berganda" don't take part in the check.
-  const eventIds = team.teamEvents
-    .filter((te) => !te.event.allowMultipleParticipation)
-    .map((te) => te.eventId);
-  if (eventIds.length > 0) {
+  // Competitions marked soloExempt take no part either way: this team's own
+  // competition being exempt skips that event, and entries in exempt
+  // competitions don't conflict.
+  for (const te of team.teamEvents) {
+    if (te.event.allowMultipleParticipation) continue;
+    const exempt = await soloExemptCompetitionIds(db, te.eventId);
+    if (exempt.has(team.competitionId)) continue;
     const conflict = await db.teamMember.findFirst({
       where: {
         participantId,
         teamId: { not: teamId },
-        team: { teamEvents: { some: { eventId: { in: eventIds } } } },
+        team: { competitionId: { notIn: [...exempt] }, teamEvents: { some: { eventId: te.eventId } } },
       },
       select: { id: true },
     });
