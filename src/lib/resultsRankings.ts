@@ -170,7 +170,14 @@ export async function computeCompetitionResults(
 
       const registrations = scoreMap.size === 0 ? [] : await db.walkInRegistration.findMany({
         where:  { id: { in: [...scoreMap.keys()] } },
-        select: { id: true, participant: { select: { id: true, name: true } }, contingent: { select: CONTINGENT_SELECT } },
+        select: {
+          id: true,
+          participant: { select: { id: true, name: true } },
+          contingent: { select: CONTINGENT_SELECT },
+          // TEAM competitions: one registration per team, anchored on one member —
+          // rank it under the team's name, with all its members.
+          team: { select: { name: true, members: { select: { participant: { select: { id: true, name: true } } } } } },
+        },
       });
 
       competitions.push({
@@ -187,11 +194,13 @@ export async function computeCompetitionResults(
           const agg = scoreMap.get(reg.id) ?? { totalScore: 0, bestTime: null };
           return {
             teamId: reg.id,
-            teamName: reg.participant.name,
+            teamName: reg.team?.name || reg.participant.name,
             ...contingentFields(reg.contingent),
             totalScore: agg.totalScore,
             bestTime: agg.bestTime,
-            members: [{ id: reg.participant.id, name: reg.participant.name }],
+            members: reg.team && reg.team.members.length > 0
+              ? reg.team.members.map(m => ({ id: m.participant.id, name: m.participant.name }))
+              : [{ id: reg.participant.id, name: reg.participant.name }],
           };
         }), mode),
       });

@@ -555,7 +555,7 @@ function TeamSpotlight({
             {/* Team name */}
             <p className="text-white font-black drop-shadow-lg" style={{ fontSize: `${scales.teamName * 2.25}rem`, fontFamily: "var(--font-poppins)", WebkitTextStroke: "0.5px rgba(0,0,0,0.5)" }}>{entry.teamName}</p>
             {/* Members */}
-            {!isWalkIn && entry.members.length > 0 && (
+            {entry.members.length > 0 && !(isWalkIn && entry.members.length === 1 && entry.members[0].name === entry.teamName) && (
               <div className="flex flex-col items-center gap-2">
                 <p className="text-white/30 text-xs font-bold uppercase tracking-widest mb-1">Ahli Pasukan</p>
                 {entry.members.map((m) => (
