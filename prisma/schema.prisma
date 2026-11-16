@@ -304,24 +304,24 @@ enum SchoolCategory {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Contingent {
-  id                  String           @id @default(cuid())
-  name                String
-  shortName           String?
-  logoUrl             String?
-  contingentType      ContingentType
-  locality            Locality?
-  schoolId            String?
-  higherInstitutionId String?
-  countryInvitationId String?
-  stateId             String?
-  zoneId              String?
-  countryId           String?
+  id                   String           @id @default(cuid())
+  name                 String
+  shortName            String?
+  logoUrl              String?
+  contingentType       ContingentType
+  locality             Locality?
+  schoolId             String?
+  higherInstitutionId  String?
+  countryInvitationId  String?
+  stateId              String?
+  zoneId               String?
+  countryId            String?
   /// Foreign schools (Penyertaan Antarabangsa) belong to the event they were registered for:
   /// that event's international page lists them, no other. Null for local contingents.
   internationalEventId String?
-  status              ContingentStatus @default(ACTIVE)
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  status               ContingentStatus @default(ACTIVE)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   school              School?              @relation(fields: [schoolId], references: [id])
   higherInstitution   HigherInstitution?   @relation(fields: [higherInstitutionId], references: [id])
@@ -427,9 +427,9 @@ model Participant {
   fc1Access             ParticipantFc1Access?
   fc1Challenges         ParticipantFc1Challenge[]
   droneChallenges       ParticipantDroneChallenge[]
+  specialAwardWins      SpecialAwardWinner[]
 
   @@index([contingentId])
-  specialAwardWins SpecialAwardWinner[]
   @@map("contestants")
 }
 
@@ -751,6 +751,7 @@ model EventCompetition {
   judgingTemplates     EventCompetitionJudgingTemplate[]
   judgingTasks         JudgingTask[]
   duelRounds           DuelRound[]
+  votingSessions       VotingSession[]
   duelControlEndpoints DuelControlEndpoint[]
   teamMerges           TeamMerge[]
   specialAwards        SpecialAward[]
@@ -2156,8 +2157,8 @@ model DuelSession {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  round   DuelRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  entries DuelEntry[]
+  round         DuelRound          @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  entries       DuelEntry[]
   scorecardLink DuelScorecardLink?
 
   @@index([roundId])
@@ -2334,4 +2335,69 @@ model DuelDisplayEndpoint {
 
   @@index([eventId])
   @@map("duel_display_endpoints")
+}
+
+/// Public voting ("Undian Awam") — an extra judging option on the Penghakiman
+/// page. Each session lists entries (a team's article, video, site…) with their
+/// links, and /vote/<routeSlug> lets the public score each entry between
+/// minScore and maxScore. One ballot per entry per voter (cookie), re-votes
+/// overwrite. src/lib/voting.ts
+model VotingSession {
+  id                 String   @id @default(cuid())
+  eventCompetitionId String
+  routeSlug          String   @unique
+  label              String
+  description        String?
+  minScore           Int      @default(1)
+  maxScore           Int      @default(5)
+  /// ACTIVE = open for votes; CLOSED = page shows "ditutup".
+  status             String   @default("ACTIVE")
+  /// Show the live average and vote count on the public page.
+  showResults        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  eventCompetition EventCompetition @relation(fields: [eventCompetitionId], references: [id], onDelete: Cascade)
+  entries          VotingEntry[]
+
+  @@index([eventCompetitionId])
+  @@map("voting_sessions")
+}
+
+model VotingEntry {
+  id        String   @id @default(cuid())
+  sessionId String
+  /// The team this entry stands for, when picked from the competition (no FK).
+  teamId    String?
+  title     String
+  subtitle  String?
+  /// [{ label, url }] — article, video, site…
+  links     Json     @default("[]")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  session VotingSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  ballots VotingBallot[]
+
+  @@index([sessionId])
+  @@map("voting_entries")
+}
+
+model VotingBallot {
+  id        String   @id @default(cuid())
+  entryId   String
+  sessionId String
+  /// Random id kept in the voter's cookie.
+  voterKey  String
+  /// sha256 of the voter's IP, for spotting abuse.
+  ipHash    String?
+  score     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entry VotingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, voterKey])
+  @@index([sessionId])
+  @@map("voting_ballots")
 }

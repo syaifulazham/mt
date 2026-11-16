@@ -17,6 +17,7 @@ import type { EventJudgingProgress, JudgingRow } from "@/lib/judgingStatus";
 import { wildcardMatcher } from "@/lib/wildcardFilter";
 import { JudgingSetupPanel } from "@/components/organizer/judging/JudgingSetupPanel";
 import { CompetitionSplitBar } from "@/components/organizer/judging/CompetitionSplitBar";
+import { VotingPanel } from "@/components/organizer/judging/VotingPanel";
 import { JudgingGlobalSettings } from "@/components/organizer/judging/JudgingGlobalSettings";
 import type { SharedRankMode } from "@/lib/sharedRank";
 import { defaultResultScope, type ResultScope } from "@/lib/resultScope";
@@ -473,6 +474,9 @@ function CompetitionCard({
               </div>
             ))
           )}
+
+          {/* Public voting — an extra judging option with its own public link */}
+          <VotingPanel eventId={event.id} ecId={ec.id} canWrite={canWriteRole} />
 
           {/* Announce completeness / verify / reopen */}
           {ec.judgingTemplates.length > 0 && (

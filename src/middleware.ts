@@ -28,7 +28,7 @@ const isWalkInRoute       = createRouteMatcher(["/walkin(.*)"]);
 const isBorangRoute       = createRouteMatcher(["/borang(.*)"]);
 const isMediaRoute        = createRouteMatcher(["/media(.*)"]);
 const isAttendanceRoute   = createRouteMatcher(["/attendance(.*)"]);
-const isDuelRoute         = createRouteMatcher(["/duel(.*)", "/scorecard(.*)", "/intl/(.*)", "/live/(.*)"]);
+const isDuelRoute         = createRouteMatcher(["/duel(.*)", "/vote/(.*)", "/scorecard(.*)", "/intl/(.*)", "/live/(.*)"]);
 // Auth.js uses /api/auth/* internally — must be fully public
 const isAuthJsInternalRoute = createRouteMatcher(["/api/auth(.*)"]);
 

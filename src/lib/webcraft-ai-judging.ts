@@ -121,8 +121,8 @@ export async function loadAiCompetition(eventId: string, ecId: string) {
 }
 export type AiCompetition = NonNullable<Awaited<ReturnType<typeof loadAiCompetition>>>;
 
-/** Every team of the competition with the published project the AI will mark (latest updated). */
-export async function teamProjects(ec: { eventId: string; competitionId: string }) {
+/** Every team of the competition with all its published projects (team and member accounts), latest updated first. */
+export async function teamAllProjects(ec: { eventId: string; competitionId: string }) {
   const teams = await db.team.findMany({
     where:  { competitionId: ec.competitionId, teamEvents: { some: { eventId: ec.eventId } } },
     select: {
@@ -137,12 +137,20 @@ export async function teamProjects(ec: { eventId: string; competitionId: string 
   ].filter((x): x is string => !!x))];
   const remote = await webcraftPublishedProjects(teams.flatMap(accountsOf));
   const stamp = (p: WebcraftPublishedProject) => new Date(p.updated_at ?? p.published_at ?? 0).getTime();
-  const out = new Map<string, WebcraftPublishedProject | null>();
+  const out = new Map<string, WebcraftPublishedProject[]>();
   for (const t of teams) {
-    const all = accountsOf(t).flatMap((u) => remote.get(u)?.projects ?? []);
-    out.set(t.id, all.sort((a, b) => stamp(b) - stamp(a))[0] ?? null);
+    const seen = new Set<string>();
+    const all = accountsOf(t).flatMap((u) => remote.get(u)?.projects ?? [])
+      .filter((p) => !seen.has(p.id) && !!seen.add(p.id));
+    out.set(t.id, all.sort((a, b) => stamp(b) - stamp(a)));
   }
   return out;
+}
+
+/** Every team of the competition with the published project the AI will mark (latest updated). */
+export async function teamProjects(ec: { eventId: string; competitionId: string }) {
+  const all = await teamAllProjects(ec);
+  return new Map([...all].map(([teamId, list]) => [teamId, list[0] ?? null]));
 }
 
 // ── Queueing and the worker ─────────────────────────────────────────────────
