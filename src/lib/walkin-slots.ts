@@ -102,9 +102,11 @@ export function isValidSlotScheduleConfig(v: unknown): v is SlotScheduleConfig {
   if (!v || typeof v !== "object") return false;
   const c = v as Record<string, unknown>;
   const timeOk = (s: unknown) => typeof s === "string" && /^\d{2}:\d{2}$/.test(s);
+  // No rest break is saved as empty times (buildSlotSchedule skips it).
+  const restOk = (s: unknown) => s === "" || timeOk(s);
   const numOk  = (n: unknown, min: number) => typeof n === "number" && Number.isInteger(n) && n >= min;
   return (
-    timeOk(c.startTime) && timeOk(c.endTime) && timeOk(c.restStart) && timeOk(c.restEnd) &&
+    timeOk(c.startTime) && timeOk(c.endTime) && restOk(c.restStart) && restOk(c.restEnd) &&
     numOk(c.totalSessions, 1) && numOk(c.sessionMinutes, 1) &&
     numOk(c.slotsPerSession, 1) && numOk(c.gapMinutes, 0) &&
     (c.offDates === undefined || (Array.isArray(c.offDates) && c.offDates.every((d) => typeof d === "string")))
