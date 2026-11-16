@@ -41,6 +41,7 @@ export async function GET(
     confirmedAt: r.confirmedAt,
     createdAt: r.createdAt,
     viblockToken: r.viblockToken,
+    slotDate: r.slotDate,
     sessionNumber: r.sessionNumber,
     slotNumber: r.slotNumber,
     participant: r.participant,

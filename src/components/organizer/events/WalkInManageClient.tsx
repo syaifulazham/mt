@@ -205,6 +205,8 @@ type Registration = {
   confirmedAt: string | null;
   createdAt: string;
   viblockToken: string | null;
+  /** "YYYY-MM-DD" (MYT) on multi-day events; "" otherwise. */
+  slotDate?: string;
   sessionNumber: number | null;
   slotNumber: number | null;
   participant: { id: string; name: string; ic: string | null; gender: string; eduLevel: string; classGrade: string | null };
@@ -1009,6 +1011,7 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
   const [generalEps,    setGeneralEps]    = useState<WalkInEndpointItem[]>(event.walkInEndpoints);
 
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [slotFor, setSlotFor] = useState<Registration | null>(null);
   const [stats,         setStats]         = useState<Stats>({});
   const [loading,       setLoading]       = useState(false);
   const [statusFilter,  setStatusFilter]  = useState<string>("ALL");
@@ -3001,13 +3004,23 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
                             </Badge>
                           </td>
                           <td className="px-4 py-3 text-xs tabular-nums">
-                            {reg.sessionNumber != null && reg.slotNumber != null ? (
-                              <span className="font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 text-[11px]">
-                                {reg.slotNumber}
-                              </span>
-                            ) : (
-                              <span className="text-zinc-300">—</span>
-                            )}
+                            {(() => {
+                              const canPick = canWrite && !!selectedWic?.walkInSlotSchedule && (reg.status === "PENDING" || reg.status === "CONFIRMED");
+                              const has = reg.sessionNumber != null && reg.slotNumber != null;
+                              const body = has ? (
+                                <span className="inline-flex flex-col items-start gap-0.5">
+                                  <span className="font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 text-[11px]">{reg.slotNumber}</span>
+                                  {reg.slotDate && <span className="text-[10px] text-zinc-400">{fmtSlotDate(reg.slotDate, { day: "numeric", month: "short" })}</span>}
+                                </span>
+                              ) : canPick ? (
+                                <span className="inline-flex items-center gap-1 rounded border border-dashed border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                                  <Clock className="h-3 w-3" /> Pilih slot
+                                </span>
+                              ) : <span className="text-zinc-300">—</span>;
+                              return canPick
+                                ? <button type="button" onClick={() => setSlotFor(reg)} title={has ? "Tukar slot" : "Pilih slot"} className="hover:opacity-80">{body}</button>
+                                : body;
+                            })()}
                           </td>
                           <td className="px-4 py-3">
                             <Badge variant="outline" className={`text-[10px] ${STATUS_COLOR[reg.status]}`}>
@@ -3400,6 +3413,13 @@ export function WalkInManageClient({ event, canWrite, canAdmin = false }: { even
         </div>,
         document.body,
       )}
+      {slotFor && selectedWic && (
+        <SlotAssignDialog
+          eventId={event.id} wicId={selectedWic.id} reg={slotFor}
+          onClose={() => setSlotFor(null)}
+          onSaved={slot => setRegistrations(prev => prev.map(r => r.id === slotFor.id ? { ...r, ...slot } : r))}
+        />
+      )}
     </div>
   );
 }
@@ -3419,5 +3439,124 @@ function VbStatusBadge({ s }: {
     : ["Sedia", "bg-zinc-50 text-zinc-500 border-zinc-200", "Token belum digunakan"];
   return (
     <span title={title} className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>
+  );
+}
+
+// ── Assign / change a registration's slot ───────────────────────────────────
+
+type SlotPick = { slotDate: string; sessionNumber: number; slotNumber: number };
+type SlotAvail = {
+  config: SlotScheduleConfig; dates: string[];
+  sessions: { n: number; start: number; end: number; booked: number[] }[] | null;
+  current: { slotDate: string; sessionNumber: number | null; slotNumber: number | null };
+};
+
+/** Pick a date, session and free slot for a registration that has none (or move it). */
+function SlotAssignDialog({ eventId, wicId, reg, onClose, onSaved }: {
+  eventId: string; wicId: string; reg: Registration;
+  onClose: () => void; onSaved: (slot: SlotPick) => void;
+}) {
+  const base = `/api/v2/organizer/events/${eventId}/walkin/${wicId}/registrations/${reg.id}/slot`;
+  const [date, setDate] = useState<string | null>(reg.slotDate || null);
+  const [data, setData] = useState<SlotAvail | null>(null);
+  const [pick, setPick] = useState<{ sessionNumber: number; slotNumber: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true); setErr("");
+      try {
+        const res = await fetch(`${base}${date ? `?date=${date}` : ""}`, { cache: "no-store" });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error ?? "Gagal");
+        if (alive) setData(j.data);
+      } catch (e) { if (alive) setErr(e instanceof Error ? e.message : "Gagal"); }
+      finally { if (alive) setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, [base, date]);
+
+  async function save() {
+    if (!pick) return;
+    setSaving(true); setErr("");
+    try {
+      const body = { slotDate: date ?? "", ...pick };
+      const res = await fetch(base, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "Gagal");
+      onSaved(j.data); onClose();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); setSaving(false); }
+  }
+
+  const name = reg.team?.name ?? reg.participant.name;
+  const multiDay = (data?.dates.length ?? 0) > 0;
+  const cur = data?.current;
+  const isCurrent = (s: number, n: number) => !!cur && cur.slotDate === (date ?? "") && cur.sessionNumber === s && cur.slotNumber === n;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg max-h-[90vh] overflow-auto rounded-xl bg-white p-5 shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-zinc-900">{reg.sessionNumber != null ? "Tukar slot" : "Pilih slot"}</p>
+            <p className="text-xs text-zinc-500">{name} · {reg.contingent.shortName ?? reg.contingent.name}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-700"><X className="h-4 w-4" /></button>
+        </div>
+
+        {multiDay && (
+          <div className="flex flex-wrap gap-1.5">
+            {data!.dates.map(d => (
+              <button key={d} type="button" onClick={() => { setDate(d); setPick(null); }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${date === d ? "border-teal-400 bg-teal-50 text-teal-800" : "border-zinc-200 text-zinc-600 hover:border-teal-300"}`}>
+                {fmtSlotDate(d, { weekday: "short", day: "numeric", month: "short" })}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {loading && !data ? <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-zinc-300" /></div>
+          : multiDay && !date ? <p className="text-xs text-zinc-500">Pilih tarikh dahulu.</p>
+          : data?.sessions && (
+            <div className={`space-y-2 ${loading ? "opacity-50" : ""}`}>
+              {data.sessions.map(s => (
+                <div key={s.n} className="rounded-lg border border-zinc-200 p-2">
+                  <p className="mb-1.5 text-[11px] font-semibold text-zinc-700">
+                    Sesi {s.n} <span className="font-mono font-normal text-zinc-400">{fmtSlotMin(s.start)} – {fmtSlotMin(s.end)}</span>
+                    <span className="ml-2 font-normal text-zinc-400">{data.config.slotsPerSession - s.booked.filter(n => n <= data.config.slotsPerSession).length} kosong</span>
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {Array.from({ length: data.config.slotsPerSession }, (_, i) => i + 1).map(n => {
+                      const mine = isCurrent(s.n, n);
+                      const taken = s.booked.includes(n) && !mine;
+                      const on = pick?.sessionNumber === s.n && pick.slotNumber === n;
+                      return (
+                        <button key={n} type="button" disabled={taken} onClick={() => setPick({ sessionNumber: s.n, slotNumber: n })}
+                          className={`h-7 w-8 rounded text-[11px] font-semibold tabular-nums ${
+                            on ? "bg-teal-600 text-white" : mine ? "border border-teal-400 bg-teal-50 text-teal-700"
+                              : taken ? "cursor-not-allowed bg-zinc-100 text-zinc-300 line-through" : "border border-zinc-200 text-zinc-700 hover:border-teal-400"
+                          }`}>{n}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+        {err && <p className="text-xs text-red-600">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Batal</Button>
+          <Button size="sm" className="bg-teal-600 text-white hover:bg-teal-700" disabled={!pick || saving} onClick={save}>
+            {saving && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+            {pick ? `Simpan · Sesi ${pick.sessionNumber} slot ${pick.slotNumber}` : "Pilih slot"}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
