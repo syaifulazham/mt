@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomUUID } from "crypto";
 import { db } from "@/lib/db";
-import { VOTER_COOKIE, entryWithTally, tallySession } from "@/lib/voting";
+import { VOTER_COOKIE, entryWithTally, parseLinks, tallySession } from "@/lib/voting";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,8 @@ export async function GET(req: NextRequest, { params }: P) {
       status: s.status, showResults: s.showResults,
       event: ec.event.name, competition: { code: ec.competition.code, name: ec.competition.name, splitLabel: ec.splitLabel },
     },
-    entries: s.entries.map(e => {
+    // Entries without a link have nothing to review, so the public never sees them.
+    entries: s.entries.filter(e => parseLinks(e.links).length > 0).map(e => {
       const { teamId: _t, sortOrder: _o, votes, total: _sum, average, ...rest } = entryWithTally(e, tally);
       void _t; void _o; void _sum;
       return s.showResults ? { ...rest, votes, average } : rest;
@@ -76,9 +77,9 @@ export async function POST(req: NextRequest, { params }: P) {
   if (!Number.isInteger(score) || score < s.minScore || score > s.maxScore)
     return NextResponse.json({ error: `Skor mesti antara ${s.minScore} dan ${s.maxScore}` }, { status: 400 });
   const entry = typeof body.entryId === "string"
-    ? await db.votingEntry.findFirst({ where: { id: body.entryId, sessionId: s.id }, select: { id: true } })
+    ? await db.votingEntry.findFirst({ where: { id: body.entryId, sessionId: s.id }, select: { id: true, links: true } })
     : null;
-  if (!entry) return NextResponse.json({ error: "Penyertaan tidak dijumpai" }, { status: 404 });
+  if (!entry || parseLinks(entry.links).length === 0) return NextResponse.json({ error: "Penyertaan tidak dijumpai" }, { status: 404 });
 
   const key = voterKeyOf(req) ?? randomUUID();
   await db.votingBallot.upsert({

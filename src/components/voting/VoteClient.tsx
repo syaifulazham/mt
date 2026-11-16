@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ExternalLink, Loader2, Lock, Search, Star, Vote, X } from "lucide-react";
 
 // Public voting page (/vote/<slug>): review each entry's links and give it a
@@ -152,6 +152,8 @@ export function VoteClient({ slug }: { slug: string }) {
                 )}
               </div>
 
+              <PageSnapshot url={e.links[0].url} label={e.title} />
+
               {e.links.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {e.links.map((l, k) => (
@@ -199,5 +201,55 @@ export function VoteClient({ slug }: { slug: string }) {
         })}
       </ul>
     </div>,
+  );
+}
+
+/** The page is drawn at a desktop size, then scaled down to the card's width. */
+const SNAP_W = 1280, SNAP_H = 800;
+
+/**
+ * Live snapshot of an entry's page: a sandboxed, non-interactive iframe scaled
+ * to fit, loaded only as the card nears the screen. Tapping it opens the page.
+ */
+function PageSnapshot({ url, label }: { url: string; label: string }) {
+  const box = useRef<HTMLAnchorElement>(null);
+  const [width, setWidth] = useState(0);
+  const [near, setNear] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setNear(true); io.disconnect(); } }, { rootMargin: "600px 0px" });
+    ro.observe(el); io.observe(el);
+    return () => { ro.disconnect(); io.disconnect(); };
+  }, []);
+
+  return (
+    <a
+      ref={box} href={url} target="_blank" rel="noopener noreferrer nofollow"
+      className="group relative mt-3 block overflow-hidden rounded-xl border border-white/15 bg-white/5"
+      style={{ aspectRatio: `${SNAP_W} / ${SNAP_H}` }}
+      title={`Buka ${url}`}
+    >
+      {near && width > 0 && (
+        <iframe
+          src={url} title={label} loading="lazy" tabIndex={-1} aria-hidden
+          sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer"
+          onLoad={() => setLoaded(true)}
+          className="absolute left-0 top-0 border-0 bg-white"
+          style={{ width: SNAP_W, height: SNAP_H, transform: `scale(${width / SNAP_W})`, transformOrigin: "0 0", pointerEvents: "none" }}
+        />
+      )}
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-violet-300" />
+        </div>
+      )}
+      <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white opacity-90 transition-opacity group-hover:opacity-100">
+        <ExternalLink className="h-3 w-3" /> Buka laman
+      </span>
+    </a>
   );
 }

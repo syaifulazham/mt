@@ -265,7 +265,7 @@ function SessionCard({ s, base, teams, wc, canWrite, reload }: {
                   </td>
                   <td className="px-3 py-2">
                     {e.links.length === 0
-                      ? <span className="text-xs italic text-amber-600">tiada pautan</span>
+                      ? <span className="text-xs italic text-amber-600" title="Penyertaan tanpa pautan tidak dipapar di halaman undian">tiada pautan · tidak dipapar</span>
                       : <div className="flex flex-col gap-0.5">
                           {e.links.map((l, k) => (
                             <a key={k} href={l.url} target="_blank" rel="noopener noreferrer"
