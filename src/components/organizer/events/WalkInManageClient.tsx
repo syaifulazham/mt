@@ -878,6 +878,118 @@ function SlotScheduleSection({ eventId, wicId, initial, eventDays, canWrite, onS
       </div>
         </>
       )}
+      {multiDay && persisted && canWrite && (
+        <DateMovePanel eventId={eventId} wicId={wicId} eventDays={eventDays} cfg={cfg} />
+      )}
+    </div>
+  );
+}
+
+type DateMoveItem = {
+  kind: "registration" | "submission"; id: string; name: string;
+  from: { sessionNumber: number | null; slotNumber: number | null };
+  to: { sessionNumber: number | null; slotNumber: number | null } | null;
+};
+
+/**
+ * "Pindah tempahan": move every active booking of one event day to another,
+ * keeping each session/slot where it is free and otherwise filling free slots
+ * (same session first, then the nearest). Shows the plan before applying.
+ */
+function DateMovePanel({ eventId, wicId, eventDays, cfg }: { eventId: string; wicId: string; eventDays: string[]; cfg: SlotScheduleConfig }) {
+  const [from, setFrom] = useState(eventDays[0] ?? "");
+  const [to, setTo] = useState(eventDays[1] ?? "");
+  const [plan, setPlan] = useState<DateMoveItem[] | null>(null);
+  const [busy, setBusy] = useState<"" | "plan" | "apply">("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  const times = new Map(buildSlotSchedule(cfg).flatMap(b => b.type === "session" ? [[b.n, fmtSlotMin(b.start)] as const] : []));
+  const slotLabel = (x: { sessionNumber: number | null; slotNumber: number | null } | null) =>
+    !x ? "—" : x.sessionNumber == null ? "tiada slot" : `Sesi ${x.sessionNumber} (${times.get(x.sessionNumber) ?? "?"}) · slot ${x.slotNumber}`;
+
+  async function run(apply: boolean) {
+    setBusy(apply ? "apply" : "plan"); setErr(""); setMsg("");
+    try {
+      const res = await fetch(`/api/v2/organizer/events/${eventId}/walkin/${wicId}/move-date`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from, to, apply }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? "Gagal");
+      if (apply) {
+        setMsg(`${j.data.moved} tempahan dipindah ke ${fmtSlotDate(to, { day: "numeric", month: "short" })}${j.data.unplaced ? ` · ${j.data.unplaced} tidak dapat dipindah (slot penuh)` : ""}.`);
+        setPlan(null);
+      } else setPlan(j.data);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Gagal"); }
+    finally { setBusy(""); setConfirming(false); }
+  }
+
+  const placed = plan?.filter(p => p.to).length ?? 0;
+  const changed = plan?.filter(p => p.to && (p.to.sessionNumber !== p.from.sessionNumber || p.to.slotNumber !== p.from.slotNumber)).length ?? 0;
+  const dayLabel = (d: string) => fmtSlotDate(d, { weekday: "short", day: "numeric", month: "short" });
+  const selCls = "text-sm border border-zinc-200 rounded-lg px-2 py-1.5 bg-white";
+
+  return (
+    <div className="rounded-lg border border-dashed border-zinc-300 p-3 space-y-2">
+      <p className="text-xs font-semibold text-zinc-700">Pindah tempahan ke tarikh lain</p>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+        Dari
+        <select value={from} onChange={e => { setFrom(e.target.value); setPlan(null); }} className={selCls}>
+          {eventDays.map(d => <option key={d} value={d}>{dayLabel(d)}</option>)}
+        </select>
+        ke
+        <select value={to} onChange={e => { setTo(e.target.value); setPlan(null); }} className={selCls}>
+          {eventDays.map(d => <option key={d} value={d}>{dayLabel(d)}</option>)}
+        </select>
+        <Button size="sm" variant="outline" className="h-8 text-xs" disabled={!!busy || from === to} onClick={() => run(false)}>
+          {busy === "plan" && <Loader2 className="h-3 w-3 animate-spin mr-1" />} Semak
+        </Button>
+      </div>
+      <p className="text-[11px] text-zinc-400">Slot asal dikekalkan jika masih kosong; jika tidak, slot kosong dalam sesi yang sama atau sesi terdekat digunakan. Sesi yang telah bermula hari ini tidak digunakan.</p>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      {msg && <p className="text-xs text-emerald-700">{msg}</p>}
+      {plan && (
+        plan.length === 0 ? <p className="text-xs text-zinc-500">Tiada tempahan aktif pada {dayLabel(from)}.</p> : (
+          <div className="space-y-2">
+            <p className="text-xs text-zinc-700">
+              <b>{plan.length}</b> tempahan pada {dayLabel(from)} · <b>{placed}</b> boleh dipindah ({changed} bertukar slot)
+              {plan.length - placed > 0 && <span className="text-red-600"> · {plan.length - placed} tiada slot kosong</span>}
+            </p>
+            <div className="max-h-64 overflow-auto rounded border">
+              <table className="w-full text-[11px]">
+                <thead className="sticky top-0 bg-zinc-50 text-zinc-500">
+                  <tr><th className="px-2 py-1 text-left">Nama</th><th className="px-2 py-1 text-left">Asal</th><th className="px-2 py-1 text-left">Baharu ({dayLabel(to)})</th></tr>
+                </thead>
+                <tbody>
+                  {plan.map(p => (
+                    <tr key={p.id} className="border-t">
+                      <td className="px-2 py-1">{p.name}{p.kind === "submission" && <span className="ml-1 text-zinc-400">(borang)</span>}</td>
+                      <td className="px-2 py-1 text-zinc-500">{slotLabel(p.from)}</td>
+                      <td className={`px-2 py-1 ${!p.to ? "text-red-600" : p.to.sessionNumber !== p.from.sessionNumber || p.to.slotNumber !== p.from.slotNumber ? "text-amber-700" : "text-zinc-700"}`}>{p.to ? slotLabel(p.to) : "Tiada slot kosong"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {placed > 0 && (
+              <Button size="sm" className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white" disabled={!!busy} onClick={() => setConfirming(true)}>
+                {busy === "apply" && <Loader2 className="h-3 w-3 animate-spin mr-1" />} Pindah {placed} tempahan
+              </Button>
+            )}
+          </div>
+        )
+      )}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Pindah tempahan?"
+        description={`${placed} tempahan pada ${dayLabel(from)} akan dipindah ke ${dayLabel(to)}. Peserta akan melihat tarikh dan slot baharu.`}
+        confirmLabel={`Pindah ${placed}`}
+        destructive={false}
+        loading={busy === "apply"}
+        onConfirm={() => run(true)}
+      />
     </div>
   );
 }

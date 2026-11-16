@@ -155,3 +155,73 @@ export function isSlotConflict(e: unknown): boolean {
   const target = e.meta?.target;
   return Array.isArray(target) ? target.includes("sessionNumber") : String(target ?? "").includes("slot");
 }
+
+// ── Moving bookings between days ────────────────────────────────────────────
+
+export type DateMoveItem = {
+  kind: "registration" | "submission";
+  id: string;
+  name: string;
+  from: { sessionNumber: number | null; slotNumber: number | null };
+  /** Where it goes on the new day; null when no free slot is left. */
+  to: { sessionNumber: number | null; slotNumber: number | null } | null;
+};
+
+/**
+ * Plan for moving every active booking (PENDING/CONFIRMED registrations and
+ * pending borang entries) of `from` to `to`: each keeps its session/slot when
+ * that is free on `to`, otherwise takes the first free slot of the same
+ * session, then of the nearest session (later first). When `to` is today
+ * (Malaysia time), sessions that have already started are not used.
+ * Bookings without a slot only change date.
+ */
+export async function planDateMove(wicId: string, cfg: SlotScheduleConfig, from: string, to: string, now = new Date()): Promise<DateMoveItem[]> {
+  const ACTIVE = { in: ["PENDING", "CONFIRMED"] as ("PENDING" | "CONFIRMED")[] };
+  const [regs, subs, regsTo, subsTo] = await Promise.all([
+    db.walkInRegistration.findMany({
+      where: { walkInCompetitionId: wicId, slotDate: from, status: ACTIVE },
+      select: { id: true, sessionNumber: true, slotNumber: true, participant: { select: { name: true } }, team: { select: { name: true } } },
+    }),
+    db.walkInFormSubmission.findMany({
+      where: { walkInCompetitionId: wicId, slotDate: from, status: "PENDING" },
+      select: { id: true, sessionNumber: true, slotNumber: true, name: true, teamName: true },
+    }),
+    db.walkInRegistration.findMany({ where: { walkInCompetitionId: wicId, slotDate: to, status: ACTIVE, sessionNumber: { not: null } }, select: { sessionNumber: true, slotNumber: true } }),
+    db.walkInFormSubmission.findMany({ where: { walkInCompetitionId: wicId, slotDate: to, status: "PENDING", sessionNumber: { not: null } }, select: { sessionNumber: true, slotNumber: true } }),
+  ]);
+
+  const key = (s: number, n: number) => `${s}:${n}`;
+  const taken = new Set([...regsTo, ...subsTo].map((r) => key(r.sessionNumber!, r.slotNumber!)));
+
+  // Sessions still usable on `to`.
+  const today = new Date(now.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+  const nowMin = to === today ? (new Date(now.getTime() + 8 * 3600_000).getUTCHours() * 60 + new Date(now.getTime() + 8 * 3600_000).getUTCMinutes()) : -1;
+  const sessions = buildSlotSchedule(cfg)
+    .filter((b): b is Extract<typeof b, { type: "session" }> => b.type === "session" && b.start > nowMin)
+    .map((b) => b.n);
+
+  const items = [
+    ...regs.map((r) => ({ kind: "registration" as const, id: r.id, name: r.team?.name ?? r.participant.name, s: r.sessionNumber, n: r.slotNumber })),
+    ...subs.map((r) => ({ kind: "submission" as const, id: r.id, name: r.teamName ?? r.name, s: r.sessionNumber, n: r.slotNumber })),
+  ].sort((a, b) => (a.s ?? 0) - (b.s ?? 0) || (a.n ?? 0) - (b.n ?? 0));
+
+  const firstFree = (s: number) => {
+    for (let n = 1; n <= cfg.slotsPerSession; n++) if (!taken.has(key(s, n))) return n;
+    return null;
+  };
+  const out: DateMoveItem[] = [];
+  for (const it of items) {
+    const from = { sessionNumber: it.s, slotNumber: it.n };
+    if (it.s == null || it.n == null) { out.push({ kind: it.kind, id: it.id, name: it.name, from, to: from }); continue; }
+    let to: DateMoveItem["to"] = null;
+    if (sessions.includes(it.s) && it.n <= cfg.slotsPerSession && !taken.has(key(it.s, it.n))) to = { sessionNumber: it.s, slotNumber: it.n };
+    else {
+      // Same session first, then nearest — later before earlier at equal distance.
+      const order = [...sessions].sort((a, b) => Math.abs(a - it.s!) - Math.abs(b - it.s!) || b - a);
+      for (const s of order) { const n = firstFree(s); if (n) { to = { sessionNumber: s, slotNumber: n }; break; } }
+    }
+    if (to) taken.add(key(to.sessionNumber!, to.slotNumber!));
+    out.push({ kind: it.kind, id: it.id, name: it.name, from, to });
+  }
+  return out;
+}
