@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCertDistribution } from "@/lib/certificates/distribution";
 import { managerContingentIds } from "@/lib/certificates/portal";
 import { generalRecipients, issueBatch, type GeneratorConfig } from "@/lib/certificates/generator";
-import { activeGeneralJob, GENERAL_CHUNK, issuedGeneral } from "@/lib/certificates/general";
+import { activeGeneralJob, GENERAL_CHUNK, generalRoster, issuedGeneral } from "@/lib/certificates/general";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -13,8 +13,8 @@ export const maxDuration = 120;
  * Manager portal → Sijil → School / Contingent Level Cert (src/lib/certificates/general.ts).
  *
  * GET — whether it is available, whether every contingent is a school, and the
- * contingents' competitions with their participants (and the General
- * certificate each already has).
+ * roster: each competition with its eligible / registered participants and the
+ * General certificate each already has (generalRoster).
  */
 export async function GET() {
   const { userId } = await auth();
@@ -25,46 +25,25 @@ export async function GET() {
   const active = (await getCertDistribution()).manager ? await activeGeneralJob() : null;
   if (!active) return NextResponse.json({ available: false }, { headers: { "Cache-Control": "no-store" } });
 
-  const [contingents, teams, issued] = await Promise.all([
+  const [contingents, competitions] = await Promise.all([
     db.contingent.findMany({ where: { id: { in: contingentIds } }, select: { contingentType: true } }),
-    db.team.findMany({
-      where:  { contingentId: { in: contingentIds } },
-      select: {
-        competition: { select: { id: true, code: true, name: true } },
-        members:     { select: { participant: { select: { id: true, name: true } } } },
-      },
-    }),
-    issuedGeneral(contingentIds),
+    generalRoster(contingentIds),
   ]);
-
-  const comps = new Map<string, { id: string; code: string; name: string; participants: Map<string, string> }>();
-  for (const t of teams) {
-    const c = comps.get(t.competition.id) ?? { ...t.competition, participants: new Map<string, string>() };
-    for (const m of t.members) c.participants.set(m.participant.id, m.participant.name);
-    comps.set(t.competition.id, c);
-  }
 
   return NextResponse.json({
     available: true,
     school: contingents.length > 0 && contingents.every(c => c.contingentType === "SCHOOL"),
     templateName: active.template.name,
-    competitions: [...comps.values()]
-      .filter(c => c.participants.size > 0)
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
-      .map(c => ({
-        id: c.id, code: c.code, name: c.name,
-        participants: [...c.participants.entries()]
-          .map(([id, name]) => ({ id, name, certificateId: issued.get(`${c.id}:${id}`) ?? null }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      })),
+    competitions,
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /**
  * POST { competitionId, participantIds } — issue General certificates for up to
  * GENERAL_CHUNK participants (the portal sends the selection in chunks to show
- * progress). Participants must be in one of the manager's teams for that
- * competition; those who already have one are skipped. Returns each
+ * progress). Participants must be on that competition's roster (eligible or
+ * registered, in the manager's contingents); those who already have one are
+ * skipped. Returns each
  * participant's certificate id.
  */
 export async function POST(req: NextRequest) {
@@ -85,8 +64,10 @@ export async function POST(req: NextRequest) {
   if (!body.competitionId || ids.length === 0) return NextResponse.json({ error: "NOTHING_SELECTED" }, { status: 400 });
   if (ids.length > GENERAL_CHUNK) return NextResponse.json({ error: "TOO_MANY" }, { status: 400 });
 
+  const roster = (await generalRoster(contingentIds)).find(c => c.id === body.competitionId);
+  const allowed = new Set(roster?.participants.map(p => p.id) ?? []);
   const cfg = active.job.config as GeneratorConfig;
-  const recipients = await generalRecipients(cfg, body.competitionId, ids, contingentIds);
+  const recipients = await generalRecipients(cfg, body.competitionId, ids.filter(id => allowed.has(id)), contingentIds);
   const before = await issuedGeneral(contingentIds);
   const todo = recipients.filter(r => !before.has(`${body.competitionId}:${r.participantId}`));
 

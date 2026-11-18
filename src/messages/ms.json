@@ -621,6 +621,17 @@
     "statusCreated": "Dijana",
     "statusExisting": "Sudah ada",
     "statusFailed": "Gagal",
-    "pdfFailed": "PDF tidak dapat disediakan"
+    "pdfFailed": "PDF tidak dapat disediakan",
+    "openGeneral": "Buka",
+    "generalCardSummary": "{issued} sijil dijana · {competitions} pertandingan",
+    "registeredBadge": "Berdaftar",
+    "searchCompetition": "Cari pertandingan…",
+    "pickCompetitionHint": "Pilih pertandingan di sebelah kiri untuk memaparkan peserta yang layak.",
+    "defaultCheckedNote": "Peserta yang berdaftar atau menyertai pertandingan ini di mana-mana peringkat ditanda secara lalai.",
+    "selectRegistered": "Pilih yang berdaftar",
+    "competitionCounts": "{registered} berdaftar · {eligible} layak · {issued} dijana",
+    "colClass": "Kelas",
+    "colTakingPart": "Berdaftar / menyertai",
+    "eligibleOnly": "Layak"
   }
 }

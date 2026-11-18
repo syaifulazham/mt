@@ -621,6 +621,17 @@
     "statusCreated": "Generated",
     "statusExisting": "Already issued",
     "statusFailed": "Failed",
-    "pdfFailed": "PDF could not be prepared"
+    "pdfFailed": "PDF could not be prepared",
+    "openGeneral": "Open",
+    "generalCardSummary": "{issued} certificates generated · {competitions} competitions",
+    "registeredBadge": "Registered",
+    "searchCompetition": "Search competition…",
+    "pickCompetitionHint": "Select a competition on the left to list its eligible participants.",
+    "defaultCheckedNote": "Participants registered or taking part in this competition at any level are ticked by default.",
+    "selectRegistered": "Select registered",
+    "competitionCounts": "{registered} registered · {eligible} eligible · {issued} issued",
+    "colClass": "Class",
+    "colTakingPart": "Registered / taking part",
+    "eligibleOnly": "Eligible"
   }
 }

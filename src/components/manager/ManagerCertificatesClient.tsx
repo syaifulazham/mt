@@ -66,8 +66,6 @@ export function ManagerCertificatesClient() {
   const [q, setQ] = useState("");
   const [onlyWith, setOnlyWith] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
-  // Bumped after the School / Contingent Level Cert section issues certificates
-  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -80,7 +78,7 @@ export function ManagerCertificatesClient() {
       })
       .catch(() => { if (alive) { setErr(t("loadFailed")); setRows([]); } });
     return () => { alive = false; };
-  }, [t, reloadKey]);
+  }, [t]);
 
   const personLine = (r: Row) => [
     r.gender === "MALE" ? t("male") : r.gender === "FEMALE" ? t("female") : null,
@@ -132,7 +130,7 @@ export function ManagerCertificatesClient() {
       ) : (
         <>
           {/* ── School / Contingent Level Cert (manager-issued General participation) ── */}
-          <ManagerGeneralCertSection onIssued={() => setReloadKey(k => k + 1)} />
+          <ManagerGeneralCertSection />
 
           {/* ── Trainers ─────────────────────────────────────────────────────── */}
           <section className="space-y-2">

@@ -441,22 +441,26 @@ export const generalKey = (competitionId: string, participantId: string) => `gen
 
 /**
  * GENERAL: recipients for the participants a manager ticked in one
- * competition — each with the team they compete in. Only participants who are
- * members of one of `contingentIds`' teams for that competition are returned.
+ * competition. Only participants of `contingentIds` are returned (the caller
+ * checks they are on the competition's roster — src/lib/certificates/general.ts);
+ * the team they compete in is printed when they have one.
  */
 export async function generalRecipients(
   cfg: GeneratorConfig, competitionId: string, participantIds: string[], contingentIds: string[],
 ): Promise<Recipient[]> {
   if (!participantIds.length || !contingentIds.length) return [];
-  const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string; team_name: string; comp_id: string; comp_name: string; comp_code: string })[]>(`
-    SELECT DISTINCT ON (p.id) ${PERSON_COLS}, t.id AS team_id, t.name AS team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code
-    FROM teams t
-    JOIN competitions c  ON c.id = t."competitionId"
-    JOIN team_members tm ON tm."teamId" = t.id
-    JOIN contestants p   ON p.id = tm."contestantId"
-    ${PERSON_JOINS.replace("%CT%", `t."contingentId"`)}
-    WHERE t."competitionId" = $1 AND t."contingentId" = ANY($2) AND p.id = ANY($3)
-    ORDER BY p.id, t."createdAt"`, competitionId, contingentIds, participantIds);
+  const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string | null; team_name: string | null; comp_id: string; comp_name: string; comp_code: string })[]>(`
+    SELECT ${PERSON_COLS}, tm.team_id, tm.team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code
+    FROM contestants p
+    JOIN competitions c ON c.id = $1
+    ${PERSON_JOINS.replace("%CT%", `p."contingentId"`)}
+    LEFT JOIN LATERAL (
+      SELECT t.id AS team_id, t.name AS team_name FROM teams t
+      JOIN team_members m ON m."teamId" = t.id
+      WHERE t."competitionId" = $1 AND m."contestantId" = p.id
+      ORDER BY t."createdAt" LIMIT 1
+    ) tm ON true
+    WHERE p."contingentId" = ANY($2) AND p.id = ANY($3)`, competitionId, contingentIds, participantIds);
   const evName = cfg.eventNameOverride?.trim() || null;
   return rows.map(r => ({
     key: generalKey(r.comp_id, r.pid),
