@@ -587,6 +587,17 @@
     "clickToDownload": "Klik ikon sijil untuk memuat turun PDF.",
     "male": "Lelaki",
     "female": "Perempuan",
-    "age": "{age} tahun"
+    "age": "{age} tahun",
+    "back": "Kembali ke Sijil",
+    "participantLabel": "Peserta",
+    "trainerLabel": "Jurulatih",
+    "certCount": "{count} sijil",
+    "season": "Techlympics {year}",
+    "noCertificates": "Belum ada sijil.",
+    "download": "Muat turun",
+    "openNewTab": "Buka di tab baharu",
+    "selectCertificate": "Pilih sijil untuk paparan.",
+    "previewHint": "Jika paparan tidak muncul, gunakan Buka di tab baharu.",
+    "clickName": "Klik nama untuk melihat semua sijilnya."
   }
 }

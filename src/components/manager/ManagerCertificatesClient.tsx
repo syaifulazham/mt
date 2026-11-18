@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 //  - Trainers of the manager's contingent(s) with their trainer certificates.
 //  - Participants; certificates sit under the level their generator distributed
 //    them to (School / State / National). Green = participation, purple =
-//    achievement, globe = online event. A certificate opens its PDF; "Download
+//    achievement, globe = online event. A name or certificate opens the viewer
+//    (certificates/[kind]/[id]: list + PDF preview); "Download
 //    all" merges a participant's certificates into one PDF.
 
 type Level = "SCHOOL" | "STATE" | "NATIONAL";
@@ -44,7 +45,7 @@ const KIND_STYLE: Record<Kind, string> = {
   TRAINER:       "border-amber-300 bg-gradient-to-b from-amber-500 to-amber-700",
 };
 
-function CertIcon({ kind, online, className, small }: { kind: Kind; online?: boolean; className?: string; small?: boolean }) {
+export function CertIcon({ kind, online, className, small }: { kind: Kind; online?: boolean; className?: string; small?: boolean }) {
   return (
     <span className={cn("relative inline-flex h-11 w-9 flex-col items-center justify-center rounded-[3px] border-2 shadow-sm", KIND_STYLE[kind], className)}>
       <span className="absolute inset-x-1 top-1 h-[3px] rounded bg-white/70" />
@@ -147,16 +148,16 @@ export function ManagerCertificatesClient() {
                     <tr key={tr.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30">
                       <td className="px-3 py-2.5 text-xs text-zinc-400">{i + 1}</td>
                       <td className="px-3 py-2.5">
-                        <p className="font-medium text-zinc-900 dark:text-zinc-100">{tr.name}</p>
+                        <Link href={`/manager/certificates/trainer/${tr.id}`} className="font-medium text-zinc-900 hover:text-blue-600 hover:underline dark:text-zinc-100">{tr.name}</Link>
                         {tr.contingent && <p className="text-[11px] text-zinc-500">{tr.contingent}</p>}
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap justify-center gap-1.5">
                           {tr.certificates.map(c => (
-                            <a key={c.id} href={`/api/v2/certificates/${c.id}/download`} title={`${t("trainerCertificate")} — ${c.label}\n${c.serialNumber}`}
+                            <Link key={c.id} href={`/manager/certificates/trainer/${tr.id}?c=${c.id}`} title={`${t("trainerCertificate")} — ${c.label}\n${c.serialNumber}`}
                               className="transition-transform hover:-translate-y-0.5">
                               <CertIcon kind="TRAINER" />
-                            </a>
+                            </Link>
                           ))}
                         </div>
                       </td>
@@ -202,18 +203,18 @@ export function ManagerCertificatesClient() {
                     <tr key={r.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30">
                       <td className="px-3 py-2.5 text-xs text-zinc-400">{i + 1}</td>
                       <td className="px-3 py-2.5">
-                        <Link href={`/manager/participants/${r.id}`} className="font-medium text-zinc-900 hover:text-blue-600 hover:underline dark:text-zinc-100">{r.name}</Link>
+                        <Link href={`/manager/certificates/participant/${r.id}`} className="font-medium text-zinc-900 hover:text-blue-600 hover:underline dark:text-zinc-100">{r.name}</Link>
                         <p className="text-[11px] text-zinc-500">{personLine(r)}</p>
                       </td>
                       {LEVELS.map(l => (
                         <td key={l.key} className="px-3 py-2.5">
                           <div className="flex flex-wrap justify-center gap-1.5">
                             {r.certificates.filter(c => c.level === l.key).map(c => (
-                              <a key={c.id} href={`/api/v2/certificates/${c.id}/download`}
+                              <Link key={c.id} href={`/manager/certificates/participant/${r.id}?c=${c.id}`}
                                 title={`${c.kind === "ACHIEVEMENT" ? t("kindAchievement") : t("kindParticipation")}${c.online ? ` (${t("online")})` : ""} — ${c.label}\n${c.serialNumber}`}
                                 className="transition-transform hover:-translate-y-0.5">
                                 <CertIcon kind={c.kind} online={c.online} />
-                              </a>
+                              </Link>
                             ))}
                           </div>
                         </td>
@@ -239,7 +240,7 @@ export function ManagerCertificatesClient() {
             <span className="flex items-center gap-2"><CertIcon kind="PARTICIPATION" className="h-8 w-7" /> {t("kindParticipation")}</span>
             <span className="flex items-center gap-2"><CertIcon kind="ACHIEVEMENT" className="h-8 w-7" /> {t("kindAchievement")}</span>
             <span className="flex items-center gap-2"><CertIcon kind="PARTICIPATION" online small className="h-8 w-7" /> {t("online")}</span>
-            <span className="flex items-center gap-1.5 not-italic"><Info className="h-3.5 w-3.5" /> {t("clickToDownload")}</span>
+            <span className="flex items-center gap-1.5 not-italic"><Info className="h-3.5 w-3.5" /> {t("clickName")}</span>
           </div>
         </>
       )}

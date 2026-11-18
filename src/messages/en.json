@@ -587,6 +587,17 @@
     "clickToDownload": "Click a certificate icon to download its PDF.",
     "male": "Male",
     "female": "Female",
-    "age": "{age} years"
+    "age": "{age} years",
+    "back": "Back to certificates",
+    "participantLabel": "Participant",
+    "trainerLabel": "Trainer",
+    "certCount": "{count} certificates",
+    "season": "Techlympics {year}",
+    "noCertificates": "No certificates yet.",
+    "download": "Download",
+    "openNewTab": "Open in new tab",
+    "selectCertificate": "Select a certificate to preview it.",
+    "previewHint": "If the preview does not appear, use Open in new tab.",
+    "clickName": "Click a name to view all their certificates."
   }
 }
