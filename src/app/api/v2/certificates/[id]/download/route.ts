@@ -71,15 +71,21 @@ async function isAllowed(
 ): Promise<boolean> {
   if (await getOrganizerSession()) return true;
 
+  // A browser can hold a participant session and a manager (Clerk) session at
+  // once: a participant miss falls through to the manager check instead of
+  // refusing outright.
   const participant = await getParticipantSession();
   if (participant) {
     // Past seasons (e.g. 2025, imported from mt25) carry no participant id: match by IC.
+    let own: boolean;
     if (archivedSeason) {
       const mine = (participant.ic ?? "").replace(/\D/g, "");
-      return status === "READY" && mine.length >= 6 && mine === (recipientIc ?? "").replace(/\D/g, "")
+      own = status === "READY" && mine.length >= 6 && mine === (recipientIc ?? "").replace(/\D/g, "")
         && (await getCertDistribution()).participant;
+    } else {
+      own = !!participantId && participant.participantId === participantId && await portalMayServe("participant", meta, status);
     }
-    return !!participantId && participant.participantId === participantId && await portalMayServe("participant", meta, status);
+    if (own) return true;
   }
 
   const { userId } = await clerkAuth();
