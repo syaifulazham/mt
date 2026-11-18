@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { ArrowLeft, CheckCircle2, Circle, Download, Loader2, School, Search, Sparkles, XCircle } from "lucide-react";
+import { ArrowLeft, BookOpen, CheckCircle2, Circle, Download, Loader2, School, Search, Sparkles, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Manager portal → Sijil → School / Contingent Level Cert (src/lib/certificates/general.ts).
@@ -138,6 +138,10 @@ export function ManagerSchoolLevelCertClient() {
           <p className="max-w-3xl text-sm text-zinc-500">{t("generalIntro")}</p>
           {data?.available && <p className="mt-0.5 text-[11px] text-zinc-400">{t("generalTemplate", { name: data.templateName })}</p>}
         </div>
+        <Link href="/manager/certificates/school-level/manual"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+          <BookOpen className="h-4 w-4" /> {t("manual")}
+        </Link>
       </div>
     </div>
   );

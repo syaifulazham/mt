@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { ArrowRight, School } from "lucide-react";
+import { ArrowRight, BookOpen, School } from "lucide-react";
 import { GENERAL_API, type GeneralData } from "@/components/manager/ManagerSchoolLevelCertClient";
 
 // Manager portal → Sijil: the School / Contingent Level Cert card. Generating
@@ -37,6 +37,10 @@ export function ManagerGeneralCertSection() {
           {t("generalTemplate", { name: data.templateName })} · {t("generalCardSummary", { issued, competitions: data.competitions.length })}
         </p>
       </div>
+      <Link href="/manager/certificates/school-level/manual"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+        <BookOpen className="h-4 w-4" /> {t("manual")}
+      </Link>
       <Link href="/manager/certificates/school-level"
         className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-emerald-700">
         {t("openGeneral")} <ArrowRight className="h-4 w-4" />
