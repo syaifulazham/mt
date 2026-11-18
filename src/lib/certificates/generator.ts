@@ -17,6 +17,12 @@
  * event's registered (EventCompetition) competitions only.
  *   ALL_REGISTERED     — every registered participant (optionally by contingent type)
  *   CUSTOM             — rows pasted by the organizer
+ *   GENERAL            — "Penyertaan Umum": the organizer only sets the template;
+ *                        contingent managers issue the certificates themselves
+ *                        from the manager portal (Sijil → School / Contingent
+ *                        Level Cert), per competition, for the participants they
+ *                        tick. Always distributed at Peringkat Sekolah. Running
+ *                        the job from the organizer page issues nothing.
  *
  * Every source can override the event name printed on the certificate.
  * Jobs run in batches (offset/limit) so the page can show progress, and each
@@ -33,7 +39,7 @@ import { compareScoreTime } from "@/lib/sharedRank";
 import { resolveResultScope } from "@/lib/resultScope";
 import { allocateSerial, newUniqueCode } from "./serial";
 
-export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_PREGEN", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM"] as const;
+export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_PREGEN", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM", "GENERAL"] as const;
 export type GeneratorSource = (typeof GENERATOR_SOURCES)[number];
 
 /** Where issued certificates are offered on the portals (Certificates → Distribution). */
@@ -107,8 +113,9 @@ export const RESULTS_BY: ResultsBy[] = ["CONFIG", "NATIONAL", "STATE", "INTERNAT
 export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | undefined): { cfg: GeneratorConfig } | { error: string } {
   // Trainers / Contingent Manager Portal users: no event and no portal distribution
   const personSource = source === "TRAINERS" || source === "MANAGERS";
+  const general = source === "GENERAL";
   const cfg: GeneratorConfig = {
-    eventId:           personSource ? undefined : raw?.eventId || undefined,
+    eventId:           personSource || general ? undefined : raw?.eventId || undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -118,7 +125,9 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
     contingentType:    raw?.contingentType || undefined,
     rows:              source === "CUSTOM" ? (raw?.rows ?? []).slice(0, 20000) : undefined,
     eventNameOverride: raw?.eventNameOverride?.trim() || undefined,
-    distributionLevel: !personSource && DISTRIBUTION_LEVELS.includes(raw?.distributionLevel as DistributionLevel)
+    // General participation is the manager portal's Peringkat Sekolah column, always.
+    distributionLevel: general ? "SCHOOL"
+      : !personSource && DISTRIBUTION_LEVELS.includes(raw?.distributionLevel as DistributionLevel)
       ? raw!.distributionLevel : "NONE",
   };
   if (source === "EVENT_WINNERS_PREGEN" && cfg.resultsBy === "INTERNATIONAL")
@@ -405,6 +414,9 @@ export async function resolveRecipients(
     };
   }
 
+  // GENERAL: recipients are chosen by managers on the portal (generalRecipients).
+  if (source === "GENERAL") return { total: 0, rows: [] };
+
   // CUSTOM
   const all = (cfg.rows ?? []).filter(r => r.name?.trim());
   return {
@@ -422,6 +434,39 @@ export async function resolveRecipients(
       };
     }),
   };
+}
+
+/** Key of a General participation certificate: one per (competition, participant), whatever the template. */
+export const generalKey = (competitionId: string, participantId: string) => `general:${competitionId}:${participantId}`;
+
+/**
+ * GENERAL: recipients for the participants a manager ticked in one
+ * competition — each with the team they compete in. Only participants who are
+ * members of one of `contingentIds`' teams for that competition are returned.
+ */
+export async function generalRecipients(
+  cfg: GeneratorConfig, competitionId: string, participantIds: string[], contingentIds: string[],
+): Promise<Recipient[]> {
+  if (!participantIds.length || !contingentIds.length) return [];
+  const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string; team_name: string; comp_id: string; comp_name: string; comp_code: string })[]>(`
+    SELECT DISTINCT ON (p.id) ${PERSON_COLS}, t.id AS team_id, t.name AS team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code
+    FROM teams t
+    JOIN competitions c  ON c.id = t."competitionId"
+    JOIN team_members tm ON tm."teamId" = t.id
+    JOIN contestants p   ON p.id = tm."contestantId"
+    ${PERSON_JOINS.replace("%CT%", `t."contingentId"`)}
+    WHERE t."competitionId" = $1 AND t."contingentId" = ANY($2) AND p.id = ANY($3)
+    ORDER BY p.id, t."createdAt"`, competitionId, contingentIds, participantIds);
+  const evName = cfg.eventNameOverride?.trim() || null;
+  return rows.map(r => ({
+    key: generalKey(r.comp_id, r.pid),
+    participantId: r.pid, name: r.name, ic: r.ic,
+    contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
+    countryName: r.country_name,
+    teamId: r.team_id, teamName: r.team_name,
+    competitionId: r.comp_id, competitionName: r.comp_name, competitionCode: r.comp_code,
+    eventId: null, eventName: evName, awardTitle: null, rank: null,
+  }));
 }
 
 /** The snapshot fields a recipient contributes to its certificate row. */

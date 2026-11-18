@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Award, Download, Globe, Loader2, Search, Info, UsersRound, GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ManagerGeneralCertSection } from "@/components/manager/ManagerGeneralCertSection";
 
 // Manager portal → Certificates. Two tables:
 //  - Trainers of the manager's contingent(s) with their trainer certificates.
@@ -65,6 +66,8 @@ export function ManagerCertificatesClient() {
   const [q, setQ] = useState("");
   const [onlyWith, setOnlyWith] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  // Bumped after the School / Contingent Level Cert section issues certificates
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -77,7 +80,7 @@ export function ManagerCertificatesClient() {
       })
       .catch(() => { if (alive) { setErr(t("loadFailed")); setRows([]); } });
     return () => { alive = false; };
-  }, [t]);
+  }, [t, reloadKey]);
 
   const personLine = (r: Row) => [
     r.gender === "MALE" ? t("male") : r.gender === "FEMALE" ? t("female") : null,
@@ -128,6 +131,9 @@ export function ManagerCertificatesClient() {
         </div>
       ) : (
         <>
+          {/* ── School / Contingent Level Cert (manager-issued General participation) ── */}
+          <ManagerGeneralCertSection onIssued={() => setReloadKey(k => k + 1)} />
+
           {/* ── Trainers ─────────────────────────────────────────────────────── */}
           <section className="space-y-2">
             {sectionHead(GraduationCap, t("trainersHeading"), t("trainersCount", { count: trainers.length }))}

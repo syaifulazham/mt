@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { GENERATOR_GROUP_COOKIE } from "./generatorCookie";
 import { PregenLinkDialog } from "./PregenLinkDialog";
 import { GeneratorSampleDialog } from "./GeneratorSampleDialog";
+import { GeneralParticipationSection } from "./GeneralParticipationSection";
 
 // Certificates → Generator. A generator = template + recipient data
 // (event participants / event winners / all registered / custom) + settings.
@@ -35,7 +36,7 @@ const RESULTS_BY_SHORT: Record<ResultsBy, string> = {
   CONFIG: "Keputusan ikut konfigurasi", STATE: "Keputusan ikut negeri",
   NATIONAL: "Keputusan kebangsaan", INTERNATIONAL: "Keputusan antarabangsa",
 };
-type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "EVENT_WINNERS_PREGEN" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM";
+type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "EVENT_WINNERS_PREGEN" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM" | "GENERAL";
 type DistLevel = "NONE" | "SCHOOL" | "STATE" | "NATIONAL";
 const DIST_LABEL: Record<DistLevel, string> = {
   NONE: "Tiada", SCHOOL: "Peringkat Sekolah", STATE: "Peringkat Negeri", NATIONAL: "Peringkat Kebangsaan",
@@ -50,6 +51,7 @@ const SOURCE_LABEL: Record<Source, string> = {
   TRAINERS:           "Jurulatih",
   MANAGERS:           "Pengurus Kontinjen",
   CUSTOM:             "Custom",
+  GENERAL:            "Penyertaan Umum",
 };
 const CONTINGENT_TYPES = [["", "Semua kontinjen"], ["SCHOOL", "Sekolah"], ["HIGHER", "IPT"], ["INDEPENDENT", "Bebas"], ["INTERNATIONAL", "Antarabangsa"]];
 const CUSTOM_COLUMNS = ["nama", "ic", "kontingen", "sekolah", "negeri", "pasukan", "pertandingan", "kod", "anugerah", "kedudukan"];
@@ -225,7 +227,8 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
           <p className="text-xs font-medium text-zinc-500">Data Penerima</p>
           <select value={source} onChange={e => setSource(e.target.value as Source)} disabled={locked} className={cn(sel, "w-56 disabled:bg-zinc-100")}>
             <option value="">Pilih…</option>
-            {(Object.keys(SOURCE_LABEL) as Source[]).map(s => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
+            {/* Penyertaan Umum has its own section (GeneralParticipationSection) */}
+            {(Object.keys(SOURCE_LABEL) as Source[]).filter(s => s !== "GENERAL" || editing?.source === "GENERAL").map(s => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
           </select>
 
           {source && (
@@ -401,6 +404,10 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
     load();
   }, [load]);
 
+  // Penyertaan Umum is set up in its own section; the newest GENERAL generator is the active one.
+  const generalJob = jobs.find(j => j.source === "GENERAL") ?? null;
+  const listJobs = jobs.filter(j => j.source !== "GENERAL");
+
   const [confirmRun, setConfirmRun] = useState<Job | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Job | null>(null);
 
@@ -481,9 +488,13 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
       {err && <p className="flex items-center gap-1.5 text-xs text-red-600"><AlertTriangle className="h-3.5 w-3.5" /> {err}</p>}
       {notice && <p className="flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {notice}</p>}
 
+      {!loading && (
+        <GeneralParticipationSection key={generalJob?.id ?? "none"} templates={templates} job={generalJob} onSaved={load} />
+      )}
+
       {loading ? (
         <div className="flex h-40 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-zinc-400" /></div>
-      ) : jobs.length === 0 ? (
+      ) : listJobs.length === 0 ? (
         <p className="rounded-xl border border-dashed bg-white py-12 text-center text-sm text-zinc-400">Belum ada penjana. Klik “Create New Generator”.</p>
       ) : (
         <div className="space-y-5">
@@ -497,7 +508,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
               </button>
             ))}
           </div>
-          {groupJobs(jobs, groupBy).map(group => (
+          {groupJobs(listJobs, groupBy).map(group => (
           <div key={group.key} className="space-y-3">
             {group.label && (
               <h2 className="flex items-baseline gap-2 border-b pb-1 text-sm font-semibold text-zinc-800">
