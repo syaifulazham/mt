@@ -15,3 +15,16 @@ export const onsiteOnly = (eventId: string) => ({
   NOT: { team: { competition: { eventCompetitions: { some: { eventId, isOnline: true } } } } },
 }) satisfies Prisma.TeamEventWhereInput;
 
+
+/**
+ * TeamEvent filter for the attendance reports (Dashboard Kehadiran, Kehadiran
+ * Individu): only teams whose competition is one of this event's competitions
+ * marked "Bersemuka" (the original row, isOnline false). Stricter than
+ * onsiteOnly: teams of competitions not set up in the event's Pertandingan
+ * section — e.g. walk-in teams registered at the counter — are left out too.
+ * The counters and Log Kehadiran keep onsiteOnly so such teams can still be
+ * checked in.
+ */
+export const bersemukaOnly = (eventId: string) => ({
+  team: { competition: { eventCompetitions: { some: { eventId, parentId: null, isOnline: false } } } },
+}) satisfies Prisma.TeamEventWhereInput;

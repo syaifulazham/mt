@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { onsiteOnly } from "@/lib/onlineCompetition";
+import { bersemukaOnly } from "@/lib/onlineCompetition";
 
 // Individual attendance of an event ("Kehadiran Individu"), from the
 // competition counter's per-participant check-ins (TeamEventParticipantAttendance).
@@ -64,7 +64,8 @@ function emptyStats(): AttendanceStats {
 
 export async function individualAttendance(eventId: string): Promise<IndividualAttendance> {
   const teamEvents = await db.teamEvent.findMany({
-    where:  { ...onsiteOnly(eventId), eventId, acceptance: "ACCEPT" },
+    // Competitions marked "Bersemuka" in the event's Pertandingan section only.
+    where:  { ...bersemukaOnly(eventId), eventId, acceptance: "ACCEPT" },
     select: {
       id: true, attendedAt: true,
       participantAttendance: { select: { participantId: true, attendedAt: true } },

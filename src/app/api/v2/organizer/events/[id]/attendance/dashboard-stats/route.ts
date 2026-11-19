@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { onsiteOnly } from "@/lib/onlineCompetition";
+import { bersemukaOnly } from "@/lib/onlineCompetition";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
 /**
- * GET ?mode=counter|individual — the attendance dashboard's numbers.
+ * GET ?mode=counter|individual — the attendance dashboard's numbers, for the
+ * event's competitions marked "Bersemuka" only (bersemukaOnly).
  *
  * counter (default): a team is present once its contingent checked in at the
  * main counter (TeamEvent.attendedAt) — every member counts as present.
@@ -39,7 +40,8 @@ export async function GET(
   if (!event) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
 
   const teamEvents = await db.teamEvent.findMany({
-    where: { ...onsiteOnly(eventId), eventId, acceptance: "ACCEPT", team: { status: "ACTIVE" } },
+    // Competitions marked "Bersemuka" in the event's Pertandingan section only.
+    where: { eventId, acceptance: "ACCEPT", team: { status: "ACTIVE", ...bersemukaOnly(eventId).team } },
     select: {
       id: true,
       attendedAt: true,
