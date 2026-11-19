@@ -7,7 +7,7 @@ import { PieChart, Pie, Cell } from "recharts";
 import {
   Users, Building2, UserCheck, BookUser,
   ArrowLeft, RefreshCw, MapPin, Ruler, X, Loader2, AlertCircle, ChevronDown, ChevronUp, Play,
-  FileSpreadsheet, FileText, LocateFixed, Save,
+  FileSpreadsheet, FileText, LocateFixed, Save, ScanLine, DoorOpen,
 } from "lucide-react";
 import type { ContingentLocation } from "./AttendanceDashboardMap";
 
@@ -28,7 +28,15 @@ const AttendanceDashboardMap = dynamic(
 
 type StatPair = { total: number; present: number };
 
+/**
+ * counter — present once the contingent checked in at the main counter (team arrival);
+ * individual — attendance taken per participant on the competition site (Kehadiran Individu).
+ */
+type Mode = "counter" | "individual";
+
 type DashboardStats = {
+  mode?: Mode;
+  individual?: { checkIns: number; teamsFull: number; teamsPartial: number; firstCheckIn: string | null; lastCheckIn: string | null };
   event: {
     name: string;
     venue: string | null;
@@ -991,11 +999,21 @@ export default function AttendanceDashboardClient({ event }: Props) {
   const [error, setError]       = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [showDistance, setShowDistance] = useState(false);
+  // Which attendance the report counts; kept in the address (?mode=individual) so a screen can be left on it.
+  const [mode, setModeState] = useState<Mode>(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "individual" ? "individual" : "counter");
+  const setMode = (m: Mode) => {
+    if (m === mode) return;
+    setModeState(m); setLoading(true);
+    const u = new URL(window.location.href);
+    if (m === "individual") u.searchParams.set("mode", "individual"); else u.searchParams.delete("mode");
+    window.history.replaceState(null, "", u);
+  };
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
-      const res  = await fetch(`/api/v2/organizer/events/${event.id}/attendance/dashboard-stats`);
+      const res  = await fetch(`/api/v2/organizer/events/${event.id}/attendance/dashboard-stats?mode=${mode}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Ralat");
       setData(json);
@@ -1006,7 +1024,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [event.id]);
+  }, [event.id, mode]);
 
   useEffect(() => {
     void fetchStats(); // eslint-disable-line react-hooks/set-state-in-effect
@@ -1104,10 +1122,51 @@ export default function AttendanceDashboardClient({ event }: Props) {
           </div>
         </div>
 
+        {/* Which attendance the report counts */}
+        <div className="flex flex-wrap items-center gap-3 border-t border-zinc-100 px-6 py-3">
+          <div role="tablist" aria-label="Sumber kehadiran" className="inline-flex rounded-lg border border-zinc-200 bg-zinc-100 p-0.5">
+            {([
+              ["counter",    DoorOpen, "Daftar Masuk Kaunter"],
+              ["individual", ScanLine, "Kehadiran Individu (Tapak Pertandingan)"],
+            ] as const).map(([m, Icon, label]) => (
+              <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
+                  mode === m ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}>
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+          <p className="min-w-0 flex-1 text-[11px] text-zinc-500">
+            {mode === "individual"
+              ? "Peserta dikira hadir apabila kehadirannya diambil di tapak pertandingan. Pasukan hadir jika sekurang-kurangnya seorang ahli hadir; kontinjen dan pengurus hadir jika sekurang-kurangnya satu pasukan hadir."
+              : "Kontinjen dikira hadir apabila mendaftar masuk di kaunter utama; semua pasukan, ahli dan pengurusnya dikira hadir."}
+          </p>
+          {mode === "individual" && (
+            <Link href={`/organizer/events/${event.slug}/manage/attendance/individual`}
+              className="shrink-0 text-[11px] font-bold text-blue-600 hover:underline">Senarai tidak hadir →</Link>
+          )}
+        </div>
+        {mode === "individual" && data.individual && (
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-zinc-100 bg-sky-50/60 px-6 py-2.5 text-[11px] text-zinc-600">
+            {data.individual.checkIns === 0 ? (
+              <span className="font-semibold text-amber-700">Tiada kehadiran individu direkodkan lagi untuk acara ini.</span>
+            ) : (
+              <>
+                <span><b className="font-mono text-zinc-900">{fmt(data.individual.checkIns)}</b> imbasan kehadiran individu</span>
+                <span><b className="font-mono text-zinc-900">{fmt(data.individual.teamsFull)}</b> pasukan hadir lengkap</span>
+                <span><b className="font-mono text-amber-700">{fmt(data.individual.teamsPartial)}</b> pasukan hadir sebahagian</span>
+                {data.individual.lastCheckIn && (
+                  <span>Imbasan terakhir {new Date(data.individual.lastCheckIn).toLocaleString("ms-MY", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* Overall progress bar */}
         <div className="px-6 py-3 bg-zinc-50 border-t border-zinc-100">
           <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1.5">
-            <span className="font-bold uppercase tracking-wide">Kehadiran Keseluruhan</span>
+            <span className="font-bold uppercase tracking-wide">Kehadiran Keseluruhan{mode === "individual" ? " · Individu" : ""}</span>
             <span className="font-mono">{pct(overall.teams.present, overall.teams.total)}% pasukan hadir</span>
           </div>
           <div className="w-full bg-zinc-200 rounded-full h-2">
