@@ -46,7 +46,7 @@ type DashboardStats = {
   };
   overall: {
     contingents:  StatPair;
-    managers:     StatPair;
+    trainers:     StatPair;
     teams:        StatPair;
     participants: StatPair;
   };
@@ -55,7 +55,7 @@ type DashboardStats = {
     name: string;
     schoolLevel: string;
     contingents:  StatPair;
-    managers:     StatPair;
+    trainers:     StatPair;
     teams:        StatPair;
     participants: StatPair;
   }[];
@@ -1138,8 +1138,8 @@ export default function AttendanceDashboardClient({ event }: Props) {
           </div>
           <p className="min-w-0 flex-1 text-[11px] text-zinc-500">
             {mode === "individual"
-              ? "Peserta dikira hadir apabila kehadirannya diambil di tapak pertandingan. Pasukan hadir jika sekurang-kurangnya seorang ahli hadir; kontinjen dan pengurus hadir jika sekurang-kurangnya satu pasukan hadir."
-              : "Kontinjen dikira hadir apabila mendaftar masuk di kaunter utama; semua pasukan, ahli dan pengurusnya dikira hadir."}
+              ? "Peserta dikira hadir apabila kehadirannya diambil di tapak pertandingan. Pasukan hadir jika sekurang-kurangnya seorang ahli hadir; kontinjen dan jurulatih hadir jika sekurang-kurangnya satu pasukan mereka hadir."
+              : "Kontinjen dikira hadir apabila mendaftar masuk di kaunter utama; semua pasukan, ahli dan jurulatihnya dikira hadir."}
           </p>
           {mode === "individual" && (
             <Link href={`/organizer/events/${event.slug}/manage/attendance/individual`}
@@ -1184,7 +1184,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatTile label="Kontingen" icon={Building2} stat={overall.contingents} />
-          <StatTile label="Pengurus"  icon={UserCheck}  stat={overall.managers}   />
+          <StatTile label="Jurulatih" icon={UserCheck}  stat={overall.trainers}   />
           <StatTile label="Pasukan"   icon={Users}       stat={overall.teams}      />
           <StatTile label="Peserta"   icon={BookUser}    stat={overall.participants} />
         </div>
@@ -1195,7 +1195,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
           </p>
           <div className="grid grid-cols-4 gap-4 py-2 place-items-center">
             <MiniDonut label="Kontingen" present={overall.contingents.present}  total={overall.contingents.total}  />
-            <MiniDonut label="Pengurus"  present={overall.managers.present}     total={overall.managers.total}     />
+            <MiniDonut label="Jurulatih" present={overall.trainers.present}     total={overall.trainers.total}     />
             <MiniDonut label="Pasukan"   present={overall.teams.present}        total={overall.teams.total}        />
             <MiniDonut label="Peserta"   present={overall.participants.present} total={overall.participants.total} />
           </div>
@@ -1234,7 +1234,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
                 <tr className="border-b-2 border-zinc-900">
                   <th className="text-left py-2 pr-4 font-black uppercase tracking-wide text-[9px] text-zinc-400">Kumpulan Sasaran</th>
                   <th className="text-right py-2 pr-4 font-black uppercase tracking-wide text-[9px] text-zinc-400">Kontingen</th>
-                  <th className="text-right py-2 pr-4 font-black uppercase tracking-wide text-[9px] text-zinc-400">Pengurus</th>
+                  <th className="text-right py-2 pr-4 font-black uppercase tracking-wide text-[9px] text-zinc-400">Jurulatih</th>
                   <th className="text-right py-2 pr-4 font-black uppercase tracking-wide text-[9px] text-zinc-400">Pasukan</th>
                   <th className="text-right py-2 font-black uppercase tracking-wide text-[9px] text-zinc-400">Peserta</th>
                 </tr>
@@ -1243,7 +1243,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
                 {byTargetGroup.map((g, i) => (
                   <tr key={g.id} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                     <td className="py-2 pr-4 font-semibold text-zinc-800">{g.name}</td>
-                    {(["contingents", "managers", "teams", "participants"] as const).map((k) => (
+                    {(["contingents", "trainers", "teams", "participants"] as const).map((k) => (
                       <td key={k} className="py-2 pr-4 text-right last:pr-0">
                         <span className="font-mono font-semibold text-emerald-600">{g[k].present}</span>
                         <span className="font-mono text-zinc-300"> / </span>
@@ -1256,7 +1256,7 @@ export default function AttendanceDashboardClient({ event }: Props) {
               <tfoot>
                 <tr className="border-t-2 border-zinc-900 font-black">
                   <td className="py-2 pr-4 text-[9px] uppercase tracking-wide text-zinc-400">Jumlah</td>
-                  {(["contingents", "managers", "teams", "participants"] as const).map((k) => (
+                  {(["contingents", "trainers", "teams", "participants"] as const).map((k) => (
                     <td key={k} className="py-2 pr-4 text-right last:pr-0">
                       <span className="font-mono text-emerald-600">{overall[k].present}</span>
                       <span className="font-mono text-zinc-300"> / </span>

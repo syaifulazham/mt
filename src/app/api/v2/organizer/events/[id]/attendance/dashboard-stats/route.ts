@@ -12,8 +12,9 @@ import { db } from "@/lib/db";
  * individual: attendance taken on the competition site, per participant
  * (TeamEventParticipantAttendance, the Kehadiran Individu page) — a member is
  * present when checked in individually, a team when at least one of its
- * members is, a contingent when at least one of its teams is. Managers follow
- * their contingent in both modes.
+ * members is, a contingent when at least one of its teams is. Jurulatih are the
+ * trainers assigned to the teams (TeamTrainer, as in Laporan Akhir Program); a
+ * trainer is present when at least one of their teams is, in both modes.
  */
 export async function GET(
   req: NextRequest,
@@ -51,6 +52,7 @@ export async function GET(
           id: true,
           contingentId: true,
           members: { select: { participantId: true } },
+          trainers: { select: { trainerId: true } },
           competition: {
             select: {
               targetGroups: {
@@ -67,7 +69,6 @@ export async function GET(
             select: {
               id: true,
               name: true,
-              managers: { select: { id: true } },
               school: {
                 select: {
                   id:        true,
@@ -93,28 +94,25 @@ export async function GET(
 
   // ── Overall stats ─────────────────────────────────────────────────────────
 
-  const contingentMap = new Map<string, { present: boolean; managerIds: string[] }>();
+  const contingentMap = new Map<string, { present: boolean }>();
   for (const te of teamEvents) {
     const cId = te.team.contingentId;
-    const managerIds = te.team.contingent.managers.map((m) => m.id);
     const existing = contingentMap.get(cId);
-    if (!existing) {
-      contingentMap.set(cId, { present: teamPresent(te), managerIds });
-    } else {
-      if (teamPresent(te)) existing.present = true;
-    }
+    if (!existing) contingentMap.set(cId, { present: teamPresent(te) });
+    else if (teamPresent(te)) existing.present = true;
   }
 
   const contingentEntries = [...contingentMap.entries()];
   const contingentsTotal   = contingentEntries.length;
   const contingentsPresent = contingentEntries.filter(([, v]) => v.present).length;
 
-  const allManagerIds     = new Set<string>();
-  const presentManagerIds = new Set<string>();
-  for (const [, { present, managerIds }] of contingentEntries) {
-    for (const mid of managerIds) {
-      allManagerIds.add(mid);
-      if (present) presentManagerIds.add(mid);
+  const allTrainerIds     = new Set<string>();
+  const presentTrainerIds = new Set<string>();
+  for (const te of teamEvents) {
+    const present = teamPresent(te);
+    for (const t of te.team.trainers) {
+      allTrainerIds.add(t.trainerId);
+      if (present) presentTrainerIds.add(t.trainerId);
     }
   }
 
@@ -137,7 +135,7 @@ export async function GET(
   type TgAcc = {
     id: string; name: string; schoolLevel: string;
     contingentIds: Set<string>; presentContingentIds: Set<string>;
-    managerIds: Set<string>; presentManagerIds: Set<string>;
+    trainerIds: Set<string>; presentTrainerIds: Set<string>;
     teamsTotal: number; teamsPresent: number;
     participantIds: Set<string>; presentParticipantIds: Set<string>;
   };
@@ -153,8 +151,8 @@ export async function GET(
         id: tgRel.id, name: tgRel.name, schoolLevel: tgRel.schoolLevel,
         contingentIds:        new Set(),
         presentContingentIds: new Set(),
-        managerIds:           new Set(),
-        presentManagerIds:    new Set(),
+        trainerIds:           new Set(),
+        presentTrainerIds:    new Set(),
         teamsTotal: 0, teamsPresent: 0,
         participantIds:        new Set(),
         presentParticipantIds: new Set(),
@@ -165,9 +163,9 @@ export async function GET(
     const present = teamPresent(te);
     g.contingentIds.add(te.team.contingentId);
     if (present) g.presentContingentIds.add(te.team.contingentId);
-    for (const m of te.team.contingent.managers) {
-      g.managerIds.add(m.id);
-      if (present) g.presentManagerIds.add(m.id);
+    for (const t of te.team.trainers) {
+      g.trainerIds.add(t.trainerId);
+      if (present) g.presentTrainerIds.add(t.trainerId);
     }
     g.teamsTotal++;
     if (present) g.teamsPresent++;
@@ -184,7 +182,7 @@ export async function GET(
       name:        g.name,
       schoolLevel: g.schoolLevel,
       contingents:  { total: g.contingentIds.size,        present: g.presentContingentIds.size },
-      managers:     { total: g.managerIds.size,            present: g.presentManagerIds.size },
+      trainers:     { total: g.trainerIds.size,            present: g.presentTrainerIds.size },
       teams:        { total: g.teamsTotal,                 present: g.teamsPresent },
       participants: { total: g.participantIds.size,          present: g.presentParticipantIds.size },
     }));
@@ -246,7 +244,7 @@ export async function GET(
     },
     overall: {
       contingents:  { total: contingentsTotal,    present: contingentsPresent },
-      managers:     { total: allManagerIds.size,  present: presentManagerIds.size },
+      trainers:     { total: allTrainerIds.size,  present: presentTrainerIds.size },
       teams:        { total: teamsTotal,           present: teamsPresent },
       participants: { total: participantsTotal,    present: participantsPresent },
     },
