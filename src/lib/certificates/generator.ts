@@ -152,7 +152,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
     eventId:           ids[0],
     eventIds:          ids.length > 1 ? ids : undefined,
     onePerCompetition: ids.length > 1 && !!raw?.onePerCompetition || undefined,
-    eventRules:        source === "EVENT_PARTICIPANTS" ? cleanRules(raw?.eventRules, ids) : undefined,
+    eventRules:        source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" ? cleanRules(raw?.eventRules, ids) : undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -399,9 +399,13 @@ async function resolveOne(
     // Per state for this competition? CONFIG follows its Konfigurasi keputusan.
     const stateFor = (r: { resultScope: string }) =>
       cfg.resultsBy === "STATE" || (cfg.resultsBy === "CONFIG" && r.resultScope === "STATE");
-    // Registered competitions only — walk-in results are not certified.
-    const results = (await computeCompetitionResults(cfg.eventId, false, null))
-      .filter(r => !codes || codes.includes(r.code));
+    // Registered competitions, and walk-in ones when the event's rule says so
+    // (acceptance NONE = no registered; walkIn other than NONE = walk-ins too).
+    const rule = cfg.eventRules?.[cfg.eventId];
+    const results = [
+      ...(rule?.acceptance === "NONE" ? [] : (await computeCompetitionResults(cfg.eventId, false, null)).map(r => ({ ...r, walkIn: false }))),
+      ...((rule?.walkIn ?? "NONE") === "NONE" ? [] : (await computeCompetitionResults(cfg.eventId, true, null)).map(r => ({ ...r, walkIn: true }))),
+    ].filter(r => !codes || codes.includes(r.code));
 
     // National: the event-wide rank. By state: re-rank each state's entries in
     // the same order (rankings are already sorted by score, then best time).
@@ -434,7 +438,7 @@ async function resolveOne(
     const entries = ranked
       .filter(x => x.rank >= from && x.rank <= to)
       .flatMap(x => x.e.members.map(m => ({ ...x, pid: m.id })));
-    entries.sort((a, b) => a.r.code.localeCompare(b.r.code)
+    entries.sort((a, b) => Number(a.r.walkIn) - Number(b.r.walkIn) || a.r.code.localeCompare(b.r.code)
       || (stateFor(a.r) ? (a.e.stateName ?? "").localeCompare(b.e.stateName ?? "") : 0)
       || a.rank - b.rank || a.e.teamName.localeCompare(b.e.teamName));
     const page = entries.slice(offset, offset + limit);
@@ -456,7 +460,8 @@ async function resolveOne(
           // state ones, so they get their own key: a Malaysian winner in both
           // gets two certificates on the same template, never one overwritten.
           // An added judging split keys on its own row, so its winners never overwrite the original's.
-          key: `${intl ? "win-intl" : "win"}:${cfg.eventId}:${r.code}${r.isSplit ? `~${r.id}` : ""}:${pid}`,
+          // Walk-in winners key on "win:walk:" — their own, and marked walk-in on the portals.
+          key: `${intl ? "win-intl" : "win"}:${r.walkIn ? "walk:" : ""}${cfg.eventId}:${r.code}${r.isSplit ? `~${r.id}` : ""}:${pid}`,
           participantId: pid, name: p?.name ?? e.members.find(m => m.id === pid)?.name ?? "", ic: p?.ic ?? null,
           // A merged state team's members each keep their own contingent.
           contingentId: e.members.find(m => m.id === pid)?.contingentId ?? e.contingentId,

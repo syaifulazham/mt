@@ -125,6 +125,13 @@ function describe(j: Job, withResultsBy = true) {
     if (withResultsBy) parts.push(RESULTS_BY_SHORT[c.resultsBy ?? "NATIONAL"]);
     parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
   }
+  if (j.source === "EVENT_WINNERS") {
+    const ids = c.eventIds?.length ? c.eventIds : c.eventId ? [c.eventId] : [];
+    const walk = ids.filter(id => (c.eventRules?.[id]?.walkIn ?? "NONE") !== "NONE").length;
+    const noReg = ids.filter(id => c.eventRules?.[id]?.acceptance === "NONE").length;
+    if (walk) parts.push(ids.length <= 1 ? (noReg ? "Walk-in sahaja" : "Termasuk walk-in") : `Walk-in: ${walk}/${ids.length} acara`);
+    else if (noReg) parts.push("Tiada pertandingan");
+  }
   if (j.source === "EVENT_PARTICIPANTS") {
     const ids = c.eventIds?.length ? c.eventIds : c.eventId ? [c.eventId] : [];
     const rules = ids.map(id => c.eventRules?.[id]);
@@ -230,7 +237,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
         templateId, source,
         config: { eventId: chosenEvents[0], eventIds: chosenEvents, onePerCompetition, competitionCodes: codes,
                   attendedOnly: chosenEvents[0] ? ruleOf(chosenEvents[0]).attendedOnly : attendedOnly,
-                  eventRules: source === "EVENT_PARTICIPANTS" ? Object.fromEntries(chosenEvents.map(id => [id, ruleOf(id)])) : undefined,
+                  eventRules: source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" ? Object.fromEntries(chosenEvents.map(id => [id, ruleOf(id)])) : undefined,
                   rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
@@ -332,7 +339,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   <div className="flex max-w-xl flex-1 flex-wrap gap-1">
                     <button type="button" onClick={() => setCodes([])}
                       className={cn("rounded-full border px-2 py-0.5 text-[11px]", codes.length === 0 ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600")}>Semua</button>
-                    {competitions.filter(c => !c.walkIn || source === "EVENT_PARTICIPANTS").map(c => {
+                    {competitions.filter(c => !c.walkIn || source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS").map(c => {
                       const on = codes.includes(c.code);
                       return (
                         <button key={c.code} type="button" title={c.name}
@@ -342,6 +349,33 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+              {source === "EVENT_WINNERS" && chosenEvents.length > 0 && (
+                <div className="flex flex-wrap items-start gap-2 text-xs">
+                  <span className="w-28 pt-2 text-zinc-500">Pertandingan</span>
+                  <div className="flex-1 space-y-2">
+                    {chosenEvents.map(id => {
+                      const r = ruleOf(id);
+                      const name = events.find(e => e.id === id)?.name ?? id;
+                      return (
+                        <div key={id} className={cn("flex flex-wrap items-center gap-2", chosenEvents.length > 1 && "rounded-md border bg-white px-2.5 py-2")}>
+                          {chosenEvents.length > 1 && <span className="w-44 truncate font-medium text-zinc-700" title={name}>{name}</span>}
+                          <span className="text-zinc-500">Berdaftar</span>
+                          <select value={r.acceptance === "NONE" ? "NONE" : "ACCEPTED"} onChange={e => setRule(id, { acceptance: e.target.value as Acceptance })} className={cn(sel, "h-8 w-32 text-xs")}>
+                            <option value="ACCEPTED">Termasuk</option>
+                            <option value="NONE">Tiada</option>
+                          </select>
+                          <span className="ml-2 text-zinc-500">Walk-in</span>
+                          <select value={r.walkIn === "NONE" ? "NONE" : "CONFIRMED"} onChange={e => setRule(id, { walkIn: e.target.value as WalkInRule })} className={cn(sel, "h-8 w-32 text-xs")}>
+                            <option value="NONE">Tiada</option>
+                            <option value="CONFIRMED">Termasuk</option>
+                          </select>
+                        </div>
+                      );
+                    })}
+                    <p className="text-[11px] text-zinc-400">Pemenang pertandingan walk-in mengikut keputusan penghakiman walk-in (pasukan: setiap ahli).</p>
                   </div>
                 </div>
               )}
