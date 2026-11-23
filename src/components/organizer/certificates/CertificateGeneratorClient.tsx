@@ -125,7 +125,7 @@ function describe(j: Job, withResultsBy = true) {
     if (withResultsBy) parts.push(RESULTS_BY_SHORT[c.resultsBy ?? "NATIONAL"]);
     parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
   }
-  if (j.source === "EVENT_WINNERS") {
+  if (j.source === "EVENT_WINNERS" || j.source === "EVENT_WINNERS_PREGEN") {
     const ids = c.eventIds?.length ? c.eventIds : c.eventId ? [c.eventId] : [];
     const walk = ids.filter(id => (c.eventRules?.[id]?.walkIn ?? "NONE") !== "NONE").length;
     const noReg = ids.filter(id => c.eventRules?.[id]?.acceptance === "NONE").length;
@@ -237,7 +237,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
         templateId, source,
         config: { eventId: chosenEvents[0], eventIds: chosenEvents, onePerCompetition, competitionCodes: codes,
                   attendedOnly: chosenEvents[0] ? ruleOf(chosenEvents[0]).attendedOnly : attendedOnly,
-                  eventRules: source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" ? Object.fromEntries(chosenEvents.map(id => [id, ruleOf(id)])) : undefined,
+                  eventRules: source === "EVENT_PARTICIPANTS" || winnersLike ? Object.fromEntries(chosenEvents.map(id => [id, ruleOf(id)])) : undefined,
                   rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
@@ -339,7 +339,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   <div className="flex max-w-xl flex-1 flex-wrap gap-1">
                     <button type="button" onClick={() => setCodes([])}
                       className={cn("rounded-full border px-2 py-0.5 text-[11px]", codes.length === 0 ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600")}>Semua</button>
-                    {competitions.filter(c => !c.walkIn || source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS").map(c => {
+                    {competitions.filter(c => !c.walkIn || source === "EVENT_PARTICIPANTS" || winnersLike).map(c => {
                       const on = codes.includes(c.code);
                       return (
                         <button key={c.code} type="button" title={c.name}
@@ -352,7 +352,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   </div>
                 </div>
               )}
-              {source === "EVENT_WINNERS" && chosenEvents.length > 0 && (
+              {winnersLike && chosenEvents.length > 0 && (
                 <div className="flex flex-wrap items-start gap-2 text-xs">
                   <span className="w-28 pt-2 text-zinc-500">Pertandingan</span>
                   <div className="flex-1 space-y-2">
@@ -375,7 +375,10 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                         </div>
                       );
                     })}
-                    <p className="text-[11px] text-zinc-400">Pemenang pertandingan walk-in mengikut keputusan penghakiman walk-in (pasukan: setiap ahli).</p>
+                    <p className="text-[11px] text-zinc-400">
+                      Pemenang pertandingan walk-in mengikut keputusan penghakiman walk-in (pasukan: setiap ahli).
+                      {source === "EVENT_WINNERS_PREGEN" && " Sijil kosong walk-in dijana berasingan dan hanya dipadankan dengan pemenang walk-in."}
+                    </p>
                   </div>
                 </div>
               )}

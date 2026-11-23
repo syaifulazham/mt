@@ -36,8 +36,9 @@ export type LinkGroup = {
   slots: LinkSlot[]; winners: LinkWinner[];
 };
 
-const groupKey = (compId: string | null, state: string | null | undefined, rank: number | null) =>
-  `${compId ?? "-"}|${state || "-"}|${rank ?? 0}`;
+/** A slot group: competition × state × rank, kept apart for walk-in competitions. */
+const groupKey = (compId: string | null, state: string | null | undefined, rank: number | null, walkIn = false) =>
+  `${walkIn ? "walk:" : ""}${compId ?? "-"}|${state || "-"}|${rank ?? 0}`;
 
 /** Loads blanks and winners and proposes who gets which blank. */
 async function build(job: Job) {
@@ -74,7 +75,7 @@ async function build(job: Job) {
   for (const c of certs) {
     const slot = (c.meta as { pregen?: SlotMeta } | null)?.pregen;
     if (!slot) continue;
-    const g = ensure(groupKey(slot.compId, slot.stateId, slot.rank), () => ({
+    const g = ensure(groupKey(slot.compId, slot.stateId, slot.rank, !!slot.walkIn), () => ({
       compCode: c.competitionCode, compName: c.competitionName,
       stateName: slot.stateId ? c.stateName : null, rank: slot.rank, awardTitle: awardTitleForRank(slot.rank),
     }));
@@ -84,7 +85,8 @@ async function build(job: Job) {
   }
 
   for (const w of winners) {
-    const g = ensure(groupKey(w.competitionId, w.slotState, w.rank), () => ({
+    // Walk-in winners (key "win:walk:…") fill walk-in slots only.
+    const g = ensure(groupKey(w.competitionId, w.slotState, w.rank, w.key.startsWith("win:walk:")), () => ({
       compCode: w.competitionCode, compName: w.competitionName,
       stateName: w.slotState && w.slotState !== "-" ? w.stateName : null, rank: w.rank ?? 0, awardTitle: w.awardTitle ?? "",
     }));

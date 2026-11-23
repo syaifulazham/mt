@@ -36,7 +36,7 @@ import { CertTargetType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
 import { compareScoreTime } from "@/lib/sharedRank";
-import { resolveResultScope } from "@/lib/resultScope";
+import { defaultResultScope, resolveResultScope } from "@/lib/resultScope";
 import { allocateSerial, newUniqueCode } from "./serial";
 
 export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_PREGEN", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM", "GENERAL"] as const;
@@ -129,7 +129,7 @@ export type Recipient = {
 };
 
 /** A pre-event slot: one blank certificate for competition × rank × state × team member. */
-export type PregenSlot = { compId: string; stateId: string | null; rank: number; member: number };
+export type PregenSlot = { compId: string; stateId: string | null; rank: number; member: number; walkIn?: boolean };
 
 export const BATCH_SIZE = 250;
 
@@ -152,7 +152,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
     eventId:           ids[0],
     eventIds:          ids.length > 1 ? ids : undefined,
     onePerCompetition: ids.length > 1 && !!raw?.onePerCompetition || undefined,
-    eventRules:        source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" ? cleanRules(raw?.eventRules, ids) : undefined,
+    eventRules:        source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN" ? cleanRules(raw?.eventRules, ids) : undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -242,40 +242,61 @@ async function eventName(cfg: GeneratorConfig): Promise<string | null> {
 async function pregenSlots(cfg: GeneratorConfig) {
   const from = Math.max(1, cfg.rankFrom ?? 1), to = Math.max(from, cfg.rankTo ?? 3);
   const codes = cfg.competitionCodes?.length ? cfg.competitionCodes : null;
+  const rule = cfg.eventRules?.[cfg.eventId!];
   const event = await db.event.findUnique({ where: { id: cfg.eventId! }, select: { scope: true } });
+  const scope = String(event?.scope ?? "");
+  type Comp = { id: string; code: string; name: string; participationType: string; maxTeamSize: number };
   // Pre-event slots are per competition (compId): judging splits share the original's.
-  const ecs = (await db.eventCompetition.findMany({
-    where: { eventId: cfg.eventId!, parentId: null },
-    select: {
-      resultScope: true, judgingMethod: true, duelConfig: true,
-      competition: { select: { id: true, code: true, name: true, participationType: true, maxTeamSize: true } },
-    },
-  })).filter(ec => !codes || codes.includes(ec.competition.code));
+  const ecs: { c: Comp; byState: boolean; walkIn: boolean }[] = [];
+  if (rule?.acceptance !== "NONE")
+    for (const ec of await db.eventCompetition.findMany({
+      where: { eventId: cfg.eventId!, parentId: null },
+      select: {
+        resultScope: true, judgingMethod: true, duelConfig: true,
+        competition: { select: { id: true, code: true, name: true, participationType: true, maxTeamSize: true } },
+      },
+    }))
+      ecs.push({ c: ec.competition, walkIn: false, byState: cfg.resultsBy === "STATE"
+        || ((cfg.resultsBy ?? "CONFIG") === "CONFIG" && resolveResultScope(ec, scope) === "STATE") });
+  // Walk-in competitions (when the event's rule includes them): ranked with the event's default scope.
+  if ((rule?.walkIn ?? "NONE") !== "NONE")
+    for (const wc of await db.eventWalkInCompetition.findMany({
+      where: { eventId: cfg.eventId! },
+      select: { competition: { select: { id: true, code: true, name: true, participationType: true, maxTeamSize: true } } },
+    }))
+      ecs.push({ c: wc.competition, walkIn: true, byState: cfg.resultsBy === "STATE"
+        || ((cfg.resultsBy ?? "CONFIG") === "CONFIG" && defaultResultScope(scope) === "STATE") });
 
-  const states = await db.$queryRawUnsafe<{ comp_id: string; state_id: string; state_name: string }[]>(`
-    SELECT DISTINCT t."competitionId" AS comp_id, st.id AS state_id, st.name AS state_name
-    FROM team_events te
-    JOIN teams t        ON t.id = te."teamId"
-    JOIN contingents ct ON ct.id = t."contingentId"
+  // States of each competition's local entrants: registered teams, and walk-in registrations.
+  const states = await db.$queryRawUnsafe<{ comp_id: string; walk_in: boolean; state_id: string; state_name: string }[]>(`
+    SELECT DISTINCT x.comp_id, x.walk_in, st.id AS state_id, st.name AS state_name FROM (
+      SELECT t."competitionId" AS comp_id, false AS walk_in, t."contingentId" AS ct_id
+      FROM team_events te JOIN teams t ON t.id = te."teamId"
+      WHERE te."eventId" = $1 AND te.acceptance <> 'REJECT'
+      UNION ALL
+      SELECT ewc."competitionId", true, w."contingentId"
+      FROM walkin_registrations w JOIN event_walkin_competitions ewc ON ewc.id = w."walkInCompetitionId"
+      WHERE ewc."eventId" = $1 AND w.status NOT IN ('REJECTED', 'CANCELLED')
+    ) x
+    JOIN contingents ct ON ct.id = x.ct_id
     LEFT JOIN schools s ON s.id = ct."schoolId"
     LEFT JOIN higher_institutions hi ON hi.id = ct."higherInstitutionId"
     LEFT JOIN countries co ON co.id = ct."countryId"
     JOIN states st ON st.id = COALESCE(ct."stateId", s."stateId", hi."stateId")
-    WHERE te."eventId" = $1 AND te.acceptance <> 'REJECT' AND (co.id IS NULL OR co."codeIso2" = 'MY')`, cfg.eventId);
+    WHERE co.id IS NULL OR co."codeIso2" = 'MY'`, cfg.eventId);
 
   const out: (PregenSlot & { compCode: string; compName: string; stateName: string | null })[] = [];
-  for (const ec of ecs.sort((a, b) => a.competition.code.localeCompare(b.competition.code, undefined, { numeric: true }))) {
-    const c = ec.competition;
-    const byState = cfg.resultsBy === "STATE"
-      || ((cfg.resultsBy ?? "CONFIG") === "CONFIG" && resolveResultScope(ec, String(event?.scope ?? "")) === "STATE");
+  const list = ecs.filter(e => !codes || codes.includes(e.c.code))
+    .sort((a, b) => Number(a.walkIn) - Number(b.walkIn) || a.c.code.localeCompare(b.c.code, undefined, { numeric: true }));
+  for (const { c, byState, walkIn } of list) {
     const groups: { id: string | null; name: string | null }[] = byState
-      ? states.filter(x => x.comp_id === c.id).map(x => ({ id: x.state_id, name: x.state_name })).sort((a, b) => a.name!.localeCompare(b.name!))
+      ? states.filter(x => x.comp_id === c.id && x.walk_in === walkIn).map(x => ({ id: x.state_id, name: x.state_name })).sort((a, b) => a.name!.localeCompare(b.name!))
       : [{ id: null, name: null }];
     const members = c.participationType === "INDIVIDUAL" ? 1 : Math.max(1, c.maxTeamSize);
     for (const g of groups)
       for (let rank = from; rank <= to; rank++)
         for (let member = 1; member <= members; member++)
-          out.push({ compId: c.id, compCode: c.code, compName: c.name, stateId: g.id, stateName: g.name, rank, member });
+          out.push({ compId: c.id, compCode: c.code, compName: c.name, stateId: g.id, stateName: g.name, rank, member, ...(walkIn && { walkIn: true }) });
   }
   return out;
 }
@@ -484,14 +505,15 @@ async function resolveOne(
     return {
       total: slots.length,
       rows: slots.slice(offset, offset + limit).map(s => ({
-        key: `pre:${cfg.eventId}:${s.compId}:${s.stateId ?? "-"}:${s.rank}:${s.member}`,
+        // Walk-in slots key on "pre:<event>:walk:" — their own, and yellow on the portals once linked.
+        key: `pre:${cfg.eventId}:${s.walkIn ? "walk:" : ""}${s.compId}:${s.stateId ?? "-"}:${s.rank}:${s.member}`,
         participantId: null, name: "", ic: null,
         contingentId: null, contingentName: null, schoolName: null, stateName: s.stateName,
         teamId: null, teamName: null,
         competitionId: s.compId, competitionName: s.compName, competitionCode: s.compCode,
         eventId: cfg.eventId!, eventName: evName, awardTitle: awardTitleForRank(s.rank), rank: s.rank,
         status: "DRAFT" as const,
-        extraMeta: { pregen: { compId: s.compId, stateId: s.stateId, rank: s.rank, member: s.member } satisfies PregenSlot },
+        extraMeta: { pregen: { compId: s.compId, stateId: s.stateId, rank: s.rank, member: s.member, ...(s.walkIn && { walkIn: true }) } satisfies PregenSlot },
       })),
     };
   }
