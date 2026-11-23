@@ -59,7 +59,7 @@ export async function GET() {
       id: p.id, name: p.name, gender: p.gender, age: p.age,
       classLabel: [p.classGrade?.trim(), p.className?.trim()].filter(Boolean).join(" ") || null,
       contingent: p.contingent?.name ?? null,
-      certificates: (byParticipant.get(p.id) ?? []).map(c => ({ id: c.id, serialNumber: c.serialNumber, level: c.level, kind: c.kind, label: c.label, online: c.online })),
+      certificates: (byParticipant.get(p.id) ?? []).map(c => ({ id: c.id, serialNumber: c.serialNumber, level: c.level, kind: c.kind, label: c.label, online: c.online, walkIn: c.walkIn })),
     })),
   }, { headers: { "Cache-Control": "no-store" } });
 }

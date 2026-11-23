@@ -17,7 +17,7 @@ import { ManagerGeneralCertSection } from "@/components/manager/ManagerGeneralCe
 
 type Level = "SCHOOL" | "STATE" | "NATIONAL";
 type Kind = "PARTICIPATION" | "ACHIEVEMENT" | "TRAINER";
-type Cert = { id: string; serialNumber: string; level: Level; kind: "PARTICIPATION" | "ACHIEVEMENT"; label: string; online: boolean };
+type Cert = { id: string; serialNumber: string; level: Level; kind: "PARTICIPATION" | "ACHIEVEMENT"; label: string; online: boolean; walkIn?: boolean };
 type Row = {
   id: string; name: string; gender: string; age: number | null; classLabel: string | null;
   contingent: string | null; certificates: Cert[];
@@ -46,9 +46,12 @@ const KIND_STYLE: Record<Kind, string> = {
   TRAINER:       "border-amber-300 bg-gradient-to-b from-amber-500 to-amber-700",
 };
 
-export function CertIcon({ kind, online, className, small }: { kind: Kind; online?: boolean; className?: string; small?: boolean }) {
+/** Walk-in competition certificates: yellow, whatever their kind. */
+const WALK_IN_STYLE = "border-yellow-200 bg-gradient-to-b from-yellow-400 to-yellow-600";
+
+export function CertIcon({ kind, online, walkIn, className, small }: { kind: Kind; online?: boolean; walkIn?: boolean; className?: string; small?: boolean }) {
   return (
-    <span className={cn("relative inline-flex h-11 w-9 flex-col items-center justify-center rounded-[3px] border-2 shadow-sm", KIND_STYLE[kind], className)}>
+    <span className={cn("relative inline-flex h-11 w-9 flex-col items-center justify-center rounded-[3px] border-2 shadow-sm", walkIn ? WALK_IN_STYLE : KIND_STYLE[kind], className)}>
       <span className="absolute inset-x-1 top-1 h-[3px] rounded bg-white/70" />
       <Award className="h-4 w-4 text-white" strokeWidth={2} />
       <span className="absolute inset-x-1.5 bottom-1.5 h-[3px] rounded bg-white/60" />
@@ -215,9 +218,9 @@ export function ManagerCertificatesClient() {
                           <div className="flex flex-wrap justify-center gap-1.5">
                             {r.certificates.filter(c => c.level === l.key).map(c => (
                               <Link key={c.id} href={`/manager/certificates/participant/${r.id}?c=${c.id}`}
-                                title={`${c.kind === "ACHIEVEMENT" ? t("kindAchievement") : t("kindParticipation")}${c.online ? ` (${t("online")})` : ""} — ${c.label}\n${c.serialNumber}`}
+                                title={`${c.kind === "ACHIEVEMENT" ? t("kindAchievement") : t("kindParticipation")}${c.walkIn ? ` (${t("walkIn")})` : ""}${c.online ? ` (${t("online")})` : ""} — ${c.label}\n${c.serialNumber}`}
                                 className="transition-transform hover:-translate-y-0.5">
-                                <CertIcon kind={c.kind} online={c.online} />
+                                <CertIcon kind={c.kind} online={c.online} walkIn={c.walkIn} />
                               </Link>
                             ))}
                           </div>
@@ -243,6 +246,7 @@ export function ManagerCertificatesClient() {
             <span className="flex items-center gap-2"><CertIcon kind="TRAINER" className="h-8 w-7" /> {t("trainerCertificate")}</span>
             <span className="flex items-center gap-2"><CertIcon kind="PARTICIPATION" className="h-8 w-7" /> {t("kindParticipation")}</span>
             <span className="flex items-center gap-2"><CertIcon kind="ACHIEVEMENT" className="h-8 w-7" /> {t("kindAchievement")}</span>
+            <span className="flex items-center gap-2"><CertIcon kind="PARTICIPATION" walkIn small className="h-8 w-7" /> {t("walkIn")}</span>
             <span className="flex items-center gap-2"><CertIcon kind="PARTICIPATION" online small className="h-8 w-7" /> {t("online")}</span>
             <span className="flex items-center gap-1.5 not-italic"><Info className="h-3.5 w-3.5" /> {t("clickName")}</span>
           </div>

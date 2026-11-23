@@ -12,7 +12,7 @@ import { CertIcon } from "@/components/manager/ManagerCertificatesClient";
 
 export type ViewerCert = {
   id: string; serialNumber: string; title: string;
-  kind: "PARTICIPATION" | "ACHIEVEMENT" | "TRAINER"; online: boolean;
+  kind: "PARTICIPATION" | "ACHIEVEMENT" | "TRAINER"; online: boolean; walkIn?: boolean;
   /** managerCertificates message key of the distribution level, if any. */
   levelKey: string | null;
   eventName: string | null; seasonYear: number;
@@ -43,6 +43,7 @@ export function ManagerCertViewer({ kind, personId, person, enabled, certs, init
   const subline = (c: ViewerCert) => [
     kindLabel(c),
     c.levelKey ? t(c.levelKey as "levelSchool") : null,
+    c.walkIn ? t("walkIn") : null,
     c.online ? t("online") : null,
     c.eventName,
   ].filter(Boolean).join(" · ");
@@ -104,7 +105,7 @@ export function ManagerCertViewer({ kind, personId, person, enabled, certs, init
                           ? "border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/40"
                           : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800/40",
                       )}>
-                      <CertIcon kind={c.kind} online={c.online} small className="h-10 w-8 shrink-0" />
+                      <CertIcon kind={c.kind} online={c.online} walkIn={c.walkIn} small className="h-10 w-8 shrink-0" />
                       <span className="min-w-0 flex-1">
                         <span className="block text-[13px] font-medium leading-snug text-zinc-900 dark:text-zinc-100">{c.title}</span>
                         <span className="block truncate text-[11px] text-zinc-500">{subline(c)}</span>

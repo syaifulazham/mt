@@ -16,12 +16,13 @@ export type PortalCert = {
   id: string; serialNumber: string; level: PortalLevel; kind: "PARTICIPATION" | "ACHIEVEMENT";
   label: string; // e.g. "6.3R Cabaran Siasatan Jenayah · TEMPAT PERTAMA"
   online: boolean; // issued for an online event (scope ONLINE_*)
+  walkIn: boolean; // a walk-in competition's certificate (generator key "walk:")
 };
 
 type Row = {
   id: string; serialNumber: string; participantId: string | null; recipientName: string;
   competitionCode: string | null; competitionName: string | null; awardTitle: string | null;
-  eventName: string | null; level: string; targetType: string; online: boolean;
+  eventName: string | null; level: string; targetType: string; online: boolean; walkIn: boolean;
 };
 
 function toPortalCert(r: Row): PortalCert {
@@ -31,6 +32,7 @@ function toPortalCert(r: Row): PortalCert {
     kind: ACHIEVEMENT_TYPES.includes(r.targetType) || r.awardTitle ? "ACHIEVEMENT" : "PARTICIPATION",
     label: [comp || r.eventName, r.awardTitle].filter(Boolean).join(" · ") || r.serialNumber,
     online: !!r.online,
+    walkIn: !!r.walkIn,
   };
 }
 
@@ -49,7 +51,8 @@ export async function distributedCertificates(where: { contingentIds?: string[];
     SELECT c.id, c."serialNumber", c."participantId", c."recipientName", c."competitionCode", c."competitionName",
            c."awardTitle", c."eventName", c.meta->>'distLevel' AS level, t."targetType"::text AS "targetType",
            -- flag stored at issue time; older certificates fall back to the event's scope (if it still exists)
-           COALESCE((c.meta->>'online')::boolean, e.scope::text LIKE 'ONLINE%', false) AS online
+           COALESCE((c.meta->>'online')::boolean, e.scope::text LIKE 'ONLINE%', false) AS online,
+           COALESCE(c.meta->>'genKey', '') LIKE '%:walk:%' AS "walkIn"
     FROM certificates c
     JOIN cert_template_versions v ON v.id = c."templateVersionId"
     JOIN cert_templates t          ON t.id = v."templateId"
@@ -95,6 +98,7 @@ export async function participantCertificatesAllSeasons(p: { id: string; ic: str
     SELECT c.id, c."serialNumber", c."participantId", c."recipientName", c."competitionCode", c."competitionName",
            c."awardTitle", c."eventName", COALESCE(c.meta->>'distLevel', 'NONE') AS level, t."targetType"::text AS "targetType",
            COALESCE((c.meta->>'online')::boolean, e.scope::text LIKE 'ONLINE%', false) AS online,
+           COALESCE(c.meta->>'genKey', '') LIKE '%:walk:%' AS "walkIn",
            s.year AS "seasonYear", s.name AS "seasonName", s."archivedAt" IS NOT NULL AS archived
     FROM certificates c
     JOIN seasons s                 ON s.id = c."seasonId"

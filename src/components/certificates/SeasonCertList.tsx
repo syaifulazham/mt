@@ -11,7 +11,10 @@ function CertTile({ c }: { c: SeasonCert }) {
   return (
     <a href={`/api/v2/certificates/${c.id}/download`}
       className="group flex items-center gap-3 rounded-lg border p-3 transition-colors hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40">
-      <span className={`relative flex h-11 w-9 shrink-0 items-center justify-center rounded-[3px] border-2 ${achievement ? "border-violet-300 bg-gradient-to-b from-violet-500 to-violet-700" : "border-emerald-300 bg-gradient-to-b from-emerald-500 to-emerald-700"}`}>
+      <span className={`relative flex h-11 w-9 shrink-0 items-center justify-center rounded-[3px] border-2 ${
+        // Walk-in competitions: yellow (as on the manager portal's Sijil page)
+        c.walkIn ? "border-yellow-200 bg-gradient-to-b from-yellow-400 to-yellow-600"
+        : achievement ? "border-violet-300 bg-gradient-to-b from-violet-500 to-violet-700" : "border-emerald-300 bg-gradient-to-b from-emerald-500 to-emerald-700"}`}>
         <Award className="h-4 w-4 text-white" />
         {c.online && (
           <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-500 dark:border-zinc-900">
@@ -24,6 +27,7 @@ function CertTile({ c }: { c: SeasonCert }) {
         <span className="block truncate text-[11px] text-zinc-500">
           {achievement ? "Pencapaian" : "Penyertaan"}
           {LEVEL[c.level] && ` · ${LEVEL[c.level]}`}
+          {c.walkIn && " · Walk-in"}
           {c.online && " · Dalam talian"}
           {c.eventName && ` · ${c.eventName}`}
         </span>

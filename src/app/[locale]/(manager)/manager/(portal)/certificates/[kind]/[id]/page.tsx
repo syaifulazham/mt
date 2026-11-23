@@ -46,7 +46,7 @@ export default async function CertificateViewerPage({
     };
     if (enabled)
       certs = (await participantCertificatesAllSeasons({ id: p.id, ic: p.ic })).map(x => ({
-        id: x.id, serialNumber: x.serialNumber, title: x.label, kind: x.kind, online: x.online,
+        id: x.id, serialNumber: x.serialNumber, title: x.label, kind: x.kind, online: x.online, walkIn: x.walkIn,
         levelKey: LEVEL[x.level] ?? null, eventName: x.eventName, seasonYear: x.seasonYear,
       }));
   } else {
