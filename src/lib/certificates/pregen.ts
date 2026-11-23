@@ -216,7 +216,7 @@ export async function saveLinks(job: Job, mapping: Record<string, string | null>
  */
 export async function refreshExtras(job: Job): Promise<number> {
   const cfg = job.config as GeneratorConfig;
-  const eventName = cfg.eventNameOverride?.trim()
+  const eventName = (cfg.eventId ? cfg.eventRules?.[cfg.eventId]?.eventName?.trim() : "") || cfg.eventNameOverride?.trim()
     || (cfg.eventId ? (await db.event.findUnique({ where: { id: cfg.eventId }, select: { name: true } }))?.name : null)
     || null;
   return db.$executeRaw`

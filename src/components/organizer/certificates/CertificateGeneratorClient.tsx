@@ -30,7 +30,7 @@ type Job = {
 type ResultsBy = "CONFIG" | "NATIONAL" | "STATE" | "INTERNATIONAL";
 type Acceptance = "ACCEPTED" | "NOT_REJECTED" | "NONE";
 type WalkInRule = "NONE" | "CONFIRMED" | "NOT_REJECTED";
-type EventRule = { acceptance?: Acceptance; attendedOnly?: boolean; walkIn?: WalkInRule };
+type EventRule = { acceptance?: Acceptance; attendedOnly?: boolean; walkIn?: WalkInRule; eventName?: string };
 type Comp = { code: string; name: string; walkIn?: boolean };
 /** Mirrors defaultAcceptance in lib/certificates/generator.ts. */
 const defaultAcceptance = (scope: string): Acceptance => scope.startsWith("ONLINE") ? "NOT_REJECTED" : "ACCEPTED";
@@ -214,6 +214,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
     acceptance: eventRules[id]?.acceptance ?? defaultAcceptance(events.find(e => e.id === id)?.scope ?? ""),
     attendedOnly: eventRules[id]?.attendedOnly ?? attendedOnly,
     walkIn: eventRules[id]?.walkIn ?? "NONE",
+    eventName: eventRules[id]?.eventName ?? "",
   });
   const setRule = (id: string, patch: EventRule) => setEventRules(r => ({ ...r, [id]: { ...ruleOf(id), ...patch } }));
   // Trainers / Contingent Manager Portal users: no event, no portal distribution
@@ -509,7 +510,26 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                 <input value={eventNameOverride} onChange={e => setOverride(e.target.value)} maxLength={120}
                   placeholder={needsEvent ? "Kosongkan untuk guna nama acara asal" : "Pilihan — dicetak pada sijil"}
                   className={cn(sel, "w-80")} />
+                {multiEvent && chosenEvents.length > 1 && <span className="text-[11px] text-zinc-400">untuk semua acara di bawah yang tidak ditetapkan sendiri</span>}
               </div>
+              {multiEvent && chosenEvents.length > 1 && (source === "EVENT_PARTICIPANTS" || winnersLike) && (
+                <div className="flex flex-wrap items-start gap-2">
+                  <span className="w-28 pt-2 text-xs text-zinc-500">Nama setiap acara</span>
+                  <div className="space-y-1.5">
+                    {chosenEvents.map(id => {
+                      const name = events.find(e => e.id === id)?.name ?? id;
+                      return (
+                        <div key={id} className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="w-44 truncate text-zinc-600" title={name}>{name}</span>
+                          <input value={ruleOf(id).eventName} onChange={e => setRule(id, { eventName: e.target.value })} maxLength={120}
+                            placeholder={eventNameOverride.trim() || name} className={cn(sel, "h-8 w-72 text-xs")} />
+                        </div>
+                      );
+                    })}
+                    <p className="text-[11px] text-zinc-400">Dicetak pada sijil penerima acara tersebut. Kosongkan untuk guna nama acara di atas (atau nama acara asal).</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

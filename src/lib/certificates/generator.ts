@@ -105,6 +105,8 @@ export type EventRule = {
    * walk-in gives a certificate to each member of its team.
    */
   walkIn?: "NONE" | "CONFIRMED" | "NOT_REJECTED";
+  /** Printed instead of this event's name (beats the generator-wide eventNameOverride). */
+  eventName?: string;
 };
 
 export type Recipient = {
@@ -186,6 +188,7 @@ function cleanRules(raw: Record<string, EventRule> | undefined, ids: string[]): 
       acceptance: r.acceptance === "NOT_REJECTED" || r.acceptance === "ACCEPTED" || r.acceptance === "NONE" ? r.acceptance : undefined,
       attendedOnly: !!r.attendedOnly,
       walkIn: r.walkIn === "CONFIRMED" || r.walkIn === "NOT_REJECTED" ? r.walkIn : undefined,
+      eventName: r.eventName?.trim().slice(0, 200) || undefined,
     };
   }
   return Object.keys(out).length ? out : undefined;
@@ -229,6 +232,9 @@ const PERSON_COLS = `p.id AS pid, p.name, p.ic, ct.id AS contingent_id, ct.name 
   COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name, ${COUNTRY_COL}`;
 
 async function eventName(cfg: GeneratorConfig): Promise<string | null> {
+  // This event's own name override, then the generator's, then the event's name.
+  const own = cfg.eventId ? cfg.eventRules?.[cfg.eventId]?.eventName?.trim() : "";
+  if (own) return own;
   if (cfg.eventNameOverride?.trim()) return cfg.eventNameOverride.trim();
   if (!cfg.eventId) return null;
   return (await db.event.findUnique({ where: { id: cfg.eventId }, select: { name: true } }))?.name ?? null;
