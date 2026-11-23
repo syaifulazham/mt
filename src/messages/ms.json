@@ -564,7 +564,7 @@
     "subtitle": "Sijil penyertaan dan pencapaian kontinjen anda.",
     "notDistributedTitle": "Sijil belum diedarkan",
     "notDistributedBody": "Sijil akan dipaparkan di sini setelah penganjur mengedarkannya. Sila semak semula kemudian.",
-    "schoolsHeading": "Sijil Sekolah / Kontinjen",
+    "schoolsHeading": "Sekolah",
     "schoolsCount": "{count} sijil pencapaian",
     "trainersHeading": "Jurulatih",
     "trainersCount": "{count} jurulatih",
@@ -636,7 +636,11 @@
     "colClass": "Kelas",
     "colTakingPart": "Berdaftar / menyertai",
     "eligibleOnly": "Layak",
-    "manual": "Manual"
+    "manual": "Manual",
+    "colCompetition": "Pertandingan",
+    "colTeam": "Pasukan",
+    "colAward": "Anugerah",
+    "noSchoolCerts": "Tiada sijil pencapaian sekolah lagi."
   },
   "schoolLevelManual": {
     "title": "Cara menjana sijil peringkat sekolah",

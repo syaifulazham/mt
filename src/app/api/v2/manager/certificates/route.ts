@@ -67,6 +67,7 @@ export async function GET() {
     enabled: true,
     schools: schoolCerts.map(c => ({
       id: c.id, serialNumber: c.serialNumber, recipient: c.recipientName, team: c.teamName,
+      competitionCode: c.competitionCode, competitionName: c.competitionName, award: c.awardTitle,
       label: [[c.competitionCode, c.competitionName].filter(Boolean).join(" "), c.awardTitle].filter(Boolean).join(" · ") || c.eventName || c.serialNumber,
       eventName: c.eventName,
       walkIn: ((c.meta as { genKey?: string } | null)?.genKey ?? "").includes(":walk:"),

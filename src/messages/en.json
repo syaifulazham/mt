@@ -564,7 +564,7 @@
     "subtitle": "Participation and achievement certificates of your contingent.",
     "notDistributedTitle": "Certificates not yet distributed",
     "notDistributedBody": "Certificates will appear here once the organiser distributes them. Please check again later.",
-    "schoolsHeading": "School / contingent certificates",
+    "schoolsHeading": "School",
     "schoolsCount": "{count} achievement certificates",
     "trainersHeading": "Trainers",
     "trainersCount": "{count} trainers",
@@ -636,7 +636,11 @@
     "colClass": "Class",
     "colTakingPart": "Registered / taking part",
     "eligibleOnly": "Eligible",
-    "manual": "Manual"
+    "manual": "Manual",
+    "colCompetition": "Competition",
+    "colTeam": "Team",
+    "colAward": "Award",
+    "noSchoolCerts": "No school achievement certificates yet."
   },
   "schoolLevelManual": {
     "title": "How to generate school level certificates",

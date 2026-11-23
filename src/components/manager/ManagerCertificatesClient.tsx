@@ -24,7 +24,10 @@ type Row = {
 };
 type TrainerRow = { id: string; name: string; contingent: string | null; certificates: { id: string; serialNumber: string; label: string; achievement?: boolean }[] };
 /** Pencapaian Acara (Sekolah): one certificate per winning team × contingent. */
-type SchoolCert = { id: string; serialNumber: string; recipient: string; team: string | null; label: string; eventName: string | null; walkIn: boolean };
+type SchoolCert = {
+  id: string; serialNumber: string; recipient: string; team: string | null; label: string; eventName: string | null; walkIn: boolean;
+  competitionCode: string | null; competitionName: string | null; award: string | null;
+};
 
 const LEVELS: { key: Level; msg: "levelSchool" | "levelState" | "levelNational" }[] = [
   { key: "SCHOOL", msg: "levelSchool" },
@@ -147,12 +150,13 @@ export function ManagerCertificatesClient() {
                   <tr>
                     <th className="w-10 px-3 py-3 text-left">{t("colNo")}</th>
                     <th className="px-3 py-3 text-left">{t("colName")}</th>
-                    <th className="w-56 px-3 py-3 text-center">{t("trainerCertificate")}</th>
+                    <th className="w-44 px-3 py-3 text-center">{t("trainerCertificate")}</th>
+                    <th className="w-56 px-3 py-3 text-center">{t("kindAchievement")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y dark:divide-zinc-800">
                   {trainers.length === 0 && (
-                    <tr><td colSpan={3} className="px-3 py-6 text-center text-xs text-zinc-400">{t("noTrainers")}</td></tr>
+                    <tr><td colSpan={4} className="px-3 py-6 text-center text-xs text-zinc-400">{t("noTrainers")}</td></tr>
                   )}
                   {trainers.map((tr, i) => (
                     <tr key={tr.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30">
@@ -161,14 +165,62 @@ export function ManagerCertificatesClient() {
                         <Link href={`/manager/certificates/trainer/${tr.id}`} className="font-medium text-zinc-900 hover:text-blue-600 hover:underline dark:text-zinc-100">{tr.name}</Link>
                         {tr.contingent && <p className="text-[11px] text-zinc-500">{tr.contingent}</p>}
                       </td>
+                      {/* Trainer appreciation, then achievements of the trainer's winning teams (Pencapaian Acara (Jurulatih)) */}
+                      {[false, true].map(ach => (
+                        <td key={String(ach)} className="px-3 py-2.5">
+                          <div className="flex flex-wrap justify-center gap-1.5">
+                            {tr.certificates.filter(c => !!c.achievement === ach).map(c => (
+                              <Link key={c.id} href={`/manager/certificates/trainer/${tr.id}?c=${c.id}`} title={`${ach ? t("kindAchievement") : t("trainerCertificate")} — ${c.label}\n${c.serialNumber}`}
+                                className="transition-transform hover:-translate-y-0.5">
+                                <CertIcon kind={ach ? "ACHIEVEMENT" : "TRAINER"} />
+                              </Link>
+                            ))}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* ── School: achievement certificates of its winning teams (Pencapaian Acara (Sekolah)) ── */}
+          <section className="space-y-2">
+            {sectionHead(School, t("schoolsHeading"), t("schoolsCount", { count: schools.length }))}
+            <div className="overflow-x-auto rounded-xl border bg-white dark:border-zinc-800 dark:bg-zinc-900">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-zinc-50 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/50">
+                  <tr>
+                    <th className="w-10 px-3 py-3 text-left">{t("colNo")}</th>
+                    <th className="px-3 py-3 text-left">{t("colCompetition")}</th>
+                    <th className="px-3 py-3 text-left">{t("colTeam")}</th>
+                    <th className="px-3 py-3 text-left">{t("colAward")}</th>
+                    <th className="w-44 px-3 py-3 text-center">{t("kindAchievement")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y dark:divide-zinc-800">
+                  {schools.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-6 text-center text-xs text-zinc-400">{t("noSchoolCerts")}</td></tr>
+                  )}
+                  {schools.map((c, i) => (
+                    <tr key={c.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30">
+                      <td className="px-3 py-2.5 text-xs text-zinc-400">{i + 1}</td>
                       <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap justify-center gap-1.5">
-                          {tr.certificates.map(c => (
-                            <Link key={c.id} href={`/manager/certificates/trainer/${tr.id}?c=${c.id}`} title={`${c.achievement ? t("kindAchievement") : t("trainerCertificate")} — ${c.label}\n${c.serialNumber}`}
-                              className="transition-transform hover:-translate-y-0.5">
-                              <CertIcon kind={c.achievement ? "ACHIEVEMENT" : "TRAINER"} />
-                            </Link>
-                          ))}
+                        <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                          {c.competitionCode && <span className="mr-1.5 font-mono text-xs text-zinc-500">{c.competitionCode}</span>}
+                          {c.competitionName ?? c.label}
+                        </p>
+                        <p className="text-[11px] text-zinc-500">{[c.recipient, c.eventName].filter(Boolean).join(" · ")}</p>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-zinc-600 dark:text-zinc-300">{c.team ?? "—"}</td>
+                      <td className="px-3 py-2.5 text-xs font-medium text-violet-700 dark:text-violet-300">{c.award ?? "—"}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex justify-center">
+                          <a href={`/api/v2/certificates/${c.id}/download?inline=1`} target="_blank" rel="noreferrer"
+                            title={`${c.walkIn ? `${t("walkIn")} · ` : ""}${c.label}\n${c.serialNumber}`} className="transition-transform hover:-translate-y-0.5">
+                            <CertIcon kind="ACHIEVEMENT" walkIn={c.walkIn} />
+                          </a>
                         </div>
                       </td>
                     </tr>
@@ -177,27 +229,6 @@ export function ManagerCertificatesClient() {
               </table>
             </div>
           </section>
-
-          {/* ── School / contingent achievement (Pencapaian Acara (Sekolah)) ─────── */}
-          {schools.length > 0 && (
-            <section className="space-y-2">
-              {sectionHead(School, t("schoolsHeading"), t("schoolsCount", { count: schools.length }))}
-              <div className="grid gap-2 sm:grid-cols-2">
-                {schools.map(c => (
-                  <a key={c.id} href={`/api/v2/certificates/${c.id}/download?inline=1`} target="_blank" rel="noreferrer"
-                    className="group flex items-center gap-3 rounded-xl border bg-white p-3 transition-colors hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/40">
-                    <CertIcon kind="ACHIEVEMENT" walkIn={c.walkIn} className="shrink-0" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{c.label}</span>
-                      <span className="block truncate text-[11px] text-zinc-500">{[c.recipient, c.team, c.eventName].filter(Boolean).join(" · ")}</span>
-                      <span className="block font-mono text-[10px] text-zinc-400">{c.serialNumber}</span>
-                    </span>
-                    <Download className="h-4 w-4 shrink-0 text-zinc-300 group-hover:text-blue-600" />
-                  </a>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* ── Participants ─────────────────────────────────────────────────── */}
           <section className="space-y-2">
