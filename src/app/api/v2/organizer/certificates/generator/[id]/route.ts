@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { BATCH_SIZE, DISTRIBUTION_LEVELS, GENERATOR_SOURCES, RESULTS_BY, issueBatch, normalizeConfig, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { BATCH_SIZE, DISTRIBUTION_LEVELS, GENERATOR_SOURCES, RESULTS_BY, WINNER_SOURCES, issueBatch, normalizeConfig, resolveRecipients, type DistributionLevel, type ResultsBy, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
 import { refreshExtras } from "@/lib/certificates/pregen";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!RESULTS_BY.includes(resultsBy as ResultsBy)) return NextResponse.json({ error: "INVALID_RESULTS_BY" }, { status: 400 });
     const job = await db.certGeneratorJob.findUnique({ where: { id } });
     if (!job) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-    if (job.source !== "EVENT_WINNERS") return NextResponse.json({ error: "NOT_WINNERS_JOB" }, { status: 400 });
+    if (!WINNER_SOURCES.includes(job.source as GeneratorSource)) return NextResponse.json({ error: "NOT_WINNERS_JOB" }, { status: 400 });
     await db.certGeneratorJob.update({
       where: { id },
       data:  { config: { ...(job.config as object), resultsBy } as Prisma.InputJsonValue },

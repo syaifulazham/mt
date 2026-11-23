@@ -100,8 +100,8 @@ async function isAllowed(
     if (archivedSeason)
       return status === "READY" && (await getCertDistribution()).manager
         && (ids.includes(contingentId ?? "") || await managerOwnsByIc(ids, recipientIc));
-    // Trainer certificates have no distribution level: the manager-portal switch alone decides
-    if (recipientType === "TRAINER")
+    // Trainer and school / contingent certificates have no distribution level: the manager-portal switch alone decides
+    if (recipientType === "TRAINER" || recipientType === "CONTINGENT")
       return status === "READY" && ids.includes(contingentId ?? "") && (await getCertDistribution()).manager;
     return ids.includes(contingentId ?? "") && await portalMayServe("manager", meta, status);
   }

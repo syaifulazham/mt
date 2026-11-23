@@ -564,6 +564,8 @@
     "subtitle": "Participation and achievement certificates of your contingent.",
     "notDistributedTitle": "Certificates not yet distributed",
     "notDistributedBody": "Certificates will appear here once the organiser distributes them. Please check again later.",
+    "schoolsHeading": "School / contingent certificates",
+    "schoolsCount": "{count} achievement certificates",
     "trainersHeading": "Trainers",
     "trainersCount": "{count} trainers",
     "trainerCertificate": "Trainer certificate",

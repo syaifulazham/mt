@@ -39,7 +39,7 @@ import { compareScoreTime } from "@/lib/sharedRank";
 import { defaultResultScope, resolveResultScope } from "@/lib/resultScope";
 import { allocateSerial, newUniqueCode } from "./serial";
 
-export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_PREGEN", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM", "GENERAL"] as const;
+export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS", "EVENT_WINNERS_PREGEN", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM", "GENERAL"] as const;
 export type GeneratorSource = (typeof GENERATOR_SOURCES)[number];
 
 /** Where issued certificates are offered on the portals (Certificates → Distribution). */
@@ -109,7 +109,7 @@ export type EventRule = {
 
 export type Recipient = {
   key: string;                         // stable per (source, event, competition, person)
-  recipientType?: "PARTICIPANT" | "TRAINER" | "MANAGER" | "OTHER";
+  recipientType?: "PARTICIPANT" | "TRAINER" | "CONTINGENT" | "MANAGER" | "OTHER";
   participantId: string | null;
   name: string; ic: string | null;
   contingentId: string | null; contingentName: string | null;
@@ -152,7 +152,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
     eventId:           ids[0],
     eventIds:          ids.length > 1 ? ids : undefined,
     onePerCompetition: ids.length > 1 && !!raw?.onePerCompetition || undefined,
-    eventRules:        source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN" ? cleanRules(raw?.eventRules, ids) : undefined,
+    eventRules:        source === "EVENT_PARTICIPANTS" || WINNER_SOURCES.includes(source) || source === "EVENT_WINNERS_PREGEN" ? cleanRules(raw?.eventRules, ids) : undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -169,7 +169,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
   };
   if (source === "EVENT_WINNERS_PREGEN" && cfg.resultsBy === "INTERNATIONAL")
     return { error: "Sijil pra-acara tidak menyokong keputusan antarabangsa." };
-  if ((source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN") && !cfg.eventId)
+  if ((source === "EVENT_PARTICIPANTS" || WINNER_SOURCES.includes(source) || source === "EVENT_WINNERS_PREGEN") && !cfg.eventId)
     return { error: "Pilih acara." };
   if (cfg.rankFrom && cfg.rankTo && cfg.rankTo < cfg.rankFrom)
     return { error: "Julat kedudukan tidak sah." };
@@ -192,7 +192,9 @@ function cleanRules(raw: Record<string, EventRule> | undefined, ids: string[]): 
 }
 
 /** Sources whose recipients may come from several events. */
-export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "EVENT_WINNERS"];
+export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
+/** Pencapaian Acara: winners themselves, the winning teams' trainers, or their schools / contingents. */
+export const WINNER_SOURCES: GeneratorSource[] = ["EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
 
 /** Which teams of an event count by default, from its scope. */
 export const defaultAcceptance = (scope: string): "ACCEPTED" | "NOT_REJECTED" =>
@@ -412,7 +414,7 @@ async function resolveOne(
     };
   }
 
-  if (source === "EVENT_WINNERS") {
+  if (WINNER_SOURCES.includes(source)) {
     if (!cfg.eventId) throw new Error("Pilih acara.");
     const from = Math.max(1, cfg.rankFrom ?? 1), to = Math.max(from, cfg.rankTo ?? 3);
     const verifiedOnly = cfg.verifiedOnly !== false;
@@ -456,6 +458,74 @@ async function resolveOne(
         return verifiedOnly && !verified ? [] : [{ r, e, rank }];
       });
     });
+    // Pencapaian Acara (Jurulatih / Sekolah): one certificate per winning team's
+    // trainer, or per contingent among the winning team's members (a merged
+    // state team gives each of its contingents one).
+    if (source === "EVENT_WINNERS_TRAINERS" || source === "EVENT_WINNERS_SCHOOLS") {
+      const won = ranked.filter(x => x.rank >= from && x.rank <= to);
+      won.sort((a, b) => Number(a.r.walkIn) - Number(b.r.walkIn) || a.r.code.localeCompare(b.r.code)
+        || (stateFor(a.r) ? (a.e.stateName ?? "").localeCompare(b.e.stateName ?? "") : 0)
+        || a.rank - b.rank || a.e.teamName.localeCompare(b.e.teamName));
+      // Walk-in results rank registrations; a team walk-in's team is the registration's.
+      const walkRegIds = won.filter(x => x.r.walkIn).map(x => x.e.teamId);
+      const regTeam = new Map((walkRegIds.length ? await db.walkInRegistration.findMany({
+        where: { id: { in: walkRegIds } }, select: { id: true, teamId: true },
+      }) : []).map(w => [w.id, w.teamId]));
+      const teamOf = (x: (typeof won)[number]) => x.r.walkIn ? regTeam.get(x.e.teamId) ?? null : x.e.teamId;
+      const compIds = new Map((await db.competition.findMany({
+        where: { code: { in: [...new Set(won.map(x => x.r.code))] } }, select: { id: true, code: true },
+      })).map(c => [c.code, c.id]));
+      const keyBase = (x: (typeof won)[number]) =>
+        `${intl ? "intl:" : ""}${x.r.walkIn ? "walk:" : ""}${cfg.eventId}:${x.r.code}${x.r.isSplit ? `~${x.r.id}` : ""}:${x.e.teamId}`;
+      const base = (x: (typeof won)[number]) => ({
+        participantId: null, teamId: teamOf(x), teamName: x.e.teamName,
+        competitionId: compIds.get(x.r.code) ?? null, competitionName: x.r.name, competitionCode: x.r.code,
+        eventId: cfg.eventId!, eventName: evName, awardTitle: awardTitleForRank(x.rank), rank: x.rank,
+        slotState: !intl && stateFor(x.r) ? (x.e.stateId ?? "-") : "-",
+      });
+
+      let all: Recipient[];
+      if (source === "EVENT_WINNERS_TRAINERS") {
+        const teamIds = [...new Set(won.map(teamOf).filter((t): t is string => !!t))];
+        const trainers = teamIds.length ? await db.$queryRawUnsafe<(PersonRow & { team_id: string })[]>(`
+          SELECT tt."teamId" AS team_id, tr.id AS pid, tr.name, tr.ic, ct.id AS contingent_id, ct.name AS contingent_name,
+                 COALESCE(s.name, hi.name) AS school_name, COALESCE(ss.name, hs.name, cs.name) AS state_name, ${COUNTRY_COL}
+          FROM team_trainers tt JOIN trainers tr ON tr.id = tt."trainerId"
+          ${PERSON_JOINS.replace("%CT%", `tr."contingentId"`)}
+          WHERE tt."teamId" = ANY($1) ORDER BY tr.name, tr.id`, teamIds) : [];
+        const byTeam = new Map<string, typeof trainers>();
+        for (const t of trainers) byTeam.set(t.team_id, [...(byTeam.get(t.team_id) ?? []), t]);
+        // Keys end ":trainer:<id>", like the Jurulatih source's, so the
+        // manager portal lists them under the trainer.
+        all = won.flatMap(x => (byTeam.get(teamOf(x) ?? "") ?? []).map((t): Recipient => ({
+          ...base(x), key: `wintr:${keyBase(x)}:trainer:${t.pid}`, recipientType: "TRAINER",
+          name: t.name, ic: t.ic, contingentId: t.contingent_id, contingentName: t.contingent_name,
+          schoolName: t.school_name, stateName: x.e.stateName ?? t.state_name, countryName: x.e.countryName ?? t.country_name,
+        })));
+      } else {
+        const contingentsOf = (x: (typeof won)[number]) => {
+          const ids = [...new Set(x.e.members.map(m => m.contingentId ?? x.e.contingentId).filter((c): c is string => !!c))];
+          return ids.length ? ids : x.e.contingentId ? [x.e.contingentId] : [];
+        };
+        const ids = [...new Set(won.flatMap(contingentsOf))];
+        const info = new Map((ids.length ? await db.$queryRawUnsafe<{ contingent_id: string; contingent_name: string; school_name: string | null; state_name: string | null; country_name: string | null }[]>(`
+          SELECT ct.id AS contingent_id, ct.name AS contingent_name, COALESCE(s.name, hi.name) AS school_name,
+                 COALESCE(ss.name, hs.name, cs.name) AS state_name, ${COUNTRY_COL}
+          FROM unnest($1::text[]) AS x(cid) ${PERSON_JOINS.replace("%CT%", "x.cid")}`, ids) : []).map(c => [c.contingent_id, c]));
+        all = won.flatMap(x => contingentsOf(x).map((cid): Recipient => {
+          const c = info.get(cid);
+          return {
+            ...base(x), key: `winsch:${keyBase(x)}:${cid}`, recipientType: "CONTINGENT",
+            // The school (or institution) is the recipient; the contingent name otherwise.
+            name: c?.school_name ?? c?.contingent_name ?? "", ic: null,
+            contingentId: cid, contingentName: c?.contingent_name ?? null, schoolName: c?.school_name ?? null,
+            stateName: x.e.stateName ?? c?.state_name ?? null, countryName: x.e.countryName ?? c?.country_name ?? null,
+          };
+        }));
+      }
+      return { total: all.length, rows: all.slice(offset, offset + limit) };
+    }
+
     const entries = ranked
       .filter(x => x.rank >= from && x.rank <= to)
       .flatMap(x => x.e.members.map(m => ({ ...x, pid: m.id })));

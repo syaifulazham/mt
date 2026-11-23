@@ -60,14 +60,17 @@ export default async function CertificateViewerPage({
       // Trainer certificates (generator source Jurulatih) link back by meta.genKey "…:trainer:<id>".
       const rows = await db.certificate.findMany({
         where:   { recipientType: "TRAINER", status: "READY", contingentId: { in: contingentIds } },
-        select:  { id: true, serialNumber: true, meta: true, eventName: true, season: { select: { year: true } } },
+        select:  { id: true, serialNumber: true, meta: true, eventName: true, competitionCode: true, competitionName: true, awardTitle: true, season: { select: { year: true } } },
         orderBy: [{ season: { year: "desc" } }, { serialNumber: "asc" }],
       });
       certs = rows
         .filter(r => ((r.meta as { genKey?: string } | null)?.genKey ?? "").endsWith(`:trainer:${t.id}`))
         .map(r => ({
-          id: r.id, serialNumber: r.serialNumber, title: r.eventName ?? r.serialNumber, kind: "TRAINER" as const,
-          online: false, levelKey: null, eventName: null, seasonYear: r.season.year,
+          // A winning team's trainer (Pencapaian Acara (Jurulatih)) shows as an achievement.
+          id: r.id, serialNumber: r.serialNumber,
+          title: r.awardTitle ? [[r.competitionCode, r.competitionName].filter(Boolean).join(" "), r.awardTitle].filter(Boolean).join(" · ") : r.eventName ?? r.serialNumber,
+          kind: r.awardTitle ? "ACHIEVEMENT" as const : "TRAINER" as const,
+          online: false, levelKey: null, eventName: r.awardTitle ? r.eventName : null, seasonYear: r.season.year,
         }));
     }
   }

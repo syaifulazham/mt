@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Award, Download, Globe, Loader2, Search, Info, UsersRound, GraduationCap } from "lucide-react";
+import { Award, Download, Globe, Loader2, Search, Info, UsersRound, GraduationCap, School } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManagerGeneralCertSection } from "@/components/manager/ManagerGeneralCertSection";
 
@@ -22,7 +22,9 @@ type Row = {
   id: string; name: string; gender: string; age: number | null; classLabel: string | null;
   contingent: string | null; certificates: Cert[];
 };
-type TrainerRow = { id: string; name: string; contingent: string | null; certificates: { id: string; serialNumber: string; label: string }[] };
+type TrainerRow = { id: string; name: string; contingent: string | null; certificates: { id: string; serialNumber: string; label: string; achievement?: boolean }[] };
+/** Pencapaian Acara (Sekolah): one certificate per winning team × contingent. */
+type SchoolCert = { id: string; serialNumber: string; recipient: string; team: string | null; label: string; eventName: string | null; walkIn: boolean };
 
 const LEVELS: { key: Level; msg: "levelSchool" | "levelState" | "levelNational" }[] = [
   { key: "SCHOOL", msg: "levelSchool" },
@@ -64,6 +66,7 @@ export function ManagerCertificatesClient() {
   const t = useTranslations("managerCertificates");
   const [rows, setRows] = useState<Row[] | null>(null);
   const [trainers, setTrainers] = useState<TrainerRow[]>([]);
+  const [schools, setSchools] = useState<SchoolCert[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
@@ -77,7 +80,7 @@ export function ManagerCertificatesClient() {
         const j = await r.json().catch(() => ({}));
         if (!alive) return;
         if (!r.ok) { setErr(j.error ?? `HTTP ${r.status}`); setRows([]); return; }
-        setEnabled(j.enabled); setRows(j.participants); setTrainers(j.trainers ?? []);
+        setEnabled(j.enabled); setRows(j.participants); setTrainers(j.trainers ?? []); setSchools(j.schools ?? []);
       })
       .catch(() => { if (alive) { setErr(t("loadFailed")); setRows([]); } });
     return () => { alive = false; };
@@ -161,9 +164,9 @@ export function ManagerCertificatesClient() {
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap justify-center gap-1.5">
                           {tr.certificates.map(c => (
-                            <Link key={c.id} href={`/manager/certificates/trainer/${tr.id}?c=${c.id}`} title={`${t("trainerCertificate")} — ${c.label}\n${c.serialNumber}`}
+                            <Link key={c.id} href={`/manager/certificates/trainer/${tr.id}?c=${c.id}`} title={`${c.achievement ? t("kindAchievement") : t("trainerCertificate")} — ${c.label}\n${c.serialNumber}`}
                               className="transition-transform hover:-translate-y-0.5">
-                              <CertIcon kind="TRAINER" />
+                              <CertIcon kind={c.achievement ? "ACHIEVEMENT" : "TRAINER"} />
                             </Link>
                           ))}
                         </div>
@@ -174,6 +177,27 @@ export function ManagerCertificatesClient() {
               </table>
             </div>
           </section>
+
+          {/* ── School / contingent achievement (Pencapaian Acara (Sekolah)) ─────── */}
+          {schools.length > 0 && (
+            <section className="space-y-2">
+              {sectionHead(School, t("schoolsHeading"), t("schoolsCount", { count: schools.length }))}
+              <div className="grid gap-2 sm:grid-cols-2">
+                {schools.map(c => (
+                  <a key={c.id} href={`/api/v2/certificates/${c.id}/download?inline=1`} target="_blank" rel="noreferrer"
+                    className="group flex items-center gap-3 rounded-xl border bg-white p-3 transition-colors hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/40">
+                    <CertIcon kind="ACHIEVEMENT" walkIn={c.walkIn} className="shrink-0" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{c.label}</span>
+                      <span className="block truncate text-[11px] text-zinc-500">{[c.recipient, c.team, c.eventName].filter(Boolean).join(" · ")}</span>
+                      <span className="block font-mono text-[10px] text-zinc-400">{c.serialNumber}</span>
+                    </span>
+                    <Download className="h-4 w-4 shrink-0 text-zinc-300 group-hover:text-blue-600" />
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* ── Participants ─────────────────────────────────────────────────── */}
           <section className="space-y-2">

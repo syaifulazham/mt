@@ -564,6 +564,8 @@
     "subtitle": "Sijil penyertaan dan pencapaian kontinjen anda.",
     "notDistributedTitle": "Sijil belum diedarkan",
     "notDistributedBody": "Sijil akan dipaparkan di sini setelah penganjur mengedarkannya. Sila semak semula kemudian.",
+    "schoolsHeading": "Sijil Sekolah / Kontinjen",
+    "schoolsCount": "{count} sijil pencapaian",
     "trainersHeading": "Jurulatih",
     "trainersCount": "{count} jurulatih",
     "trainerCertificate": "Sijil Jurulatih",

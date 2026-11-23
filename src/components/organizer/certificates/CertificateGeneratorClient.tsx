@@ -42,7 +42,7 @@ const RESULTS_BY_SHORT: Record<ResultsBy, string> = {
   CONFIG: "Keputusan ikut konfigurasi", STATE: "Keputusan ikut negeri",
   NATIONAL: "Keputusan kebangsaan", INTERNATIONAL: "Keputusan antarabangsa",
 };
-type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "EVENT_WINNERS_PREGEN" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM" | "GENERAL";
+type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "EVENT_WINNERS_TRAINERS" | "EVENT_WINNERS_SCHOOLS" | "EVENT_WINNERS_PREGEN" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM" | "GENERAL";
 type DistLevel = "NONE" | "SCHOOL" | "STATE" | "NATIONAL";
 const DIST_LABEL: Record<DistLevel, string> = {
   NONE: "Tiada", SCHOOL: "Peringkat Sekolah", STATE: "Peringkat Negeri", NATIONAL: "Peringkat Kebangsaan",
@@ -52,6 +52,8 @@ const API = "/api/v2/organizer/certificates/generator";
 const SOURCE_LABEL: Record<Source, string> = {
   EVENT_PARTICIPANTS: "Peserta Acara",
   EVENT_WINNERS:      "Pencapaian Acara",
+  EVENT_WINNERS_TRAINERS: "Pencapaian Acara (Jurulatih)",
+  EVENT_WINNERS_SCHOOLS:  "Pencapaian Acara (Sekolah)",
   EVENT_WINNERS_PREGEN: "Pencapaian Acara (pra-acara)",
   ALL_REGISTERED:     "Semua Berdaftar",
   TRAINERS:           "Jurulatih",
@@ -59,6 +61,8 @@ const SOURCE_LABEL: Record<Source, string> = {
   CUSTOM:             "Custom",
   GENERAL:            "Penyertaan Umum",
 };
+/** Pencapaian Acara from the results: winners, their teams' trainers, or their schools / contingents. */
+const RESULT_WINNERS: Source[] = ["EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
 const CONTINGENT_TYPES = [["", "Semua kontinjen"], ["SCHOOL", "Sekolah"], ["HIGHER", "IPT"], ["INDEPENDENT", "Bebas"], ["INTERNATIONAL", "Antarabangsa"]];
 const CUSTOM_COLUMNS = ["nama", "ic", "kontingen", "sekolah", "negeri", "pasukan", "pertandingan", "kod", "anugerah", "kedudukan"];
 const fmt = (n: number) => n.toLocaleString();
@@ -121,11 +125,11 @@ function describe(j: Job, withResultsBy = true) {
   const c = j.config;
   const parts: string[] = [];
   if (j.eventName) parts.push(j.eventName);
-  if (j.source === "EVENT_WINNERS" || j.source === "EVENT_WINNERS_PREGEN") {
+  if (RESULT_WINNERS.includes(j.source) || j.source === "EVENT_WINNERS_PREGEN") {
     if (withResultsBy) parts.push(RESULTS_BY_SHORT[c.resultsBy ?? "NATIONAL"]);
     parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
   }
-  if (j.source === "EVENT_WINNERS" || j.source === "EVENT_WINNERS_PREGEN") {
+  if (RESULT_WINNERS.includes(j.source) || j.source === "EVENT_WINNERS_PREGEN") {
     const ids = c.eventIds?.length ? c.eventIds : c.eventId ? [c.eventId] : [];
     const walk = ids.filter(id => (c.eventRules?.[id]?.walkIn ?? "NONE") !== "NONE").length;
     const noReg = ids.filter(id => c.eventRules?.[id]?.acceptance === "NONE").length;
@@ -199,10 +203,10 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const winnersLike = source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN";
+  const winnersLike = RESULT_WINNERS.includes(source as Source) || source === "EVENT_WINNERS_PREGEN";
   const needsEvent = source === "EVENT_PARTICIPANTS" || winnersLike;
   // Participants and winners may come from several events; pre-event blanks from one.
-  const multiEvent = source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS";
+  const multiEvent = source === "EVENT_PARTICIPANTS" || RESULT_WINNERS.includes(source as Source);
   const chosenEvents = multiEvent ? eventIds : eventIds.slice(0, 1);
   // Each event's team rule; events without one start from the old single
   // "hadir sahaja" switch and their scope's default.
@@ -421,6 +425,13 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                     </p>
                   </div>
                 </div>
+              )}
+              {(source === "EVENT_WINNERS_TRAINERS" || source === "EVENT_WINNERS_SCHOOLS") && (
+                <p className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] leading-relaxed text-violet-900">
+                  {source === "EVENT_WINNERS_TRAINERS"
+                    ? <>Satu sijil bagi <b>setiap jurulatih pasukan yang menang</b> (pasukan × jurulatih), dengan pertandingan dan anugerah pasukan. Dipaparkan di bawah jurulatih di Portal Pengurus.</>
+                    : <>Satu sijil bagi <b>setiap sekolah / kontinjen pasukan yang menang</b> (pasukan × kontinjen — pasukan gabungan negeri memberi satu sijil kepada setiap kontinjen ahlinya). Nama penerima ialah nama sekolah / institusi.</>}
+                </p>
               )}
               {source === "EVENT_WINNERS_PREGEN" && (
                 <p className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-[11px] leading-relaxed text-sky-900">
@@ -680,14 +691,14 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                     <p className="text-[11px] font-medium text-zinc-400">Data Penerima</p>
                     <p className="rounded-md border bg-zinc-50 px-2.5 py-1.5 text-sm font-medium">{SOURCE_LABEL[j.source]}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
-                      {j.source === "EVENT_WINNERS" && (
+                      {RESULT_WINNERS.includes(j.source) && (
                         <select value={j.config.resultsBy ?? "NATIONAL"} disabled={!!running} title="Kedudukan dikira"
                           onChange={e => setResultsBy(j, e.target.value as ResultsBy)}
                           className="h-6 rounded border bg-white px-1 text-[11px] text-zinc-600">
                           {(Object.keys(RESULTS_BY_SHORT) as ResultsBy[]).map(v => <option key={v} value={v}>{RESULTS_BY_SHORT[v]}</option>)}
                         </select>
                       )}
-                      {describe(j, j.source !== "EVENT_WINNERS").map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
+                      {describe(j, !RESULT_WINNERS.includes(j.source)).map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
                       {j.source !== "TRAINERS" && j.source !== "MANAGERS" && (
                       <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-zinc-500">
                         Edaran
@@ -784,7 +795,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                 ? confirmRun.source === "EVENT_WINNERS_PREGEN"
                   ? <><b>{fmt(confirmRun.total)}</b> sijil kosong <b>{confirmRun.templateName}</b> akan dijana (pra-acara). Slot yang sudah mempunyai sijil akan dilangkau; sijil yang telah dipadankan kepada pemenang tidak diubah.</>
                   : <>Sijil <b>{confirmRun.templateName}</b> akan dijana untuk <b>{fmt(confirmRun.total)}</b> penerima. Penerima yang sudah mempunyai sijil templat ini akan dilangkau.</>
-                : <>Tiada penerima yang sepadan dengan tetapan penjana ini{confirmRun?.source === "EVENT_WINNERS" && confirmRun.config.verifiedOnly !== false
+                : <>Tiada penerima yang sepadan dengan tetapan penjana ini{confirmRun && RESULT_WINNERS.includes(confirmRun.source) && confirmRun.config.verifiedOnly !== false
                     ? " — keputusan pertandingan acara ini mungkin belum disahkan (VERIFIED). Sahkan keputusan dahulu, atau cipta penjana baharu tanpa pilihan “disahkan sahaja”."
                     : "."} Jumlah penerima dikira semula setiap kali dijana.</>}
             </DialogDescription>
