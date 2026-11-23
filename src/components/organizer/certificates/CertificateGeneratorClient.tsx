@@ -22,7 +22,7 @@ type Job = {
   id: string; templateId: string; templateName: string; templateType: string | null; source: Source; status: string;
   total: number; created: number; skipped: number; error: string | null;
   createdBy: string | null; createdAt: string; completedAt: string | null; eventName: string | null;
-  config: { eventId?: string; eventIds?: string[]; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
+  config: { eventId?: string; eventIds?: string[]; onePerCompetition?: boolean; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
             verifiedOnly?: boolean; contingentType?: string; eventNameOverride?: string; rowCount?: number;
             resultsBy?: ResultsBy;
             distributionLevel?: DistLevel };
@@ -123,6 +123,7 @@ function describe(j: Job, withResultsBy = true) {
   if (c.competitionCodes?.length) parts.push(`${c.competitionCodes.length} pertandingan`);
   if (j.source === "ALL_REGISTERED") parts.push(CONTINGENT_TYPES.find(t => t[0] === (c.contingentType ?? ""))?.[1] ?? "");
   if (j.source === "CUSTOM") parts.push(`${fmt(c.rowCount ?? 0)} baris`);
+  if ((c.eventIds?.length ?? 0) > 1) parts.push(`${c.eventIds!.length} acara · ${c.onePerCompetition ? "1 sijil / peserta × pertandingan" : "1 sijil / acara"}`);
   if (c.eventNameOverride) parts.push(`Nama acara: "${c.eventNameOverride}"`);
   return parts.filter(Boolean);
 }
@@ -144,6 +145,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const [eventIds, setEventIds] = useState<string[]>(c?.eventIds?.length ? c.eventIds : c?.eventId ? [c.eventId] : []);
   const [competitions, setCompetitions] = useState<{ code: string; name: string }[]>([]);
   const [codes, setCodes] = useState<string[]>(c?.competitionCodes ?? []);
+  const [onePerCompetition, setOnePerCompetition] = useState(c?.onePerCompetition ?? false);
   const [attendedOnly, setAttendedOnly] = useState(c?.attendedOnly ?? false);
   const [rankFrom, setRankFrom] = useState(c?.rankFrom ?? 1);
   const [rankTo, setRankTo] = useState(c?.rankTo ?? 3);
@@ -194,7 +196,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
     try {
       await call(editing ? `${API}/${editing.id}` : API, { method: editing ? "PUT" : "POST", body: JSON.stringify({
         templateId, source,
-        config: { eventId: chosenEvents[0], eventIds: chosenEvents, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
+        config: { eventId: chosenEvents[0], eventIds: chosenEvents, onePerCompetition, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
       onCreated();
@@ -260,10 +262,23 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                       </div>
                     ))}
                     {multiEvent && chosenEvents.length > 1 && (
-                      <p className="text-[11px] text-zinc-400">
-                        Penerima setiap acara dijana mengikut susunan di atas, dengan nama acara masing-masing (kecuali nama acara ditetapkan).
-                        Peserta yang sama dalam dua acara menerima sijil bagi setiap acara.
-                      </p>
+                      <div className="max-w-xl space-y-1.5 pt-1">
+                        <div className="flex flex-wrap gap-1.5 text-xs">
+                          {([[false, "Satu sijil setiap acara"], [true, "Satu sijil setiap peserta × pertandingan"]] as const).map(([v, l]) => (
+                            <button key={String(v)} type="button" onClick={() => setOnePerCompetition(v)}
+                              className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
+                                onePerCompetition === v ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
+                              {l}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-zinc-400">
+                          {onePerCompetition
+                            ? "Peserta yang sama dalam pertandingan yang sama di beberapa acara menerima satu sijil sahaja — daripada acara pertama (mengikut susunan di atas) yang dia sertai."
+                            : "Peserta yang sama dalam dua acara menerima sijil bagi setiap acara."}
+                          {" "}Penerima dijana mengikut susunan acara di atas, dengan nama acara masing-masing (kecuali nama acara ditetapkan).
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>

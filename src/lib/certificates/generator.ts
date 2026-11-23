@@ -62,6 +62,11 @@ export type GeneratorConfig = {
    * resolved one after another (each with its own event name and keys).
    */
   eventIds?: string[];
+  /**
+   * Several events: true = one certificate per person × competition (the
+   * first chosen event they appear in wins); false / absent = one per event.
+   */
+  onePerCompetition?: boolean;
   /** Limit to these competition codes (empty / absent = all of the event's). */
   competitionCodes?: string[];
   attendedOnly?: boolean;              // EVENT_PARTICIPANTS
@@ -127,6 +132,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
   const cfg: GeneratorConfig = {
     eventId:           ids[0],
     eventIds:          ids.length > 1 ? ids : undefined,
+    onePerCompetition: ids.length > 1 && !!raw?.onePerCompetition || undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -246,6 +252,10 @@ export async function resolveRecipients(
 ): Promise<{ rows: Recipient[]; total: number }> {
   const ids = configEventIds(cfg);
   if (ids.length <= 1 || !MULTI_EVENT_SOURCES.includes(source)) return resolveOne(source, cfg, offset, limit);
+  if (cfg.onePerCompetition) {
+    const all = await uniqueAcrossEvents(source, cfg, ids);
+    return { total: all.length, rows: all.slice(offset, offset + limit) };
+  }
   const rows: Recipient[] = [];
   let total = 0;
   for (const eventId of ids) {
@@ -258,6 +268,28 @@ export async function resolveRecipients(
     total += r.total;
   }
   return { rows, total };
+}
+
+/**
+ * Every event's recipients, keeping only the first row of each person ×
+ * competition (events in the chosen order). Needs the whole list to page, so
+ * it is cached briefly — a generator run asks for it once per batch.
+ */
+const uniqueCache = new Map<string, { at: number; rows: Recipient[] }>();
+async function uniqueAcrossEvents(source: GeneratorSource, cfg: GeneratorConfig, ids: string[]): Promise<Recipient[]> {
+  const cacheKey = JSON.stringify([source, cfg]);
+  const hit = uniqueCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < 120_000) return hit.rows;
+  const seen = new Set<string>(), rows: Recipient[] = [];
+  for (const eventId of ids)
+    for (const r of (await resolveOne(source, { ...cfg, eventId, eventIds: undefined }, 0, 1_000_000)).rows) {
+      const k = `${r.participantId ?? r.name}|${r.competitionId ?? r.competitionCode}`;
+      if (seen.has(k)) continue;
+      seen.add(k); rows.push(r);
+    }
+  for (const [k, v] of uniqueCache) if (Date.now() - v.at >= 120_000) uniqueCache.delete(k);
+  uniqueCache.set(cacheKey, { at: Date.now(), rows });
+  return rows;
 }
 
 async function resolveOne(
