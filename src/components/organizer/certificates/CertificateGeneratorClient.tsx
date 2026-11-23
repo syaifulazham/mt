@@ -22,7 +22,7 @@ type Job = {
   id: string; templateId: string; templateName: string; templateType: string | null; source: Source; status: string;
   total: number; created: number; skipped: number; error: string | null;
   createdBy: string | null; createdAt: string; completedAt: string | null; eventName: string | null;
-  config: { eventId?: string; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
+  config: { eventId?: string; eventIds?: string[]; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
             verifiedOnly?: boolean; contingentType?: string; eventNameOverride?: string; rowCount?: number;
             resultsBy?: ResultsBy;
             distributionLevel?: DistLevel };
@@ -74,7 +74,7 @@ function groupJobs(jobs: Job[], by: GroupBy): { key: string; label: string; jobs
   const groups = new Map<string, { key: string; label: string; jobs: Job[] }>();
   for (const j of jobs) {
     const [key, label] =
-      by === "event"    ? [j.config.eventId ?? "-", j.eventName ?? (j.config.eventNameOverride ? `"${j.config.eventNameOverride}"` : "Tanpa acara")]
+      by === "event"    ? [(j.config.eventIds ?? [j.config.eventId ?? "-"]).join(","), j.eventName ?? (j.config.eventNameOverride ? `"${j.config.eventNameOverride}"` : "Tanpa acara")]
       : by === "type"   ? [j.templateType ?? "-", TYPE_LABEL[j.templateType ?? ""] ?? j.templateType ?? "Tidak diketahui"]
       :                   [j.templateId, j.templateName];
     const g = groups.get(key) ?? { key, label, jobs: [] };
@@ -141,7 +141,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const c = base?.config;
   const [templateId, setTemplateId] = useState(base && (editing || templates.some(t => t.id === base.templateId)) ? base.templateId : "");
   const [source, setSource] = useState<Source | "">(base?.source ?? "");
-  const [eventId, setEventId] = useState(c?.eventId ?? "");
+  const [eventIds, setEventIds] = useState<string[]>(c?.eventIds?.length ? c.eventIds : c?.eventId ? [c.eventId] : []);
   const [competitions, setCompetitions] = useState<{ code: string; name: string }[]>([]);
   const [codes, setCodes] = useState<string[]>(c?.competitionCodes ?? []);
   const [attendedOnly, setAttendedOnly] = useState(c?.attendedOnly ?? false);
@@ -154,11 +154,12 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const [eventNameOverride, setOverride] = useState(c?.eventNameOverride ?? "");
   const [distributionLevel, setDistributionLevel] = useState<DistLevel>(c?.distributionLevel ?? "NONE");
 
-  // Duplicating / editing a generator with an event: load that event's competitions for the filter
+  // Duplicating / editing a generator with events: load their competitions for the filter
   useEffect(() => {
-    if (!base?.config.eventId) return;
+    const ids = base?.config.eventIds?.length ? base.config.eventIds : base?.config.eventId ? [base.config.eventId] : [];
+    if (!ids.length) return;
     let alive = true;
-    call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${base.config.eventId}`)
+    call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${ids.join(",")}`)
       .then(j => { if (alive) setCompetitions(j.competitions); }).catch(() => {});
     return () => { alive = false; };
   }, [base]);
@@ -167,16 +168,25 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
 
   const winnersLike = source === "EVENT_WINNERS" || source === "EVENT_WINNERS_PREGEN";
   const needsEvent = source === "EVENT_PARTICIPANTS" || winnersLike;
+  // Participants and winners may come from several events; pre-event blanks from one.
+  const multiEvent = source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS";
+  const chosenEvents = multiEvent ? eventIds : eventIds.slice(0, 1);
   // Trainers / Contingent Manager Portal users: no event, no portal distribution
   const personSource = source === "TRAINERS" || source === "MANAGERS";
   const customRows = source === "CUSTOM" ? parseCustom(customText) : [];
   const chosen = templates.find(t => t.id === templateId);
 
-  async function pickEvent(id: string) {
-    setEventId(id); setCodes([]); setCompetitions([]);
+  /** Replace the event at index i (i = length adds one; "" removes it). */
+  async function pickEvent(i: number, id: string) {
+    const next = [...chosenEvents];
+    if (id) next[i] = id; else next.splice(i, 1);
+    const ids = [...new Set(next.filter(Boolean))];
+    setEventIds(ids); setCompetitions([]);
     // Each competition as its Konfigurasi keputusan says (Kebangsaan / Negeri)
-    setResultsBy("CONFIG");
-    if (id) call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${id}`).then(j => setCompetitions(j.competitions)).catch(() => {});
+    if (i === 0 && id) setResultsBy("CONFIG");
+    if (ids.length) call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${ids.join(",")}`)
+      .then(j => { setCompetitions(j.competitions); setCodes(cs => cs.filter(x => j.competitions.some(c => c.code === x))); }).catch(() => {});
+    else setCodes([]);
   }
 
   async function save() {
@@ -184,7 +194,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
     try {
       await call(editing ? `${API}/${editing.id}` : API, { method: editing ? "PUT" : "POST", body: JSON.stringify({
         templateId, source,
-        config: { eventId: eventId || undefined, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
+        config: { eventId: chosenEvents[0], eventIds: chosenEvents, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
       onCreated();
@@ -193,7 +203,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   }
 
   const sel = "h-9 rounded-md border bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200";
-  const ready = templateId && source && (!needsEvent || eventId) && (source !== "CUSTOM" || customRows.length > 0 || (!!editing && editing.source === "CUSTOM")) && (!winnersLike || rankTo >= rankFrom) && !(source === "EVENT_WINNERS_PREGEN" && resultsBy === "INTERNATIONAL");
+  const ready = templateId && source && (!needsEvent || chosenEvents.length > 0) && (source !== "CUSTOM" || customRows.length > 0 || (!!editing && editing.source === "CUSTOM")) && (!winnersLike || rankTo >= rankFrom) && !(source === "EVENT_WINNERS_PREGEN" && resultsBy === "INTERNATIONAL");
 
   return (
     <div className={cn("rounded-xl border bg-white p-5 shadow-sm", base && "border-sky-300 ring-2 ring-sky-100")}>
@@ -234,12 +244,28 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
           {source && (
             <div className="mt-2 space-y-3 rounded-lg border bg-zinc-50/60 p-3 text-sm">
               {needsEvent && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="w-28 text-xs text-zinc-500">Acara</span>
-                  <select value={eventId} onChange={e => pickEvent(e.target.value)} className={cn(sel, "w-80")}>
-                    <option value="">Pilih acara…</option>
-                    {events.map(e => <option key={e.id} value={e.id}>{e.name} ({e.scope})</option>)}
-                  </select>
+                <div className="flex flex-wrap items-start gap-2">
+                  <span className="w-28 pt-2 text-xs text-zinc-500">Acara</span>
+                  <div className="space-y-1.5">
+                    {[...chosenEvents, ...(chosenEvents.length === 0 || multiEvent ? [""] : [])].map((id, i) => (
+                      <div key={`${i}:${id}`} className="flex items-center gap-1.5">
+                        <select value={id} onChange={e => pickEvent(i, e.target.value)} className={cn(sel, "w-80", !id && i > 0 && "border-dashed text-zinc-400")}>
+                          <option value="">{i === 0 ? "Pilih acara…" : "+ Tambah acara lain…"}</option>
+                          {events.filter(e => e.id === id || !chosenEvents.includes(e.id)).map(e => <option key={e.id} value={e.id}>{e.name} ({e.scope})</option>)}
+                        </select>
+                        {id && chosenEvents.length > 1 && (
+                          <button type="button" onClick={() => pickEvent(i, "")} title="Buang acara ini"
+                            className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>
+                        )}
+                      </div>
+                    ))}
+                    {multiEvent && chosenEvents.length > 1 && (
+                      <p className="text-[11px] text-zinc-400">
+                        Penerima setiap acara dijana mengikut susunan di atas, dengan nama acara masing-masing (kecuali nama acara ditetapkan).
+                        Peserta yang sama dalam dua acara menerima sijil bagi setiap acara.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
               {personSource && (

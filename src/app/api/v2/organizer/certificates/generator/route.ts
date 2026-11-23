@@ -2,24 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { GENERATOR_SOURCES, normalizeConfig, resolveRecipients, type GeneratorConfig, type GeneratorSource } from "@/lib/certificates/generator";
+import { GENERATOR_SOURCES, normalizeConfig, resolveRecipients, type GeneratorConfig, type GeneratorSource, configEventIds } from "@/lib/certificates/generator";
 
 export const dynamic = "force-dynamic";
 const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN"];
 
 /**
  * GET            — generator jobs, publishable templates and events
- * GET ?eventId=X — that event's competitions (regular + walk-in), for the filter
+ * GET ?eventId=X[,Y…] — those events' competitions (regular + walk-in), for the filter
  */
 export async function GET(req: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!WRITE_ROLES.includes(session.role)) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
-  const eventId = req.nextUrl.searchParams.get("eventId");
-  if (eventId) {
+  const eventIds = req.nextUrl.searchParams.get("eventId")?.split(",").filter(Boolean) ?? [];
+  if (eventIds.length) {
     // Registered competitions only: walk-in competitions never get certificates.
-    const regular = await db.eventCompetition.findMany({ where: { eventId }, select: { competition: { select: { code: true, name: true } } } });
+    const regular = await db.eventCompetition.findMany({ where: { eventId: { in: eventIds } }, select: { competition: { select: { code: true, name: true } } } });
     const all = new Map(regular.map(c => [c.competition.code, c.competition]));
     return NextResponse.json({ competitions: [...all.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })) });
   }
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     jobs: jobs.map(j => {
       const cfg = j.config as GeneratorConfig;
-      return { ...j, templateName: tName.get(j.templateId) ?? "(templat dipadam)", templateType: tType.get(j.templateId) ?? null, eventName: cfg.eventId ? evName.get(cfg.eventId) ?? null : null, config: { ...cfg, rows: undefined, rowCount: cfg.rows?.length } };
+      return { ...j, templateName: tName.get(j.templateId) ?? "(templat dipadam)", templateType: tType.get(j.templateId) ?? null, eventName: configEventIds(cfg).map(e => evName.get(e)).filter(Boolean).join(" · ") || null, config: { ...cfg, rows: undefined, rowCount: cfg.rows?.length } };
     }),
     templates, events,
   }, { headers: { "Cache-Control": "no-store" } });

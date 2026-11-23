@@ -55,7 +55,13 @@ export type CustomRow = {
 };
 
 export type GeneratorConfig = {
+  /** The first of eventIds (kept for older readers and single-event sources). */
   eventId?: string;
+  /**
+   * EVENT_PARTICIPANTS / EVENT_WINNERS: every event the recipients come from,
+   * resolved one after another (each with its own event name and keys).
+   */
+  eventIds?: string[];
   /** Limit to these competition codes (empty / absent = all of the event's). */
   competitionCodes?: string[];
   attendedOnly?: boolean;              // EVENT_PARTICIPANTS
@@ -114,8 +120,13 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
   // Trainers / Contingent Manager Portal users: no event and no portal distribution
   const personSource = source === "TRAINERS" || source === "MANAGERS";
   const general = source === "GENERAL";
+  const ids = personSource || general ? [] : [...new Set((raw?.eventIds?.length ? raw.eventIds : [raw?.eventId]).filter((x): x is string => !!x))];
+  // Pre-event blanks are matched to winners per event (pregen.ts): one event only.
+  if (ids.length > 1 && !MULTI_EVENT_SOURCES.includes(source))
+    return { error: "Sumber data ini menyokong satu acara sahaja." };
   const cfg: GeneratorConfig = {
-    eventId:           personSource || general ? undefined : raw?.eventId || undefined,
+    eventId:           ids[0],
+    eventIds:          ids.length > 1 ? ids : undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -138,6 +149,13 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
     return { error: "Julat kedudukan tidak sah." };
   return { cfg };
 }
+
+/** Sources whose recipients may come from several events. */
+export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "EVENT_WINNERS"];
+
+/** A generator's events, in order (one for older configs). */
+export const configEventIds = (cfg: GeneratorConfig): string[] =>
+  cfg.eventIds?.length ? cfg.eventIds : cfg.eventId ? [cfg.eventId] : [];
 
 export function awardTitleForRank(rank: number): string {
   return rank === 1 ? "TEMPAT PERTAMA" : `TEMPAT KE-${rank}`;
@@ -217,8 +235,32 @@ async function pregenSlots(cfg: GeneratorConfig) {
   return out;
 }
 
-/** One page of recipients plus the total, in a stable order. */
+/**
+ * One page of recipients plus the total, in a stable order. With several
+ * events (eventIds), each event's recipients follow the previous event's, in
+ * the order the events were chosen; keys carry the event id, so the same
+ * person in two events gets a certificate for each.
+ */
 export async function resolveRecipients(
+  source: GeneratorSource, cfg: GeneratorConfig, offset: number, limit: number,
+): Promise<{ rows: Recipient[]; total: number }> {
+  const ids = configEventIds(cfg);
+  if (ids.length <= 1 || !MULTI_EVENT_SOURCES.includes(source)) return resolveOne(source, cfg, offset, limit);
+  const rows: Recipient[] = [];
+  let total = 0;
+  for (const eventId of ids) {
+    const one: GeneratorConfig = { ...cfg, eventId, eventIds: undefined };
+    // This event's slice of the requested page [offset, offset + limit); the
+    // call also returns the event's total, which places the next event.
+    const from = Math.max(0, offset - total), want = Math.max(0, offset + limit - total - from);
+    const r = await resolveOne(source, one, from, want);
+    rows.push(...r.rows);
+    total += r.total;
+  }
+  return { rows, total };
+}
+
+async function resolveOne(
   source: GeneratorSource, cfg: GeneratorConfig, offset: number, limit: number,
 ): Promise<{ rows: Recipient[]; total: number }> {
   const evName = await eventName(cfg);
