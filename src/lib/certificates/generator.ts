@@ -67,6 +67,12 @@ export type GeneratorConfig = {
    * first chosen event they appear in wins); false / absent = one per event.
    */
   onePerCompetition?: boolean;
+  /**
+   * EVENT_PARTICIPANTS: which of each event's teams count, by event id. An
+   * event without a rule uses attendedOnly and its scope's default (ONLINE:
+   * every team not rejected; otherwise accepted teams).
+   */
+  eventRules?: Record<string, EventRule>;
   /** Limit to these competition codes (empty / absent = all of the event's). */
   competitionCodes?: string[];
   attendedOnly?: boolean;              // EVENT_PARTICIPANTS
@@ -86,6 +92,13 @@ export type GeneratorConfig = {
   eventNameOverride?: string;
   /** Portal column the certificates appear under; NONE = not distributed. */
   distributionLevel?: DistributionLevel;
+};
+
+export type EventRule = {
+  /** ACCEPTED = accepted teams only; NOT_REJECTED = every team not rejected. */
+  acceptance?: "ACCEPTED" | "NOT_REJECTED";
+  /** Teams checked in at the counter (attendedAt) only. */
+  attendedOnly?: boolean;
 };
 
 export type Recipient = {
@@ -133,6 +146,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
     eventId:           ids[0],
     eventIds:          ids.length > 1 ? ids : undefined,
     onePerCompetition: ids.length > 1 && !!raw?.onePerCompetition || undefined,
+    eventRules:        source === "EVENT_PARTICIPANTS" ? cleanRules(raw?.eventRules, ids) : undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -156,8 +170,26 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
   return { cfg };
 }
 
+function cleanRules(raw: Record<string, EventRule> | undefined, ids: string[]): Record<string, EventRule> | undefined {
+  if (!raw) return undefined;
+  const out: Record<string, EventRule> = {};
+  for (const id of ids) {
+    const r = raw[id];
+    if (!r) continue;
+    out[id] = {
+      acceptance: r.acceptance === "NOT_REJECTED" ? "NOT_REJECTED" : r.acceptance === "ACCEPTED" ? "ACCEPTED" : undefined,
+      attendedOnly: !!r.attendedOnly,
+    };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** Sources whose recipients may come from several events. */
 export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "EVENT_WINNERS"];
+
+/** Which teams of an event count by default, from its scope. */
+export const defaultAcceptance = (scope: string): "ACCEPTED" | "NOT_REJECTED" =>
+  scope.startsWith("ONLINE") ? "NOT_REJECTED" : "ACCEPTED";
 
 /** A generator's events, in order (one for older configs). */
 export const configEventIds = (cfg: GeneratorConfig): string[] =>
@@ -302,11 +334,14 @@ async function resolveOne(
     if (!cfg.eventId) throw new Error("Pilih acara.");
     const params: unknown[] = [cfg.eventId];
     const codeFilter = codes ? (params.push(codes), `AND c.code = ANY($${params.length})`) : "";
-    const attended = cfg.attendedOnly ? `AND te."attendedAt" IS NOT NULL` : "";
+    const rule = cfg.eventRules?.[cfg.eventId];
+    const attended = (rule?.attendedOnly ?? cfg.attendedOnly) ? `AND te."attendedAt" IS NOT NULL` : "";
     // Physical events accept teams one by one; online events never do (their
     // teams stay PENDING), so there every team that isn't rejected takes part.
+    // The event's own rule, when set, decides instead.
     const scope = (await db.event.findUnique({ where: { id: cfg.eventId }, select: { scope: true } }))?.scope ?? "";
-    const accepted = String(scope).startsWith("ONLINE") ? `te.acceptance <> 'REJECT'` : `te.acceptance = 'ACCEPT'`;
+    const acceptance = rule?.acceptance ?? defaultAcceptance(String(scope));
+    const accepted = acceptance === "NOT_REJECTED" ? `te.acceptance <> 'REJECT'` : `te.acceptance = 'ACCEPT'`;
     const sql = `
       SELECT * FROM (
         SELECT ${PERSON_COLS}, t.id AS team_id, t.name AS team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code

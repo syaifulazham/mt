@@ -22,12 +22,16 @@ type Job = {
   id: string; templateId: string; templateName: string; templateType: string | null; source: Source; status: string;
   total: number; created: number; skipped: number; error: string | null;
   createdBy: string | null; createdAt: string; completedAt: string | null; eventName: string | null;
-  config: { eventId?: string; eventIds?: string[]; onePerCompetition?: boolean; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
+  config: { eventId?: string; eventIds?: string[]; onePerCompetition?: boolean; eventRules?: Record<string, EventRule>; competitionCodes?: string[]; attendedOnly?: boolean; rankFrom?: number; rankTo?: number;
             verifiedOnly?: boolean; contingentType?: string; eventNameOverride?: string; rowCount?: number;
             resultsBy?: ResultsBy;
             distributionLevel?: DistLevel };
 };
 type ResultsBy = "CONFIG" | "NATIONAL" | "STATE" | "INTERNATIONAL";
+type Acceptance = "ACCEPTED" | "NOT_REJECTED";
+type EventRule = { acceptance?: Acceptance; attendedOnly?: boolean };
+/** Mirrors defaultAcceptance in lib/certificates/generator.ts. */
+const defaultAcceptance = (scope: string): Acceptance => scope.startsWith("ONLINE") ? "NOT_REJECTED" : "ACCEPTED";
 const RESULTS_BY_LABEL: Record<ResultsBy, string> = {
   CONFIG: "Ikut konfigurasi keputusan", STATE: "State (ikut negeri)",
   NATIONAL: "National (kebangsaan)", INTERNATIONAL: "International (antarabangsa)",
@@ -119,7 +123,19 @@ function describe(j: Job, withResultsBy = true) {
     if (withResultsBy) parts.push(RESULTS_BY_SHORT[c.resultsBy ?? "NATIONAL"]);
     parts.push(`Kedudukan ${c.rankFrom ?? 1} – ${c.rankTo ?? 3}${c.verifiedOnly === false ? " · termasuk belum disahkan" : ""}`);
   }
-  if (j.source === "EVENT_PARTICIPANTS" && c.attendedOnly) parts.push("Hadir sahaja");
+  if (j.source === "EVENT_PARTICIPANTS") {
+    const ids = c.eventIds?.length ? c.eventIds : c.eventId ? [c.eventId] : [];
+    const rules = ids.map(id => c.eventRules?.[id]);
+    const att = rules.filter(r => r ? r.attendedOnly : c.attendedOnly).length;
+    const notRej = rules.filter(r => r?.acceptance === "NOT_REJECTED").length;
+    if (ids.length <= 1) {
+      if (att) parts.push("Hadir sahaja");
+      if (notRej) parts.push("Semua kecuali ditolak");
+    } else {
+      if (att) parts.push(att === ids.length ? "Hadir sahaja" : `Hadir sahaja: ${att}/${ids.length} acara`);
+      if (notRej) parts.push(`Semua kecuali ditolak: ${notRej}/${ids.length} acara`);
+    }
+  }
   if (c.competitionCodes?.length) parts.push(`${c.competitionCodes.length} pertandingan`);
   if (j.source === "ALL_REGISTERED") parts.push(CONTINGENT_TYPES.find(t => t[0] === (c.contingentType ?? ""))?.[1] ?? "");
   if (j.source === "CUSTOM") parts.push(`${fmt(c.rowCount ?? 0)} baris`);
@@ -146,7 +162,9 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const [competitions, setCompetitions] = useState<{ code: string; name: string }[]>([]);
   const [codes, setCodes] = useState<string[]>(c?.competitionCodes ?? []);
   const [onePerCompetition, setOnePerCompetition] = useState(c?.onePerCompetition ?? false);
-  const [attendedOnly, setAttendedOnly] = useState(c?.attendedOnly ?? false);
+  const [eventRules, setEventRules] = useState<Record<string, EventRule>>(c?.eventRules ?? {});
+  // The old single switch: the default for events without a rule of their own.
+  const attendedOnly = c?.attendedOnly ?? false;
   const [rankFrom, setRankFrom] = useState(c?.rankFrom ?? 1);
   const [rankTo, setRankTo] = useState(c?.rankTo ?? 3);
   const [verifiedOnly, setVerifiedOnly] = useState(c?.verifiedOnly ?? true);
@@ -173,6 +191,13 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   // Participants and winners may come from several events; pre-event blanks from one.
   const multiEvent = source === "EVENT_PARTICIPANTS" || source === "EVENT_WINNERS";
   const chosenEvents = multiEvent ? eventIds : eventIds.slice(0, 1);
+  // Each event's team rule; events without one start from the old single
+  // "hadir sahaja" switch and their scope's default.
+  const ruleOf = (id: string): Required<EventRule> => ({
+    acceptance: eventRules[id]?.acceptance ?? defaultAcceptance(events.find(e => e.id === id)?.scope ?? ""),
+    attendedOnly: eventRules[id]?.attendedOnly ?? attendedOnly,
+  });
+  const setRule = (id: string, patch: EventRule) => setEventRules(r => ({ ...r, [id]: { ...ruleOf(id), ...patch } }));
   // Trainers / Contingent Manager Portal users: no event, no portal distribution
   const personSource = source === "TRAINERS" || source === "MANAGERS";
   const customRows = source === "CUSTOM" ? parseCustom(customText) : [];
@@ -196,7 +221,10 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
     try {
       await call(editing ? `${API}/${editing.id}` : API, { method: editing ? "PUT" : "POST", body: JSON.stringify({
         templateId, source,
-        config: { eventId: chosenEvents[0], eventIds: chosenEvents, onePerCompetition, competitionCodes: codes, attendedOnly, rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
+        config: { eventId: chosenEvents[0], eventIds: chosenEvents, onePerCompetition, competitionCodes: codes,
+                  attendedOnly: chosenEvents[0] ? ruleOf(chosenEvents[0]).attendedOnly : attendedOnly,
+                  eventRules: source === "EVENT_PARTICIPANTS" ? Object.fromEntries(chosenEvents.map(id => [id, ruleOf(id)])) : undefined,
+                  rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
       onCreated();
@@ -310,11 +338,32 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   </div>
                 </div>
               )}
-              {source === "EVENT_PARTICIPANTS" && (
-                <label className="flex items-center gap-2 text-xs text-zinc-600">
-                  <span className="w-28 text-zinc-500">Kehadiran</span>
-                  <input type="checkbox" checked={attendedOnly} onChange={e => setAttendedOnly(e.target.checked)} /> Pasukan yang hadir sahaja
-                </label>
+              {source === "EVENT_PARTICIPANTS" && chosenEvents.length > 0 && (
+                <div className="flex flex-wrap items-start gap-2 text-xs">
+                  <span className="w-28 pt-2 text-zinc-500">Pasukan dikira</span>
+                  <div className="flex-1 space-y-1.5">
+                    {chosenEvents.map(id => {
+                      const r = ruleOf(id);
+                      const name = events.find(e => e.id === id)?.name ?? id;
+                      return (
+                        <div key={id} className="flex flex-wrap items-center gap-2">
+                          {chosenEvents.length > 1 && <span className="w-44 truncate font-medium text-zinc-700" title={name}>{name}</span>}
+                          <select value={r.acceptance} onChange={e => setRule(id, { acceptance: e.target.value as Acceptance })} className={cn(sel, "h-8 w-52 text-xs")}>
+                            <option value="ACCEPTED">Pasukan diterima sahaja</option>
+                            <option value="NOT_REJECTED">Semua kecuali ditolak</option>
+                          </select>
+                          <label className="flex items-center gap-1.5 text-zinc-600">
+                            <input type="checkbox" checked={r.attendedOnly} onChange={e => setRule(id, { attendedOnly: e.target.checked })} /> Hadir sahaja
+                          </label>
+                        </div>
+                      );
+                    })}
+                    <p className="text-[11px] text-zinc-400">
+                      &ldquo;Semua kecuali ditolak&rdquo; untuk acara yang pasukannya tidak pernah diterima (cth. saringan / dalam talian).
+                      &ldquo;Hadir sahaja&rdquo; = pasukan yang mendaftar masuk di kaunter.
+                    </p>
+                  </div>
+                </div>
               )}
               {source === "EVENT_WINNERS_PREGEN" && (
                 <p className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-[11px] leading-relaxed text-sky-900">
