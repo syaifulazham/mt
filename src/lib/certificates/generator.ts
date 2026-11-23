@@ -95,10 +95,16 @@ export type GeneratorConfig = {
 };
 
 export type EventRule = {
-  /** ACCEPTED = accepted teams only; NOT_REJECTED = every team not rejected. */
-  acceptance?: "ACCEPTED" | "NOT_REJECTED";
-  /** Teams checked in at the counter (attendedAt) only. */
+  /** Registered teams: ACCEPTED = accepted only; NOT_REJECTED = every team not rejected; NONE = none. */
+  acceptance?: "ACCEPTED" | "NOT_REJECTED" | "NONE";
+  /** Registered teams checked in at the counter (attendedAt) only. */
   attendedOnly?: boolean;
+  /**
+   * Walk-in competitions: NONE (default) = none; CONFIRMED = confirmed
+   * registrations; NOT_REJECTED = every one not rejected or cancelled. A team
+   * walk-in gives a certificate to each member of its team.
+   */
+  walkIn?: "NONE" | "CONFIRMED" | "NOT_REJECTED";
 };
 
 export type Recipient = {
@@ -177,8 +183,9 @@ function cleanRules(raw: Record<string, EventRule> | undefined, ids: string[]): 
     const r = raw[id];
     if (!r) continue;
     out[id] = {
-      acceptance: r.acceptance === "NOT_REJECTED" ? "NOT_REJECTED" : r.acceptance === "ACCEPTED" ? "ACCEPTED" : undefined,
+      acceptance: r.acceptance === "NOT_REJECTED" || r.acceptance === "ACCEPTED" || r.acceptance === "NONE" ? r.acceptance : undefined,
       attendedOnly: !!r.attendedOnly,
+      walkIn: r.walkIn === "CONFIRMED" || r.walkIn === "NOT_REJECTED" ? r.walkIn : undefined,
     };
   }
   return Object.keys(out).length ? out : undefined;
@@ -342,24 +349,38 @@ async function resolveOne(
     const scope = (await db.event.findUnique({ where: { id: cfg.eventId }, select: { scope: true } }))?.scope ?? "";
     const acceptance = rule?.acceptance ?? defaultAcceptance(String(scope));
     const accepted = acceptance === "NOT_REJECTED" ? `te.acceptance <> 'REJECT'` : `te.acceptance = 'ACCEPT'`;
-    const sql = `
-      SELECT * FROM (
-        SELECT ${PERSON_COLS}, t.id AS team_id, t.name AS team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code
+    const parts: string[] = [];
+    if (acceptance !== "NONE") parts.push(`
+        SELECT ${PERSON_COLS}, t.id AS team_id, t.name AS team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code, false AS walk_in
         FROM team_events te
         JOIN teams t         ON t.id = te."teamId"
         JOIN competitions c  ON c.id = t."competitionId"
         JOIN team_members tm ON tm."teamId" = t.id
         JOIN contestants p   ON p.id = tm."contestantId"
         ${PERSON_JOINS.replace("%CT%", `t."contingentId"`)}
-        WHERE te."eventId" = $1 AND ${accepted} ${attended} ${codeFilter}
-      ) x`;
+        WHERE te."eventId" = $1 AND ${accepted} ${attended} ${codeFilter}`);
+    // Walk-in competitions: the registered participant, or each member of the
+    // walk-in's team (with their own contingent).
+    const walkIn = rule?.walkIn ?? "NONE";
+    if (walkIn !== "NONE") parts.push(`
+        SELECT ${PERSON_COLS}, t.id AS team_id, t.name AS team_name, c.id AS comp_id, c.name AS comp_name, c.code AS comp_code, true AS walk_in
+        FROM walkin_registrations w
+        JOIN event_walkin_competitions ewc ON ewc.id = w."walkInCompetitionId"
+        JOIN competitions c  ON c.id = ewc."competitionId"
+        LEFT JOIN teams t    ON t.id = w."teamId"
+        LEFT JOIN team_members tm ON tm."teamId" = t.id
+        JOIN contestants p   ON p.id = COALESCE(tm."contestantId", w."participantId")
+        ${PERSON_JOINS.replace("%CT%", `COALESCE(p."contingentId", w."contingentId")`)}
+        WHERE ewc."eventId" = $1 AND ${walkIn === "CONFIRMED" ? `w.status = 'CONFIRMED'` : `w.status NOT IN ('REJECTED', 'CANCELLED')`} ${codeFilter}`);
+    if (!parts.length) return { total: 0, rows: [] };
+    const sql = `SELECT * FROM (${parts.join(" UNION ALL ")}) x`;
     const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${sql}) y`, ...params);
-    const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string | null; team_name: string | null; comp_id: string; comp_name: string; comp_code: string })[]>(
-      `${sql} ORDER BY comp_code, team_name NULLS LAST, name, pid OFFSET ${offset} LIMIT ${limit}`, ...params);
+    const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string | null; team_name: string | null; comp_id: string; comp_name: string; comp_code: string; walk_in: boolean })[]>(
+      `${sql} ORDER BY walk_in, comp_code, team_name NULLS LAST, name, pid OFFSET ${offset} LIMIT ${limit}`, ...params);
     return {
       total: n,
       rows: rows.map(r => ({
-        key: `part:${cfg.eventId}:${r.comp_id}:${r.pid}`,
+        key: `${r.walk_in ? "walk" : "part"}:${cfg.eventId}:${r.comp_id}:${r.pid}`,
         participantId: r.pid, name: r.name, ic: r.ic,
         contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
         countryName: r.country_name,

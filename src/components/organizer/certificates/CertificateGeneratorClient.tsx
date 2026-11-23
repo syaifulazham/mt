@@ -28,8 +28,10 @@ type Job = {
             distributionLevel?: DistLevel };
 };
 type ResultsBy = "CONFIG" | "NATIONAL" | "STATE" | "INTERNATIONAL";
-type Acceptance = "ACCEPTED" | "NOT_REJECTED";
-type EventRule = { acceptance?: Acceptance; attendedOnly?: boolean };
+type Acceptance = "ACCEPTED" | "NOT_REJECTED" | "NONE";
+type WalkInRule = "NONE" | "CONFIRMED" | "NOT_REJECTED";
+type EventRule = { acceptance?: Acceptance; attendedOnly?: boolean; walkIn?: WalkInRule };
+type Comp = { code: string; name: string; walkIn?: boolean };
 /** Mirrors defaultAcceptance in lib/certificates/generator.ts. */
 const defaultAcceptance = (scope: string): Acceptance => scope.startsWith("ONLINE") ? "NOT_REJECTED" : "ACCEPTED";
 const RESULTS_BY_LABEL: Record<ResultsBy, string> = {
@@ -126,8 +128,12 @@ function describe(j: Job, withResultsBy = true) {
   if (j.source === "EVENT_PARTICIPANTS") {
     const ids = c.eventIds?.length ? c.eventIds : c.eventId ? [c.eventId] : [];
     const rules = ids.map(id => c.eventRules?.[id]);
-    const att = rules.filter(r => r ? r.attendedOnly : c.attendedOnly).length;
+    const att = rules.filter(r => r ? r.attendedOnly && r.acceptance !== "NONE" : c.attendedOnly).length;
     const notRej = rules.filter(r => r?.acceptance === "NOT_REJECTED").length;
+    const walk = rules.filter(r => r?.walkIn && r.walkIn !== "NONE").length;
+    const noReg = rules.filter(r => r?.acceptance === "NONE").length;
+    if (walk) parts.push(ids.length <= 1 ? "Termasuk walk-in" : `Walk-in: ${walk}/${ids.length} acara`);
+    if (noReg) parts.push(ids.length <= 1 ? "Tanpa pertandingan berdaftar" : `Tanpa pertandingan berdaftar: ${noReg}/${ids.length} acara`);
     if (ids.length <= 1) {
       if (att) parts.push("Hadir sahaja");
       if (notRej) parts.push("Semua kecuali ditolak");
@@ -159,7 +165,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const [templateId, setTemplateId] = useState(base && (editing || templates.some(t => t.id === base.templateId)) ? base.templateId : "");
   const [source, setSource] = useState<Source | "">(base?.source ?? "");
   const [eventIds, setEventIds] = useState<string[]>(c?.eventIds?.length ? c.eventIds : c?.eventId ? [c.eventId] : []);
-  const [competitions, setCompetitions] = useState<{ code: string; name: string }[]>([]);
+  const [competitions, setCompetitions] = useState<Comp[]>([]);
   const [codes, setCodes] = useState<string[]>(c?.competitionCodes ?? []);
   const [onePerCompetition, setOnePerCompetition] = useState(c?.onePerCompetition ?? false);
   const [eventRules, setEventRules] = useState<Record<string, EventRule>>(c?.eventRules ?? {});
@@ -179,7 +185,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
     const ids = base?.config.eventIds?.length ? base.config.eventIds : base?.config.eventId ? [base.config.eventId] : [];
     if (!ids.length) return;
     let alive = true;
-    call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${ids.join(",")}`)
+    call<{ competitions: Comp[] }>(`${API}?eventId=${ids.join(",")}`)
       .then(j => { if (alive) setCompetitions(j.competitions); }).catch(() => {});
     return () => { alive = false; };
   }, [base]);
@@ -196,6 +202,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const ruleOf = (id: string): Required<EventRule> => ({
     acceptance: eventRules[id]?.acceptance ?? defaultAcceptance(events.find(e => e.id === id)?.scope ?? ""),
     attendedOnly: eventRules[id]?.attendedOnly ?? attendedOnly,
+    walkIn: eventRules[id]?.walkIn ?? "NONE",
   });
   const setRule = (id: string, patch: EventRule) => setEventRules(r => ({ ...r, [id]: { ...ruleOf(id), ...patch } }));
   // Trainers / Contingent Manager Portal users: no event, no portal distribution
@@ -211,7 +218,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
     setEventIds(ids); setCompetitions([]);
     // Each competition as its Konfigurasi keputusan says (Kebangsaan / Negeri)
     if (i === 0 && id) setResultsBy("CONFIG");
-    if (ids.length) call<{ competitions: { code: string; name: string }[] }>(`${API}?eventId=${ids.join(",")}`)
+    if (ids.length) call<{ competitions: Comp[] }>(`${API}?eventId=${ids.join(",")}`)
       .then(j => { setCompetitions(j.competitions); setCodes(cs => cs.filter(x => j.competitions.some(c => c.code === x))); }).catch(() => {});
     else setCodes([]);
   }
@@ -325,13 +332,13 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   <div className="flex max-w-xl flex-1 flex-wrap gap-1">
                     <button type="button" onClick={() => setCodes([])}
                       className={cn("rounded-full border px-2 py-0.5 text-[11px]", codes.length === 0 ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600")}>Semua</button>
-                    {competitions.map(c => {
+                    {competitions.filter(c => !c.walkIn || source === "EVENT_PARTICIPANTS").map(c => {
                       const on = codes.includes(c.code);
                       return (
                         <button key={c.code} type="button" title={c.name}
                           onClick={() => setCodes(on ? codes.filter(x => x !== c.code) : [...codes, c.code])}
-                          className={cn("rounded-full border px-2 py-0.5 font-mono text-[11px]", on ? "border-[#085782] bg-sky-50 text-[#085782]" : "bg-white text-zinc-600")}>
-                          {c.code}
+                          className={cn("rounded-full border px-2 py-0.5 font-mono text-[11px]", on ? "border-[#085782] bg-sky-50 text-[#085782]" : c.walkIn ? "border-amber-200 bg-amber-50 text-amber-800" : "bg-white text-zinc-600")}>
+                          {c.code}{c.walkIn && <span className="ml-1 font-sans text-[9px] font-semibold uppercase">walk-in</span>}
                         </button>
                       );
                     })}
@@ -340,27 +347,40 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
               )}
               {source === "EVENT_PARTICIPANTS" && chosenEvents.length > 0 && (
                 <div className="flex flex-wrap items-start gap-2 text-xs">
-                  <span className="w-28 pt-2 text-zinc-500">Pasukan dikira</span>
-                  <div className="flex-1 space-y-1.5">
+                  <span className="w-28 pt-2 text-zinc-500">Penerima dikira</span>
+                  <div className="flex-1 space-y-2">
                     {chosenEvents.map(id => {
                       const r = ruleOf(id);
                       const name = events.find(e => e.id === id)?.name ?? id;
                       return (
-                        <div key={id} className="flex flex-wrap items-center gap-2">
-                          {chosenEvents.length > 1 && <span className="w-44 truncate font-medium text-zinc-700" title={name}>{name}</span>}
-                          <select value={r.acceptance} onChange={e => setRule(id, { acceptance: e.target.value as Acceptance })} className={cn(sel, "h-8 w-52 text-xs")}>
-                            <option value="ACCEPTED">Pasukan diterima sahaja</option>
-                            <option value="NOT_REJECTED">Semua kecuali ditolak</option>
-                          </select>
-                          <label className="flex items-center gap-1.5 text-zinc-600">
-                            <input type="checkbox" checked={r.attendedOnly} onChange={e => setRule(id, { attendedOnly: e.target.checked })} /> Hadir sahaja
-                          </label>
+                        <div key={id} className={cn("space-y-1.5", chosenEvents.length > 1 && "rounded-md border bg-white px-2.5 py-2")}>
+                          {chosenEvents.length > 1 && <p className="truncate font-medium text-zinc-700" title={name}>{name}</p>}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="w-36 text-zinc-500">Pertandingan berdaftar</span>
+                            <select value={r.acceptance} onChange={e => setRule(id, { acceptance: e.target.value as Acceptance })} className={cn(sel, "h-8 w-52 text-xs")}>
+                              <option value="ACCEPTED">Pasukan diterima sahaja</option>
+                              <option value="NOT_REJECTED">Semua kecuali ditolak</option>
+                              <option value="NONE">Tiada</option>
+                            </select>
+                            <label className={cn("flex items-center gap-1.5 text-zinc-600", r.acceptance === "NONE" && "opacity-40")}>
+                              <input type="checkbox" checked={r.attendedOnly} disabled={r.acceptance === "NONE"}
+                                onChange={e => setRule(id, { attendedOnly: e.target.checked })} /> Hadir sahaja
+                            </label>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="w-36 text-zinc-500">Pertandingan walk-in</span>
+                            <select value={r.walkIn} onChange={e => setRule(id, { walkIn: e.target.value as WalkInRule })} className={cn(sel, "h-8 w-52 text-xs")}>
+                              <option value="NONE">Tiada</option>
+                              <option value="CONFIRMED">Disahkan sahaja</option>
+                              <option value="NOT_REJECTED">Semua kecuali ditolak / dibatalkan</option>
+                            </select>
+                          </div>
                         </div>
                       );
                     })}
                     <p className="text-[11px] text-zinc-400">
                       &ldquo;Semua kecuali ditolak&rdquo; untuk acara yang pasukannya tidak pernah diterima (cth. saringan / dalam talian).
-                      &ldquo;Hadir sahaja&rdquo; = pasukan yang mendaftar masuk di kaunter.
+                      &ldquo;Hadir sahaja&rdquo; = pasukan yang mendaftar masuk di kaunter. Walk-in berpasukan: setiap ahli pasukan menerima sijil.
                     </p>
                   </div>
                 </div>

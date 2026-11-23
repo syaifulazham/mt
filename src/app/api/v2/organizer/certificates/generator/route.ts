@@ -18,9 +18,13 @@ export async function GET(req: NextRequest) {
 
   const eventIds = req.nextUrl.searchParams.get("eventId")?.split(",").filter(Boolean) ?? [];
   if (eventIds.length) {
-    // Registered competitions only: walk-in competitions never get certificates.
-    const regular = await db.eventCompetition.findMany({ where: { eventId: { in: eventIds } }, select: { competition: { select: { code: true, name: true } } } });
-    const all = new Map(regular.map(c => [c.competition.code, c.competition]));
+    // Registered and walk-in competitions (walk-ins count only when an event's rule includes them).
+    const [regular, walkIns] = await Promise.all([
+      db.eventCompetition.findMany({ where: { eventId: { in: eventIds } }, select: { competition: { select: { code: true, name: true } } } }),
+      db.eventWalkInCompetition.findMany({ where: { eventId: { in: eventIds } }, select: { competition: { select: { code: true, name: true } } } }),
+    ]);
+    const all = new Map<string, { code: string; name: string; walkIn?: boolean }>(walkIns.map(c => [c.competition.code, { ...c.competition, walkIn: true }]));
+    for (const c of regular) all.set(c.competition.code, c.competition);
     return NextResponse.json({ competitions: [...all.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })) });
   }
 
