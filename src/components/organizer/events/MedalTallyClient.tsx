@@ -5,14 +5,14 @@ import { Fragment, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Check, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Globe, Loader2, Lock, Medal,
-  MonitorPlay, Plus, Trash2,
+  MonitorPlay, Plus, Search, Trash2, Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { MedalTally, Place } from "@/lib/medalTally";
+import type { CompetitionPodium, MedalTally, PodiumEntry, Place } from "@/lib/medalTally";
 
 type Endpoint = {
   id: string; routeSlug: string; passcode: string | null; label: string | null;
@@ -31,6 +31,149 @@ function MedalHead({ place }: { place: Place }) {
     <th className="px-3 py-2.5 text-center w-20">
       <span className="inline-flex items-center gap-1.5"><span className={cn("h-2.5 w-2.5 rounded-full", s.dot)} />{s.label}</span>
     </th>
+  );
+}
+
+type Picked = { podium: CompetitionPodium; place: Place; entry: PodiumEntry };
+
+function Flag({ src, className }: { src: string | null; className?: string }) {
+  return src
+    ? <img src={src} alt="" className={cn("h-4 w-6 shrink-0 rounded-sm border object-cover", className)} />
+    : <span className={cn("h-4 w-6 shrink-0 rounded-sm border bg-zinc-100", className)} />;
+}
+
+function PodiumCell({ podium, place, onPick }: { podium: CompetitionPodium; place: Place; onPick: (p: Picked) => void }) {
+  const list = place === 1 ? podium.gold : place === 2 ? podium.silver : podium.bronze;
+  if (!list.length) return <td className="px-3 py-2 text-center text-zinc-300">–</td>;
+  return (
+    <td className="px-3 py-2 align-top">
+      <div className="flex flex-col gap-1">
+        {list.map((e, i) => (
+          <button key={i} type="button" onClick={() => onPick({ podium, place, entry: e })}
+            title={`${e.teamName} · ${e.contingentName}`}
+            className="flex items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 hover:underline">
+            <Flag src={e.stateFlag} />
+            <span className="truncate">{e.stateName}</span>
+          </button>
+        ))}
+      </div>
+    </td>
+  );
+}
+
+function CompetitionPodiums({ podiums }: { podiums: CompetitionPodium[] }) {
+  const [q, setQ] = useState("");
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? podiums.filter((p) => `${p.competitionCode} ${p.competitionName}`.toLowerCase().includes(needle)
+      || [...p.gold, ...p.silver, ...p.bronze].some((e) => e.stateName.toLowerCase().includes(needle)))
+    : podiums;
+
+  return (
+    <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-zinc-50 px-5 py-3">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-700">Pingat mengikut pertandingan</h2>
+          <p className="mt-0.5 text-xs text-zinc-400">Klik nama negeri untuk melihat kontinjen, pasukan dan peserta yang menang.</p>
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari pertandingan / negeri"
+            className="h-8 w-60 pl-7 text-xs" />
+        </div>
+      </div>
+      {shown.length === 0 ? (
+        <p className="px-5 py-10 text-center text-sm text-zinc-400">Tiada pertandingan.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-xs font-semibold uppercase text-zinc-500">
+                <th className="w-12 px-4 py-2.5 text-center">#</th>
+                <th className="px-3 py-2.5 text-left">Pertandingan</th>
+                {([1, 2, 3] as Place[]).map((pl) => (
+                  <th key={pl} className="w-44 px-3 py-2.5 text-left">
+                    <span className="inline-flex items-center gap-1.5"><span className={cn("h-2.5 w-2.5 rounded-full", PLACE_STYLE[pl].dot)} />{PLACE_STYLE[pl].label}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((p, i) => (
+                <tr key={`${p.walkIn ? "w" : "r"}:${p.competitionId}`} className="border-b align-top last:border-0">
+                  <td className="px-4 py-2.5 text-center text-xs tabular-nums text-zinc-400">{i + 1}</td>
+                  <td className="px-3 py-2.5">
+                    <span className="text-zinc-800"><span className="font-mono text-xs text-zinc-400">{p.competitionCode}</span> {p.competitionName}</span>
+                    <span className="mt-0.5 flex flex-wrap gap-1">
+                      {p.walkIn && <span className="rounded bg-indigo-50 px-1 text-[10px] text-indigo-600">Walk-in</span>}
+                      {p.counted && !p.verified && <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-700">Belum disahkan</span>}
+                    </span>
+                  </td>
+                  {p.counted ? (
+                    <>
+                      <PodiumCell podium={p} place={1} onPick={setPicked} />
+                      <PodiumCell podium={p} place={2} onPick={setPicked} />
+                      <PodiumCell podium={p} place={3} onPick={setPicked} />
+                    </>
+                  ) : (
+                    <td colSpan={3} className="px-3 py-2.5 text-xs italic text-zinc-400">
+                      {p.hasResults ? "Penghakiman belum disahkan" : "Belum ada keputusan"}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog open={!!picked} onOpenChange={(o) => { if (!o) setPicked(null); }}>
+        <DialogContent className="max-w-md">
+          {picked && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <span className={cn("h-3 w-3 rounded-full", PLACE_STYLE[picked.place].dot)} />
+                  <span className={PLACE_STYLE[picked.place].text}>{PLACE_STYLE[picked.place].label}</span>
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  <span className="font-mono">{picked.podium.competitionCode}</span> {picked.podium.competitionName}
+                  {picked.podium.walkIn && " · Walk-in"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 px-1 py-2 text-sm">
+                <div className="flex items-center gap-2 text-zinc-600">
+                  <Flag src={picked.entry.stateFlag} className="h-5 w-8" />
+                  <span className="font-medium">{picked.entry.stateName}</span>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border bg-zinc-50 p-3">
+                  {picked.entry.contingentLogo
+                    ? <img src={picked.entry.contingentLogo} alt="" className="h-10 w-10 shrink-0 rounded-full border bg-white object-contain" />
+                    : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-white text-xs font-bold text-zinc-400">{picked.entry.contingentName.slice(0, 2).toUpperCase()}</span>}
+                  <div className="min-w-0">
+                    <p className="text-[11px] uppercase text-zinc-400">Kontinjen</p>
+                    <p className="font-semibold text-zinc-800">{picked.entry.contingentName}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase text-zinc-400">Pasukan</p>
+                  <p className="font-medium text-zinc-800">{picked.entry.teamName}</p>
+                </div>
+                <div>
+                  <p className="flex items-center gap-1 text-[11px] uppercase text-zinc-400"><Users className="h-3 w-3" /> Peserta ({picked.entry.members.length})</p>
+                  {picked.entry.members.length ? (
+                    <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-zinc-700">
+                      {picked.entry.members.map((m, i) => <li key={i}>{m}</li>)}
+                    </ol>
+                  ) : <p className="mt-1 text-xs italic text-zinc-400">Tiada peserta direkodkan.</p>}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -297,6 +440,8 @@ export function MedalTallyClient({ event, tally, includeUnverified, endpoints: i
           </div>
         )}
       </div>
+
+      <CompetitionPodiums podiums={tally.podiums} />
 
       {/* Public screens */}
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">

@@ -37,8 +37,35 @@ export interface StateTally {
   winners: MedalWinner[];
 }
 
+export interface PodiumEntry {
+  stateId: string | null;
+  stateName: string;
+  stateFlag: string | null;
+  teamName: string;
+  contingentName: string;
+  contingentLogo: string | null;
+  members: string[];
+}
+
+/** One competition's gold / silver / bronze (ties share a place, so each is a list). */
+export interface CompetitionPodium {
+  competitionId: string;
+  competitionName: string;
+  competitionCode: string;
+  walkIn: boolean;
+  verified: boolean;
+  /** Whether it is counted in the tally (verified, or previewing unverified). */
+  counted: boolean;
+  hasResults: boolean;
+  gold: PodiumEntry[];
+  silver: PodiumEntry[];
+  bronze: PodiumEntry[];
+}
+
 export interface MedalTally {
   states: StateTally[];
+  /** Every competition in the event, by code, with its medallists. */
+  podiums: CompetitionPodium[];
   /** Competitions in the event, and how many were counted. */
   competitions: { total: number; counted: number; verified: number };
 }
@@ -73,14 +100,26 @@ export async function computeMedalTally(eventId: string, opts: { includeUnverifi
 
   let counted = 0;
   let verified = 0;
+  const podiums: CompetitionPodium[] = [];
   for (const c of all) {
     const isVerified = c.judgingStatus === "VERIFIED";
     if (isVerified) verified++;
+    const podium: CompetitionPodium = {
+      competitionId: c.id, competitionName: c.name, competitionCode: c.code, walkIn: c.walkIn,
+      verified: isVerified, counted: false, hasResults: c.rankings.length > 0, gold: [], silver: [], bronze: [],
+    };
+    podiums.push(podium);
     if (!isVerified && !opts.includeUnverified) continue;
     if (c.rankings.length === 0) continue;
     counted++;
+    podium.counted = true;
     for (const r of c.rankings) {
       if (r.rank > 3) continue;
+      (r.rank === 1 ? podium.gold : r.rank === 2 ? podium.silver : podium.bronze).push({
+        stateId: r.stateId, stateName: r.stateName ?? NO_STATE, stateFlag: r.stateFlag,
+        teamName: r.teamName, contingentName: r.contingentName, contingentLogo: r.contingentLogo,
+        members: r.members.map((m) => m.name),
+      });
       const s = stateOf(r.stateId, r.stateName, r.stateFlag);
       const place = r.rank as Place;
       if (place === 1) s.gold++;
@@ -107,7 +146,11 @@ export async function computeMedalTally(eventId: string, opts: { includeUnverifi
     s.winners.sort((a, b) => a.place - b.place || a.competitionCode.localeCompare(b.competitionCode));
   });
 
-  return { states, competitions: { total: all.length, counted, verified } };
+  podiums.sort((a, b) => Number(a.walkIn) - Number(b.walkIn)
+    || a.competitionCode.localeCompare(b.competitionCode, undefined, { numeric: true })
+    || a.competitionName.localeCompare(b.competitionName, "ms"));
+
+  return { states, podiums, competitions: { total: all.length, counted, verified } };
 }
 
 export function generateRouteSlug() {
