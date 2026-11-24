@@ -29,9 +29,9 @@ const REPORTS = [
   },
   {
     icon: UserCheck,
-    title: "Laporan Kehadiran",
-    description: "Rekod kehadiran peserta dan kontinjen semasa acara berlangsung.",
-    href: null,
+    title: "Laporan Kehadiran Akhir",
+    description: "Penglibatan sebenar selepas kehadiran, diasingkan antara pertandingan Bersemuka dan Dalam Talian — mengikut kumpulan sasaran, darjah/tingkatan, etnik, jantina, lokaliti, negeri dan pertandingan.",
+    href: "final-attendance",
     color: "text-emerald-600",
     bg: "bg-emerald-50",
     border: "border-emerald-200",
