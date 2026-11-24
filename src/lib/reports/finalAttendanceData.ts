@@ -3,19 +3,24 @@ import { db } from "@/lib/db";
 // Laporan Kehadiran Akhir — who actually took part, split by how the
 // competition was run in the event:
 //
-// • Bersemuka — the event's competitions marked "Bersemuka" (original row,
-//   isOnline false), plus its walk-in competitions. A registered team
-//   (accepted, ACTIVE) is present once its contingent checked in at the counter
-//   (TeamEvent.attendedAt) or any member was checked in on site (Kehadiran
-//   Individu). A member is present when the team checked in at the counter or
-//   they were checked in individually. A walk-in entry is present once
-//   CONFIRMED; a team walk-in brings all its members.
+// • Bersemuka — accepted, ACTIVE teams of the event's competitions marked
+//   "Bersemuka" (original row, isOnline false), counted exactly as the
+//   attendance dashboard (dashboard-stats) does, in either of its modes:
+//   counter — a team, and all its members, are present once the contingent
+//   checked in at the main counter (TeamEvent.attendedAt); individual — a
+//   member is present when checked in on site (Kehadiran Individu), a team
+//   when at least one member is. A contingent / trainer is present when at
+//   least one of its teams is.
+// • Walk-in — the event's walk-in competitions (on site, but not in the
+//   dashboard): an entry is present once CONFIRMED; a team walk-in brings all
+//   its members.
 // • Dalam talian — competitions marked "Dalam talian" (isOnline). No attendance
 //   is taken for them, so every accepted, ACTIVE team counts.
 //
 // Every breakdown counts unique participants.
 
-export type Mode = "BERSEMUKA" | "ONLINE";
+export type Mode = "BERSEMUKA" | "WALKIN" | "ONLINE";
+export type AttendanceBasis = "counter" | "individual";
 
 export interface Count { reg: number; present: number }
 
@@ -80,8 +85,10 @@ export interface ModeReport {
 export interface FinalAttendanceData {
   eventName: string;
   generatedAt: string;
+  basis: AttendanceBasis;
   overall: { participants: number; contingents: number; teams: number; trainers: number; both: number };
   bersemuka: ModeReport;
+  walkIn: ModeReport;
   online: ModeReport;
 }
 
@@ -165,7 +172,7 @@ function pickTg(tgs: TG[], p: Person): TG | null {
 }
 
 function buildMode(mode: Mode, entries: Entry[], people: Map<string, Person>): ModeReport {
-  const attendanceTaken = mode === "BERSEMUKA";
+  const attendanceTaken = mode !== "ONLINE";
 
   type Acc = { label: string; reg: Set<string>; present: Set<string> };
   const dim = (m: Map<string, Acc>, key: string, label: string) => {
@@ -337,7 +344,9 @@ const CONTINGENT_SELECT = {
 } as const;
 const PERSON_SELECT = { select: { id: true, gender: true, ethnicity: true, eduLevel: true, classGrade: true, ppki: true } } as const;
 
-export async function computeFinalAttendanceData(eventId: string): Promise<FinalAttendanceData | null> {
+export async function computeFinalAttendanceData(
+  eventId: string, basis: AttendanceBasis = "counter",
+): Promise<FinalAttendanceData | null> {
   const event = await db.event.findUnique({ where: { id: eventId }, select: { name: true } });
   if (!event) return null;
 
@@ -382,7 +391,8 @@ export async function computeFinalAttendanceData(eventId: string): Promise<Final
     return p.id;
   };
 
-  const bersemuka: Entry[] = [], onlineEntries: Entry[] = [];
+  const bersemuka: Entry[] = [], walkInEntries: Entry[] = [], onlineEntries: Entry[] = [];
+  const individual = basis === "individual";
   for (const te of teamEvents) {
     const t = te.team;
     const isOnline = online.get(t.competitionId) === true;
@@ -398,10 +408,10 @@ export async function computeFinalAttendanceData(eventId: string): Promise<Final
       contingentId: t.contingent.id,
       stateName: stateName(t.contingent),
       locality: t.contingent.locality ?? "NONE",
-      teamPresent: isOnline || counter || indiv.size > 0,
+      teamPresent: isOnline || (individual ? indiv.size > 0 : counter),
       members: t.members.map(m => {
         const pid = addPerson(m.participant);
-        return { pid, present: isOnline || counter || indiv.has(pid) };
+        return { pid, present: isOnline || (individual ? indiv.has(pid) : counter) };
       }),
       trainerIds: t.trainers.map(x => x.trainerId),
     };
@@ -417,7 +427,7 @@ export async function computeFinalAttendanceData(eventId: string): Promise<Final
     const members = w.team && w.team.members.length
       ? w.team.members.map(m => addPerson(m.participant))
       : [addPerson(w.participant)];
-    bersemuka.push({
+    walkInEntries.push({
       teamKey: w.team ? `wt:${w.walkInCompetition.id}:${w.team.id}` : `w:${w.id}`,
       compKey: `w:${w.walkInCompetition.id}`,
       compCode: w.walkInCompetition.competition.code,
@@ -434,15 +444,17 @@ export async function computeFinalAttendanceData(eventId: string): Promise<Final
   }
 
   const b = buildMode("BERSEMUKA", bersemuka, people);
+  const w = buildMode("WALKIN", walkInEntries, people);
   const o = buildMode("ONLINE", onlineEntries, people);
 
   const presentOf = (list: Entry[]) => new Set(list.flatMap(e => e.members.filter(m => m.present).map(m => m.pid)));
-  const bP = presentOf(bersemuka), oP = presentOf(onlineEntries);
-  const presentEntries = [...bersemuka, ...onlineEntries].filter(e => e.teamPresent);
+  const bP = new Set([...presentOf(bersemuka), ...presentOf(walkInEntries)]), oP = presentOf(onlineEntries);
+  const presentEntries = [...bersemuka, ...walkInEntries, ...onlineEntries].filter(e => e.teamPresent);
 
   return {
     eventName: event.name,
     generatedAt: new Date().toISOString(),
+    basis,
     overall: {
       participants: new Set([...bP, ...oP]).size,
       both: [...bP].filter(id => oP.has(id)).length,
@@ -451,6 +463,7 @@ export async function computeFinalAttendanceData(eventId: string): Promise<Final
       trainers: new Set(presentEntries.flatMap(e => e.trainerIds)).size,
     },
     bersemuka: b,
+    walkIn: w,
     online: o,
   };
 }

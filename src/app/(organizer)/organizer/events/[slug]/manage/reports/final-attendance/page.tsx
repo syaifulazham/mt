@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Globe, MapPin, Users } from "lucide-react";
+import { ArrowLeft, Footprints, Globe, MapPin, Users } from "lucide-react";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { PrintButton } from "@/components/organizer/events/PrintButton";
 import { db } from "@/lib/db";
 import {
-  computeFinalAttendanceData, type Count, type DimRow, type MatrixData, type ModeReport,
+  computeFinalAttendanceData, type AttendanceBasis, type Count, type DimRow, type MatrixData, type ModeReport,
 } from "@/lib/reports/finalAttendanceData";
 
 export const metadata: Metadata = { title: "Laporan Kehadiran Akhir" };
@@ -22,6 +22,7 @@ const fmtDate = (d: Date) => d.toLocaleDateString("ms-MY", { day: "numeric", mon
 type Theme = { band: string; sub: string; bar: string; soft: string; text: string; ring: string };
 const THEMES: Record<ModeReport["mode"], Theme> = {
   BERSEMUKA: { band: "bg-emerald-800", sub: "text-emerald-200", bar: "bg-emerald-600", soft: "bg-emerald-50", text: "text-emerald-700", ring: "border-emerald-200" },
+  WALKIN:    { band: "bg-amber-700",   sub: "text-amber-100",   bar: "bg-amber-500",   soft: "bg-amber-50",   text: "text-amber-700",   ring: "border-amber-200" },
   ONLINE:    { band: "bg-sky-800",     sub: "text-sky-200",     bar: "bg-sky-600",     soft: "bg-sky-50",     text: "text-sky-700",     ring: "border-sky-200" },
 };
 
@@ -184,12 +185,25 @@ function CountHeads({ label, attendance }: { label: string; attendance: boolean 
   ) : <th className={`${TH} text-right`}>{label}</th>;
 }
 
-function ModeSection({ r, index }: { r: ModeReport; index: number }) {
+const MODE_TITLE: Record<ModeReport["mode"], string> = {
+  BERSEMUKA: "Pertandingan Bersemuka", WALKIN: "Pertandingan Walk-in (Bersemuka)", ONLINE: "Pertandingan Dalam Talian",
+};
+const MODE_SHORT: Record<ModeReport["mode"], string> = { BERSEMUKA: "Bersemuka", WALKIN: "Walk-in", ONLINE: "Dalam talian" };
+const MODE_ICON = { BERSEMUKA: MapPin, WALKIN: Footprints, ONLINE: Globe } as const;
+
+function ModeSection({ r, index, basis }: { r: ModeReport; index: number; basis: AttendanceBasis }) {
   const theme = THEMES[r.mode];
   const att = r.attendanceTaken;
   const total = r.participants.present;
-  const title = r.mode === "BERSEMUKA" ? "Pertandingan Bersemuka" : "Pertandingan Dalam Talian";
-  const Icon = r.mode === "BERSEMUKA" ? MapPin : Globe;
+  const title = MODE_TITLE[r.mode];
+  const Icon = MODE_ICON[r.mode];
+  const basisNote = r.mode === "BERSEMUKA"
+    ? basis === "individual"
+      ? "Kehadiran Individu: peserta hadir apabila didaftar masuk di tapak pertandingan; pasukan hadir apabila sekurang-kurangnya seorang ahli hadir (sama seperti Dashboard Kehadiran, mod Individu)."
+      : "Kehadiran kaunter: pasukan dan semua ahlinya hadir apabila kontinjen mendaftar masuk di kaunter utama (sama seperti Dashboard Kehadiran, mod Kaunter)."
+    : r.mode === "WALKIN"
+      ? "Pendaftaran walk-in di tapak; dikira hadir apabila disahkan. Tidak termasuk dalam Dashboard Kehadiran."
+      : "Kehadiran tidak diambil bagi pertandingan dalam talian — angka ialah penyertaan pasukan yang diterima.";
 
   if (!r.competitions) {
     return (
@@ -210,19 +224,16 @@ function ModeSection({ r, index }: { r: ModeReport; index: number }) {
         <h2 className="flex items-center gap-2 text-lg font-black uppercase"><Icon className="h-5 w-5" />{title}</h2>
         <p className={`mt-1 text-xs ${theme.sub}`}>
           {r.competitions} pertandingan ·{" "}
-          {att
-            ? "Kehadiran: daftar masuk di kaunter utama atau di tapak pertandingan (Kehadiran Individu); walk-in dikira hadir apabila disahkan."
-            : "Kehadiran tidak diambil bagi pertandingan dalam talian — angka ialah penyertaan pasukan yang diterima."}
+          {basisNote}
         </p>
       </div>
 
       {/* A. Ringkasan */}
-      <div className={`grid grid-cols-2 gap-3 ${att ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi label="Peserta" count={r.participants} attendance={att} theme={theme} />
         <Kpi label="Kontinjen" count={r.contingents} attendance={att} theme={theme} />
         <Kpi label="Pasukan / penyertaan" count={r.teams} attendance={att} theme={theme} />
         <Kpi label="Jurulatih" count={r.trainers} attendance={att} theme={theme} />
-        {att && <Kpi label="Peserta walk-in" count={r.walkIn} attendance={att} theme={theme} />}
       </div>
 
       {/* B. Profil peserta */}
@@ -344,7 +355,12 @@ function ModeSection({ r, index }: { r: ModeReport; index: number }) {
 
 // ── page ────────────────────────────────────────────────────────────────────
 
-export default async function FinalAttendanceReportPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function FinalAttendanceReportPage({
+  params, searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ mode?: string }>;
+}) {
   const session = await getOrganizerSession();
   if (!session) redirect("/organizer/login");
 
@@ -355,14 +371,16 @@ export default async function FinalAttendanceReportPage({ params }: { params: Pr
   });
   if (!event) notFound();
 
-  const d = await computeFinalAttendanceData(event.id);
+  const basis: AttendanceBasis = (await searchParams).mode === "individual" ? "individual" : "counter";
+  const d = await computeFinalAttendanceData(event.id, basis);
   if (!d) notFound();
 
   const venueLine = [event.venue, event.city, event.state?.name].filter(Boolean).join(" · ");
   const dateLine = event.startDate
     ? [fmtDate(event.startDate), event.endDate && fmtDate(event.endDate) !== fmtDate(event.startDate) ? fmtDate(event.endDate) : null].filter(Boolean).join(" — ")
     : null;
-  const b = d.bersemuka, o = d.online;
+  const b = d.bersemuka, w = d.walkIn, o = d.online;
+  const base = `/organizer/events/${slug}/manage/reports/final-attendance`;
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>
@@ -381,7 +399,18 @@ export default async function FinalAttendanceReportPage({ params }: { params: Pr
               <span>Data setakat {new Date(d.generatedAt).toLocaleString("ms-MY", { timeZone: "Asia/Kuala_Lumpur", dateStyle: "medium", timeStyle: "short" })}</span>
             </div>
           </div>
-          <div className="shrink-0 print:hidden"><PrintButton /></div>
+          <div className="flex shrink-0 flex-col items-end gap-2 print:hidden">
+            <PrintButton />
+            <div className="flex rounded-lg bg-zinc-800 p-0.5 text-xs font-medium">
+              {([["counter", "Kaunter"], ["individual", "Individu"]] as const).map(([k, l]) => (
+                <Link key={k} href={k === "counter" ? base : `${base}?mode=individual`} replace scroll={false}
+                  className={`rounded-md px-3 py-1 ${basis === k ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-zinc-100"}`}>
+                  {l}
+                </Link>
+              ))}
+            </div>
+            <p className="text-[10px] text-zinc-500">Asas kehadiran Bersemuka</p>
+          </div>
         </div>
       </div>
 
@@ -390,7 +419,7 @@ export default async function FinalAttendanceReportPage({ params }: { params: Pr
         <section className="overflow-hidden rounded-lg border bg-white shadow-sm">
           <div className="bg-[#7B0D1E] px-5 py-3 text-white">
             <p className="text-[10px] font-black uppercase tracking-[0.25em] text-rose-300">Ringkasan Keseluruhan</p>
-            <h2 className="text-sm font-black uppercase">Penglibatan sebenar — Bersemuka dan Dalam Talian</h2>
+            <h2 className="text-sm font-black uppercase">Penglibatan sebenar — Bersemuka, Walk-in dan Dalam Talian</h2>
           </div>
           <div className="grid grid-cols-2 divide-x divide-y md:grid-cols-4 md:divide-y-0">
             {[
@@ -423,12 +452,12 @@ export default async function FinalAttendanceReportPage({ params }: { params: Pr
                 </tr>
               </thead>
               <tbody>
-                {[b, o].map(m => (
+                {[b, w, o].filter(m => m.competitions).map(m => (
                   <tr key={m.mode} className="border-b last:border-0">
                     <td className={`${TD} font-semibold`}>
                       <span className={`inline-flex items-center gap-1.5 ${THEMES[m.mode].text}`}>
-                        {m.mode === "BERSEMUKA" ? <MapPin className="h-3.5 w-3.5" /> : <Globe className="h-3.5 w-3.5" />}
-                        {m.mode === "BERSEMUKA" ? "Bersemuka" : "Dalam talian"}
+                        {(() => { const I = MODE_ICON[m.mode]; return <I className="h-3.5 w-3.5" />; })()}
+                        {MODE_SHORT[m.mode]}
                       </span>
                     </td>
                     <td className={NUM}>{fmt(m.competitions)}</td>
@@ -448,12 +477,14 @@ export default async function FinalAttendanceReportPage({ params }: { params: Pr
           <p className="flex items-start gap-1.5 border-t bg-slate-50 px-5 py-2.5 text-[11px] text-slate-500">
             <Users className="mt-0.5 h-3 w-3 shrink-0" />
             Semua angka peserta ialah peserta unik. Seorang peserta yang menyertai lebih daripada satu pertandingan dikira sekali dalam setiap jadual.
+            Bahagian Bersemuka sepadan dengan Dashboard Kehadiran (mod {basis === "individual" ? "Individu" : "Kaunter"}); walk-in dilaporkan berasingan.
             Laporan Akhir Program pula berdasarkan pendaftaran (sebelum kehadiran).
           </p>
         </section>
 
-        <ModeSection r={b} index={1} />
-        <ModeSection r={o} index={2} />
+        <ModeSection r={b} index={1} basis={basis} />
+        {w.competitions > 0 && <ModeSection r={w} index={2} basis={basis} />}
+        <ModeSection r={o} index={w.competitions > 0 ? 3 : 2} basis={basis} />
       </div>
     </OrganizerShell>
   );
