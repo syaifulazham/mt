@@ -65,7 +65,7 @@ const SOURCE_LABEL: Record<Source, string> = {
 /** Pencapaian Acara from the results: winners, their teams' trainers, or their schools / contingents. */
 const RESULT_WINNERS: Source[] = ["EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
 /** Penyertaan from the events' counted teams: each participant, or each contingent. */
-const PARTICIPATION: Source[] = ["EVENT_PARTICIPANTS", "CONTINGENT_PARTICIPATION"];
+const PARTICIPATION: Source[] = ["EVENT_PARTICIPANTS"];
 const CONTINGENT_TYPES = [["", "Semua kontinjen"], ["SCHOOL", "Sekolah"], ["HIGHER", "IPT"], ["INDEPENDENT", "Bebas"], ["INTERNATIONAL", "Antarabangsa"]];
 const CUSTOM_COLUMNS = ["nama", "ic", "kontingen", "sekolah", "negeri", "pasukan", "pertandingan", "kod", "anugerah", "kedudukan"];
 const fmt = (n: number) => n.toLocaleString();
@@ -215,15 +215,15 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   // Each event's team rule; events without one start from the old single
   // "hadir sahaja" switch and their scope's default.
   const ruleOf = (id: string): Required<EventRule> => ({
-    // Penyertaan Kontinjen: registered in at least one competition = every team not rejected.
-    acceptance: eventRules[id]?.acceptance ?? (source === "CONTINGENT_PARTICIPATION" ? "NOT_REJECTED" : defaultAcceptance(events.find(e => e.id === id)?.scope ?? "")),
-    attendedOnly: eventRules[id]?.attendedOnly ?? (source === "CONTINGENT_PARTICIPATION" ? false : attendedOnly),
+    acceptance: eventRules[id]?.acceptance ?? defaultAcceptance(events.find(e => e.id === id)?.scope ?? ""),
+    attendedOnly: eventRules[id]?.attendedOnly ?? attendedOnly,
     walkIn: eventRules[id]?.walkIn ?? "NONE",
     eventName: eventRules[id]?.eventName ?? "",
   });
   const setRule = (id: string, patch: EventRule) => setEventRules(r => ({ ...r, [id]: { ...ruleOf(id), ...patch } }));
   // Trainers / Contingent Manager Portal users: no event, no portal distribution
-  const personSource = source === "TRAINERS" || source === "MANAGERS";
+  // …and Penyertaan Kontinjen (every contingent with a registered team)
+  const personSource = source === "TRAINERS" || source === "MANAGERS" || source === "CONTINGENT_PARTICIPATION";
   const customRows = source === "CUSTOM" ? parseCustom(customText) : [];
   const chosen = templates.find(t => t.id === templateId);
 
@@ -316,7 +316,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                     {multiEvent && chosenEvents.length > 1 && (
                       <div className="max-w-xl space-y-1.5 pt-1">
                         <div className="flex flex-wrap gap-1.5 text-xs">
-                          {([[false, "Satu sijil setiap acara"], [true, source === "CONTINGENT_PARTICIPATION" ? "Satu sijil setiap kontinjen" : "Satu sijil setiap peserta × pertandingan"]] as const).map(([v, l]) => (
+                          {([[false, "Satu sijil setiap acara"], [true, "Satu sijil setiap peserta × pertandingan"]] as const).map(([v, l]) => (
                             <button key={String(v)} type="button" onClick={() => setOnePerCompetition(v)}
                               className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
                                 onePerCompetition === v ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
@@ -325,9 +325,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                           ))}
                         </div>
                         <p className="text-[11px] text-zinc-400">
-                          {source === "CONTINGENT_PARTICIPATION"
-                            ? (onePerCompetition ? "Kontinjen yang menyertai beberapa acara menerima satu sijil sahaja — daripada acara pertama (mengikut susunan di atas)." : "Kontinjen yang menyertai dua acara menerima sijil bagi setiap acara.")
-                            : onePerCompetition
+                          {onePerCompetition
                             ? "Peserta yang sama dalam pertandingan yang sama di beberapa acara menerima satu sijil sahaja — daripada acara pertama (mengikut susunan di atas) yang dia sertai."
                             : "Peserta yang sama dalam dua acara menerima sijil bagi setiap acara."}
                           {" "}Penerima dijana mengikut susunan acara di atas, dengan nama acara masing-masing (kecuali nama acara ditetapkan).
@@ -341,8 +339,10 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                 <p className="text-[11px] text-zinc-400">
                   {source === "TRAINERS"
                     ? "Semua jurulatih berdaftar — satu sijil setiap jurulatih, dengan kontinjen masing-masing."
+                    : source === "CONTINGENT_PARTICIPATION"
+                    ? "Semua kontinjen yang berdaftar dalam sekurang-kurangnya satu pertandingan — satu sijil setiap kontinjen; nama penerima ialah nama sekolah / institusi (atau nama kontinjen). Dipaparkan di bawah sijil sekolah di Portal Pengurus."
                     : "Semua pengguna Portal Pengurus Kontinjen — satu sijil setiap pengurus, dengan kontinjen pertama yang diurus."}
-                  {" "}Tidak terikat kepada acara dan tidak diedarkan ke portal.
+                  {" "}Tidak terikat kepada acara{source === "CONTINGENT_PARTICIPATION" ? "." : " dan tidak diedarkan ke portal."}
                 </p>
               )}
               {needsEvent && competitions.length > 0 && (
@@ -433,13 +433,6 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                     </p>
                   </div>
                 </div>
-              )}
-              {source === "CONTINGENT_PARTICIPATION" && (
-                <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] leading-relaxed text-emerald-900">
-                  Satu sijil bagi <b>setiap kontinjen yang berdaftar dalam sekurang-kurangnya satu pertandingan</b> acara
-                  (lalai: semua pasukan kecuali ditolak; boleh dihadkan dengan peraturan dan pertandingan di bawah).
-                  Nama penerima ialah nama sekolah / institusi (atau nama kontinjen). Dipaparkan di bawah Sijil Sekolah di Portal Pengurus.
-                </p>
               )}
               {(source === "EVENT_WINNERS_TRAINERS" || source === "EVENT_WINNERS_SCHOOLS") && (
                 <p className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] leading-relaxed text-violet-900">
@@ -733,7 +726,7 @@ export function CertificateGeneratorClient({ initialGroupBy = "none" }: { initia
                         </select>
                       )}
                       {describe(j, !RESULT_WINNERS.includes(j.source)).map(d => <span key={d} className="rounded border bg-white px-1.5 py-0.5 text-[11px] text-zinc-600">{d}</span>)}
-                      {j.source !== "TRAINERS" && j.source !== "MANAGERS" && (
+                      {j.source !== "TRAINERS" && j.source !== "MANAGERS" && j.source !== "CONTINGENT_PARTICIPATION" && (
                       <label className="ml-1 inline-flex items-center gap-1 text-[11px] text-zinc-500">
                         Edaran
                         <select value={j.config.distributionLevel ?? "NONE"} disabled={!!running}

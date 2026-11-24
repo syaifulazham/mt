@@ -13,11 +13,11 @@
  *                        printed early; after the event src/lib/certificates/
  *                        pregen.ts ties each slot to the actual winner
  *
- *   CONTINGENT_PARTICIPATION — "Penyertaan Kontinjen": one certificate per
- *                        contingent registered in at least one competition of
- *                        the event (by default every team not rejected; the
- *                        event rules of EVENT_PARTICIPANTS can narrow it); the
- *                        recipient is the school / institution, else the contingent
+ *   CONTINGENT_PARTICIPATION — "Penyertaan Kontinjen": not tied to an event —
+ *                        one certificate per contingent with at least one
+ *                        active team (with members) registered in a
+ *                        competition; the recipient is the school /
+ *                        institution, else the contingent
  *
  * Walk-in competitions never get certificates: both event sources cover the
  * event's registered (EventCompetition) competitions only.
@@ -150,7 +150,7 @@ export const RESULTS_BY: ResultsBy[] = ["CONFIG", "NATIONAL", "STATE", "INTERNAT
  */
 export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | undefined): { cfg: GeneratorConfig } | { error: string } {
   // Trainers / Contingent Manager Portal users: no event and no portal distribution
-  const personSource = source === "TRAINERS" || source === "MANAGERS";
+  const personSource = source === "TRAINERS" || source === "MANAGERS" || source === "CONTINGENT_PARTICIPATION";
   const general = source === "GENERAL";
   const ids = personSource || general ? [] : [...new Set((raw?.eventIds?.length ? raw.eventIds : [raw?.eventId]).filter((x): x is string => !!x))];
   // Pre-event blanks are matched to winners per event (pregen.ts): one event only.
@@ -201,9 +201,9 @@ function cleanRules(raw: Record<string, EventRule> | undefined, ids: string[]): 
 }
 
 /** Sources whose recipients may come from several events. */
-export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "CONTINGENT_PARTICIPATION", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
-/** Penyertaan: each person (Peserta Acara) or each contingent (Penyertaan Kontinjen) of the events' counted teams. */
-export const PARTICIPATION_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "CONTINGENT_PARTICIPATION"];
+export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
+/** Penyertaan from the events' counted teams (Peserta Acara). */
+export const PARTICIPATION_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS"];
 /** Pencapaian Acara: winners themselves, the winning teams' trainers, or their schools / contingents. */
 export const WINNER_SOURCES: GeneratorSource[] = ["EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
 
@@ -384,9 +384,7 @@ async function resolveOne(
     // teams stay PENDING), so there every team that isn't rejected takes part.
     // The event's own rule, when set, decides instead.
     const scope = (await db.event.findUnique({ where: { id: cfg.eventId }, select: { scope: true } }))?.scope ?? "";
-    // Penyertaan Kontinjen: any contingent with at least one team registered
-    // (not rejected) in the event qualifies, unless the event's rule says otherwise.
-    const acceptance = rule?.acceptance ?? (source === "CONTINGENT_PARTICIPATION" ? "NOT_REJECTED" : defaultAcceptance(String(scope)));
+    const acceptance = rule?.acceptance ?? defaultAcceptance(String(scope));
     const accepted = acceptance === "NOT_REJECTED" ? `te.acceptance <> 'REJECT'` : `te.acceptance = 'ACCEPT'`;
     const parts: string[] = [];
     if (acceptance !== "NONE") parts.push(`
@@ -413,27 +411,6 @@ async function resolveOne(
         WHERE ewc."eventId" = $1 AND ${walkIn === "CONFIRMED" ? `w.status = 'CONFIRMED'` : `w.status NOT IN ('REJECTED', 'CANCELLED')`} ${codeFilter}`);
     if (!parts.length) return { total: 0, rows: [] };
     const sql = `SELECT * FROM (${parts.join(" UNION ALL ")}) x`;
-    if (source === "CONTINGENT_PARTICIPATION") {
-      // One per contingent among the counted teams' members (registered: the
-      // team's contingent; walk-in: the participant's own).
-      const csql = `SELECT contingent_id, MIN(contingent_name) AS contingent_name, MIN(school_name) AS school_name,
-                           MIN(state_name) AS state_name, MIN(country_name) AS country_name
-                    FROM (${sql}) y WHERE contingent_id IS NOT NULL GROUP BY contingent_id`;
-      const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${csql}) z`, ...params);
-      const rows = await db.$queryRawUnsafe<{ contingent_id: string; contingent_name: string; school_name: string | null; state_name: string | null; country_name: string | null }[]>(
-        `SELECT * FROM (${csql}) z ORDER BY state_name NULLS LAST, COALESCE(school_name, contingent_name), contingent_id OFFSET ${offset} LIMIT ${limit}`, ...params);
-      return {
-        total: n,
-        rows: rows.map((r): Recipient => ({
-          key: `cont:${cfg.eventId}:${r.contingent_id}`, recipientType: "CONTINGENT",
-          participantId: null, name: r.school_name ?? r.contingent_name, ic: null,
-          contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
-          countryName: r.country_name,
-          teamId: null, teamName: null, competitionId: null, competitionName: null, competitionCode: null,
-          eventId: cfg.eventId!, eventName: evName, awardTitle: null, rank: null,
-        })),
-      };
-    }
     const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${sql}) y`, ...params);
     const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string | null; team_name: string | null; comp_id: string; comp_name: string; comp_code: string; walk_in: boolean })[]>(
       `${sql} ORDER BY walk_in, comp_code, team_name NULLS LAST, name, pid OFFSET ${offset} LIMIT ${limit}`, ...params);
@@ -640,6 +617,30 @@ async function resolveOne(
         countryName: r.country_name,
         teamId: null, teamName: null, competitionId: null, competitionName: null, competitionCode: null,
         eventId: cfg.eventId ?? null, eventName: evName, awardTitle: null, rank: null,
+      })),
+    };
+  }
+
+  if (source === "CONTINGENT_PARTICIPATION") {
+    // Not tied to an event: every contingent registered in at least one
+    // competition (an active team with members). Only the event-name override applies.
+    const sql = `SELECT ct.id AS contingent_id, ct.name AS contingent_name, COALESCE(s.name, hi.name) AS school_name,
+                        COALESCE(ss.name, hs.name, cs.name) AS state_name, ${COUNTRY_COL}
+                 FROM (SELECT DISTINCT t."contingentId" AS cid FROM teams t
+                       WHERE t.status = 'ACTIVE' AND EXISTS (SELECT 1 FROM team_members tm WHERE tm."teamId" = t.id)) x
+                 ${PERSON_JOINS.replace("%CT%", "x.cid")}`;
+    const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${sql}) y`);
+    const rows = await db.$queryRawUnsafe<{ contingent_id: string; contingent_name: string; school_name: string | null; state_name: string | null; country_name: string | null }[]>(
+      `SELECT * FROM (${sql}) y ORDER BY state_name NULLS LAST, COALESCE(school_name, contingent_name), contingent_id OFFSET ${offset} LIMIT ${limit}`);
+    return {
+      total: n,
+      rows: rows.map((r): Recipient => ({
+        key: `contingent:${r.contingent_id}`, recipientType: "CONTINGENT",
+        participantId: null, name: r.school_name ?? r.contingent_name, ic: null,
+        contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
+        countryName: r.country_name,
+        teamId: null, teamName: null, competitionId: null, competitionName: null, competitionCode: null,
+        eventId: null, eventName: cfg.eventNameOverride?.trim() || null, awardTitle: null, rank: null,
       })),
     };
   }
