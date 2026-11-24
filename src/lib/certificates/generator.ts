@@ -13,6 +13,12 @@
  *                        printed early; after the event src/lib/certificates/
  *                        pregen.ts ties each slot to the actual winner
  *
+ *   CONTINGENT_PARTICIPATION — "Penyertaan Kontinjen": one certificate per
+ *                        contingent registered in at least one competition of
+ *                        the event (by default every team not rejected; the
+ *                        event rules of EVENT_PARTICIPANTS can narrow it); the
+ *                        recipient is the school / institution, else the contingent
+ *
  * Walk-in competitions never get certificates: both event sources cover the
  * event's registered (EventCompetition) competitions only.
  *   ALL_REGISTERED     — every registered participant (optionally by contingent type)
@@ -39,7 +45,7 @@ import { compareScoreTime } from "@/lib/sharedRank";
 import { defaultResultScope, resolveResultScope } from "@/lib/resultScope";
 import { allocateSerial, newUniqueCode } from "./serial";
 
-export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS", "EVENT_WINNERS_PREGEN", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM", "GENERAL"] as const;
+export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS", "EVENT_WINNERS_PREGEN", "CONTINGENT_PARTICIPATION", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM", "GENERAL"] as const;
 export type GeneratorSource = (typeof GENERATOR_SOURCES)[number];
 
 /** Where issued certificates are offered on the portals (Certificates → Distribution). */
@@ -154,7 +160,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
     eventId:           ids[0],
     eventIds:          ids.length > 1 ? ids : undefined,
     onePerCompetition: ids.length > 1 && !!raw?.onePerCompetition || undefined,
-    eventRules:        source === "EVENT_PARTICIPANTS" || WINNER_SOURCES.includes(source) || source === "EVENT_WINNERS_PREGEN" ? cleanRules(raw?.eventRules, ids) : undefined,
+    eventRules:        PARTICIPATION_SOURCES.includes(source) || WINNER_SOURCES.includes(source) || source === "EVENT_WINNERS_PREGEN" ? cleanRules(raw?.eventRules, ids) : undefined,
     competitionCodes:  raw?.competitionCodes?.filter(Boolean),
     attendedOnly:      !!raw?.attendedOnly,
     rankFrom:          raw?.rankFrom ? Math.max(1, Math.floor(raw.rankFrom)) : undefined,
@@ -171,7 +177,7 @@ export function normalizeConfig(source: GeneratorSource, raw: GeneratorConfig | 
   };
   if (source === "EVENT_WINNERS_PREGEN" && cfg.resultsBy === "INTERNATIONAL")
     return { error: "Sijil pra-acara tidak menyokong keputusan antarabangsa." };
-  if ((source === "EVENT_PARTICIPANTS" || WINNER_SOURCES.includes(source) || source === "EVENT_WINNERS_PREGEN") && !cfg.eventId)
+  if ((PARTICIPATION_SOURCES.includes(source) || WINNER_SOURCES.includes(source) || source === "EVENT_WINNERS_PREGEN") && !cfg.eventId)
     return { error: "Pilih acara." };
   if (cfg.rankFrom && cfg.rankTo && cfg.rankTo < cfg.rankFrom)
     return { error: "Julat kedudukan tidak sah." };
@@ -195,7 +201,9 @@ function cleanRules(raw: Record<string, EventRule> | undefined, ids: string[]): 
 }
 
 /** Sources whose recipients may come from several events. */
-export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
+export const MULTI_EVENT_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "CONTINGENT_PARTICIPATION", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
+/** Penyertaan: each person (Peserta Acara) or each contingent (Penyertaan Kontinjen) of the events' counted teams. */
+export const PARTICIPATION_SOURCES: GeneratorSource[] = ["EVENT_PARTICIPANTS", "CONTINGENT_PARTICIPATION"];
 /** Pencapaian Acara: winners themselves, the winning teams' trainers, or their schools / contingents. */
 export const WINNER_SOURCES: GeneratorSource[] = ["EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
 
@@ -366,7 +374,7 @@ async function resolveOne(
   const evName = await eventName(cfg);
   const codes = cfg.competitionCodes?.length ? cfg.competitionCodes : null;
 
-  if (source === "EVENT_PARTICIPANTS") {
+  if (PARTICIPATION_SOURCES.includes(source)) {
     if (!cfg.eventId) throw new Error("Pilih acara.");
     const params: unknown[] = [cfg.eventId];
     const codeFilter = codes ? (params.push(codes), `AND c.code = ANY($${params.length})`) : "";
@@ -376,7 +384,9 @@ async function resolveOne(
     // teams stay PENDING), so there every team that isn't rejected takes part.
     // The event's own rule, when set, decides instead.
     const scope = (await db.event.findUnique({ where: { id: cfg.eventId }, select: { scope: true } }))?.scope ?? "";
-    const acceptance = rule?.acceptance ?? defaultAcceptance(String(scope));
+    // Penyertaan Kontinjen: any contingent with at least one team registered
+    // (not rejected) in the event qualifies, unless the event's rule says otherwise.
+    const acceptance = rule?.acceptance ?? (source === "CONTINGENT_PARTICIPATION" ? "NOT_REJECTED" : defaultAcceptance(String(scope)));
     const accepted = acceptance === "NOT_REJECTED" ? `te.acceptance <> 'REJECT'` : `te.acceptance = 'ACCEPT'`;
     const parts: string[] = [];
     if (acceptance !== "NONE") parts.push(`
@@ -403,6 +413,27 @@ async function resolveOne(
         WHERE ewc."eventId" = $1 AND ${walkIn === "CONFIRMED" ? `w.status = 'CONFIRMED'` : `w.status NOT IN ('REJECTED', 'CANCELLED')`} ${codeFilter}`);
     if (!parts.length) return { total: 0, rows: [] };
     const sql = `SELECT * FROM (${parts.join(" UNION ALL ")}) x`;
+    if (source === "CONTINGENT_PARTICIPATION") {
+      // One per contingent among the counted teams' members (registered: the
+      // team's contingent; walk-in: the participant's own).
+      const csql = `SELECT contingent_id, MIN(contingent_name) AS contingent_name, MIN(school_name) AS school_name,
+                           MIN(state_name) AS state_name, MIN(country_name) AS country_name
+                    FROM (${sql}) y WHERE contingent_id IS NOT NULL GROUP BY contingent_id`;
+      const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${csql}) z`, ...params);
+      const rows = await db.$queryRawUnsafe<{ contingent_id: string; contingent_name: string; school_name: string | null; state_name: string | null; country_name: string | null }[]>(
+        `SELECT * FROM (${csql}) z ORDER BY state_name NULLS LAST, COALESCE(school_name, contingent_name), contingent_id OFFSET ${offset} LIMIT ${limit}`, ...params);
+      return {
+        total: n,
+        rows: rows.map((r): Recipient => ({
+          key: `cont:${cfg.eventId}:${r.contingent_id}`, recipientType: "CONTINGENT",
+          participantId: null, name: r.school_name ?? r.contingent_name, ic: null,
+          contingentId: r.contingent_id, contingentName: r.contingent_name, schoolName: r.school_name, stateName: r.state_name,
+          countryName: r.country_name,
+          teamId: null, teamName: null, competitionId: null, competitionName: null, competitionCode: null,
+          eventId: cfg.eventId!, eventName: evName, awardTitle: null, rank: null,
+        })),
+      };
+    }
     const [{ n }] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM (${sql}) y`, ...params);
     const rows = await db.$queryRawUnsafe<(PersonRow & { team_id: string | null; team_name: string | null; comp_id: string; comp_name: string; comp_code: string; walk_in: boolean })[]>(
       `${sql} ORDER BY walk_in, comp_code, team_name NULLS LAST, name, pid OFFSET ${offset} LIMIT ${limit}`, ...params);

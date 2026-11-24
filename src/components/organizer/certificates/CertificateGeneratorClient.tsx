@@ -42,7 +42,7 @@ const RESULTS_BY_SHORT: Record<ResultsBy, string> = {
   CONFIG: "Keputusan ikut konfigurasi", STATE: "Keputusan ikut negeri",
   NATIONAL: "Keputusan kebangsaan", INTERNATIONAL: "Keputusan antarabangsa",
 };
-type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "EVENT_WINNERS_TRAINERS" | "EVENT_WINNERS_SCHOOLS" | "EVENT_WINNERS_PREGEN" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM" | "GENERAL";
+type Source = "EVENT_PARTICIPANTS" | "EVENT_WINNERS" | "EVENT_WINNERS_TRAINERS" | "EVENT_WINNERS_SCHOOLS" | "EVENT_WINNERS_PREGEN" | "CONTINGENT_PARTICIPATION" | "ALL_REGISTERED" | "TRAINERS" | "MANAGERS" | "CUSTOM" | "GENERAL";
 type DistLevel = "NONE" | "SCHOOL" | "STATE" | "NATIONAL";
 const DIST_LABEL: Record<DistLevel, string> = {
   NONE: "Tiada", SCHOOL: "Peringkat Sekolah", STATE: "Peringkat Negeri", NATIONAL: "Peringkat Kebangsaan",
@@ -51,6 +51,7 @@ const DIST_LABEL: Record<DistLevel, string> = {
 const API = "/api/v2/organizer/certificates/generator";
 const SOURCE_LABEL: Record<Source, string> = {
   EVENT_PARTICIPANTS: "Peserta Acara",
+  CONTINGENT_PARTICIPATION: "Penyertaan Kontinjen",
   EVENT_WINNERS:      "Pencapaian Acara",
   EVENT_WINNERS_TRAINERS: "Pencapaian Acara (Jurulatih)",
   EVENT_WINNERS_SCHOOLS:  "Pencapaian Acara (Sekolah)",
@@ -63,6 +64,8 @@ const SOURCE_LABEL: Record<Source, string> = {
 };
 /** Pencapaian Acara from the results: winners, their teams' trainers, or their schools / contingents. */
 const RESULT_WINNERS: Source[] = ["EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS"];
+/** Penyertaan from the events' counted teams: each participant, or each contingent. */
+const PARTICIPATION: Source[] = ["EVENT_PARTICIPANTS", "CONTINGENT_PARTICIPATION"];
 const CONTINGENT_TYPES = [["", "Semua kontinjen"], ["SCHOOL", "Sekolah"], ["HIGHER", "IPT"], ["INDEPENDENT", "Bebas"], ["INTERNATIONAL", "Antarabangsa"]];
 const CUSTOM_COLUMNS = ["nama", "ic", "kontingen", "sekolah", "negeri", "pasukan", "pertandingan", "kod", "anugerah", "kedudukan"];
 const fmt = (n: number) => n.toLocaleString();
@@ -136,7 +139,7 @@ function describe(j: Job, withResultsBy = true) {
     if (walk) parts.push(ids.length <= 1 ? (noReg ? "Walk-in sahaja" : "Termasuk walk-in") : `Walk-in: ${walk}/${ids.length} acara`);
     else if (noReg) parts.push("Tiada pertandingan");
   }
-  if (j.source === "EVENT_PARTICIPANTS") {
+  if (PARTICIPATION.includes(j.source)) {
     const ids = c.eventIds?.length ? c.eventIds : c.eventId ? [c.eventId] : [];
     const rules = ids.map(id => c.eventRules?.[id]);
     const att = rules.filter(r => r ? r.attendedOnly && r.acceptance !== "NONE" : c.attendedOnly).length;
@@ -204,15 +207,17 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
   const [err, setErr] = useState("");
 
   const winnersLike = RESULT_WINNERS.includes(source as Source) || source === "EVENT_WINNERS_PREGEN";
-  const needsEvent = source === "EVENT_PARTICIPANTS" || winnersLike;
+  const participation = PARTICIPATION.includes(source as Source);
+  const needsEvent = participation || winnersLike;
   // Participants and winners may come from several events; pre-event blanks from one.
-  const multiEvent = source === "EVENT_PARTICIPANTS" || RESULT_WINNERS.includes(source as Source);
+  const multiEvent = participation || RESULT_WINNERS.includes(source as Source);
   const chosenEvents = multiEvent ? eventIds : eventIds.slice(0, 1);
   // Each event's team rule; events without one start from the old single
   // "hadir sahaja" switch and their scope's default.
   const ruleOf = (id: string): Required<EventRule> => ({
-    acceptance: eventRules[id]?.acceptance ?? defaultAcceptance(events.find(e => e.id === id)?.scope ?? ""),
-    attendedOnly: eventRules[id]?.attendedOnly ?? attendedOnly,
+    // Penyertaan Kontinjen: registered in at least one competition = every team not rejected.
+    acceptance: eventRules[id]?.acceptance ?? (source === "CONTINGENT_PARTICIPATION" ? "NOT_REJECTED" : defaultAcceptance(events.find(e => e.id === id)?.scope ?? "")),
+    attendedOnly: eventRules[id]?.attendedOnly ?? (source === "CONTINGENT_PARTICIPATION" ? false : attendedOnly),
     walkIn: eventRules[id]?.walkIn ?? "NONE",
     eventName: eventRules[id]?.eventName ?? "",
   });
@@ -242,7 +247,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
         templateId, source,
         config: { eventId: chosenEvents[0], eventIds: chosenEvents, onePerCompetition, competitionCodes: codes,
                   attendedOnly: chosenEvents[0] ? ruleOf(chosenEvents[0]).attendedOnly : attendedOnly,
-                  eventRules: source === "EVENT_PARTICIPANTS" || winnersLike ? Object.fromEntries(chosenEvents.map(id => [id, ruleOf(id)])) : undefined,
+                  eventRules: participation || winnersLike ? Object.fromEntries(chosenEvents.map(id => [id, ruleOf(id)])) : undefined,
                   rankFrom, rankTo, verifiedOnly, resultsBy, contingentType, eventNameOverride, distributionLevel,
                   rows: source === "CUSTOM" ? customRows : undefined },
       }) });
@@ -311,7 +316,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                     {multiEvent && chosenEvents.length > 1 && (
                       <div className="max-w-xl space-y-1.5 pt-1">
                         <div className="flex flex-wrap gap-1.5 text-xs">
-                          {([[false, "Satu sijil setiap acara"], [true, "Satu sijil setiap peserta × pertandingan"]] as const).map(([v, l]) => (
+                          {([[false, "Satu sijil setiap acara"], [true, source === "CONTINGENT_PARTICIPATION" ? "Satu sijil setiap kontinjen" : "Satu sijil setiap peserta × pertandingan"]] as const).map(([v, l]) => (
                             <button key={String(v)} type="button" onClick={() => setOnePerCompetition(v)}
                               className={cn("rounded-md border px-2.5 py-1 font-medium transition-colors",
                                 onePerCompetition === v ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600 hover:bg-zinc-50")}>
@@ -320,7 +325,9 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                           ))}
                         </div>
                         <p className="text-[11px] text-zinc-400">
-                          {onePerCompetition
+                          {source === "CONTINGENT_PARTICIPATION"
+                            ? (onePerCompetition ? "Kontinjen yang menyertai beberapa acara menerima satu sijil sahaja — daripada acara pertama (mengikut susunan di atas)." : "Kontinjen yang menyertai dua acara menerima sijil bagi setiap acara.")
+                            : onePerCompetition
                             ? "Peserta yang sama dalam pertandingan yang sama di beberapa acara menerima satu sijil sahaja — daripada acara pertama (mengikut susunan di atas) yang dia sertai."
                             : "Peserta yang sama dalam dua acara menerima sijil bagi setiap acara."}
                           {" "}Penerima dijana mengikut susunan acara di atas, dengan nama acara masing-masing (kecuali nama acara ditetapkan).
@@ -344,7 +351,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   <div className="flex max-w-xl flex-1 flex-wrap gap-1">
                     <button type="button" onClick={() => setCodes([])}
                       className={cn("rounded-full border px-2 py-0.5 text-[11px]", codes.length === 0 ? "border-[#085782] bg-[#085782] text-white" : "bg-white text-zinc-600")}>Semua</button>
-                    {competitions.filter(c => !c.walkIn || source === "EVENT_PARTICIPANTS" || winnersLike).map(c => {
+                    {competitions.filter(c => !c.walkIn || participation || winnersLike).map(c => {
                       const on = codes.includes(c.code);
                       return (
                         <button key={c.code} type="button" title={c.name}
@@ -387,7 +394,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   </div>
                 </div>
               )}
-              {source === "EVENT_PARTICIPANTS" && chosenEvents.length > 0 && (
+              {participation && chosenEvents.length > 0 && (
                 <div className="flex flex-wrap items-start gap-2 text-xs">
                   <span className="w-28 pt-2 text-zinc-500">Penerima dikira</span>
                   <div className="flex-1 space-y-2">
@@ -426,6 +433,13 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                     </p>
                   </div>
                 </div>
+              )}
+              {source === "CONTINGENT_PARTICIPATION" && (
+                <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] leading-relaxed text-emerald-900">
+                  Satu sijil bagi <b>setiap kontinjen yang berdaftar dalam sekurang-kurangnya satu pertandingan</b> acara
+                  (lalai: semua pasukan kecuali ditolak; boleh dihadkan dengan peraturan dan pertandingan di bawah).
+                  Nama penerima ialah nama sekolah / institusi (atau nama kontinjen). Dipaparkan di bawah Sijil Sekolah di Portal Pengurus.
+                </p>
               )}
               {(source === "EVENT_WINNERS_TRAINERS" || source === "EVENT_WINNERS_SCHOOLS") && (
                 <p className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] leading-relaxed text-violet-900">
@@ -512,7 +526,7 @@ function NewGenerator({ templates, events, onCreated, onCancel, initial, editing
                   className={cn(sel, "w-80")} />
                 {multiEvent && chosenEvents.length > 1 && <span className="text-[11px] text-zinc-400">untuk semua acara di bawah yang tidak ditetapkan sendiri</span>}
               </div>
-              {multiEvent && chosenEvents.length > 1 && (source === "EVENT_PARTICIPANTS" || winnersLike) && (
+              {multiEvent && chosenEvents.length > 1 && (participation || winnersLike) && (
                 <div className="flex flex-wrap items-start gap-2">
                   <span className="w-28 pt-2 text-xs text-zinc-500">Nama setiap acara</span>
                   <div className="space-y-1.5">

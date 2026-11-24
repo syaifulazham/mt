@@ -29,7 +29,7 @@ type Row = {
   eventName: string | null; templateVersion: { version: number };
 };
 const SOURCE_LABEL: Record<string, string> = {
-  EVENT_PARTICIPANTS: "Peserta Acara", EVENT_WINNERS: "Pencapaian Acara",
+  EVENT_PARTICIPANTS: "Peserta Acara", CONTINGENT_PARTICIPATION: "Penyertaan Kontinjen", EVENT_WINNERS: "Pencapaian Acara",
   EVENT_WINNERS_TRAINERS: "Pencapaian Acara (Jurulatih)", EVENT_WINNERS_SCHOOLS: "Pencapaian Acara (Sekolah)", ALL_REGISTERED: "Semua Berdaftar", CUSTOM: "Custom",
 };
 const fmtIc = (ic: string | null) => {
