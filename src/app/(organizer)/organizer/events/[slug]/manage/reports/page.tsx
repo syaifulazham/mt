@@ -4,7 +4,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { ArrowLeft, BarChart3, CheckSquare, UserCheck, FileText, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckSquare, ClipboardList, UserCheck, FileText, Users } from "lucide-react";
 
 export const metadata: Metadata = { title: "Laporan" };
 
@@ -35,6 +35,15 @@ const REPORTS = [
     color: "text-emerald-600",
     bg: "bg-emerald-50",
     border: "border-emerald-200",
+  },
+  {
+    icon: ClipboardList,
+    title: "Senarai Kehadiran Penyertaan",
+    description: "Senarai sekolah yang hadir mengikut pertandingan — jantina, bangsa, bilangan murid dan guru — termasuk semua peserta antarabangsa.",
+    href: "attendance-list",
+    color: "text-teal-600",
+    bg: "bg-teal-50",
+    border: "border-teal-200",
   },
   {
     icon: FileText,
