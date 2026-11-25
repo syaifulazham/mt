@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft, FileDown, Info } from "lucide-react";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { PrintButton } from "@/components/organizer/events/PrintButton";
@@ -138,7 +138,14 @@ export default async function AttendanceListReportPage({
             <p className="mt-2 text-xs text-zinc-400 print:text-zinc-600">Snapshot data setakat {asAt}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2 print:hidden">
-            <PrintButton />
+            <div className="flex gap-2">
+              <a href={`/api/v2/organizer/events/${event.id}/reports/attendance-list/docx${basis === "individual" ? "?mode=individual" : ""}`}
+                download
+                className="flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200">
+                <FileDown className="h-4 w-4" /> Word (.docx)
+              </a>
+              <PrintButton />
+            </div>
             <div className="flex rounded-lg bg-zinc-800 p-0.5 text-xs font-medium">
               {([["counter", "Kaunter"], ["individual", "Individu"]] as const).map(([k, l]) => (
                 <Link key={k} href={k === "counter" ? base : `${base}?mode=individual`} replace scroll={false}
