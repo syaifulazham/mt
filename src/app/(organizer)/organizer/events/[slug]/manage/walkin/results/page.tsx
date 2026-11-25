@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { compareScoreTime, parseSharedRankMode, withSharedRanks } from "@/lib/sharedRank";
 import { redirect } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
 import { WalkInResultsClient } from "@/components/organizer/events/WalkInResultsClient";
 import { walkInJudgingProgress, type JudgingRow } from "@/lib/judgingStatus";
+import { computeCompetitionResults, type RankingEntry } from "@/lib/resultsRankings";
+
+type WalkInRankEntry = {
+  registrationId: string; participantName: string;
+  contingentName: string; contingentLogo: string | null;
+  totalScore: number; bestTime: number | null; rank: number;
+};
 
 export const metadata: Metadata = { title: "Keputusan Walk-in" };
 
@@ -18,24 +24,12 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
   const event = await db.event.findUnique({
     where: { slug },
     select: {
-      id: true, name: true, slug: true, scope: true, sharedRankMode: true,
+      id: true, name: true, slug: true, scope: true,
       walkInCompetitions: {
         select: {
           id: true,
           judgingStatus: true, judgingVerifiedAt: true, judgingVerifiedBy: true,
           competition: { select: { id: true, name: true, code: true } },
-          judgingEndpoints: {
-            select: {
-              id: true,
-              scores: {
-                select: {
-                  walkInRegistrationId: true,
-                  score: true,
-                  timeSeconds: true,
-                },
-              },
-            },
-          },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -48,73 +42,36 @@ export default async function WalkInResultsPage({ params }: { params: Promise<{ 
 
   if (!event) redirect("/organizer/events");
 
-  // Pre-aggregate rankings per walk-in competition
-  type RankEntry = {
-    registrationId: string; participantName: string;
-    contingentName: string; contingentLogo: string | null;
-    totalScore: number; bestTime: number | null; rank: number;
-  };
-
   type Judging = { status: string; verifiedAt: string | null; verifiedBy: string | null; statusUrl: string; rows: JudgingRow[] };
   // Per-state judging rows ("Semua" + states with participants) for the verification table.
   const progress = new Map((await walkInJudgingProgress(event.id)).map((p) => [p.id, p.rows]));
-  const competitionRankings: { id: string; name: string; code: string; judging: Judging; rankings: RankEntry[] }[] = [];
+  // The same rankings the certificate generator (Pencapaian Acara) issues from,
+  // so the ranks shown here are the ranks printed on walk-in certificates.
+  const results = new Map((await computeCompetitionResults(event.id, true, null)).map(r => [r.id, r]));
 
-  for (const wc of event.walkInCompetitions) {
-    const judging = {
+  const toEntry = (e: RankingEntry): WalkInRankEntry => ({
+    registrationId: e.teamId, participantName: e.teamName,
+    contingentName: e.contingentName, contingentLogo: e.contingentLogo,
+    totalScore: e.totalScore, bestTime: e.bestTime, rank: e.rank,
+  });
+
+  const competitionRankings = event.walkInCompetitions.map((wc) => {
+    const judging: Judging = {
       status:     wc.judgingStatus,
       verifiedAt: wc.judgingVerifiedAt?.toISOString() ?? null,
       verifiedBy: wc.judgingVerifiedBy,
       statusUrl:  `/api/v2/organizer/events/${event.id}/walkin/${wc.id}/judging-status`,
       rows:       progress.get(wc.id) ?? [],
     };
-    const scoreMap = new Map<string, { total: number; minTime: number | null }>();
-    for (const ep of wc.judgingEndpoints) {
-      for (const s of ep.scores) {
-        const cur = scoreMap.get(s.walkInRegistrationId) ?? { total: 0, minTime: null };
-        cur.total += s.score ?? 0;
-        if (s.timeSeconds != null) {
-          cur.minTime = cur.minTime == null ? s.timeSeconds : Math.min(cur.minTime, s.timeSeconds);
-        }
-        scoreMap.set(s.walkInRegistrationId, cur);
-      }
-    }
-    if (scoreMap.size === 0) {
-      competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, judging, rankings: [] });
-      continue;
-    }
-
-    const registrations = await db.walkInRegistration.findMany({
-      where: { id: { in: [...scoreMap.keys()] } },
-      select: {
-        id: true,
-        participant: { select: { name: true } },
-        contingent: { select: { name: true, logoUrl: true } },
-      },
-    });
-
-    const sorted = withSharedRanks(registrations
-      .map(r => {
-        const agg = scoreMap.get(r.id)!;
-        return {
-          registrationId: r.id,
-          participantName: r.participant.name,
-          contingentName: r.contingent.name,
-          contingentLogo: r.contingent.logoUrl,
-          totalScore: agg.total,
-          bestTime: agg.minTime,
-        };
-      })
-      .sort((a, b) => {
-        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-        if (a.bestTime != null && b.bestTime != null) return a.bestTime - b.bestTime;
-        if (a.bestTime != null) return -1;
-        if (b.bestTime != null) return 1;
-        return 0;
-      }), compareScoreTime, parseSharedRankMode(event.sharedRankMode));
-
-    competitionRankings.push({ id: wc.competition.id, name: wc.competition.name, code: wc.competition.code, judging, rankings: sorted });
-  }
+    const r = results.get(wc.id);
+    return {
+      id: wc.id, name: wc.competition.name, code: wc.competition.code, judging,
+      // Walk-ins are always ranked nationally (Kebangsaan) — one list, as certificates rank them.
+      rankings: (r?.rankings ?? []).map(toEntry),
+      // Foreign walk-ins: ranked within their own country, never with the locals.
+      foreign: (r?.foreignRankings ?? []).map(e => ({ ...toEntry(e), countryName: e.countryName ?? "" })),
+    };
+  });
 
   return (
     <OrganizerShell userName={session.name} role={session.role}>

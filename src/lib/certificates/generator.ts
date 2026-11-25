@@ -42,7 +42,7 @@ import { CertTargetType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { computeCompetitionResults, internationalRankings, type RankingEntry } from "@/lib/resultsRankings";
 import { compareScoreTime } from "@/lib/sharedRank";
-import { defaultResultScope, resolveResultScope } from "@/lib/resultScope";
+import { resolveResultScope } from "@/lib/resultScope";
 import { allocateSerial, newUniqueCode } from "./serial";
 
 export const GENERATOR_SOURCES = ["EVENT_PARTICIPANTS", "EVENT_WINNERS", "EVENT_WINNERS_TRAINERS", "EVENT_WINNERS_SCHOOLS", "EVENT_WINNERS_PREGEN", "CONTINGENT_PARTICIPATION", "ALL_REGISTERED", "TRAINERS", "MANAGERS", "CUSTOM", "GENERAL"] as const;
@@ -274,14 +274,13 @@ async function pregenSlots(cfg: GeneratorConfig) {
     }))
       ecs.push({ c: ec.competition, walkIn: false, byState: cfg.resultsBy === "STATE"
         || ((cfg.resultsBy ?? "CONFIG") === "CONFIG" && resolveResultScope(ec, scope) === "STATE") });
-  // Walk-in competitions (when the event's rule includes them): ranked with the event's default scope.
+  // Walk-in competitions (when the event's rule includes them): always ranked nationally.
   if ((rule?.walkIn ?? "NONE") !== "NONE")
     for (const wc of await db.eventWalkInCompetition.findMany({
       where: { eventId: cfg.eventId! },
       select: { competition: { select: { id: true, code: true, name: true, participationType: true, maxTeamSize: true } } },
     }))
-      ecs.push({ c: wc.competition, walkIn: true, byState: cfg.resultsBy === "STATE"
-        || ((cfg.resultsBy ?? "CONFIG") === "CONFIG" && defaultResultScope(scope) === "STATE") });
+      ecs.push({ c: wc.competition, walkIn: true, byState: false });
 
   // States of each competition's local entrants: registered teams, and walk-in registrations.
   const states = await db.$queryRawUnsafe<{ comp_id: string; walk_in: boolean; state_id: string; state_name: string }[]>(`
@@ -434,8 +433,9 @@ async function resolveOne(
     const verifiedOnly = cfg.verifiedOnly !== false;
     const intl    = cfg.resultsBy === "INTERNATIONAL";
     // Per state for this competition? CONFIG follows its Konfigurasi keputusan.
-    const stateFor = (r: { resultScope: string }) =>
-      cfg.resultsBy === "STATE" || (cfg.resultsBy === "CONFIG" && r.resultScope === "STATE");
+    // Walk-ins are always ranked nationally (Kebangsaan), even with "by state".
+    const stateFor = (r: { resultScope: string; walkIn: boolean }) => !r.walkIn &&
+      (cfg.resultsBy === "STATE" || (cfg.resultsBy === "CONFIG" && r.resultScope === "STATE"));
     // Registered competitions, and walk-in ones when the event's rule says so
     // (acceptance NONE = no registered; walkIn other than NONE = walk-ins too).
     const rule = cfg.eventRules?.[cfg.eventId];

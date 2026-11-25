@@ -24,7 +24,11 @@ type RankEntry = {
 };
 
 type CompetitionRanking = {
-  id: string; name: string; code: string; rankings: RankEntry[];
+  id: string; name: string; code: string;
+  /** Walk-ins are always ranked nationally: local participants 1..n, as on certificates. */
+  rankings: RankEntry[];
+  /** Foreign participants, ranked within their country. */
+  foreign: (RankEntry & { countryName: string })[];
   /** Walk-in judging lifecycle (OPEN | COMPLETED | VERIFIED). */
   judging?: ResultsJudging;
 };
@@ -143,6 +147,42 @@ function EndpointRow({ ep, eventId, onDelete, onStatusChange }: {
   );
 }
 
+// ── Ranking row ────────────────────────────────────────────────────────────────
+
+function renderRow(r: RankEntry, note?: string) {
+  return (
+    <tr key={r.registrationId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
+      r.rank <= 3 && "bg-amber-50/30")}>
+      <td className="px-4 py-3 text-center">
+        {MEDAL[r.rank]
+          ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
+          : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
+        }
+      </td>
+      <td className="px-4 py-3 font-medium text-zinc-800">
+        {r.participantName}
+        {note && <span className="ml-2 text-[10px] font-normal text-zinc-400">{note}</span>}
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          {r.contingentLogo
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={r.contingentLogo} alt="" className="w-6 h-6 rounded-full object-cover border" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            : <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500">
+                {r.contingentName.slice(0, 2).toUpperCase()}
+              </div>
+          }
+          <span className="text-sm text-zinc-600 truncate max-w-[200px]">{r.contingentName}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-center font-bold text-indigo-700">{r.totalScore.toFixed(1)}</td>
+      <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
+        {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
+      </td>
+    </tr>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function WalkInResultsClient({
@@ -185,6 +225,21 @@ export function WalkInResultsClient({
 
   const activeRanking = competitionRankings.find(c => c.id === activeComp);
   const theme = judgingTheme(activeRanking?.judging?.status);
+  const hasData = !!activeRanking && (activeRanking.rankings.length > 0 || activeRanking.foreign.length > 0);
+
+  const groupHeader = (key: string, label: string) => (
+    <tr key={key} className="bg-zinc-100 border-b border-zinc-200">
+      <td colSpan={5} className="px-4 py-1.5">
+        <span className="text-[11px] font-bold text-zinc-600 uppercase tracking-wide">{label}</span>
+      </td>
+    </tr>
+  );
+  const foreignRows = activeRanking && activeRanking.foreign.length > 0 && (
+    <>
+      {groupHeader("foreign", "Antarabangsa (kedudukan dalam negara masing-masing)")}
+      {activeRanking.foreign.map(r => renderRow(r, r.countryName))}
+    </>
+  );
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -239,7 +294,7 @@ export function WalkInResultsClient({
           />
         )}
 
-        {!activeRanking || activeRanking.rankings.length === 0 ? (
+        {!activeRanking || !hasData ? (
           <div className="py-12 text-center text-sm text-zinc-400">
             Tiada markah direkodkan lagi untuk pertandingan ini.
           </div>
@@ -256,34 +311,8 @@ export function WalkInResultsClient({
                 </tr>
               </thead>
               <tbody>
-                {activeRanking.rankings.map(r => (
-                  <tr key={r.registrationId} className={cn("border-b last:border-0 hover:bg-zinc-50/40",
-                    r.rank <= 3 && "bg-amber-50/30")}>
-                    <td className="px-4 py-3 text-center">
-                      {MEDAL[r.rank]
-                        ? <span className="text-lg">{MEDAL[r.rank].icon}</span>
-                        : <span className="text-xs font-bold text-zinc-400">{r.rank}</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3 font-medium text-zinc-800">{r.participantName}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {r.contingentLogo
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={r.contingentLogo} alt="" className="w-6 h-6 rounded-full object-cover border" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                          : <div className="w-6 h-6 rounded-full bg-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500">
-                              {r.contingentName.slice(0, 2).toUpperCase()}
-                            </div>
-                        }
-                        <span className="text-sm text-zinc-600 truncate max-w-[200px]">{r.contingentName}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center font-bold text-indigo-700">{r.totalScore.toFixed(1)}</td>
-                    <td className="px-4 py-3 text-center text-xs font-mono text-sky-600">
-                      {r.bestTime != null ? fmtTime(r.bestTime) : "—"}
-                    </td>
-                  </tr>
-                ))}
+                {activeRanking.rankings.map(r => renderRow(r))}
+                {foreignRows}
               </tbody>
             </table>
           </div>

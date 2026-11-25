@@ -6,7 +6,7 @@ import { hiddenMembers, mergeByLead, mergesByEc } from "@/lib/team-merge-server"
 import { competitionTitle } from "@/lib/competition-split";
 import { duelStandings } from "@/lib/duel";
 import { loadRounds } from "@/lib/duel-server";
-import { defaultResultScope, resolveResultScope, type ResultScope } from "@/lib/resultScope";
+import { resolveResultScope, type ResultScope } from "@/lib/resultScope";
 
 // Competition rankings from judging scores — shared by the public results
 // board (/api/results/[slug]) and the announcer board (/api/announce/[slug]).
@@ -186,7 +186,8 @@ export async function computeCompetitionResults(
         code: wc.competition.code,
         targetGroups: wc.competition.targetGroups.map(t => ({ code: t.targetGroup.code, name: t.targetGroup.name })),
         judgingStatus: wc.judgingStatus,
-        resultScope: defaultResultScope(eventScope),
+        // Walk-ins are always ranked nationally (Kebangsaan), whatever the event scope.
+        resultScope: "NATIONAL",
         judgingVerifiedAt: wc.judgingVerifiedAt,
         verifiedStateIds: [],
         splitLabel: "", isSplit: false, countInMedals: true, judgingMethod: "SCORE",
