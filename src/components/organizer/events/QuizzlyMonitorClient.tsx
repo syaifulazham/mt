@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { QuizzlyMonitorCompetition, QuizzlyMonitorRow } from "@/lib/quizzlyMonitor";
 import { rankQuizRows, exportQuizzlyResultsExcel } from "@/lib/export/quizzlyResultsExport";
+import { QuizJudgingPanel } from "@/components/organizer/events/QuizJudgingPanel";
 
 // Pantauan Pertandingan Dalam Talian → Asia Spark Quizzes: per Quizzly-linked
 // competition of the event, its registered participants by quiz (toggle by
@@ -238,6 +239,8 @@ function CompetitionPanel({ comp, eventId }: { comp: QuizzlyMonitorCompetition; 
           {comp.unassigned > 0 && <span className="text-amber-700"> · {comp.unassigned} tiada kuiz sepadan (darjah / kumpulan sasaran)</span>}
         </p>
       </div>
+
+      <QuizJudgingPanel eventId={eventId} ecId={comp.ecId} />
 
       {comp.quizzes.length === 0 ? (
         <p className="px-5 py-6 text-sm text-zinc-400">Tiada kuiz dikonfigurasi untuk pertandingan ini.</p>

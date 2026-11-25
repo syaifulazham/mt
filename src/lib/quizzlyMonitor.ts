@@ -29,7 +29,7 @@ export type QuizzlyMonitorRow = {
   totalQuestions: number;
   submittedAt: string | null;
   durationMs: number | null;
-  score: { raw: number; max: number; percentage: number } | null;
+  score: { raw: number; max: number; percentage: number; correct: number; questions: number } | null;
 };
 
 export type QuizzlyMonitorQuiz = { id: string; title: string; label: string; registered: number };
@@ -153,7 +153,7 @@ export async function quizzlyMonitorQuiz(eventId: string, ecId: string, quizId: 
       totalQuestions: pr?.attempt.total_questions ?? 0,
       submittedAt: attempt?.timing.submitted_at ?? pr?.attempt.submitted_at ?? null,
       durationMs: attempt?.timing.duration_ms ?? null,
-      score: attempt?.score ? { raw: attempt.score.raw, max: attempt.score.max, percentage: attempt.score.percentage } : null,
+      score: attempt?.score ? { raw: attempt.score.raw, max: attempt.score.max, percentage: attempt.score.percentage, correct: attempt.score.correct, questions: attempt.score.correct + attempt.score.incorrect + attempt.score.unanswered } : null,
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
