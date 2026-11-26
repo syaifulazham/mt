@@ -5,7 +5,7 @@ import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
 import {
-  computeFinalProgramData, internationalNote, programBasisNote, PROGRAM_MODE_LABEL, type ProgramMode,
+  computeFinalProgramData, internationalNote, programBasisNote, PROGRAM_MODE_LABEL, type ProgramMode, type TeamSummary,
 } from "@/lib/reports/finalProgramData";
 import Link from "next/link";
 import { Fragment } from "react";
@@ -53,6 +53,86 @@ function PctRow({ vals, labels, total, bg }: { vals: number[]; labels: string[];
 const TR_ODD = "bg-white";
 const TR_EVEN = "bg-slate-50";
 
+/** A group's summary table: contingents by level, teams, participants by their own level. */
+function TeamSummaryTable({ s }: { s: TeamSummary }) {
+  return (
+      <table className="w-full">
+        <thead>
+          <tr>
+            <th className={`${TH_LEFT} w-1/2`}>&nbsp;</th>
+            <th className={TH}>Pelajar</th>
+            <th className={TH}>Belia</th>
+            <th className={TH}>Jumlah</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className={TR_ODD}>
+            <td className={TD_LABEL}>Kontinjen Sekolah / Belia</td>
+            <td className={TD_NUM}>{n(s.schoolContingents)}</td>
+            <td className={TD_NUM}>{n(s.beliaContingents)}</td>
+            <td className="px-3 py-1.5 text-center font-mono font-black text-slate-900 text-xs tabular-nums">
+              {n(s.schoolContingents + s.beliaContingents)}
+            </td>
+          </tr>
+          {s.prasekolahContingents > 0 && (
+            <tr className={TR_ODD}>
+              <td className={`${TD} pl-6`}>↳ Prasekolah</td>
+              <td className={TD_NUM}>{n(s.prasekolahContingents)}</td>
+              <td className={`${TD} text-center text-slate-400`}>—</td>
+              <td className={TD_NUM}>{n(s.prasekolahContingents)}</td>
+            </tr>
+          )}
+          <tr className={TR_EVEN}>
+            <td className={`${TD} pl-6`}>↳ Sekolah Rendah</td>
+            <td className={TD_NUM}>{n(s.rendahContingents)}</td>
+            <td className={`${TD} text-center text-slate-400`}>—</td>
+            <td className={TD_NUM}>{n(s.rendahContingents)}</td>
+          </tr>
+          <tr className={TR_ODD}>
+            <td className={`${TD} pl-6`}>↳ Sekolah Menengah</td>
+            <td className={TD_NUM}>{n(s.menengahContingents)}</td>
+            <td className={`${TD} text-center text-slate-400`}>—</td>
+            <td className={TD_NUM}>{n(s.menengahContingents)}</td>
+          </tr>
+          <tr className={TR_EVEN}>
+            <td className={`${TD} pl-6`}>↳ Belia</td>
+            <td className={`${TD} text-center text-slate-400`}>—</td>
+            <td className={TD_NUM}>{n(s.beliaContingents)}</td>
+            <td className={TD_NUM}>{n(s.beliaContingents)}</td>
+          </tr>
+          <tr className="bg-slate-100">
+            <td className={TD_LABEL}>Jumlah Pasukan</td>
+            <td className={TD_NUM}>{n(s.schoolTeams)}</td>
+            <td className={TD_NUM}>{n(s.beliaTeams)}</td>
+            <td className={TD_NUM}>{n(s.schoolTeams + s.beliaTeams)}</td>
+          </tr>
+          <tr className="bg-slate-100">
+            <td className={TD_LABEL}>Jumlah Peserta</td>
+            <td className={TD_NUM}>{n(s.schoolParticipants)}</td>
+            <td className={TD_NUM}>{n(s.beliaParticipants)}</td>
+            <td className="px-3 py-1.5 text-center font-mono font-black text-slate-900 text-xs tabular-nums">
+              {n(s.schoolParticipants + s.beliaParticipants)}
+            </td>
+          </tr>
+          {([
+            ["Peserta Prasekolah", s.prasekolahPax, true],
+            ["Peserta Sekolah Rendah", s.rendahPax, true],
+            ["Peserta Sekolah Menengah", s.menengahPax, true],
+            ["Peserta Belia", s.beliaParticipants, false],
+          ] as const).filter(([, v]) => v > 0).map(([label, v, school]) => (
+            <tr key={label} className={TR_ODD}>
+              <td className={`${TD} pl-6`}>↳ {label}</td>
+              <td className={school ? TD_NUM : `${TD} text-center text-slate-400`}>{school ? n(v) : "—"}</td>
+              <td className={school ? `${TD} text-center text-slate-400` : TD_NUM}>{school ? "—" : n(v)}</td>
+              <td className={TD_NUM}>{n(v)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+  );
+}
+
+
 export default async function FinalProgramReportPage({
   params, searchParams,
 }: {
@@ -77,15 +157,18 @@ export default async function FinalProgramReportPage({
   });
   if (!event) notFound();
 
-  const mode: ProgramMode = (await searchParams).kategori === "online" ? "ONLINE" : "BERSEMUKA";
+  const kat = (await searchParams).kategori;
+  const mode: ProgramMode = kat === "online" ? "ONLINE" : kat === "semua" ? "SEMUA" : "BERSEMUKA";
   const d = await computeFinalProgramData(event.id, mode);
   if (!d) notFound();
   const intlNote = internationalNote(d.international);
   const base = `/organizer/events/${slug}/manage/reports/final-program`;
 
-  const pesertaUtama = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants;
-  const jumlahPeserta = pesertaUtama + d.walkInSummary.total;
+  // Unique participants (a participant in several categories counts once).
+  const pesertaUtama = d.teamParticipants;
+  const jumlahPeserta = d.uniqueParticipants;
   const grandTotal = jumlahPeserta + d.trainerCount;
+  const KATEGORI: Record<ProgramMode, string> = { BERSEMUKA: "", ONLINE: "online", SEMUA: "semua" };
 
   const venueLine = [event.venue, event.city, event.state?.name].filter(Boolean).join(" · ");
   const startStr = event.startDate ? fmtDate(event.startDate) : null;
@@ -130,10 +213,10 @@ export default async function FinalProgramReportPage({
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2 print:hidden">
-            <FinalProgramExportButtons eventId={event.id} kategori={mode === "ONLINE" ? "online" : undefined} />
+            <FinalProgramExportButtons eventId={event.id} kategori={KATEGORI[mode] || undefined} />
             <div className="flex rounded-lg bg-zinc-800 p-0.5 text-xs font-medium">
-              {(["BERSEMUKA", "ONLINE"] as const).map(k => (
-                <Link key={k} href={k === "ONLINE" ? `${base}?kategori=online` : base} replace scroll={false}
+              {(["BERSEMUKA", "ONLINE", "SEMUA"] as const).map(k => (
+                <Link key={k} href={KATEGORI[k] ? `${base}?kategori=${KATEGORI[k]}` : base} replace scroll={false}
                   className={`rounded-md px-3 py-1 ${mode === k ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-zinc-100"}`}>
                   {PROGRAM_MODE_LABEL[k]}
                 </Link>
@@ -214,83 +297,21 @@ export default async function FinalProgramReportPage({
               </span>
             </div>
 
-            {/* BERDAFTAR */}
+            {/* BERDAFTAR (Bersemuka; or the mode's teams) */}
             <div className="bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 mt-0">
-              Berdaftar (Hadir)
+              {mode === "SEMUA" ? "Bersemuka — Berdaftar (Hadir)" : "Berdaftar (Hadir)"}
             </div>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th className={`${TH_LEFT} w-1/2`}>&nbsp;</th>
-                  <th className={TH}>Pelajar</th>
-                  <th className={TH}>Belia</th>
-                  <th className={TH}>Jumlah</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className={TR_ODD}>
-                  <td className={TD_LABEL}>Kontinjen Sekolah / Belia</td>
-                  <td className={TD_NUM}>{n(d.regSummary.schoolContingents)}</td>
-                  <td className={TD_NUM}>{n(d.regSummary.beliaContingents)}</td>
-                  <td className="px-3 py-1.5 text-center font-mono font-black text-slate-900 text-xs tabular-nums">
-                    {n(d.regSummary.schoolContingents + d.regSummary.beliaContingents)}
-                  </td>
-                </tr>
-                {d.regSummary.prasekolahContingents > 0 && (
-                  <tr className={TR_ODD}>
-                    <td className={`${TD} pl-6`}>↳ Prasekolah</td>
-                    <td className={TD_NUM}>{n(d.regSummary.prasekolahContingents)}</td>
-                    <td className={`${TD} text-center text-slate-400`}>—</td>
-                    <td className={TD_NUM}>{n(d.regSummary.prasekolahContingents)}</td>
-                  </tr>
-                )}
-                <tr className={TR_EVEN}>
-                  <td className={`${TD} pl-6`}>↳ Sekolah Rendah</td>
-                  <td className={TD_NUM}>{n(d.regSummary.rendahContingents)}</td>
-                  <td className={`${TD} text-center text-slate-400`}>—</td>
-                  <td className={TD_NUM}>{n(d.regSummary.rendahContingents)}</td>
-                </tr>
-                <tr className={TR_ODD}>
-                  <td className={`${TD} pl-6`}>↳ Sekolah Menengah</td>
-                  <td className={TD_NUM}>{n(d.regSummary.menengahContingents)}</td>
-                  <td className={`${TD} text-center text-slate-400`}>—</td>
-                  <td className={TD_NUM}>{n(d.regSummary.menengahContingents)}</td>
-                </tr>
-                <tr className={TR_EVEN}>
-                  <td className={`${TD} pl-6`}>↳ Belia</td>
-                  <td className={`${TD} text-center text-slate-400`}>—</td>
-                  <td className={TD_NUM}>{n(d.regSummary.beliaContingents)}</td>
-                  <td className={TD_NUM}>{n(d.regSummary.beliaContingents)}</td>
-                </tr>
-                <tr className="bg-slate-100">
-                  <td className={TD_LABEL}>Jumlah Pasukan</td>
-                  <td className={TD_NUM}>{n(d.regSummary.schoolTeams)}</td>
-                  <td className={TD_NUM}>{n(d.regSummary.beliaTeams)}</td>
-                  <td className={TD_NUM}>{n(d.regSummary.schoolTeams + d.regSummary.beliaTeams)}</td>
-                </tr>
-                <tr className="bg-slate-100">
-                  <td className={TD_LABEL}>Jumlah Peserta</td>
-                  <td className={TD_NUM}>{n(d.regSummary.schoolParticipants)}</td>
-                  <td className={TD_NUM}>{n(d.regSummary.beliaParticipants)}</td>
-                  <td className="px-3 py-1.5 text-center font-mono font-black text-slate-900 text-xs tabular-nums">
-                    {n(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants)}
-                  </td>
-                </tr>
-                {([
-                  ["Peserta Prasekolah", d.regSummary.prasekolahPax, true],
-                  ["Peserta Sekolah Rendah", d.regSummary.rendahPax, true],
-                  ["Peserta Sekolah Menengah", d.regSummary.menengahPax, true],
-                  ["Peserta Belia", d.regSummary.beliaParticipants, false],
-                ] as const).filter(([, v]) => v > 0).map(([label, v, school]) => (
-                  <tr key={label} className={TR_ODD}>
-                    <td className={`${TD} pl-6`}>↳ {label}</td>
-                    <td className={school ? TD_NUM : `${TD} text-center text-slate-400`}>{school ? n(v) : "—"}</td>
-                    <td className={school ? `${TD} text-center text-slate-400` : TD_NUM}>{school ? "—" : n(v)}</td>
-                    <td className={TD_NUM}>{n(v)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TeamSummaryTable s={d.regSummary} />
+
+            {/* DALAM TALIAN (Semua only) */}
+            {d.onlineSummary && (
+              <>
+                <div className="bg-sky-900 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-sky-100 mt-2">
+                  Dalam Talian — Diterima
+                </div>
+                <TeamSummaryTable s={d.onlineSummary} />
+              </>
+            )}
 
             {/* WALK-IN */}
             <div className="bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 mt-2">
@@ -331,7 +352,7 @@ export default async function FinalProgramReportPage({
             <div className="bg-slate-900 px-4 py-3 flex items-center justify-between mt-2">
               <div>
                 <div className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
-                  Berdaftar + Walk-In
+                  {mode === "SEMUA" ? "Bersemuka + Dalam Talian + Walk-In" : mode === "ONLINE" ? "Dalam Talian" : "Berdaftar + Walk-In"} · peserta unik
                 </div>
                 <div className="text-xs font-black text-slate-200 uppercase tracking-wide">
                   Jumlah Keseluruhan Peserta
@@ -717,7 +738,7 @@ export default async function FinalProgramReportPage({
                 {
                   label: "Belia",
                   comps: d.beliaComps,
-                  levelParticipants: d.regSummary.beliaParticipants,
+                  levelParticipants: d.beliaCompParticipants,
                   labelCls: "bg-teal-800 text-white",
                   subCls: "bg-teal-50",
                   totCls: "bg-teal-100 text-teal-900",

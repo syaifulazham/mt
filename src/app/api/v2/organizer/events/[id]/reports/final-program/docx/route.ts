@@ -144,7 +144,8 @@ export async function GET(
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { id: eventId } = await params;
-  const data = await computeFinalProgramData(eventId, req.nextUrl.searchParams.get("kategori") === "online" ? "ONLINE" : "BERSEMUKA");
+  const kat = req.nextUrl.searchParams.get("kategori");
+  const data = await computeFinalProgramData(eventId, kat === "online" ? "ONLINE" : kat === "semua" ? "SEMUA" : "BERSEMUKA");
   if (!data) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const d = data;
@@ -153,8 +154,10 @@ export async function GET(
   const intlParas = intlNote
     ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 40, after: 60 }, children: [new TextRun({ text: intlNote, size: 16, italics: true, color: INDIGO_800 })] })]
     : [];
-  const pesertaUtama  = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants;
-  const jumlahPeserta = pesertaUtama + d.walkInSummary.total;
+  // Unique participants (a participant in several categories counts once).
+  const pesertaUtama  = d.teamParticipants;
+  const jumlahPeserta = d.uniqueParticipants;
+  const os = d.onlineSummary;
   const grandTotal    = jumlahPeserta + d.trainerCount;
   const generated  = new Date().toLocaleDateString("ms-MY", { day: "2-digit", month: "long", year: "numeric" });
 
@@ -325,6 +328,27 @@ export async function GET(
         dCell(school ? "—" : nv(v), WHITE, school ? AlignmentType.CENTER : AlignmentType.RIGHT),
         dCell(nv(v), WHITE, AlignmentType.RIGHT),
       ]})),
+      ...(os ? [
+        new TableRow({ children: [dCell("DALAM TALIAN — DITERIMA", "0C4A6E", AlignmentType.LEFT, true, WHITE, 4)] }),
+        new TableRow({ children: [
+          dCell("Kontinjen Sekolah / Belia (Dalam Talian)", WHITE),
+          dCell(nv(os.schoolContingents), WHITE, AlignmentType.RIGHT),
+          dCell(nv(os.beliaContingents),  WHITE, AlignmentType.RIGHT),
+          dCell(nv(os.schoolContingents + os.beliaContingents), WHITE, AlignmentType.RIGHT, true),
+        ]}),
+        new TableRow({ children: [
+          dCell("Jumlah Pasukan (Dalam Talian)", SLATE_50),
+          dCell(nv(os.schoolTeams), SLATE_50, AlignmentType.RIGHT),
+          dCell(nv(os.beliaTeams),  SLATE_50, AlignmentType.RIGHT),
+          dCell(nv(os.schoolTeams + os.beliaTeams), SLATE_50, AlignmentType.RIGHT, true),
+        ]}),
+        new TableRow({ children: [
+          dCell("Jumlah Peserta (Dalam Talian)", WHITE),
+          dCell(nv(os.schoolParticipants), WHITE, AlignmentType.RIGHT),
+          dCell(nv(os.beliaParticipants),  WHITE, AlignmentType.RIGHT),
+          dCell(nv(os.schoolParticipants + os.beliaParticipants), WHITE, AlignmentType.RIGHT, true),
+        ]}),
+      ] : []),
       new TableRow({ children: [
         dCell("Jumlah Pasukan (Walk-In, berpasukan)", SLATE_50),
         dCell(nv(d.walkInSummary.schoolTeams), SLATE_50, AlignmentType.RIGHT),
@@ -338,13 +362,13 @@ export async function GET(
         dCell(nv(d.walkInSummary.total), WHITE, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
-        dCell("JUMLAH KESELURUHAN PESERTA BERDAFTAR", SLATE_800, AlignmentType.LEFT, true, WHITE),
-        dCell(nv(d.regSummary.schoolParticipants), SLATE_800, AlignmentType.RIGHT, true, WHITE),
-        dCell(nv(d.regSummary.beliaParticipants),  SLATE_800, AlignmentType.RIGHT, true, WHITE),
+        dCell(os ? "JUMLAH PESERTA BERDAFTAR — BERSEMUKA + DALAM TALIAN (UNIK)" : "JUMLAH KESELURUHAN PESERTA BERDAFTAR", SLATE_800, AlignmentType.LEFT, true, WHITE),
+        dCell(os ? "" : nv(d.regSummary.schoolParticipants), SLATE_800, AlignmentType.RIGHT, true, WHITE),
+        dCell(os ? "" : nv(d.regSummary.beliaParticipants),  SLATE_800, AlignmentType.RIGHT, true, WHITE),
         dCell(nv(pesertaUtama), SLATE_800, AlignmentType.RIGHT, true, WHITE),
       ]}),
       new TableRow({ children: [
-        dCell("JUMLAH KESELURUHAN (Berdaftar + Walk-In)", SLATE_900, AlignmentType.LEFT, true, WHITE),
+        dCell(`JUMLAH KESELURUHAN PESERTA (${os ? "Bersemuka + Dalam Talian + Walk-In" : "Berdaftar + Walk-In"}, unik)`, SLATE_900, AlignmentType.LEFT, true, WHITE),
         dCell("", SLATE_900),
         dCell("", SLATE_900),
         dCell(nv(jumlahPeserta), SLATE_900, AlignmentType.RIGHT, true, WHITE),
@@ -471,7 +495,7 @@ export async function GET(
     { label: "Prasekolah",       comps: d.prasekolahComps, hBg: ROSE_800, rBg: ROSE_50,    tBg: ROSE_100,   levelPax: d.prasekolahParticipants },
     { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100, levelPax: d.rendahParticipants },
     { label: "Sekolah Menengah", comps: d.menengahComps, hBg: AMBER_800,  rBg: AMBER_50,   tBg: AMBER_100,  levelPax: d.menengahParticipants },
-    { label: "Belia",            comps: d.beliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100,   levelPax: d.regSummary.beliaParticipants },
+    { label: "Belia",            comps: d.beliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100,   levelPax: d.beliaCompParticipants },
   ];
   for (const g of levelGroups) {
     if (!g.comps.length) continue;
@@ -693,7 +717,7 @@ export async function GET(
   const blob = await Packer.toBlob(doc);
   const arrayBuffer = await blob.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const safeName = `Laporan-Akhir-Program-${d.slug}${d.mode === "ONLINE" ? "-dalam-talian" : ""}.docx`;
+  const safeName = `Laporan-Akhir-Program-${d.slug}${d.mode === "ONLINE" ? "-dalam-talian" : d.mode === "SEMUA" ? "-semua" : ""}.docx`;
 
   return new NextResponse(buffer, {
     headers: {

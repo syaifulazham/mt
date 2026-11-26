@@ -46,8 +46,8 @@ export interface WalkInStateCompGroup {
   comps: (WalkInCompStat & { level: Level })[];
 }
 
-/** Which competitions the report covers: on site (Bersemuka, with walk-ins) or online. */
-export type ProgramMode = "BERSEMUKA" | "ONLINE";
+/** Which competitions the report covers: on site (Bersemuka, with walk-ins), online, or both. */
+export type ProgramMode = "BERSEMUKA" | "ONLINE" | "SEMUA";
 
 export interface InternationalStat {
   participants: number;
@@ -55,6 +55,22 @@ export interface InternationalStat {
   /** Teams not accepted into the event that are still counted (international teams always count). */
   notAcceptedTeams: number;
   countries: { name: string; participants: number; teams: number }[];
+}
+
+export interface TeamSummary {
+  prasekolahContingents: number;
+  rendahContingents: number;
+  menengahContingents: number;
+  schoolContingents: number;
+  beliaContingents: number;
+  schoolTeams: number;
+  beliaTeams: number;
+  schoolParticipants: number;
+  beliaParticipants: number;
+  /** Participants by their own level — the Pelajar breakdown (Laporan Kehadiran Akhir's target groups). */
+  prasekolahPax: number;
+  rendahPax: number;
+  menengahPax: number;
 }
 
 export interface FinalProgramData {
@@ -65,21 +81,16 @@ export interface FinalProgramData {
   eventId: string;
   slug: string;
   locationLabel: string;
-  regSummary: {
-    prasekolahContingents: number;
-    rendahContingents: number;
-    menengahContingents: number;
-    schoolContingents: number;
-    beliaContingents: number;
-    schoolTeams: number;
-    beliaTeams: number;
-    schoolParticipants: number;
-    beliaParticipants: number;
-    /** Participants by their own level — the Pelajar breakdown (Laporan Kehadiran Akhir's target groups). */
-    prasekolahPax: number;
-    rendahPax: number;
-    menengahPax: number;
-  };
+  /** Bersemuka teams (or the mode's teams); in SEMUA the on-site teams only — onlineSummary has the rest. */
+  regSummary: TeamSummary;
+  /** SEMUA only: the Dalam Talian teams. */
+  onlineSummary: TeamSummary | null;
+  /** Unique participants of every counted team (in SEMUA: Bersemuka and Dalam Talian together). */
+  teamParticipants: number;
+  /** Unique participants of teams and walk-ins together — Laporan Kehadiran Akhir's "Peserta unik" in SEMUA. */
+  uniqueParticipants: number;
+  /** Participants of the Belia competitions (the education-level table's Belia total). */
+  beliaCompParticipants: number;
   walkInSummary: {
     schoolParticipants: number;
     beliaParticipants: number;
@@ -210,7 +221,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   const onlineComp = new Set(anchors.filter(a => a.isOnline).map(a => a.competitionId));
 
   const modeComps = anchors
-    .filter(a => (mode === "ONLINE") === a.isOnline)
+    .filter(a => mode === "SEMUA" || (mode === "ONLINE") === a.isOnline)
     .map(a => a.competitionId);
 
   const allTeams = await db.team.findMany({
@@ -288,7 +299,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     select: {
       id: true,
       walkInCompetitionId: true,
-      team: { select: { id: true, members: { select: { participant: { select: { id: true, gender: true, ethnicity: true, classGrade: true, ppki: true } } } } } },
+      team: { select: { id: true, trainers: { select: { trainerId: true } }, members: { select: { participant: { select: { id: true, gender: true, ethnicity: true, classGrade: true, ppki: true } } } } } },
       walkInCompetition: {
         select: {
           competition: {
@@ -323,6 +334,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
 
   // ── flat team data ────────────────────────────────────────────────────────
   type TD = {
+    online: boolean;
     compId: string; compCode: string; compName: string; level: Level;
     contingentId: string; stateName: string;
     /** level: the participant's own (participantLevel) — participant counts and gender use it. */
@@ -330,6 +342,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   };
 
   const tds: TD[] = teams.map(t => ({
+    online: onlineComp.has(t.competitionId),
     compId: t.competition.id,
     compCode: t.competition.code,
     compName: t.competition.name,
@@ -348,11 +361,13 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   const rendahTDs  = tds.filter(t => t.level === "RENDAH");
   const menengahTDs = tds.filter(t => t.level === "MENENGAH");
   const beliaTDs   = tds.filter(t => t.level === "BELIA");
-  // Pelajar = pra-sekolah + sekolah rendah + sekolah menengah.
-  const schoolTDs  = [...prasekolahTDs, ...rendahTDs, ...menengahTDs];
 
-  // unique trainers of the teams that attended
-  const trainerCount = new Set(teams.flatMap(t => t.trainers.map(tr => tr.trainerId))).size;
+  // unique trainers of the teams that attended (in SEMUA also of team walk-ins,
+  // as Laporan Kehadiran Akhir's overall Jurulatih)
+  const trainerCount = new Set([
+    ...teams.flatMap(t => t.trainers.map(tr => tr.trainerId)),
+    ...(mode === "SEMUA" ? walkIns.flatMap(w => w.team?.trainers.map(tr => tr.trainerId) ?? []) : []),
+  ]).size;
 
   const uniquePids = (list: TD[]) => new Set(list.flatMap(t => t.members.map(m => m.id)));
   // Participants by their own level (Pelajar = every level but Belia).
@@ -362,21 +377,31 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   const isSchool = (l: Level) => l !== "BELIA";
   const isBelia = (l: Level) => l === "BELIA";
 
-  // summary
-  const regSummary = {
-    prasekolahContingents: new Set(prasekolahTDs.map(t => t.contingentId)).size,
-    rendahContingents:  new Set(rendahTDs.map(t => t.contingentId)).size,
-    menengahContingents: new Set(menengahTDs.map(t => t.contingentId)).size,
-    schoolContingents:  new Set(schoolTDs.map(t => t.contingentId)).size,
-    beliaContingents:   new Set(beliaTDs.map(t => t.contingentId)).size,
-    schoolTeams:        schoolTDs.length,
-    beliaTeams:         beliaTDs.length,
-    schoolParticipants: paxAt(isSchool),
-    beliaParticipants:  paxAt(isBelia),
-    prasekolahPax:      paxAt(l => l === "PRASEKOLAH"),
-    rendahPax:          paxAt(l => l === "RENDAH"),
-    menengahPax:        paxAt(l => l === "MENENGAH"),
+  // summary — per group of teams (in SEMUA, on-site and online apart)
+  const summarize = (list: TD[]): TeamSummary => {
+    const at = (l: Level) => list.filter(t => t.level === l);
+    const school = list.filter(t => t.level !== "BELIA");
+    const members = list.flatMap(t => t.members);
+    const pax = (pred: (l: Level) => boolean) => new Set(members.filter(m => pred(m.level)).map(m => m.id)).size;
+    const contingents = (l: TD[]) => new Set(l.map(t => t.contingentId)).size;
+    return {
+      prasekolahContingents: contingents(at("PRASEKOLAH")),
+      rendahContingents:  contingents(at("RENDAH")),
+      menengahContingents: contingents(at("MENENGAH")),
+      schoolContingents:  contingents(school),
+      beliaContingents:   contingents(at("BELIA")),
+      schoolTeams:        school.length,
+      beliaTeams:         at("BELIA").length,
+      schoolParticipants: pax(isSchool),
+      beliaParticipants:  pax(isBelia),
+      prasekolahPax:      pax(l => l === "PRASEKOLAH"),
+      rendahPax:          pax(l => l === "RENDAH"),
+      menengahPax:        pax(l => l === "MENENGAH"),
+    };
   };
+  const regSummary = summarize(mode === "SEMUA" ? tds.filter(t => !t.online) : tds);
+  const onlineSummary = mode === "SEMUA" ? summarize(tds.filter(t => t.online)) : null;
+  const teamPids = uniquePids(tds);
 
   // gender
   const schoolMale   = paxAt(isSchool, "MALE");
@@ -563,8 +588,14 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     }))
     .sort((a, b) => byStateName(a.stateName, b.stateName));
 
+  const uniqueParticipants = new Set([...teamPids, ...walkIns.map(w => w.participant.id)]).size;
+
   return {
     mode,
+    onlineSummary,
+    teamParticipants: teamPids.size,
+    uniqueParticipants,
+    beliaCompParticipants: uniquePids(beliaTDs).size,
     international,
     eventName:   event.name,
     eventId:     event.id,
@@ -599,10 +630,13 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
 
 // ─── report wording (page + Word) ─────────────────────────────────────────────
 
-export const PROGRAM_MODE_LABEL: Record<ProgramMode, string> = { BERSEMUKA: "Bersemuka", ONLINE: "Dalam Talian" };
+export const PROGRAM_MODE_LABEL: Record<ProgramMode, string> = { BERSEMUKA: "Bersemuka", ONLINE: "Dalam Talian", SEMUA: "Semua (Bersemuka + Dalam Talian)" };
 
 /** What the figures count, for the report header. */
 export function programBasisNote(mode: ProgramMode): string {
+  if (mode === "SEMUA")
+    return "Semua pertandingan: Bersemuka (pasukan yang daftar masuk di kaunter dan walk-in yang disahkan) dan Dalam Talian (semua pasukan yang diterima). " +
+      "Jumlah keseluruhan ialah peserta unik — seorang peserta yang menyertai lebih daripada satu kategori dikira sekali — sepadan dengan \u201cPeserta unik\u201d Laporan Kehadiran Akhir.";
   return mode === "ONLINE"
     ? "Pertandingan Dalam Talian: kehadiran tidak diambil, maka semua pasukan yang diterima dikira. Sepadan dengan bahagian Dalam Talian Laporan Kehadiran Akhir."
     : "Pertandingan Bersemuka, berdasarkan kehadiran: pasukan yang daftar masuk di kaunter dan walk-in yang disahkan. Sepadan dengan bahagian Bersemuka dan Walk-in Laporan Kehadiran Akhir (mod Kaunter) serta Senarai Kehadiran Penyertaan.";

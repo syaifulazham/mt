@@ -14,8 +14,8 @@ import {
 
 interface Props {
   eventId: string;
-  /** "online" for the Dalam Talian competitions; default Bersemuka. */
-  kategori?: "online";
+  /** "online" for the Dalam Talian competitions, "semua" for both; default Bersemuka. */
+  kategori?: string;
 }
 
 export function FinalProgramExportButtons({ eventId, kategori }: Props) {
