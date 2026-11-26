@@ -10,6 +10,9 @@ import { Fragment } from "react";
 import { ArrowLeft, MapPin, Mars, Venus } from "lucide-react";
 import { FinalProgramExportButtons } from "@/components/organizer/events/FinalProgramExportButtons";
 
+const BASIS_NOTE =
+  "Berdasarkan kehadiran: pasukan yang hadir (daftar masuk kaunter), pertandingan dalam talian yang diterima, semua peserta antarabangsa dan walk-in yang disahkan.";
+
 export const metadata: Metadata = { title: "Laporan Akhir Program" };
 
 function pct(n: number, total: number): string {
@@ -119,6 +122,7 @@ export default async function FinalProgramReportPage({
                 {dateLine && <span>{dateLine}</span>}
               </div>
             )}
+            <p className="mt-2 text-[11px] text-zinc-500">{BASIS_NOTE}</p>
           </div>
           <div className="shrink-0 print:hidden">
             <FinalProgramExportButtons eventId={event.id} />
@@ -186,7 +190,7 @@ export default async function FinalProgramReportPage({
 
             {/* BERDAFTAR */}
             <div className="bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 mt-0">
-              Berdaftar
+              Berdaftar (Hadir)
             </div>
             <table className="w-full">
               <thead>

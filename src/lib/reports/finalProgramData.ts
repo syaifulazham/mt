@@ -134,12 +134,28 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
   });
   if (!event) return null;
 
-  const teams = await db.team.findMany({
+  // Attendance-based (Laporan Kehadiran Akhir, counter basis): an accepted,
+  // ACTIVE team counts when its contingent checked in at the main counter
+  // (TeamEvent.attendedAt) — or, for competitions run "Dalam talian" (no
+  // attendance taken), when accepted. International teams (foreign contingents
+  // registered for this event) always count: they were not checked in at the
+  // counter. Trainers are those of the teams that count.
+  const anchors = await db.eventCompetition.findMany({
+    where: { eventId, parentId: null },
+    select: { competitionId: true, isOnline: true },
+  });
+  const onlineComp = new Set(anchors.filter(a => a.isOnline).map(a => a.competitionId));
+
+  const allTeams = await db.team.findMany({
     where: {
       status: "ACTIVE",
-      teamEvents: { some: { eventId, acceptance: "ACCEPT" } },
+      OR: [
+        { teamEvents: { some: { eventId, acceptance: "ACCEPT" } } },
+        { contingent: { internationalEventId: eventId, country: { codeIso2: { not: "MY" } } } },
+      ],
     },
     include: {
+      teamEvents: { where: { eventId }, select: { acceptance: true, attendedAt: true } },
       competition: {
         select: {
           id: true, code: true, name: true,
@@ -152,6 +168,8 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
           state: { select: { name: true } },
           school: { select: { state: { select: { name: true } } } },
           higherInstitution: { select: { state: { select: { name: true } } } },
+          internationalEventId: true,
+          country: { select: { codeIso2: true } },
         },
       },
       members: {
@@ -165,12 +183,24 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     },
   });
 
-  const walkIns = await db.walkInRegistration.findMany({
+  const teams = allTeams.filter(t => {
+    const foreign = t.contingent.internationalEventId === eventId && !!t.contingent.country && t.contingent.country.codeIso2 !== "MY";
+    if (foreign) return true;
+    const te = t.teamEvents.find(x => x.acceptance === "ACCEPT");
+    if (!te) return false;
+    return onlineComp.has(t.competitionId) || !!te.attendedAt;
+  });
+
+  // Walk-ins count once CONFIRMED; a team walk-in (one registration anchored on
+  // one member) brings every member of the team.
+  const walkInRegs = await db.walkInRegistration.findMany({
     where: {
-      status: { not: "REJECTED" },
+      status: "CONFIRMED",
       walkInCompetition: { eventId },
     },
     select: {
+      walkInCompetitionId: true,
+      team: { select: { id: true, members: { select: { participant: { select: { id: true, gender: true, ethnicity: true } } } } } },
       walkInCompetition: {
         select: {
           competition: {
@@ -190,6 +220,15 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
         },
       },
     },
+  });
+
+  const seenWalkInTeams = new Set<string>();
+  const walkIns = walkInRegs.flatMap(w => {
+    if (!w.team || !w.team.members.length) return [w];
+    const k = `${w.walkInCompetitionId}:${w.team.id}`;
+    if (seenWalkInTeams.has(k)) return [];
+    seenWalkInTeams.add(k);
+    return w.team.members.map(m => ({ ...w, participant: m.participant }));
   });
 
   // ── flat team data ────────────────────────────────────────────────────────
@@ -218,7 +257,7 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
   const beliaTDs   = tds.filter(t => t.level === "BELIA");
   const schoolTDs  = [...rendahTDs, ...menengahTDs];
 
-  // unique trainers across all active event teams
+  // unique trainers of the teams that attended
   const trainerCount = new Set(teams.flatMap(t => t.trainers.map(tr => tr.trainerId))).size;
 
   const uniquePids = (list: TD[]) => new Set(list.flatMap(t => t.members.map(m => m.id)));

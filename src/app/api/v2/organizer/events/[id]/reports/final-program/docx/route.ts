@@ -34,6 +34,9 @@ const TEAL_100   = "CCFBF1";   // Belia sub-total
 const ROSE_50    = "FFF1F2";   // Perempuan
 const MAROON     = "7B0D1E";   // Penyertaan dan Penglibatan header
 
+const BASIS_NOTE =
+  "Berdasarkan kehadiran: pasukan yang hadir (daftar masuk kaunter), pertandingan dalam talian yang diterima, semua peserta antarabangsa dan walk-in yang disahkan.";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type Shade = { fill: string; type: typeof ShadingType.CLEAR; color: "auto" };
@@ -192,6 +195,11 @@ export async function GET(
             new TextRun({ text: `Dijana: ${generated}`, size: 18, color: SLATE_400 }),
           ],
         }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 40 },
+          children: [new TextRun({ text: BASIS_NOTE, size: 16, italics: true, color: SLATE_400 })],
+        }),
       ],
       borders: NO_BORDERS,
       verticalAlign: "center",
@@ -214,6 +222,11 @@ export async function GET(
         alignment: AlignmentType.CENTER,
         spacing: { after: 60 },
         children: [new TextRun({ text: d.eventName.toUpperCase(), bold: true, size: 26, color: SLATE_700 })],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 60 },
+        children: [new TextRun({ text: BASIS_NOTE, size: 16, italics: true, color: SLATE_400 })],
       }),
     );
   }
@@ -353,7 +366,7 @@ export async function GET(
   const ethnRows: TableRow[] = [
     new TableRow({ children: ethnLabels3.map(l => hCell(l)) }),
     // Berdaftar group
-    new TableRow({ children: [dCell("Peserta Berdaftar", SLATE_800, AlignmentType.LEFT, true, WHITE, ECSPAN)] }),
+    new TableRow({ children: [dCell("Peserta Berdaftar (Hadir)", SLATE_800, AlignmentType.LEFT, true, WHITE, ECSPAN)] }),
     new TableRow({ children: regEthnVals3.map(v => dCell(nv(v), WHITE, AlignmentType.CENTER, true)) }),
     new TableRow({ children: regEthnVals3.map(v => dCell(
       regEthnTotal3 ? `${(v / regEthnTotal3 * 100).toFixed(1)}%` : "", SLATE_50, AlignmentType.CENTER, false, SLATE_400,
@@ -521,7 +534,7 @@ export async function GET(
 
         sectionMasthead("Seksyen 1", "Ringkasan Penyertaan"),
         SMALL_GAP,
-        subHeader("Berdaftar"),
+        subHeader("Berdaftar (Hadir)"),
         summaryTable,
         GAP,
 

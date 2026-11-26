@@ -478,7 +478,7 @@ export default async function FinalAttendanceReportPage({
             <Users className="mt-0.5 h-3 w-3 shrink-0" />
             Semua angka peserta ialah peserta unik. Seorang peserta yang menyertai lebih daripada satu pertandingan dikira sekali dalam setiap jadual.
             Bahagian Bersemuka sepadan dengan Dashboard Kehadiran (mod {basis === "individual" ? "Individu" : "Kaunter"}); walk-in dilaporkan berasingan.
-            Laporan Akhir Program pula berdasarkan pendaftaran (sebelum kehadiran).
+            Laporan Akhir Program juga berdasarkan kehadiran (mod Kaunter), tetapi menyenaraikan semua peserta antarabangsa.
           </p>
         </section>
 

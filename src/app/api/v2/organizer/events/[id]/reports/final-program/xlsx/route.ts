@@ -143,7 +143,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   // ═══ SECTION 1: RINGKASAN ══════════════════════════════════════════════════
   sectionHeader("Ringkasan Penyertaan", "Seksyen 1");
-  subHeader("Berdaftar", 4);
+  subHeader("Berdaftar (Hadir)", 4);
 
   // sub-col headers
   applyHeader(ws.getCell(r, 1), "Kategori", C.slate700);
@@ -493,7 +493,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyMasthead(ws.getCell("F1"), "Bagi Laporan KBS — Rakan Muda", C.slate800);
 
     ws.mergeCells("A2:D2");
-    applyMasthead(ws.getCell("A2"), "Berdaftar", C.slate800);
+    applyMasthead(ws.getCell("A2"), "Berdaftar (Hadir)", C.slate800);
     ws.getRow(2).height = 18;
 
     applyHeader(ws.getCell("B3"), "Pelajar");
@@ -947,7 +947,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   // LEFT: Penyertaan stats
   sectionHeader("Ringkasan Laporan Statistik", `Penyertaan — ${d.locationLabel}`, C.slate900, 1, 5);
-  subHeader("Berdaftar", 1, 5);
+  subHeader("Berdaftar (Hadir)", 1, 5);
   applyHeader(ws.getCell(r, 1), "Kategori", C.slate700);
   applyHeader(ws.getCell(r, 2), "Pelajar", C.slate700);
   applyHeader(ws.getCell(r, 3), "Belia", C.slate700);
@@ -1001,7 +1001,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   const ethnGrandTotal = regEthnTotal + wiEthnTotal;
 
   ws.mergeCells(r, RIGHT, r, COLS);
-  applyCell(ws.getCell(r, RIGHT), "PESERTA BERDAFTAR", C.slate800, left, true, C.white);
+  applyCell(ws.getCell(r, RIGHT), "PESERTA BERDAFTAR (HADIR)", C.slate800, left, true, C.white);
   r++;
   ethnLabels.forEach((l, i) => applyHeader(ws.getCell(r, RIGHT + i), l));
   applyHeader(ws.getCell(r, COLS), "Jumlah");
