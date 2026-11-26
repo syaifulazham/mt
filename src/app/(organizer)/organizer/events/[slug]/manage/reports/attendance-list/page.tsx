@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, FileDown, Info } from "lucide-react";
+import { ArrowLeft, FileDown, FileSpreadsheet, Info } from "lucide-react";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { PrintButton } from "@/components/organizer/events/PrintButton";
 import { db } from "@/lib/db";
 import {
-  computeAttendanceListData, type AttendanceBasis, type CompetitionGroup, type Tally,
+  attendanceListNote, computeAttendanceListData, LIST_MODE_LABEL,
+  type AttendanceBasis, type CompetitionGroup, type ListMode, type Tally,
 } from "@/lib/reports/attendanceListData";
 
 export const metadata: Metadata = { title: "Senarai Kehadiran Penyertaan" };
@@ -107,7 +108,7 @@ export default async function AttendanceListReportPage({
   params, searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; kategori?: string }>;
 }) {
   const session = await getOrganizerSession();
   if (!session) redirect("/organizer/login");
@@ -116,11 +117,19 @@ export default async function AttendanceListReportPage({
   const event = await db.event.findUnique({ where: { slug }, select: { id: true } });
   if (!event) notFound();
 
-  const basis: AttendanceBasis = (await searchParams).mode === "individual" ? "individual" : "counter";
-  const d = await computeAttendanceListData(event.id, basis);
+  const sp = await searchParams;
+  const basis: AttendanceBasis = sp.mode === "individual" ? "individual" : "counter";
+  const listMode: ListMode = sp.kategori === "online" ? "ONLINE" : "BERSEMUKA";
+  const d = await computeAttendanceListData(event.id, basis, listMode);
   if (!d) notFound();
 
   const base = `/organizer/events/${slug}/manage/reports/attendance-list`;
+  const qs = (b: AttendanceBasis, m: ListMode) => {
+    const q = new URLSearchParams();
+    if (m === "ONLINE") q.set("kategori", "online");
+    else if (b === "individual") q.set("mode", "individual");
+    return q.size ? `?${q}` : "";
+  };
   const asAt = new Date(d.generatedAt).toLocaleString("ms-MY", { timeZone: "Asia/Kuala_Lumpur", dateStyle: "medium", timeStyle: "short" });
 
   return (
@@ -135,26 +144,50 @@ export default async function AttendanceListReportPage({
             </Link>
             <p className="mb-1 text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Senarai Kehadiran Penyertaan</p>
             <h1 className="text-xl font-black uppercase leading-tight tracking-tight text-white print:text-black md:text-2xl">{d.eventName}</h1>
-            <p className="mt-2 text-xs text-zinc-400 print:text-zinc-600">Snapshot data setakat {asAt}</p>
+            <p className="mt-2 text-xs text-zinc-400 print:text-zinc-600">
+              <span className="font-semibold uppercase tracking-wider text-zinc-300 print:text-zinc-800">Pertandingan {LIST_MODE_LABEL[listMode]}</span>
+              {" · "}Snapshot data setakat {asAt}
+            </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2 print:hidden">
-            <div className="flex gap-2">
-              <a href={`/api/v2/organizer/events/${event.id}/reports/attendance-list/docx${basis === "individual" ? "?mode=individual" : ""}`}
+            <div className="flex max-w-xl flex-wrap justify-end gap-2">
+              <a href={`/api/v2/organizer/events/${event.id}/reports/attendance-list/docx${qs(basis, listMode)}`}
                 download
                 className="flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200">
                 <FileDown className="h-4 w-4" /> Word (.docx)
               </a>
+              {([["single", "Excel — 1 helaian"], ["multi", "Excel — berbilang helaian"]] as const).map(([layout, label]) => (
+                <a key={layout}
+                  href={`/api/v2/organizer/events/${event.id}/reports/attendance-list/xlsx${qs(basis, listMode) || "?"}${qs(basis, listMode) ? "&" : ""}layout=${layout}`}
+                  download
+                  title={layout === "single" ? "Ringkasan dan semua pertandingan dalam satu helaian" : "Helaian Ringkasan dan satu helaian bagi setiap pertandingan"}
+                  className="flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200">
+                  <FileSpreadsheet className="h-4 w-4" /> {label}
+                </a>
+              ))}
               <PrintButton />
             </div>
             <div className="flex rounded-lg bg-zinc-800 p-0.5 text-xs font-medium">
-              {([["counter", "Kaunter"], ["individual", "Individu"]] as const).map(([k, l]) => (
-                <Link key={k} href={k === "counter" ? base : `${base}?mode=individual`} replace scroll={false}
-                  className={`rounded-md px-3 py-1 ${basis === k ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-zinc-100"}`}>
-                  {l}
+              {(["BERSEMUKA", "ONLINE"] as const).map(m => (
+                <Link key={m} href={`${base}${qs(basis, m)}`} replace scroll={false}
+                  className={`rounded-md px-3 py-1 ${listMode === m ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-zinc-100"}`}>
+                  {LIST_MODE_LABEL[m]}
                 </Link>
               ))}
             </div>
-            <p className="text-[10px] text-zinc-500">Asas kehadiran</p>
+            {listMode === "BERSEMUKA" && (
+              <>
+                <div className="flex rounded-lg bg-zinc-800 p-0.5 text-xs font-medium">
+                  {([["counter", "Kaunter"], ["individual", "Individu"]] as const).map(([k, l]) => (
+                    <Link key={k} href={`${base}${qs(k, listMode)}`} replace scroll={false}
+                      className={`rounded-md px-3 py-1 ${basis === k ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-zinc-100"}`}>
+                      {l}
+                    </Link>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-500">Asas kehadiran</p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -210,10 +243,7 @@ export default async function AttendanceListReportPage({
           </div>
           <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500">
             <Info className="mt-0.5 h-3 w-3 shrink-0" />
-            Hanya peserta yang hadir: pertandingan Bersemuka mengikut kehadiran {basis === "individual" ? "individu" : "kaunter"} (sama seperti Laporan Kehadiran Akhir) dan walk-in yang disahkan.
-            Pertandingan Dalam Talian tidak disenaraikan. Semua peserta antarabangsa disenaraikan. Murid dan guru dikira unik dalam setiap pertandingan;
-            murid yang menyertai lebih daripada satu pertandingan dikira dalam setiap pertandingan. Lain-lain merangkumi Orang Asli, Bumiputera Sabah/Sarawak,
-            lain-lain dan tidak dinyatakan.
+            {attendanceListNote(d)}
           </p>
         </section>
 

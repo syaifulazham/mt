@@ -14,14 +14,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!event) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const basis: AttendanceBasis = req.nextUrl.searchParams.get("mode") === "individual" ? "individual" : "counter";
-  const d = await computeAttendanceListData(event.id, basis);
+  const mode = req.nextUrl.searchParams.get("kategori") === "online" ? "ONLINE" : "BERSEMUKA";
+  const d = await computeAttendanceListData(event.id, basis, mode);
   if (!d) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const buffer = await buildAttendanceListDocx(d);
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="Senarai-Kehadiran-Penyertaan-${event.slug}.docx"`,
+      "Content-Disposition": `attachment; filename="Senarai-Kehadiran-Penyertaan-${event.slug}${mode === "ONLINE" ? "-dalam-talian" : ""}.docx"`,
     },
   });
 }

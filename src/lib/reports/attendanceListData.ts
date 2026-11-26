@@ -10,15 +10,18 @@ import { db } from "@/lib/db";
 //   counter (TeamEvent.attendedAt); individual basis: the member was checked in
 //   on site (Kehadiran Individu);
 // • CONFIRMED walk-ins (a team walk-in brings all its members).
-// Dalam talian competitions take no attendance and are left out. Every
-// international participant (a foreign contingent registered for this event)
-// of an on-site competition is listed, whatever their check-in or acceptance —
-// they were not checked in at the counter.
+// That is the Bersemuka list. The Dalam Talian list (mode ONLINE) covers the
+// competitions run "Dalam talian" instead: no attendance is taken, so every
+// accepted, ACTIVE team counts (as in Laporan Kehadiran Akhir), and there are
+// no walk-ins. In either list every international participant (a foreign
+// contingent registered for this event) of its competitions is included,
+// whatever their check-in or acceptance — they are not checked in at the counter.
 //
 // Murid = unique present participants of that school in that competition;
 // Guru = unique trainers of that school's present teams in that competition.
 
 export type AttendanceBasis = "counter" | "individual";
+export type ListMode = "BERSEMUKA" | "ONLINE";
 
 export interface Tally {
   male: number;
@@ -52,6 +55,7 @@ export interface AttendanceListData {
   eventName: string;
   generatedAt: string;
   basis: AttendanceBasis;
+  mode: ListMode;
   groups: CompetitionGroup[];
   total: Tally & { schools: number; internationalMurid: number };
 }
@@ -93,7 +97,7 @@ interface Acc {
 interface GroupAcc { code: string; name: string; walkIn: boolean; byContingent: Map<string, Acc> }
 
 export async function computeAttendanceListData(
-  eventId: string, basis: AttendanceBasis = "counter",
+  eventId: string, basis: AttendanceBasis = "counter", mode: ListMode = "BERSEMUKA",
 ): Promise<AttendanceListData | null> {
   const event = await db.event.findUnique({ where: { id: eventId }, select: { name: true } });
   if (!event) return null;
@@ -103,6 +107,7 @@ export async function computeAttendanceListData(
     select: { competitionId: true, isOnline: true },
   });
   const online = new Map(anchors.map(a => [a.competitionId, a.isOnline]));
+  const inMode = (competitionId: string) => (online.get(competitionId) === true) === (mode === "ONLINE");
 
   const teamSelect = {
     id: true, competitionId: true,
@@ -130,7 +135,7 @@ export async function computeAttendanceListData(
       },
       select: teamSelect,
     }),
-    db.walkInRegistration.findMany({
+    mode === "ONLINE" ? [] : db.walkInRegistration.findMany({
       where: { status: "CONFIRMED", walkInCompetition: { eventId } },
       select: {
         walkInCompetition: { select: { id: true, competition: { select: { id: true, code: true, name: true } } } },
@@ -160,15 +165,15 @@ export async function computeAttendanceListData(
     const t = te.team;
     const foreign = isForeign(t.contingent);
     if (foreign) continue; // listed below, from every international team
-    if (online.get(t.competitionId) === true) continue;
+    if (!inMode(t.competitionId)) continue;
     const indiv = new Set(te.participantAttendance.map(a => a.participantId));
     const present = t.members
       .map(m => m.participant)
-      .filter(p => (individual ? indiv.has(p.id) : !!te.attendedAt));
+      .filter(p => mode === "ONLINE" || (individual ? indiv.has(p.id) : !!te.attendedAt));
     put(`c:${t.competitionId}`, t.competition, false, t.contingent, present, present.length ? t.trainers.map(x => x.trainerId) : []);
   }
   for (const t of foreignTeams) {
-    if (online.get(t.competitionId) === true) continue; // Dalam talian: not on this list
+    if (!inMode(t.competitionId)) continue;
     put(`c:${t.competitionId}`, t.competition, false, t.contingent, t.members.map(m => m.participant), t.trainers.map(x => x.trainerId));
   }
 
@@ -220,6 +225,7 @@ export async function computeAttendanceListData(
     eventName: event.name,
     generatedAt: new Date().toISOString(),
     basis,
+    mode,
     groups: out,
     total: {
       ...total,
@@ -227,4 +233,15 @@ export async function computeAttendanceListData(
       internationalMurid: out.reduce((s, g) => s + g.rows.filter(r => r.international).reduce((x, r) => x + r.murid, 0), 0),
     },
   };
+}
+
+export const LIST_MODE_LABEL: Record<ListMode, string> = { BERSEMUKA: "Bersemuka", ONLINE: "Dalam Talian" };
+
+/** The explanatory note under the summary (page and Word). */
+export function attendanceListNote(d: Pick<AttendanceListData, "basis" | "mode">): string {
+  const who = d.mode === "ONLINE"
+    ? "Pertandingan Dalam Talian: kehadiran tidak diambil, maka semua pasukan yang diterima disenaraikan (sama seperti bahagian Dalam Talian Laporan Kehadiran Akhir)."
+    : `Hanya peserta yang hadir: pertandingan Bersemuka mengikut kehadiran ${d.basis === "individual" ? "individu" : "kaunter"} (sama seperti Laporan Kehadiran Akhir) dan walk-in yang disahkan.`;
+  return `${who} Semua peserta antarabangsa disenaraikan. Murid dan guru dikira unik dalam setiap pertandingan; ` +
+    "murid yang menyertai lebih daripada satu pertandingan dikira dalam setiap pertandingan. Lain-lain merangkumi Orang Asli, Bumiputera Sabah/Sarawak, lain-lain dan tidak dinyatakan.";
 }

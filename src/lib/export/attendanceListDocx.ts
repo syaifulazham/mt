@@ -3,7 +3,7 @@ import {
   Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlign, WidthType, convertMillimetersToTwip,
 } from "docx";
 import {
-  type AttendanceListData, type CompetitionGroup, type Tally,
+  attendanceListNote, LIST_MODE_LABEL, type AttendanceListData, type CompetitionGroup, type Tally,
 } from "@/lib/reports/attendanceListData";
 
 // Senarai Kehadiran Penyertaan as Word: A4 landscape, the summary by
@@ -140,7 +140,11 @@ export async function buildAttendanceListDocx(d: AttendanceListData): Promise<Bu
   const children: (Paragraph | Table)[] = [
     para("SENARAI KEHADIRAN PENYERTAAN", { bold: true, size: 18, color: "64748B" }),
     para(d.eventName.toUpperCase(), { bold: true, size: 30, after: 60 }),
-    para(`Snapshot data setakat ${asAt} · Asas kehadiran: ${basis === "individual" ? "Individu" : "Kaunter"}`, { size: 18, color: "475569", after: 160 }),
+    para(
+      `Pertandingan ${LIST_MODE_LABEL[d.mode]} · Snapshot data setakat ${asAt}` +
+      (d.mode === "BERSEMUKA" ? ` · Asas kehadiran: ${basis === "individual" ? "Individu" : "Kaunter"}` : ""),
+      { size: 18, color: "475569", after: 160 },
+    ),
     para(
       `${d.groups.length} pertandingan · ${d.total.schools.toLocaleString("en-MY")} sekolah / kontinjen · ` +
       `${d.total.murid.toLocaleString("en-MY")} penyertaan murid · ${d.total.guru.toLocaleString("en-MY")} guru · ` +
@@ -149,12 +153,7 @@ export async function buildAttendanceListDocx(d: AttendanceListData): Promise<Bu
     ),
     para("RINGKASAN MENGIKUT PERTANDINGAN", { bold: true, size: 22, after: 100 }),
     summary,
-    para(
-      `Hanya peserta yang hadir: pertandingan Bersemuka mengikut kehadiran ${basis === "individual" ? "individu" : "kaunter"} dan walk-in yang disahkan. ` +
-      "Pertandingan Dalam Talian tidak disenaraikan. Semua peserta antarabangsa disenaraikan. Murid dan guru dikira unik dalam setiap pertandingan; " +
-      "murid yang menyertai lebih daripada satu pertandingan dikira dalam setiap pertandingan. Lain-lain merangkumi Orang Asli, Bumiputera Sabah/Sarawak, lain-lain dan tidak dinyatakan.",
-      { size: 16, color: "64748B", before: 120 },
-    ),
+    para(attendanceListNote(d), { size: 16, color: "64748B", before: 120 }),
   ];
 
   d.groups.forEach((g, i) => {
