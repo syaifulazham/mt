@@ -10,7 +10,9 @@ import { db } from "@/lib/db";
 //   checked in at the main counter (TeamEvent.attendedAt); individual — a
 //   member is present when checked in on site (Kehadiran Individu), a team
 //   when at least one member is. A contingent / trainer is present when at
-//   least one of its teams is.
+//   least one of its teams is. International teams (foreign contingents
+//   registered for this event) are not checked in at the counter: all of them,
+//   accepted or not, count as present.
 // • Walk-in — the event's walk-in competitions (on site, but not in the
 //   dashboard): an entry is present once CONFIRMED; a team walk-in brings all
 //   its members.
@@ -335,7 +337,7 @@ function buildMode(mode: Mode, entries: Entry[], people: Map<string, Person>): M
 const TG_SELECT = { select: { targetGroup: { select: { id: true, code: true, name: true, schoolLevel: true, classGrades: true, ppki: true } } } } as const;
 const CONTINGENT_SELECT = {
   select: {
-    id: true, locality: true,
+    id: true, locality: true, internationalEventId: true,
     state: { select: { name: true } },
     school: { select: { state: { select: { name: true } } } },
     higherInstitution: { select: { state: { select: { name: true } } } },
@@ -356,22 +358,32 @@ export async function computeFinalAttendanceData(
   });
   const online = new Map(anchors.map(a => [a.competitionId, a.isOnline]));
 
-  const [teamEvents, walkIns] = await Promise.all([
+  const teamSelect = {
+    id: true, competitionId: true,
+    competition: { select: { code: true, name: true, targetGroups: TG_SELECT } },
+    contingent: CONTINGENT_SELECT,
+    members: { select: { participant: PERSON_SELECT } },
+    trainers: { select: { trainerId: true } },
+  } as const;
+
+  const [teamEvents, foreignTeams, walkIns] = await Promise.all([
     db.teamEvent.findMany({
       where: { eventId, acceptance: "ACCEPT", team: { status: "ACTIVE", competitionId: { in: [...online.keys()] } } },
       select: {
         id: true, attendedAt: true,
         participantAttendance: { select: { participantId: true } },
-        team: {
-          select: {
-            id: true, competitionId: true,
-            competition: { select: { code: true, name: true, targetGroups: TG_SELECT } },
-            contingent: CONTINGENT_SELECT,
-            members: { select: { participant: PERSON_SELECT } },
-            trainers: { select: { trainerId: true } },
-          },
-        },
+        team: { select: teamSelect },
       },
+    }),
+    // International teams (foreign contingents registered for this event) all
+    // count as present — they are not checked in at the counter — accepted or not.
+    db.team.findMany({
+      where: {
+        status: "ACTIVE",
+        competitionId: { in: [...online.keys()] },
+        contingent: { internationalEventId: eventId, country: { codeIso2: { not: "MY" } } },
+      },
+      select: teamSelect,
     }),
     db.walkInRegistration.findMany({
       where: { status: { notIn: ["REJECTED", "CANCELLED"] }, walkInCompetition: { eventId } },
@@ -393,11 +405,17 @@ export async function computeFinalAttendanceData(
 
   const bersemuka: Entry[] = [], walkInEntries: Entry[] = [], onlineEntries: Entry[] = [];
   const individual = basis === "individual";
-  for (const te of teamEvents) {
+  const foreignIds = new Set(foreignTeams.map(t => t.id));
+  const teamRows = [
+    ...teamEvents.filter(te => !foreignIds.has(te.team.id)),
+    ...foreignTeams.map(t => ({ team: t, attendedAt: null, participantAttendance: [] as { participantId: string }[], foreign: true })),
+  ];
+  for (const te of teamRows) {
     const t = te.team;
+    const foreign = "foreign" in te;
     const isOnline = online.get(t.competitionId) === true;
     const indiv = new Set(te.participantAttendance.map(a => a.participantId));
-    const counter = !!te.attendedAt;
+    const counter = !!te.attendedAt || foreign;
     const entry: Entry = {
       teamKey: `t:${t.id}`,
       compKey: `c:${t.competitionId}`,
@@ -408,10 +426,10 @@ export async function computeFinalAttendanceData(
       contingentId: t.contingent.id,
       stateName: stateName(t.contingent),
       locality: t.contingent.locality ?? "NONE",
-      teamPresent: isOnline || (individual ? indiv.size > 0 : counter),
+      teamPresent: isOnline || foreign || (individual ? indiv.size > 0 : counter),
       members: t.members.map(m => {
         const pid = addPerson(m.participant);
-        return { pid, present: isOnline || (individual ? indiv.has(pid) : counter) };
+        return { pid, present: isOnline || foreign || (individual ? indiv.has(pid) : counter) };
       }),
       trainerIds: t.trainers.map(x => x.trainerId),
     };

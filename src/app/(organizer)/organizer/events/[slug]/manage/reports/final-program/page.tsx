@@ -4,14 +4,13 @@ import { notFound } from "next/navigation";
 import { getOrganizerSession } from "@/lib/auth/session";
 import { OrganizerShell } from "@/components/organizer/OrganizerShell";
 import { db } from "@/lib/db";
-import { computeFinalProgramData } from "@/lib/reports/finalProgramData";
+import {
+  computeFinalProgramData, internationalNote, programBasisNote, PROGRAM_MODE_LABEL, type ProgramMode,
+} from "@/lib/reports/finalProgramData";
 import Link from "next/link";
 import { Fragment } from "react";
-import { ArrowLeft, MapPin, Mars, Venus } from "lucide-react";
+import { ArrowLeft, Globe, Info, MapPin, Mars, Venus } from "lucide-react";
 import { FinalProgramExportButtons } from "@/components/organizer/events/FinalProgramExportButtons";
-
-const BASIS_NOTE =
-  "Berdasarkan kehadiran: pasukan yang hadir (daftar masuk kaunter), pertandingan dalam talian yang diterima, semua peserta antarabangsa dan walk-in yang disahkan.";
 
 export const metadata: Metadata = { title: "Laporan Akhir Program" };
 
@@ -55,9 +54,10 @@ const TR_ODD = "bg-white";
 const TR_EVEN = "bg-slate-50";
 
 export default async function FinalProgramReportPage({
-  params,
+  params, searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ kategori?: string }>;
 }) {
   const session = await getOrganizerSession();
   if (!session) redirect("/organizer/login");
@@ -77,8 +77,11 @@ export default async function FinalProgramReportPage({
   });
   if (!event) notFound();
 
-  const d = await computeFinalProgramData(event.id);
+  const mode: ProgramMode = (await searchParams).kategori === "online" ? "ONLINE" : "BERSEMUKA";
+  const d = await computeFinalProgramData(event.id, mode);
   if (!d) notFound();
+  const intlNote = internationalNote(d.international);
+  const base = `/organizer/events/${slug}/manage/reports/final-program`;
 
   const pesertaUtama = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants;
   const jumlahPeserta = pesertaUtama + d.walkInSummary.total;
@@ -122,16 +125,39 @@ export default async function FinalProgramReportPage({
                 {dateLine && <span>{dateLine}</span>}
               </div>
             )}
-            <p className="mt-2 text-[11px] text-zinc-500">{BASIS_NOTE}</p>
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
+              Pertandingan {PROGRAM_MODE_LABEL[mode]}
+            </p>
           </div>
-          <div className="shrink-0 print:hidden">
-            <FinalProgramExportButtons eventId={event.id} />
+          <div className="flex shrink-0 flex-col items-end gap-2 print:hidden">
+            <FinalProgramExportButtons eventId={event.id} kategori={mode === "ONLINE" ? "online" : undefined} />
+            <div className="flex rounded-lg bg-zinc-800 p-0.5 text-xs font-medium">
+              {(["BERSEMUKA", "ONLINE"] as const).map(k => (
+                <Link key={k} href={k === "ONLINE" ? `${base}?kategori=online` : base} replace scroll={false}
+                  className={`rounded-md px-3 py-1 ${mode === k ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-zinc-100"}`}>
+                  {PROGRAM_MODE_LABEL[k]}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ── report body ─────────────────────────────────────────────────────── */}
       <div className="px-6 py-6 space-y-6 print:px-0 print:py-0 bg-slate-100 min-h-screen">
+        {/* ── notes ─────────────────────────────────────────────────────────── */}
+        <div className="space-y-2">
+          <p className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs leading-relaxed text-slate-600">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+            {programBasisNote(mode)}
+          </p>
+          {intlNote && (
+            <p className="flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs leading-relaxed text-indigo-900">
+              <Globe className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />
+              {intlNote}
+            </p>
+          )}
+        </div>
 
         {/* ══ RINGKASAN ══════════════════════════════════════════════════════ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 print:grid-cols-2">

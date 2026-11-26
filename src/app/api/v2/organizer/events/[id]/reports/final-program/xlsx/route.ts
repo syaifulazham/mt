@@ -1300,7 +1300,7 @@ export async function GET(
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { id: eventId } = await params;
-  const data = await computeFinalProgramData(eventId);
+  const data = await computeFinalProgramData(eventId, new URL(req.url).searchParams.get("kategori") === "online" ? "ONLINE" : "BERSEMUKA");
   if (!data) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const mode = new URL(req.url).searchParams.get("mode") ?? "multi";
@@ -1317,7 +1317,7 @@ export async function GET(
 
   const buffer = await wb.xlsx.writeBuffer();
   const modeSuffix = mode === "single" ? "-single" : "";
-  const safeName = `Laporan-Akhir-Program-${data.slug}${modeSuffix}.xlsx`;
+  const safeName = `Laporan-Akhir-Program-${data.slug}${data.mode === "ONLINE" ? "-dalam-talian" : ""}${modeSuffix}.xlsx`;
 
   return new NextResponse(buffer, {
     headers: {

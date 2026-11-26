@@ -14,9 +14,11 @@ import {
 
 interface Props {
   eventId: string;
+  /** "online" for the Dalam Talian competitions; default Bersemuka. */
+  kategori?: "online";
 }
 
-export function FinalProgramExportButtons({ eventId }: Props) {
+export function FinalProgramExportButtons({ eventId, kategori }: Props) {
   const [loading, setLoading] = useState<"xlsx-single" | "xlsx-multi" | "docx" | null>(null);
   const [showXlsxModal, setShowXlsxModal] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -38,7 +40,10 @@ export function FinalProgramExportButtons({ eventId }: Props) {
     setShowXlsxModal(false);
     setShowDropdown(false);
     try {
-      const qs = mode ? `?mode=${mode}` : "";
+      const q = new URLSearchParams();
+      if (mode) q.set("mode", mode);
+      if (kategori) q.set("kategori", kategori);
+      const qs = q.size ? `?${q}` : "";
       const res = await fetch(
         `/api/v2/organizer/events/${eventId}/reports/final-program/${type}${qs}`
       );

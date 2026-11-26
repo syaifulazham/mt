@@ -42,7 +42,21 @@ export interface WalkInStateCompGroup {
   comps: (WalkInCompStat & { level: Level })[];
 }
 
+/** Which competitions the report covers: on site (Bersemuka, with walk-ins) or online. */
+export type ProgramMode = "BERSEMUKA" | "ONLINE";
+
+export interface InternationalStat {
+  participants: number;
+  teams: number;
+  /** Teams not accepted into the event that are still counted (international teams always count). */
+  notAcceptedTeams: number;
+  countries: { name: string; participants: number; teams: number }[];
+}
+
 export interface FinalProgramData {
+  mode: ProgramMode;
+  /** International participants included in this mode's figures. */
+  international: InternationalStat;
   eventName: string;
   eventId: string;
   slug: string;
@@ -112,7 +126,9 @@ function getStateName(contingent: {
   state: { name: string } | null;
   school: { state: { name: string } | null } | null;
   higherInstitution: { state: { name: string } | null } | null;
+  country?: { codeIso2: string; name: string } | null;
 }): string {
+  if (contingent.country && contingent.country.codeIso2 !== "MY") return `Antarabangsa (${contingent.country.name})`;
   return (
     contingent.state?.name ??
     contingent.school?.state?.name ??
@@ -121,9 +137,15 @@ function getStateName(contingent: {
   );
 }
 
+/** States alphabetically; international and unknown last. */
+function byStateName(a: string, b: string): number {
+  const last = (n: string) => Number(n.startsWith("Antarabangsa") || n === "Lain-lain");
+  return last(a) - last(b) || a.localeCompare(b);
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
-export async function computeFinalProgramData(eventId: string): Promise<FinalProgramData | null> {
+export async function computeFinalProgramData(eventId: string, mode: ProgramMode = "BERSEMUKA"): Promise<FinalProgramData | null> {
   const event = await db.event.findUnique({
     where: { id: eventId },
     select: {
@@ -134,21 +156,30 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
   });
   if (!event) return null;
 
-  // Attendance-based (Laporan Kehadiran Akhir, counter basis): an accepted,
-  // ACTIVE team counts when its contingent checked in at the main counter
-  // (TeamEvent.attendedAt) — or, for competitions run "Dalam talian" (no
-  // attendance taken), when accepted. International teams (foreign contingents
-  // registered for this event) always count: they were not checked in at the
-  // counter. Trainers are those of the teams that count.
+  // Attendance-based, the same as Laporan Kehadiran Akhir (counter basis) and
+  // Senarai Kehadiran Penyertaan, one mode at a time:
+  // • BERSEMUKA — the event's on-site competitions (original row, isOnline
+  //   false): an accepted, ACTIVE team counts when its contingent checked in at
+  //   the main counter (TeamEvent.attendedAt); plus CONFIRMED walk-ins.
+  // • ONLINE — competitions run "Dalam talian": no attendance is taken, so every
+  //   accepted, ACTIVE team counts. No walk-ins.
+  // International teams (foreign contingents registered for this event) always
+  // count, accepted or not: they are not checked in at the counter. Trainers are
+  // those of the teams that count.
   const anchors = await db.eventCompetition.findMany({
     where: { eventId, parentId: null },
     select: { competitionId: true, isOnline: true },
   });
   const onlineComp = new Set(anchors.filter(a => a.isOnline).map(a => a.competitionId));
 
+  const modeComps = anchors
+    .filter(a => (mode === "ONLINE") === a.isOnline)
+    .map(a => a.competitionId);
+
   const allTeams = await db.team.findMany({
     where: {
       status: "ACTIVE",
+      competitionId: { in: modeComps },
       OR: [
         { teamEvents: { some: { eventId, acceptance: "ACCEPT" } } },
         { contingent: { internationalEventId: eventId, country: { codeIso2: { not: "MY" } } } },
@@ -169,7 +200,7 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
           school: { select: { state: { select: { name: true } } } },
           higherInstitution: { select: { state: { select: { name: true } } } },
           internationalEventId: true,
-          country: { select: { codeIso2: true } },
+          country: { select: { codeIso2: true, name: true } },
         },
       },
       members: {
@@ -183,17 +214,36 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     },
   });
 
+  const isForeign = (t: (typeof allTeams)[number]) =>
+    t.contingent.internationalEventId === eventId && !!t.contingent.country && t.contingent.country.codeIso2 !== "MY";
   const teams = allTeams.filter(t => {
-    const foreign = t.contingent.internationalEventId === eventId && !!t.contingent.country && t.contingent.country.codeIso2 !== "MY";
-    if (foreign) return true;
+    if (isForeign(t)) return true;
     const te = t.teamEvents.find(x => x.acceptance === "ACCEPT");
     if (!te) return false;
     return onlineComp.has(t.competitionId) || !!te.attendedAt;
   });
 
+  const foreignTeams = teams.filter(isForeign);
+  const byCountry = new Map<string, { pids: Set<string>; teams: number }>();
+  for (const t of foreignTeams) {
+    const name = t.contingent.country!.name;
+    let c = byCountry.get(name);
+    if (!c) { c = { pids: new Set(), teams: 0 }; byCountry.set(name, c); }
+    c.teams++;
+    for (const m of t.members) c.pids.add(m.participant.id);
+  }
+  const international: InternationalStat = {
+    participants: new Set(foreignTeams.flatMap(t => t.members.map(m => m.participant.id))).size,
+    teams: foreignTeams.length,
+    notAcceptedTeams: foreignTeams.filter(t => !t.teamEvents.some(x => x.acceptance === "ACCEPT")).length,
+    countries: [...byCountry.entries()]
+      .map(([name, c]) => ({ name, participants: c.pids.size, teams: c.teams }))
+      .sort((a, b) => b.participants - a.participants || a.name.localeCompare(b.name)),
+  };
+
   // Walk-ins count once CONFIRMED; a team walk-in (one registration anchored on
   // one member) brings every member of the team.
-  const walkInRegs = await db.walkInRegistration.findMany({
+  const walkInRegs = mode === "ONLINE" ? [] : await db.walkInRegistration.findMany({
     where: {
       status: "CONFIRMED",
       walkInCompetition: { eventId },
@@ -370,7 +420,7 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
         .map(c => ({ code: c.code, name: c.name, level: c.level, participants: c.pids.size }))
         .sort((a, b) => a.code.localeCompare(b.code)),
     }))
-    .sort((a, b) => a.stateName.localeCompare(b.stateName));
+    .sort((a, b) => byStateName(a.stateName, b.stateName));
 
   // registered participants in more than one team
   const teamsPerPax = new Map<string, number>();
@@ -430,7 +480,7 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
       male:  s.malePids.size,
       female: s.femalePids.size,
     }))
-    .sort((a, b) => a.stateName.localeCompare(b.stateName));
+    .sort((a, b) => byStateName(a.stateName, b.stateName));
 
   // state × competition
   const scMap = new Map<string, Map<string, { code: string; name: string; level: Level; teams: number; pids: Set<string> }>>();
@@ -450,9 +500,11 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
         .map(c => ({ code: c.code, name: c.name, level: c.level, teams: c.teams, participants: c.pids.size }))
         .sort((a, b) => a.code.localeCompare(b.code)),
     }))
-    .sort((a, b) => a.stateName.localeCompare(b.stateName));
+    .sort((a, b) => byStateName(a.stateName, b.stateName));
 
   return {
+    mode,
+    international,
     eventName:   event.name,
     eventId:     event.id,
     slug:        event.slug,
@@ -479,4 +531,25 @@ export async function computeFinalProgramData(eventId: string): Promise<FinalPro
     multiTeamParticipantCount,
     walkInStateCompStats,
   };
+}
+
+// ─── report wording (page + Word) ─────────────────────────────────────────────
+
+export const PROGRAM_MODE_LABEL: Record<ProgramMode, string> = { BERSEMUKA: "Bersemuka", ONLINE: "Dalam Talian" };
+
+/** What the figures count, for the report header. */
+export function programBasisNote(mode: ProgramMode): string {
+  return mode === "ONLINE"
+    ? "Pertandingan Dalam Talian: kehadiran tidak diambil, maka semua pasukan yang diterima dikira. Sepadan dengan bahagian Dalam Talian Laporan Kehadiran Akhir."
+    : "Pertandingan Bersemuka, berdasarkan kehadiran: pasukan yang daftar masuk di kaunter dan walk-in yang disahkan. Sepadan dengan bahagian Bersemuka dan Walk-in Laporan Kehadiran Akhir (mod Kaunter) serta Senarai Kehadiran Penyertaan.";
+}
+
+/** The international-participants note, or null when there are none in this mode. */
+export function internationalNote(i: InternationalStat): string | null {
+  if (!i.participants) return null;
+  const countries = i.countries.map(c => `${c.name} ${c.participants}`).join(", ");
+  return `Termasuk ${i.participants.toLocaleString("en-MY")} peserta antarabangsa (${i.teams} pasukan — ${countries}). ` +
+    "Peserta antarabangsa tidak daftar masuk di kaunter, maka semuanya dikira hadir" +
+    (i.notAcceptedTeams ? `, termasuk ${i.notAcceptedTeams} pasukan yang belum diterima dalam acara` : "") +
+    ". Mereka disenaraikan di bawah negeri “Antarabangsa (negara)”.";
 }

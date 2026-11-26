@@ -10,10 +10,10 @@ import { db } from "@/lib/db";
 //   counter (TeamEvent.attendedAt); individual basis: the member was checked in
 //   on site (Kehadiran Individu);
 // • CONFIRMED walk-ins (a team walk-in brings all its members).
-// Dalam talian competitions take no attendance and are left out, except that
-// every international participant (a foreign contingent registered for this
-// event) is listed, whatever their check-in or competition mode — they were not
-// checked in at the counter.
+// Dalam talian competitions take no attendance and are left out. Every
+// international participant (a foreign contingent registered for this event)
+// of an on-site competition is listed, whatever their check-in or acceptance —
+// they were not checked in at the counter.
 //
 // Murid = unique present participants of that school in that competition;
 // Guru = unique trainers of that school's present teams in that competition.
@@ -125,6 +125,7 @@ export async function computeAttendanceListData(
     db.team.findMany({
       where: {
         status: "ACTIVE",
+        competitionId: { in: [...online.keys()] },
         contingent: { internationalEventId: eventId, country: { codeIso2: { not: "MY" } } },
       },
       select: teamSelect,
@@ -167,6 +168,7 @@ export async function computeAttendanceListData(
     put(`c:${t.competitionId}`, t.competition, false, t.contingent, present, present.length ? t.trainers.map(x => x.trainerId) : []);
   }
   for (const t of foreignTeams) {
+    if (online.get(t.competitionId) === true) continue; // Dalam talian: not on this list
     put(`c:${t.competitionId}`, t.competition, false, t.contingent, t.members.map(m => m.participant), t.trainers.map(x => x.trainerId));
   }
 

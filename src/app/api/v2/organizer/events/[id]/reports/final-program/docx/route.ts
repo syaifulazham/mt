@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import sharp from "sharp";
 import { getOrganizerSession } from "@/lib/auth/session";
-import { computeFinalProgramData } from "@/lib/reports/finalProgramData";
+import { computeFinalProgramData, internationalNote, programBasisNote, PROGRAM_MODE_LABEL } from "@/lib/reports/finalProgramData";
 import type { StateStat, CompStat } from "@/lib/reports/finalProgramData";
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun,
@@ -33,9 +33,6 @@ const TEAL_50    = "F0FDFA";   // Belia data rows
 const TEAL_100   = "CCFBF1";   // Belia sub-total
 const ROSE_50    = "FFF1F2";   // Perempuan
 const MAROON     = "7B0D1E";   // Penyertaan dan Penglibatan header
-
-const BASIS_NOTE =
-  "Berdasarkan kehadiran: pasukan yang hadir (daftar masuk kaunter), pertandingan dalam talian yang diterima, semua peserta antarabangsa dan walk-in yang disahkan.";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -138,17 +135,22 @@ const SMALL_GAP = new Paragraph({ spacing: { after: 80 }, children: [] });
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const { id: eventId } = await params;
-  const data = await computeFinalProgramData(eventId);
+  const data = await computeFinalProgramData(eventId, req.nextUrl.searchParams.get("kategori") === "online" ? "ONLINE" : "BERSEMUKA");
   if (!data) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const d = data;
+  const basisNote = `Pertandingan ${PROGRAM_MODE_LABEL[data.mode]} — ${programBasisNote(data.mode)}`;
+  const intlNote = internationalNote(data.international);
+  const intlParas = intlNote
+    ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 40, after: 60 }, children: [new TextRun({ text: intlNote, size: 16, italics: true, color: INDIGO_800 })] })]
+    : [];
   const pesertaUtama  = d.regSummary.schoolParticipants + d.regSummary.beliaParticipants;
   const jumlahPeserta = pesertaUtama + d.walkInSummary.total;
   const grandTotal    = jumlahPeserta + d.trainerCount;
@@ -198,8 +200,9 @@ export async function GET(
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { before: 40 },
-          children: [new TextRun({ text: BASIS_NOTE, size: 16, italics: true, color: SLATE_400 })],
+          children: [new TextRun({ text: basisNote, size: 16, italics: true, color: SLATE_400 })],
         }),
+        ...intlParas,
       ],
       borders: NO_BORDERS,
       verticalAlign: "center",
@@ -226,8 +229,9 @@ export async function GET(
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: 60 },
-        children: [new TextRun({ text: BASIS_NOTE, size: 16, italics: true, color: SLATE_400 })],
+        children: [new TextRun({ text: basisNote, size: 16, italics: true, color: SLATE_400 })],
       }),
+      ...intlParas,
     );
   }
   coverChildren.push(GAP);
@@ -660,7 +664,7 @@ export async function GET(
   const blob = await Packer.toBlob(doc);
   const arrayBuffer = await blob.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const safeName = `Laporan-Akhir-Program-${d.slug}.docx`;
+  const safeName = `Laporan-Akhir-Program-${d.slug}${d.mode === "ONLINE" ? "-dalam-talian" : ""}.docx`;
 
   return new NextResponse(buffer, {
     headers: {
