@@ -34,6 +34,8 @@ export interface StateCompGroup {
 export interface WalkInCompStat {
   code: string;
   name: string;
+  /** Team walk-ins (0 for an individual competition). */
+  teams: number;
   participants: number;
 }
 
@@ -75,6 +77,12 @@ export interface FinalProgramData {
     schoolParticipants: number;
     beliaParticipants: number;
     total: number;
+    /** Team walk-ins (a team counts once, however its members registered). */
+    schoolTeams: number;
+    beliaTeams: number;
+    teams: number;
+    /** Walk-in entries — a team or an individual each count once; Laporan Kehadiran Akhir's "Pasukan / penyertaan". */
+    entries: number;
   };
   schoolMale: number;
   schoolFemale: number;
@@ -249,6 +257,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
       walkInCompetition: { eventId },
     },
     select: {
+      id: true,
       walkInCompetitionId: true,
       team: { select: { id: true, members: { select: { participant: { select: { id: true, gender: true, ethnicity: true } } } } } },
       walkInCompetition: {
@@ -273,13 +282,15 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   });
 
   const seenWalkInTeams = new Set<string>();
+  // entryKey: one per walk-in entry (a team, or an individual registration).
   const walkIns = walkInRegs.flatMap(w => {
-    if (!w.team || !w.team.members.length) return [w];
+    if (!w.team || !w.team.members.length) return [{ ...w, entryKey: `w:${w.id}`, isTeam: false }];
     const k = `${w.walkInCompetitionId}:${w.team.id}`;
     if (seenWalkInTeams.has(k)) return [];
     seenWalkInTeams.add(k);
-    return w.team.members.map(m => ({ ...w, participant: m.participant }));
+    return w.team.members.map(m => ({ ...w, participant: m.participant, entryKey: `wt:${k}`, isTeam: true }));
   });
+  const teamEntries = (list: typeof walkIns) => new Set(list.filter(w => w.isTeam).map(w => w.entryKey)).size;
 
   // ── flat team data ────────────────────────────────────────────────────────
   type TD = {
@@ -357,19 +368,24 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     schoolParticipants: new Set(wiSchool.map(w => w.participant.id)).size,
     beliaParticipants:  new Set(wiBelia.map(w => w.participant.id)).size,
     total: new Set(walkIns.map(w => w.participant.id)).size,
+    schoolTeams: teamEntries(wiSchool),
+    beliaTeams:  teamEntries(wiBelia),
+    teams:       teamEntries(walkIns),
+    entries:     new Set(walkIns.map(w => w.entryKey)).size,
   };
 
   // walk-in per competition
-  const wiCompMap = new Map<string, { code: string; name: string; level: Level; pids: Set<string> }>();
+  const wiCompMap = new Map<string, { code: string; name: string; level: Level; pids: Set<string>; teams: Set<string> }>();
   for (const w of walkIns) {
     const comp = w.walkInCompetition.competition;
     const level = classifyLevel(comp.targetGroups);
     if (!wiCompMap.has(comp.id))
-      wiCompMap.set(comp.id, { code: comp.code, name: comp.name, level, pids: new Set() });
+      wiCompMap.set(comp.id, { code: comp.code, name: comp.name, level, pids: new Set(), teams: new Set() });
     wiCompMap.get(comp.id)!.pids.add(w.participant.id);
+    if (w.isTeam) wiCompMap.get(comp.id)!.teams.add(w.entryKey);
   }
   const allWiComps = [...wiCompMap.values()]
-    .map(c => ({ code: c.code, name: c.name, level: c.level, participants: c.pids.size }))
+    .map(c => ({ code: c.code, name: c.name, level: c.level, teams: c.teams.size, participants: c.pids.size }))
     .sort((a, b) => a.code.localeCompare(b.code));
 
   // walk-in gender
@@ -402,7 +418,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   const walkInMultiCompCount = [...wiCompPerPax.values()].filter(c => c > 1).length;
 
   // walk-in state × competition
-  const wiScMap = new Map<string, Map<string, { code: string; name: string; level: Level; pids: Set<string> }>>();
+  const wiScMap = new Map<string, Map<string, { code: string; name: string; level: Level; pids: Set<string>; teams: Set<string> }>>();
   for (const w of walkIns) {
     const comp = w.walkInCompetition.competition;
     const level = classifyLevel(comp.targetGroups);
@@ -410,14 +426,15 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     if (!wiScMap.has(stateName)) wiScMap.set(stateName, new Map());
     const byComp = wiScMap.get(stateName)!;
     if (!byComp.has(comp.id))
-      byComp.set(comp.id, { code: comp.code, name: comp.name, level, pids: new Set() });
+      byComp.set(comp.id, { code: comp.code, name: comp.name, level, pids: new Set(), teams: new Set() });
     byComp.get(comp.id)!.pids.add(w.participant.id);
+    if (w.isTeam) byComp.get(comp.id)!.teams.add(w.entryKey);
   }
   const walkInStateCompStats: WalkInStateCompGroup[] = [...wiScMap.entries()]
     .map(([stateName, byComp]) => ({
       stateName,
       comps: [...byComp.values()]
-        .map(c => ({ code: c.code, name: c.name, level: c.level, participants: c.pids.size }))
+        .map(c => ({ code: c.code, name: c.name, level: c.level, teams: c.teams.size, participants: c.pids.size }))
         .sort((a, b) => a.code.localeCompare(b.code)),
     }))
     .sort((a, b) => byStateName(a.stateName, b.stateName));

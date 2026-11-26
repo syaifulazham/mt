@@ -307,6 +307,12 @@ export async function GET(
         dCell(nv(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants), SLATE_50, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
+        dCell("Jumlah Pasukan (Walk-In, berpasukan)", SLATE_50),
+        dCell(nv(d.walkInSummary.schoolTeams), SLATE_50, AlignmentType.RIGHT),
+        dCell(nv(d.walkInSummary.beliaTeams),  SLATE_50, AlignmentType.RIGHT),
+        dCell(nv(d.walkInSummary.teams), SLATE_50, AlignmentType.RIGHT, true),
+      ]}),
+      new TableRow({ children: [
         dCell("Jumlah Peserta (Walk-In)", WHITE),
         dCell(nv(d.walkInSummary.schoolParticipants), WHITE, AlignmentType.RIGHT),
         dCell(nv(d.walkInSummary.beliaParticipants),  WHITE, AlignmentType.RIGHT),
@@ -567,7 +573,7 @@ export async function GET(
           SMALL_GAP,
           (() => {
             const wiLevelRows: TableRow[] = [
-              new TableRow({ children: [hCell("Tahap Pendidikan"), hCell("Kod"), hCell("Pertandingan"), hCell("—"), hCell("Peserta")] }),
+              new TableRow({ children: [hCell("Tahap Pendidikan"), hCell("Kod"), hCell("Pertandingan"), hCell("Pasukan"), hCell("Peserta")] }),
             ];
             const wiLevelGrps3 = [
               { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100 },
@@ -583,7 +589,7 @@ export async function GET(
                   dCell("", bg),
                   dCell(c.code, bg, AlignmentType.CENTER),
                   dCell(c.name, bg),
-                  dCell("—", bg, AlignmentType.CENTER),
+                  dCell(c.teams ? nv(c.teams) : "—", bg, AlignmentType.CENTER),
                   dCell(nv(c.participants), bg, AlignmentType.RIGHT),
                 ]}));
               });
@@ -591,7 +597,7 @@ export async function GET(
               wiLevelRows.push(new TableRow({ children: [
                 dCell("", g.tBg), dCell("", g.tBg),
                 dCell(`Jumlah ${g.label}`, g.tBg, AlignmentType.RIGHT, true),
-                dCell("", g.tBg),
+                dCell(nv(g.comps.reduce((s, c) => s + c.teams, 0)), g.tBg, AlignmentType.CENTER, true),
                 dCell(nv(subWIP), g.tBg, AlignmentType.RIGHT, true),
               ]}));
             }
@@ -613,17 +619,18 @@ export async function GET(
               .flatMap(sg => sg.comps)
               .reduce((s, c) => s + c.participants, 0);
             const wiStateRows: TableRow[] = [
-              new TableRow({ children: [hCell("Negeri"), hCell("Kod"), hCell("Pertandingan"), hCell("Peserta")] }),
+              new TableRow({ children: [hCell("Negeri"), hCell("Kod"), hCell("Pertandingan"), hCell("Pasukan"), hCell("Peserta")] }),
             ];
             d.walkInStateCompStats.forEach((sg, si) => {
               const rowBg = si % 2 === 0 ? WHITE : SLATE_50;
-              wiStateRows.push(new TableRow({ children: [dCell(sg.stateName, SLATE_700, AlignmentType.LEFT, true, WHITE, 4)] }));
+              wiStateRows.push(new TableRow({ children: [dCell(sg.stateName, SLATE_700, AlignmentType.LEFT, true, WHITE, 5)] }));
               sg.comps.forEach((c, i) => {
                 const bg = i % 2 === 0 ? rowBg : WHITE;
                 wiStateRows.push(new TableRow({ children: [
                   dCell("", bg),
                   dCell(c.code, bg, AlignmentType.CENTER),
                   dCell(c.name, bg),
+                  dCell(c.teams ? nv(c.teams) : "—", bg, AlignmentType.CENTER),
                   dCell(nv(c.participants), bg, AlignmentType.RIGHT),
                 ]}));
               });
@@ -631,20 +638,21 @@ export async function GET(
               wiStateRows.push(new TableRow({ children: [
                 dCell("", SLATE_200), dCell("", SLATE_200),
                 dCell(`Jumlah ${sg.stateName}`, SLATE_200, AlignmentType.RIGHT, true),
+                dCell(nv(sg.comps.reduce((s, c) => s + c.teams, 0)), SLATE_200, AlignmentType.CENTER, true),
                 dCell(nv(subP), SLATE_200, AlignmentType.RIGHT, true),
               ]}));
             });
             wiStateRows.push(new TableRow({ children: [
-              dCell("Jumlah Penyertaan (termasuk penyertaan berganda)", SLATE_700, AlignmentType.LEFT, false, WHITE, 3),
+              dCell("Jumlah Penyertaan (termasuk penyertaan berganda)", SLATE_700, AlignmentType.LEFT, false, WHITE, 4),
               dCell(nv(totalPenyertaan), SLATE_700, AlignmentType.RIGHT, true, WHITE),
             ]}));
             wiStateRows.push(new TableRow({ children: [
-              dCell("JUMLAH PESERTA WALK-IN (UNIK)", SLATE_900, AlignmentType.LEFT, true, WHITE, 3),
+              dCell("JUMLAH PESERTA WALK-IN (UNIK)", SLATE_900, AlignmentType.LEFT, true, WHITE, 4),
               dCell(nv(d.walkInSummary.total), SLATE_900, AlignmentType.RIGHT, true, WHITE),
             ]}));
             if (d.walkInMultiCompCount > 0) {
               wiStateRows.push(new TableRow({ children: [
-                dCell("Peserta memasuki 2 atau lebih pertandingan", AMBER_50, AlignmentType.LEFT, false, AMBER_800, 3),
+                dCell("Peserta memasuki 2 atau lebih pertandingan", AMBER_50, AlignmentType.LEFT, false, AMBER_800, 4),
                 dCell(nv(d.walkInMultiCompCount), AMBER_50, AlignmentType.RIGHT, true, AMBER_800),
               ]}));
             }

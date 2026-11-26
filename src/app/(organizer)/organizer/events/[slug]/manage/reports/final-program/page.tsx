@@ -285,6 +285,16 @@ export default async function FinalProgramReportPage({
                 </tr>
               </thead>
               <tbody>
+                <tr className={TR_EVEN}>
+                  <td className={TD_LABEL}>
+                    Jumlah Pasukan <span className="font-normal text-slate-400">(pertandingan berpasukan)</span>
+                  </td>
+                  <td className={TD_NUM}>{n(d.walkInSummary.schoolTeams)}</td>
+                  <td className={TD_NUM}>{n(d.walkInSummary.beliaTeams)}</td>
+                  <td className="px-3 py-1.5 text-center font-mono font-black text-slate-900 text-xs tabular-nums">
+                    {n(d.walkInSummary.teams)}
+                  </td>
+                </tr>
                 <tr className={TR_ODD}>
                   <td className={TD_LABEL}>Jumlah Peserta</td>
                   <td className={TD_NUM}>{n(d.walkInSummary.schoolParticipants)}</td>
@@ -755,6 +765,7 @@ export default async function FinalProgramReportPage({
                   <th className={`${TH_LEFT} w-44`}>Tahap Pendidikan</th>
                   <th className={`${TH} w-20`}>Kod</th>
                   <th className={TH_LEFT}>Pertandingan</th>
+                  <th className={`${TH} w-24`}>Pasukan</th>
                   <th className={`${TH} w-24`}>Peserta</th>
                 </tr>
               </thead>
@@ -800,6 +811,9 @@ export default async function FinalProgramReportPage({
                           <td className="px-3 py-1.5 text-xs text-slate-700">
                             {c.name}
                           </td>
+                          <td className="px-3 py-1.5 text-center font-mono text-xs text-slate-700 tabular-nums">
+                            {c.teams ? n(c.teams) : "–"}
+                          </td>
                           <td className="px-3 py-1.5 text-center font-mono font-bold text-xs text-slate-900 tabular-nums">
                             {n(c.participants)}
                           </td>
@@ -808,6 +822,9 @@ export default async function FinalProgramReportPage({
                       <tr className={`${g.totCls} font-semibold`}>
                         <td className="px-3 py-1.5 text-right text-xs" colSpan={2}>
                           Jumlah {g.label}:
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-mono font-bold text-sm tabular-nums">
+                          {n(g.comps.reduce((s, c) => s + c.teams, 0))}
                         </td>
                         <td className="px-3 py-1.5 text-center font-mono font-black text-sm tabular-nums">
                           {n(g.comps.reduce((s, c) => s + c.participants, 0))}
@@ -824,7 +841,7 @@ export default async function FinalProgramReportPage({
                   return (
                     <>
                       <tr className="bg-slate-700 text-white">
-                        <td className="px-3 py-1.5 text-xs font-semibold text-slate-300" colSpan={3}>
+                        <td className="px-3 py-1.5 text-xs font-semibold text-slate-300" colSpan={4}>
                           Jumlah Penyertaan <span className="font-normal italic text-slate-400">(termasuk penyertaan berganda)</span>
                         </td>
                         <td className="px-3 py-1.5 text-center font-mono font-black text-sm tabular-nums">
@@ -832,7 +849,7 @@ export default async function FinalProgramReportPage({
                         </td>
                       </tr>
                       <tr className="bg-slate-900 text-white">
-                        <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={3}>
+                        <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={4}>
                           Jumlah Peserta Walk-In (Unik)
                         </td>
                         <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
@@ -841,7 +858,7 @@ export default async function FinalProgramReportPage({
                       </tr>
                       {d.walkInMultiCompCount > 0 && (
                         <tr className="bg-amber-50 border-t border-amber-200">
-                          <td className="px-3 py-1.5 text-xs text-amber-800" colSpan={3}>
+                          <td className="px-3 py-1.5 text-xs text-amber-800" colSpan={4}>
                             Peserta memasuki 2 atau lebih pertandingan
                           </td>
                           <td className="px-3 py-1.5 text-center font-mono font-bold text-sm tabular-nums text-amber-900">
@@ -944,6 +961,7 @@ export default async function FinalProgramReportPage({
                   <th className={`${TH_LEFT} w-44`}>Negeri</th>
                   <th className={`${TH} w-20`}>Kod</th>
                   <th className={TH_LEFT}>Pertandingan</th>
+                  <th className={`${TH} w-24`}>Pasukan</th>
                   <th className={`${TH} w-24`}>Peserta</th>
                 </tr>
               </thead>
@@ -969,6 +987,9 @@ export default async function FinalProgramReportPage({
                           <td className="px-3 py-1.5 text-xs text-slate-700">
                             {c.name}
                           </td>
+                          <td className="px-3 py-1.5 text-center font-mono text-xs text-slate-700 tabular-nums">
+                            {c.teams ? n(c.teams) : "–"}
+                          </td>
                           <td className="px-3 py-1.5 text-center font-mono font-bold text-xs text-slate-900 tabular-nums">
                             {n(c.participants)}
                           </td>
@@ -977,6 +998,9 @@ export default async function FinalProgramReportPage({
                       <tr className="bg-slate-200 font-semibold">
                         <td className="px-3 py-1.5 text-right text-xs text-slate-700" colSpan={2}>
                           Jumlah {sg.stateName}:
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-mono font-bold text-sm text-slate-900 tabular-nums">
+                          {n(sg.comps.reduce((s, c) => s + c.teams, 0))}
                         </td>
                         <td className="px-3 py-1.5 text-center font-mono font-black text-sm text-slate-900 tabular-nums">
                           {n(subP)}
@@ -992,7 +1016,7 @@ export default async function FinalProgramReportPage({
                   return (
                     <>
                       <tr className="bg-slate-700 text-white">
-                        <td className="px-3 py-1.5 text-xs font-semibold text-slate-300" colSpan={3}>
+                        <td className="px-3 py-1.5 text-xs font-semibold text-slate-300" colSpan={4}>
                           Jumlah Penyertaan <span className="font-normal italic text-slate-400">(termasuk penyertaan berganda)</span>
                         </td>
                         <td className="px-3 py-1.5 text-center font-mono font-black text-sm tabular-nums">
@@ -1000,7 +1024,7 @@ export default async function FinalProgramReportPage({
                         </td>
                       </tr>
                       <tr className="bg-slate-900 text-white">
-                        <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={3}>
+                        <td className="px-3 py-2 text-xs font-black uppercase tracking-widest" colSpan={4}>
                           Jumlah Peserta Walk-In (Unik)
                         </td>
                         <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
@@ -1009,7 +1033,7 @@ export default async function FinalProgramReportPage({
                       </tr>
                       {d.walkInMultiCompCount > 0 && (
                         <tr className="bg-amber-50 border-t border-amber-200">
-                          <td className="px-3 py-1.5 text-xs text-amber-800" colSpan={3}>
+                          <td className="px-3 py-1.5 text-xs text-amber-800" colSpan={4}>
                             Peserta memasuki 2 atau lebih pertandingan
                           </td>
                           <td className="px-3 py-1.5 text-center font-mono font-bold text-sm tabular-nums text-amber-900">

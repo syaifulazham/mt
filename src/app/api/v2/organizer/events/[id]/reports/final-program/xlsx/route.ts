@@ -361,7 +361,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
   const hasWalkInComps = d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
   if (hasWalkInComps) {
     sectionHeader("Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan", "Walk-In");
-    ["Tahap Pendidikan", "Kod", "Pertandingan", "—", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+    ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
     ws.getRow(r).height = 18; r++;
     const wiLevelGroups = [
       { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
@@ -378,7 +378,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
         applyCell(ws.getCell(r, 1), "", bg);
         applyCell(ws.getCell(r, 2), c.code, bg, center);
         applyCell(ws.getCell(r, 3), c.name, bg, left);
-        applyCell(ws.getCell(r, 4), "—", bg, center);
+        applyCell(ws.getCell(r, 4), c.teams ? nv(c.teams) : "—", bg, center);
         applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
         r++;
       });
@@ -386,7 +386,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
       applyCell(ws.getCell(r, 1), "", g.tBg);
       applyCell(ws.getCell(r, 2), "", g.tBg);
       applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);
-      applyCell(ws.getCell(r, 4), "", g.tBg);
+      applyCell(ws.getCell(r, 4), nv(g.comps.reduce((s, c) => s + c.teams, 0)), g.tBg, center, true);
       applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
       r++; spacer();
     }
@@ -757,7 +757,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       ws.mergeCells(r, 1, r, 5);
       applyCell(ws.getCell(r, 1), "Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan", C.slate800, left, true, C.white);
       ws.getRow(r).height = 18; r++;
-      ["Tahap Pendidikan", "Kod", "Pertandingan", "—", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+      ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
       ws.getRow(r).height = 18; r++;
       const wiLevelGrps = [
         { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
@@ -774,7 +774,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
           applyCell(ws.getCell(r, 1), "", bg);
           applyCell(ws.getCell(r, 2), c.code, bg, center);
           applyCell(ws.getCell(r, 3), c.name, bg, left);
-          applyCell(ws.getCell(r, 4), "—", bg, center);
+          applyCell(ws.getCell(r, 4), c.teams ? nv(c.teams) : "—", bg, center);
           applyCell(ws.getCell(r, 5), nv(c.participants), bg, center);
           r++;
         });
@@ -782,7 +782,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
         applyCell(ws.getCell(r, 1), "", g.tBg);
         applyCell(ws.getCell(r, 2), "", g.tBg);
         applyCell(ws.getCell(r, 3), `Jumlah ${g.label}`, g.tBg, right, true);
-        applyCell(ws.getCell(r, 4), "", g.tBg);
+        applyCell(ws.getCell(r, 4), nv(g.comps.reduce((s, c) => s + c.teams, 0)), g.tBg, center, true);
         applyCell(ws.getCell(r, 5), nv(subWIP), g.tBg, center, true);
         r += 2;
       }
