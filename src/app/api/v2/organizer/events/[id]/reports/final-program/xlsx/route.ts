@@ -126,7 +126,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   const overallRows: [string, number | string, string][] = [
     ["1. Peserta Utama",    nv(pesertaUtama),           C.white],
-    ["2. Peserta Walk-in",  nv(d.walkInSummary.total),  C.slate50],
+    ["2. Peserta Walk-in (selain peserta utama)",  nv(d.walkInExtraParticipants),  C.slate50],
     ["3. Jurulatih",        nv(d.trainerCount),         C.white],
   ];
   for (const [label, value, bg] of overallRows) {
@@ -228,8 +228,8 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
   // Walk-in gender
   if (d.walkInSummary.total > 0) {
     for (const [label, male, female] of [
-      ["Jantina Pelajar Sekolah (Walk-In)", d.walkInSchoolMale, d.walkInSchoolFemale],
-      ["Jantina Belia (Walk-In)",           d.walkInBeliaMale,  d.walkInBeliaFemale],
+      ["Jantina Pelajar Sekolah (Walk-In, selain berdaftar)", d.walkInSchoolMale, d.walkInSchoolFemale],
+      ["Jantina Belia (Walk-In, selain berdaftar)",           d.walkInBeliaMale,  d.walkInBeliaFemale],
     ] as [string, number, number][]) {
       const wiGT = male + female;
       subHeader(label, 4);
@@ -280,14 +280,14 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   // Peserta Walk-in row
   if (wiEthnTotal > 0) {
-    applyCell(ws.getCell(r, 1), "Peserta Walk-in", C.white, left, true);
+    applyCell(ws.getCell(r, 1), "Peserta Walk-in (selain berdaftar)", C.white, left, true);
     wiEthnVals.forEach((v, i) => applyCell(ws.getCell(r, i + 2), fmtCountPct(v, wiEthnTotal), C.white, center, true));
     applyCell(ws.getCell(r, 9), nv(wiEthnTotal), C.white, center, true);
     r++;
   }
 
   // Grand total row
-  applyCell(ws.getCell(r, 1), "Jumlah Keseluruhan", C.slate900, left, true, C.white);
+  applyCell(ws.getCell(r, 1), "Jumlah Keseluruhan (peserta unik)", C.slate900, left, true, C.white);
   ethnLabels.forEach((_, i) => applyCell(ws.getCell(r, i + 2), nv(regEthnVals[i] + (wiEthnTotal > 0 ? wiEthnVals[i] : 0)), C.slate900, center, true, C.white));
   applyCell(ws.getCell(r, 9), nv(ethnGrandTotal), C.slate900, center, true, C.white);
   ws.getRow(r).height = 18; r++;
@@ -295,7 +295,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   // ═══ SECTION 3: STATE DETAIL ════════════════════════════════════════════════
   sectionHeader("Laporan Terperinci Mengikut Negeri", "Seksyen 3");
-  const stateHdrs = ["Negeri", "Kont. Sekolah", "Sek. Rendah", "Sek. Menengah", "Kont. Belia", "Pasukan", "Peserta", "Lelaki", "Perempuan"];
+  const stateHdrs = ["Negeri", "Kont. Sekolah", "Sek. Rendah", "Sek. Menengah", "Kont. Belia", "Pasukan", "Peserta (termasuk walk-in)", "Lelaki", "Perempuan"];
   stateHdrs.forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
   ws.getRow(r).height = 18; r++;
   d.stateStats.forEach((s, i) => {
@@ -537,12 +537,12 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     // Peserta Walk-in row
     if (wiEthnTotal2 > 0) {
-      applyCell(ws.getCell("F5"), "Peserta Walk-in", C.white, left, true);
+      applyCell(ws.getCell("F5"), "Peserta Walk-in (selain berdaftar)", C.white, left, true);
       ethnCols2.forEach((col, i) => applyCell(ws.getCell(`${col}5`), fmtCountPct2(wiEthnVals2[i], wiEthnTotal2), C.white, center, true));
       applyCell(ws.getCell("N5"), nv(wiEthnTotal2), C.white, center, true);
 
       // Grand total row
-      applyCell(ws.getCell("F6"), "Jumlah Keseluruhan", C.slate900, left, true, C.white);
+      applyCell(ws.getCell("F6"), "Jumlah Keseluruhan (peserta unik)", C.slate900, left, true, C.white);
       ethnLabels2.forEach((_, i) => applyCell(ws.getCell(`${ethnCols2[i]}6`), nv(regEthnVals2[i] + wiEthnVals2[i]), C.slate900, center, true, C.white));
       applyCell(ws.getCell("N6"), nv(regEthnTotal2 + wiEthnTotal2), C.slate900, center, true, C.white);
     } else {
@@ -618,7 +618,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     // Gender — walk-in school
     ws.mergeCells("A27:D27");
-    applyMasthead(ws.getCell("A27"), "Jantina Pelajar Sekolah (Walk-In)", C.slate800);
+    applyMasthead(ws.getCell("A27"), "Jantina Pelajar Sekolah (Walk-In, selain berdaftar)", C.slate800);
     ws.getRow(27).height = 18;
     applyHeader(ws.getCell("B28"), "Bilangan"); applyHeader(ws.getCell("C28"), "%");
     applyCell(ws.getCell("A29"), "Lelaki",    C.indigo50, left, true, C.indigo800);
@@ -630,7 +630,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     // Gender — walk-in belia
     ws.mergeCells("A32:D32");
-    applyMasthead(ws.getCell("A32"), "Jantina Belia (Walk-In)", C.slate800);
+    applyMasthead(ws.getCell("A32"), "Jantina Belia (Walk-In, selain berdaftar)", C.slate800);
     ws.getRow(32).height = 18;
     applyHeader(ws.getCell("B33"), "Bilangan"); applyHeader(ws.getCell("C33"), "%");
     applyCell(ws.getCell("A34"), "Lelaki",    C.indigo50, left, true, C.indigo800);
@@ -652,7 +652,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     const mkRows: [string, number | string, string][] = [
       ["1. Peserta Utama",   nv(pesertaUtama),          C.white],
-      ["2. Peserta Walk-in", nv(d.walkInSummary.total), C.slate50],
+      ["2. Peserta Walk-in (selain peserta utama)", nv(d.walkInExtraParticipants), C.slate50],
       ["3. Jurulatih",       nv(d.trainerCount),        C.white],
     ];
     mkRows.forEach(([label, val, bg], i) => {
@@ -680,7 +680,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     applyMasthead(ws.getCell("A1"), `Laporan Terperinci — ${d.locationLabel}`);
     ws.getRow(1).height = 22;
 
-    ["Negeri","Kont. Sekolah","Sek. Rendah","Sek. Menengah","Kont. Belia","Pasukan","Peserta","Lelaki","Perempuan"]
+    ["Negeri","Kont. Sekolah","Sek. Rendah","Sek. Menengah","Kont. Belia","Pasukan","Peserta (termasuk walk-in)","Lelaki","Perempuan"]
       .forEach((h, i) => applyHeader(ws.getCell(2, i + 1), h));
     ws.getRow(2).height = 20;
 
@@ -941,7 +941,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   ws.getRow(r).height = 18; r++;
   const overallRows: [string, number | string, string][] = [
     ["1. Peserta Utama", nv(pesertaUtama), C.white],
-    ["2. Peserta Walk-in", nv(d.walkInSummary.total), C.slate50],
+    ["2. Peserta Walk-in (selain peserta utama)", nv(d.walkInExtraParticipants), C.slate50],
     ["3. Jurulatih", nv(d.trainerCount), C.white],
   ];
   for (const [label, value, bg] of overallRows) {
@@ -1034,7 +1034,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   if (wiEthnTotal > 0) {
     ws.mergeCells(r, RIGHT, r, COLS);
-    applyCell(ws.getCell(r, RIGHT), "PESERTA WALK-IN", C.slate800, left, true, C.white);
+    applyCell(ws.getCell(r, RIGHT), "PESERTA WALK-IN (SELAIN PESERTA BERDAFTAR)", C.slate800, left, true, C.white);
     r++;
     ethnLabels.forEach((l, i) => applyHeader(ws.getCell(r, RIGHT + i), l));
     applyHeader(ws.getCell(r, COLS), "Jumlah");
@@ -1051,7 +1051,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     r++;
   }
   ws.mergeCells(r, RIGHT, r, COLS - 1);
-  applyCell(ws.getCell(r, RIGHT), "Jumlah Keseluruhan", C.slate900, right, true, C.white);
+  applyCell(ws.getCell(r, RIGHT), "Jumlah Keseluruhan (peserta unik)", C.slate900, right, true, C.white);
   ethnLabels.forEach((_, i) => applyCell(ws.getCell(r, RIGHT + i), nv(regEthnVals[i] + wiEthnVals[i]), C.slate900, center, true, C.white));
   applyCell(ws.getCell(r, COLS), nv(ethnGrandTotal), C.slate900, center, true, C.white);
   ws.getRow(r).height = 20; r++;
@@ -1093,7 +1093,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   if (d.walkInSummary.total > 0) {
     ws.mergeCells(r, RIGHT, r, RIGHT + 2);
-    applyCell(ws.getCell(r, RIGHT), "Jantina — Pelajar (Walk-In)", C.slate700, left, true, C.white);
+    applyCell(ws.getCell(r, RIGHT), "Jantina — Pelajar (Walk-In, selain berdaftar)", C.slate700, left, true, C.white);
     r++;
     gHeaders.forEach((h, i) => applyHeader(ws.getCell(r, RIGHT + i), h));
     ws.getRow(r).height = 16; r++;
@@ -1108,7 +1108,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     r += 2;
 
     ws.mergeCells(r, RIGHT + 4, r, RIGHT + 6);
-    applyCell(ws.getCell(r, RIGHT + 4), "Jantina — Belia (Walk-In)", C.slate700, left, true, C.white);
+    applyCell(ws.getCell(r, RIGHT + 4), "Jantina — Belia (Walk-In, selain berdaftar)", C.slate700, left, true, C.white);
     r++;
     gHeaders.forEach((h, i) => applyHeader(ws.getCell(r, RIGHT + 4 + i), h));
     ws.getRow(r).height = 16; r++;
@@ -1128,7 +1128,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
   // Laporan Terperinci Mengikut Negeri
   sectionHeader("Laporan Terperinci Mengikut Negeri", "Statistik Penyertaan");
-  ["Negeri", "Kont. Sekolah", "Sek. Rendah", "Sek. Menengah", "Kont. Belia", "Pasukan", "Peserta", "Lelaki", "Perempuan"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
+  ["Negeri", "Kont. Sekolah", "Sek. Rendah", "Sek. Menengah", "Kont. Belia", "Pasukan", "Peserta (termasuk walk-in)", "Lelaki", "Perempuan"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
   ws.getRow(r).height = 18; r++;
   d.stateStats.forEach((s, i) => {
     const bg = i % 2 === 0 ? C.white : C.slate50;

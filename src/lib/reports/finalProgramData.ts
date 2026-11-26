@@ -23,7 +23,11 @@ export interface StateStat {
   mTeams: number;
   bTeams: number;
   totalTeams: number;
+  /** Unique participants: team members plus walk-ins not already in a team
+   *  (the rows add up to uniqueParticipants). */
   participants: number;
+  /** Of which walk-in participants not already counted as team participants. */
+  walkInParticipants: number;
   male: number;
   female: number;
 }
@@ -91,6 +95,10 @@ export interface FinalProgramData {
   uniqueParticipants: number;
   /** Participants of the Belia competitions (the education-level table's Belia total). */
   beliaCompParticipants: number;
+  /** Walk-in participants who are not already counted as team participants — the
+   *  walk-in part of the unique total (teamParticipants + this = uniqueParticipants).
+   *  The Kaum and Jantina walk-in figures count only these. */
+  walkInExtraParticipants: number;
   walkInSummary: {
     schoolParticipants: number;
     beliaParticipants: number;
@@ -456,14 +464,22 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     .sort((a, b) => a.code.localeCompare(b.code));
 
   // walk-in gender
-  const walkInSchoolMale   = new Set(wiSchool.filter(w => (w.participant.gender as string) === "MALE").map(w => w.participant.id)).size;
-  const walkInSchoolFemale = new Set(wiSchool.filter(w => (w.participant.gender as string) === "FEMALE").map(w => w.participant.id)).size;
-  const walkInBeliaMale    = new Set(wiBelia.filter(w => (w.participant.gender as string) === "MALE").map(w => w.participant.id)).size;
-  const walkInBeliaFemale  = new Set(wiBelia.filter(w => (w.participant.gender as string) === "FEMALE").map(w => w.participant.id)).size;
+  // Kaum and Jantina count each person once: a walk-in who is also a team
+  // participant is already in the registered figures, so the walk-in figures
+  // cover only the rest (registered + walk-in = uniqueParticipants).
+  const wiExtra = walkIns.filter(w => !teamPids.has(w.participant.id));
+  const wiExtraSchool = wiExtra.filter(w => wiLevel(w) !== "BELIA");
+  const wiExtraBelia  = wiExtra.filter(w => wiLevel(w) === "BELIA" && !wiExtraSchool.some(s => s.participant.id === w.participant.id));
+  const walkInExtraParticipants = new Set(wiExtra.map(w => w.participant.id)).size;
+  const gCount = (list: typeof walkIns, g: string) => new Set(list.filter(w => (w.participant.gender as string) === g).map(w => w.participant.id)).size;
+  const walkInSchoolMale   = gCount(wiExtraSchool, "MALE");
+  const walkInSchoolFemale = gCount(wiExtraSchool, "FEMALE");
+  const walkInBeliaMale    = gCount(wiExtraBelia, "MALE");
+  const walkInBeliaFemale  = gCount(wiExtraBelia, "FEMALE");
 
   // walk-in ethnicity
   const wiEthn = new Map<string, Set<string>>();
-  for (const w of walkIns) {
+  for (const w of wiExtra) {
     const k = (w.participant.ethnicity as string | null) ?? "LAIN_LAIN";
     if (!wiEthn.has(k)) wiEthn.set(k, new Set());
     wiEthn.get(k)!.add(w.participant.id);
@@ -550,6 +566,25 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
       else s.femalePids.add(m.id);
     });
   }
+  // Walk-ins not already counted as team participants join their contingent's
+  // state, so the Peserta column adds up to the unique total.
+  const wiStatePids = new Map<string, Set<string>>();
+  for (const w of wiExtra) {
+    const stateName = getStateName(w.contingent);
+    if (!stateMap.has(stateName))
+      stateMap.set(stateName, {
+        pCIds: new Set(), rCIds: new Set(), mCIds: new Set(), bCIds: new Set(),
+        pTeams: 0, rTeams: 0, mTeams: 0, bTeams: 0,
+        pids: new Set(), malePids: new Set(), femalePids: new Set(),
+      });
+    const s = stateMap.get(stateName)!;
+    const pid = w.participant.id;
+    s.pids.add(pid);
+    if ((w.participant.gender as string) === "MALE") s.malePids.add(pid);
+    else s.femalePids.add(pid);
+    if (!wiStatePids.has(stateName)) wiStatePids.set(stateName, new Set());
+    wiStatePids.get(stateName)!.add(pid);
+  }
   const stateStats: StateStat[] = [...stateMap.entries()]
     .map(([stateName, s]) => ({
       stateName,
@@ -563,6 +598,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
       bTeams:    s.bTeams,
       totalTeams: s.pTeams + s.rTeams + s.mTeams + s.bTeams,
       participants: s.pids.size,
+      walkInParticipants: wiStatePids.get(stateName)?.size ?? 0,
       male:  s.malePids.size,
       female: s.femalePids.size,
     }))
@@ -595,6 +631,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     onlineSummary,
     teamParticipants: teamPids.size,
     uniqueParticipants,
+    walkInExtraParticipants,
     beliaCompParticipants: uniquePids(beliaTDs).size,
     international,
     eventName:   event.name,

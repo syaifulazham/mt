@@ -168,6 +168,8 @@ export default async function FinalProgramReportPage({
   const pesertaUtama = d.teamParticipants;
   const jumlahPeserta = d.uniqueParticipants;
   const grandTotal = jumlahPeserta + d.trainerCount;
+  /** Walk-ins who are also team participants — counted once, under Peserta Utama. */
+  const wiAlsoReg = d.walkInSummary.total - d.walkInExtraParticipants;
   const KATEGORI: Record<ProgramMode, string> = { BERSEMUKA: "", ONLINE: "online", SEMUA: "semua" };
 
   const venueLine = [event.venue, event.city, event.state?.name].filter(Boolean).join(" · ");
@@ -274,8 +276,11 @@ export default async function FinalProgramReportPage({
                   <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-lg tabular-nums pr-4">{n(pesertaUtama)}</td>
                 </tr>
                 <tr className={TR_EVEN}>
-                  <td className="px-3 py-2 text-slate-700 text-sm font-black">Peserta Walk-in</td>
-                  <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-lg tabular-nums pr-4">{n(d.walkInSummary.total)}</td>
+                  <td className="px-3 py-2 text-slate-700 text-sm font-black">
+                    Peserta Walk-in
+                    {wiAlsoReg > 0 && <span className="block text-[10px] font-normal text-slate-500">{n(d.walkInSummary.total)} walk-in, {n(wiAlsoReg)} juga peserta utama (tidak dikira semula)</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-slate-900 text-lg tabular-nums pr-4">{n(d.walkInExtraParticipants)}</td>
                 </tr>
                 <tr className={TR_ODD}>
                   <td className="px-3 py-2 text-slate-700 text-sm font-black">Jurulatih</td>
@@ -437,7 +442,7 @@ export default async function FinalProgramReportPage({
                         <>
                           <tr className="bg-slate-800">
                             <td colSpan={labels.length} className="px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-                              Peserta Walk-In
+                              Peserta Walk-In{wiAlsoReg > 0 && " (selain peserta berdaftar)"}
                             </td>
                           </tr>
                           <tr className="bg-white">
@@ -452,6 +457,7 @@ export default async function FinalProgramReportPage({
                             <td colSpan={labels.length} className="px-3 py-1 text-right text-[10px] text-slate-600">
                               <span className="font-semibold uppercase tracking-widest mr-2">Jumlah Walk-In</span>
                               <span className="font-black font-mono text-slate-900">{n(wiTotal)}</span>
+                              {wiAlsoReg > 0 && <span className="block normal-case text-[10px] text-slate-500">{n(wiAlsoReg)} peserta walk-in juga peserta berdaftar — dikira sekali sahaja</span>}
                             </td>
                           </tr>
                         </>
@@ -461,7 +467,7 @@ export default async function FinalProgramReportPage({
                       <tr className="bg-slate-900">
                         <td colSpan={labels.length} className="px-4 py-1.5 text-right">
                           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 mr-2">
-                            Jumlah Keseluruhan
+                            Jumlah Keseluruhan · peserta unik
                           </span>
                           <span className="text-sm font-black font-mono text-white">{n(grandTotal)}</span>
                         </td>
@@ -539,7 +545,7 @@ export default async function FinalProgramReportPage({
                 </div>
 
                 {/* Walk-In gender separator + sections */}
-                {d.walkInSummary.total > 0 && (
+                {d.walkInExtraParticipants > 0 && (
                   <>
                     <div className="col-span-2 border-t border-slate-200 pt-2 pb-0.5">
                       <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Walk-In</span>
@@ -548,7 +554,7 @@ export default async function FinalProgramReportPage({
                     {/* Walk-In: Pelajar */}
                     <div>
                       <div className="bg-slate-700 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">
-                        Jantina — Pelajar (Walk-In)
+                        Jantina — Pelajar (Walk-In{wiAlsoReg > 0 ? ", selain berdaftar" : ""})
                       </div>
                       <table className="w-full">
                         <thead>
@@ -576,7 +582,7 @@ export default async function FinalProgramReportPage({
                     {/* Walk-In: Belia */}
                     <div>
                       <div className="bg-slate-700 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">
-                        Jantina — Belia (Walk-In)
+                        Jantina — Belia (Walk-In{wiAlsoReg > 0 ? ", selain berdaftar" : ""})
                       </div>
                       <table className="w-full">
                         <thead>
@@ -650,7 +656,14 @@ export default async function FinalProgramReportPage({
                       </span>
                     )}
                   </td>
-                  <td className={TD_NUM}>{n(s.participants)}</td>
+                  <td className="px-3 py-1.5 text-center text-xs font-mono font-bold text-slate-900 tabular-nums">
+                    {n(s.participants)}
+                    {s.walkInParticipants > 0 && (
+                      <span className="ml-1 text-[9px] font-normal text-slate-500">
+                        (+{s.walkInParticipants} WI)
+                      </span>
+                    )}
+                  </td>
                   <td className={TD_NUM}>{n(s.male)}</td>
                   <td className={TD_NUM}>{n(s.female)}</td>
                 </tr>
@@ -664,10 +677,11 @@ export default async function FinalProgramReportPage({
                     beliaC: acc.beliaC + s.beliaC,
                     totalTeams: acc.totalTeams + s.totalTeams,
                     participants: acc.participants + s.participants,
+                    walkIn: acc.walkIn + s.walkInParticipants,
                     male: acc.male + s.male,
                     female: acc.female + s.female,
                   }),
-                  { schoolC: 0, rendahC: 0, menengahC: 0, beliaC: 0, totalTeams: 0, participants: 0, male: 0, female: 0 },
+                  { schoolC: 0, rendahC: 0, menengahC: 0, beliaC: 0, totalTeams: 0, participants: 0, walkIn: 0, male: 0, female: 0 },
                 );
                 return (
                   <tr className="bg-slate-900 text-white">
@@ -679,7 +693,10 @@ export default async function FinalProgramReportPage({
                     <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">{n(tot.menengahC)}</td>
                     <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">{n(tot.beliaC)}</td>
                     <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">{n(tot.totalTeams)}</td>
-                    <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">{n(tot.participants)}</td>
+                    <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">
+                      {n(tot.participants)}
+                      {tot.walkIn > 0 && <span className="ml-1 text-[9px] font-normal text-slate-400">(+{n(tot.walkIn)} WI)</span>}
+                    </td>
                     <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">{n(tot.male)}</td>
                     <td className="px-3 py-2 text-center font-mono font-black text-sm tabular-nums">{n(tot.female)}</td>
                   </tr>
@@ -687,6 +704,12 @@ export default async function FinalProgramReportPage({
               })()}
             </tbody>
           </table>
+          {d.walkInExtraParticipants > 0 && (
+            <p className="bg-slate-50 px-3 py-1.5 text-[10px] text-slate-500">
+              Peserta, Lelaki dan Perempuan termasuk peserta walk-in yang bukan peserta berdaftar (WI); setiap peserta dikira sekali sahaja.
+              Kontinjen dan Pasukan hanya bagi pasukan berdaftar.
+            </p>
+          )}
         </div>
 
         {/* ══ 1. MENGIKUT TAHAP PENDIDIKAN ══════════════════════════════════ */}

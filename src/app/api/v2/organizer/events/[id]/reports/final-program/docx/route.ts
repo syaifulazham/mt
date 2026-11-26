@@ -156,6 +156,9 @@ export async function GET(
     : [];
   // Unique participants (a participant in several categories counts once).
   const pesertaUtama  = d.teamParticipants;
+  /** Walk-ins who are also team participants — counted once, under Peserta Utama. */
+  const wiAlsoReg = d.walkInSummary.total - d.walkInExtraParticipants;
+  const wiSfx = wiAlsoReg > 0 ? ", selain berdaftar" : "";
   const jumlahPeserta = d.uniqueParticipants;
   const os = d.onlineSummary;
   const grandTotal    = jumlahPeserta + d.trainerCount;
@@ -255,8 +258,10 @@ export async function GET(
         dCell(nv(pesertaUtama), WHITE, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
-        dCell("2. Peserta Walk-in", SLATE_50, AlignmentType.LEFT),
-        dCell(nv(d.walkInSummary.total), SLATE_50, AlignmentType.RIGHT, true),
+        dCell(wiAlsoReg > 0
+          ? `2. Peserta Walk-in (${nv(d.walkInSummary.total)} walk-in, ${nv(wiAlsoReg)} juga peserta utama — tidak dikira semula)`
+          : "2. Peserta Walk-in", SLATE_50, AlignmentType.LEFT),
+        dCell(nv(d.walkInExtraParticipants), SLATE_50, AlignmentType.RIGHT, true),
       ]}),
       new TableRow({ children: [
         dCell("3. Jurulatih", WHITE, AlignmentType.LEFT),
@@ -385,8 +390,8 @@ export async function GET(
         hCell("Jantina"),
         hCell("Pelajar (Daftar)"),
         hCell("Belia (Daftar)"),
-        hCell("Pelajar (Walk-In)"),
-        hCell("Belia (Walk-In)"),
+        hCell(`Pelajar (Walk-In${wiSfx})`),
+        hCell(`Belia (Walk-In${wiSfx})`),
       ]}),
       new TableRow({ children: [
         dCell("Lelaki", INDIGO_50, AlignmentType.LEFT, true),
@@ -428,15 +433,15 @@ export async function GET(
   ];
   if (wiEthnTotal3 > 0) {
     ethnRows.push(
-      new TableRow({ children: [dCell("Peserta Walk-In", SLATE_800, AlignmentType.LEFT, true, WHITE, ECSPAN)] }),
+      new TableRow({ children: [dCell(`Peserta Walk-In${wiAlsoReg > 0 ? " (selain peserta berdaftar)" : ""}`, SLATE_800, AlignmentType.LEFT, true, WHITE, ECSPAN)] }),
       new TableRow({ children: wiEthnVals3.map(v => dCell(nv(v), WHITE, AlignmentType.CENTER, true)) }),
       new TableRow({ children: wiEthnVals3.map(v => dCell(
         wiEthnTotal3 ? `${(v / wiEthnTotal3 * 100).toFixed(1)}%` : "", SLATE_50, AlignmentType.CENTER, false, SLATE_400,
       ))}),
-      new TableRow({ children: [dCell(`Jumlah Walk-In: ${wiEthnTotal3}`, SLATE_200, AlignmentType.RIGHT, true, TEXT_DARK, ECSPAN)] }),
+      new TableRow({ children: [dCell(`Jumlah Walk-In: ${wiEthnTotal3}${wiAlsoReg > 0 ? ` (${wiAlsoReg} peserta walk-in juga peserta berdaftar — dikira sekali sahaja)` : ""}`, SLATE_200, AlignmentType.RIGHT, true, TEXT_DARK, ECSPAN)] }),
     );
   }
-  ethnRows.push(new TableRow({ children: [dCell(`Jumlah Keseluruhan: ${ethnGrandTotal3}`, SLATE_900, AlignmentType.RIGHT, true, WHITE, ECSPAN)] }));
+  ethnRows.push(new TableRow({ children: [dCell(`Jumlah Keseluruhan (peserta unik): ${ethnGrandTotal3}`, SLATE_900, AlignmentType.RIGHT, true, WHITE, ECSPAN)] }));
   const ethnTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: NO_BORDERS,
@@ -447,7 +452,7 @@ export async function GET(
   const stateRows: TableRow[] = [
     new TableRow({ children: [
       hCell("Negeri"), hCell("Kont. Sekolah"), hCell("Sek. Rendah"), hCell("Sek. Menengah"),
-      hCell("Kont. Belia"), hCell("Pasukan"), hCell("Peserta"), hCell("Lelaki"), hCell("Perempuan"),
+      hCell("Kont. Belia"), hCell("Pasukan"), hCell("Peserta (termasuk walk-in)"), hCell("Lelaki"), hCell("Perempuan"),
     ]}),
   ];
   d.stateStats.forEach((s: StateStat, i: number) => {
