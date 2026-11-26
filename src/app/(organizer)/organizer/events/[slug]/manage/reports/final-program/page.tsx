@@ -236,6 +236,14 @@ export default async function FinalProgramReportPage({
                     {n(d.regSummary.schoolContingents + d.regSummary.beliaContingents)}
                   </td>
                 </tr>
+                {d.regSummary.prasekolahContingents > 0 && (
+                  <tr className={TR_ODD}>
+                    <td className={`${TD} pl-6`}>↳ Prasekolah</td>
+                    <td className={TD_NUM}>{n(d.regSummary.prasekolahContingents)}</td>
+                    <td className={`${TD} text-center text-slate-400`}>—</td>
+                    <td className={TD_NUM}>{n(d.regSummary.prasekolahContingents)}</td>
+                  </tr>
+                )}
                 <tr className={TR_EVEN}>
                   <td className={`${TD} pl-6`}>↳ Sekolah Rendah</td>
                   <td className={TD_NUM}>{n(d.regSummary.rendahContingents)}</td>
@@ -670,6 +678,14 @@ export default async function FinalProgramReportPage({
             <tbody>
               {[
                 {
+                  label: "Prasekolah",
+                  comps: d.prasekolahComps,
+                  levelParticipants: d.prasekolahParticipants,
+                  labelCls: "bg-rose-800 text-white",
+                  subCls: "bg-rose-50",
+                  totCls: "bg-rose-100 text-rose-900",
+                },
+                {
                   label: "Sekolah Rendah",
                   comps: d.rendahComps,
                   levelParticipants: d.rendahParticipants,
@@ -749,7 +765,7 @@ export default async function FinalProgramReportPage({
         </div>
 
         {/* ══ WALK-IN MENGIKUT TAHAP PENDIDIKAN ════════════════════════════ */}
-        {(d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0) && (
+        {(d.walkInPrasekolahComps.length > 0 || d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0) && (
           <div className="overflow-hidden rounded-sm">
             <div className="bg-slate-900 px-4 py-2.5 flex flex-col gap-0.5">
               <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">
@@ -771,6 +787,13 @@ export default async function FinalProgramReportPage({
               </thead>
               <tbody>
                 {[
+                  {
+                    label: "Prasekolah",
+                    comps: d.walkInPrasekolahComps,
+                    labelCls: "bg-rose-800 text-white",
+                    subCls: "bg-rose-50",
+                    totCls: "bg-rose-100 text-rose-900",
+                  },
                   {
                     label: "Sekolah Rendah",
                     comps: d.walkInRendahComps,
@@ -835,7 +858,7 @@ export default async function FinalProgramReportPage({
                 )}
                 {(() => {
                   const totalPenyertaan = [
-                    ...d.walkInRendahComps, ...d.walkInMenengahComps, ...d.walkInBeliaComps
+                    ...d.walkInPrasekolahComps, ...d.walkInRendahComps, ...d.walkInMenengahComps, ...d.walkInBeliaComps
                   ].reduce((s, c) => s + c.participants, 0);
                   const uniquePeserta = d.walkInSummary.total;
                   return (

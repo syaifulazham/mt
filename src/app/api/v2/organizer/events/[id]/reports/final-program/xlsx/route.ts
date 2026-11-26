@@ -18,7 +18,7 @@ const C = {
   indigo800: "3730A3", indigo100: "E0E7FF", indigo50: "EEF2FF",
   amber800:  "92400E", amber100:  "FEF3C7", amber50:  "FFFBEB",
   teal800:   "115E59", teal100:   "CCFBF1", teal50:   "F0FDFA",
-  rose50:    "FFF1F2",
+  rose800:   "9F1239", rose100:   "FFE4E6", rose50:   "FFF1F2",
   maroon:    "7B0D1E",
 };
 
@@ -156,6 +156,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
     ["Kontinjen Sekolah / Belia",
       nv(d.regSummary.schoolContingents), nv(d.regSummary.beliaContingents),
       nv(d.regSummary.schoolContingents + d.regSummary.beliaContingents), C.slate100],
+    ...(d.regSummary.prasekolahContingents ? [["  ↳ Prasekolah", nv(d.regSummary.prasekolahContingents), "—", nv(d.regSummary.prasekolahContingents), C.rose50] as [string, string | number, string | number, string | number, string]] : []),
     ["  ↳ Sekolah Rendah",  nv(d.regSummary.rendahContingents),   "—", nv(d.regSummary.rendahContingents),   C.indigo50],
     ["  ↳ Sekolah Menengah",nv(d.regSummary.menengahContingents), "—", nv(d.regSummary.menengahContingents), C.amber50],
     ["  ↳ Belia",           "—", nv(d.regSummary.beliaContingents),    nv(d.regSummary.beliaContingents),    C.teal50],
@@ -323,6 +324,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
   ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
   ws.getRow(r).height = 18; r++;
   const levelGroups = [
+    { label: "Prasekolah", comps: d.prasekolahComps, hBg: C.rose800, rBg: C.rose50, tBg: C.rose100, levelPax: d.prasekolahParticipants },
     { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100, levelPax: d.rendahParticipants },
     { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100,  levelPax: d.menengahParticipants },
     { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100,   levelPax: d.regSummary.beliaParticipants },
@@ -358,12 +360,13 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
   }
 
   // ═══ SECTION 4b: WALK-IN BY EDUCATION LEVEL ════════════════════════════════
-  const hasWalkInComps = d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
+  const hasWalkInComps = d.walkInPrasekolahComps.length > 0 || d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
   if (hasWalkInComps) {
     sectionHeader("Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan", "Walk-In");
     ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
     ws.getRow(r).height = 18; r++;
     const wiLevelGroups = [
+      { label: "Prasekolah", comps: d.walkInPrasekolahComps, hBg: C.rose800, rBg: C.rose50, tBg: C.rose100 },
       { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
       { label: "Sekolah Menengah", comps: d.walkInMenengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
       { label: "Belia",            comps: d.walkInBeliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
@@ -390,7 +393,7 @@ function buildSingleSheetLegacy(wb: ExcelJS.Workbook, d: FinalProgramData) {
       applyCell(ws.getCell(r, 5), nv(subP), g.tBg, center, true);
       r++; spacer();
     }
-    const wiTotal2 = [d.walkInRendahComps, d.walkInMenengahComps, d.walkInBeliaComps]
+    const wiTotal2 = [d.walkInPrasekolahComps, d.walkInRendahComps, d.walkInMenengahComps, d.walkInBeliaComps]
       .flat().reduce((s, c) => s + c.participants, 0);
     ws.mergeCells(r, 1, r, 4);
     applyCell(ws.getCell(r, 1), "JUMLAH KESELURUHAN PESERTA WALK-IN", C.slate900, left, true, C.white);
@@ -548,6 +551,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     // Berdaftar data (A-D)
     const bRows: [string, string|number, string|number, string|number, string, boolean][] = [
       ["Kontinjen Sekolah / Belia", nv(d.regSummary.schoolContingents), nv(d.regSummary.beliaContingents), nv(d.regSummary.schoolContingents + d.regSummary.beliaContingents), C.slate100, true],
+      ...(d.regSummary.prasekolahContingents ? [["  ↳ Prasekolah", nv(d.regSummary.prasekolahContingents), "—", nv(d.regSummary.prasekolahContingents), C.rose50, false] as [string, string | number, string | number, string | number, string, boolean]] : []),
       ["  ↳ Sekolah Rendah",  nv(d.regSummary.rendahContingents),   "—", nv(d.regSummary.rendahContingents),   C.indigo50, false],
       ["  ↳ Sekolah Menengah",nv(d.regSummary.menengahContingents), "—", nv(d.regSummary.menengahContingents), C.amber50, false],
       ["  ↳ Belia",           "—", nv(d.regSummary.beliaContingents), nv(d.regSummary.beliaContingents),       C.teal50, false],
@@ -586,7 +590,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     // Gender — school
     ws.mergeCells("A17:D17");
-    applyMasthead(ws.getCell("A17"), "Jantina Pelajar Sekolah (Rendah & Menengah)", C.slate800);
+    applyMasthead(ws.getCell("A17"), "Jantina Pelajar (Prasekolah, Rendah & Menengah)", C.slate800);
     ws.getRow(17).height = 18;
     applyHeader(ws.getCell("B18"), "Bilangan"); applyHeader(ws.getCell("C18"), "%");
     applyCell(ws.getCell("A19"), "Lelaki",    C.indigo50, left, true, C.indigo800);
@@ -716,6 +720,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
 
     let r = 3;
     const levelGroups = [
+      { label: "Prasekolah", comps: d.prasekolahComps, hBg: C.rose800, rBg: C.rose50, tBg: C.rose100, levelPax: d.prasekolahParticipants },
       { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100, levelPax: d.rendahParticipants },
       { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100,  levelPax: d.menengahParticipants },
       { label: "Belia",            comps: d.beliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100,   levelPax: d.regSummary.beliaParticipants },
@@ -751,7 +756,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
     }
 
     // Walk-In competitions by level
-    const hasWI = d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
+    const hasWI = d.walkInPrasekolahComps.length > 0 || d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
     if (hasWI) {
       r++;
       ws.mergeCells(r, 1, r, 5);
@@ -760,6 +765,7 @@ function buildMultiSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
       ws.getRow(r).height = 18; r++;
       const wiLevelGrps = [
+        { label: "Prasekolah", comps: d.walkInPrasekolahComps, hBg: C.rose800, rBg: C.rose50, tBg: C.rose100 },
         { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
         { label: "Sekolah Menengah", comps: d.walkInMenengahComps, hBg: C.amber800,  rBg: C.amber50,  tBg: C.amber100 },
         { label: "Belia",            comps: d.walkInBeliaComps,    hBg: C.teal800,   rBg: C.teal50,   tBg: C.teal100 },
@@ -955,6 +961,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   ws.getRow(r).height = 18; r++;
   const regRows: [string, number | string, number | string, number | string, string][] = [
     ["Kontinjen Sekolah / Belia", nv(d.regSummary.schoolContingents), nv(d.regSummary.beliaContingents), nv(d.regSummary.schoolContingents + d.regSummary.beliaContingents), C.slate100],
+    ...(d.regSummary.prasekolahContingents ? [["  ↳ Prasekolah", nv(d.regSummary.prasekolahContingents), "—", nv(d.regSummary.prasekolahContingents), C.rose50] as [string, string | number, string | number, string | number, string]] : []),
     ["  ↳ Sekolah Rendah", nv(d.regSummary.rendahContingents), "—", nv(d.regSummary.rendahContingents), C.indigo50],
     ["  ↳ Sekolah Menengah", nv(d.regSummary.menengahContingents), "—", nv(d.regSummary.menengahContingents), C.amber50],
     ["  ↳ Belia", "—", nv(d.regSummary.beliaContingents), nv(d.regSummary.beliaContingents), C.teal50],
@@ -1142,6 +1149,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   ["Tahap Pendidikan", "Kod", "Pertandingan", "Pasukan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
   ws.getRow(r).height = 18; r++;
   const levelGroups = [
+    { label: "Prasekolah", comps: d.prasekolahComps, hBg: C.rose800, rBg: C.rose50, tBg: C.rose100, levelPax: d.prasekolahParticipants },
     { label: "Sekolah Rendah", comps: d.rendahComps, hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100, levelPax: d.rendahParticipants },
     { label: "Sekolah Menengah", comps: d.menengahComps, hBg: C.amber800, rBg: C.amber50, tBg: C.amber100, levelPax: d.menengahParticipants },
     { label: "Belia", comps: d.beliaComps, hBg: C.teal800, rBg: C.teal50, tBg: C.teal100, levelPax: d.regSummary.beliaParticipants },
@@ -1176,12 +1184,13 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
   }
 
   // Walk-In Mengikut Tahap Pendidikan
-  const hasWalkInComps = d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
+  const hasWalkInComps = d.walkInPrasekolahComps.length > 0 || d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0;
   if (hasWalkInComps) {
     sectionHeader("Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan", "Penyertaan Walk-In");
     ["Tahap Pendidikan", "Kod", "Pertandingan", "Peserta"].forEach((h, i) => applyHeader(ws.getCell(r, i + 1), h));
     ws.getRow(r).height = 18; r++;
     const wiLevelGroups = [
+      { label: "Prasekolah", comps: d.walkInPrasekolahComps, hBg: C.rose800, rBg: C.rose50, tBg: C.rose100 },
       { label: "Sekolah Rendah", comps: d.walkInRendahComps, hBg: C.indigo800, rBg: C.indigo50, tBg: C.indigo100 },
       { label: "Sekolah Menengah", comps: d.walkInMenengahComps, hBg: C.amber800, rBg: C.amber50, tBg: C.amber100 },
       { label: "Belia", comps: d.walkInBeliaComps, hBg: C.teal800, rBg: C.teal50, tBg: C.teal100 },
@@ -1206,7 +1215,7 @@ function buildSingleSheet(wb: ExcelJS.Workbook, d: FinalProgramData) {
       applyCell(ws.getCell(r, 4), nv(subP), g.tBg, center, true);
       r++;
     }
-    const totalPenyertaan = [...d.walkInRendahComps, ...d.walkInMenengahComps, ...d.walkInBeliaComps].reduce((s, c) => s + c.participants, 0);
+    const totalPenyertaan = [...d.walkInPrasekolahComps, ...d.walkInRendahComps, ...d.walkInMenengahComps, ...d.walkInBeliaComps].reduce((s, c) => s + c.participants, 0);
     ws.mergeCells(r, 1, r, 3);
     applyCell(ws.getCell(r, 1), "Jumlah Penyertaan (termasuk penyertaan berganda)", C.slate700, left, true, C.white);
     applyCell(ws.getCell(r, 4), nv(totalPenyertaan), C.slate700, center, true, C.white);

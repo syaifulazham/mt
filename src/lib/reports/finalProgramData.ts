@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-export type Level = "RENDAH" | "MENENGAH" | "BELIA";
+export type Level = "PRASEKOLAH" | "RENDAH" | "MENENGAH" | "BELIA";
 
 export interface CompStat {
   code: string;
@@ -14,6 +14,8 @@ export interface CompStat {
 export interface StateStat {
   stateName: string;
   schoolC: number;
+  /** Pra-sekolah contingents (also counted in schoolC). */
+  prasekolahC: number;
   rendahC: number;
   menengahC: number;
   beliaC: number;
@@ -64,6 +66,7 @@ export interface FinalProgramData {
   slug: string;
   locationLabel: string;
   regSummary: {
+    prasekolahContingents: number;
     rendahContingents: number;
     menengahContingents: number;
     schoolContingents: number;
@@ -99,12 +102,15 @@ export interface FinalProgramData {
   };
   trainerCount: number;
   stateStats: StateStat[];
+  prasekolahComps: CompStat[];
   rendahComps: CompStat[];
   menengahComps: CompStat[];
   beliaComps: CompStat[];
+  prasekolahParticipants: number;
   rendahParticipants: number;
   menengahParticipants: number;
   stateCompStats: StateCompGroup[];
+  walkInPrasekolahComps: WalkInCompStat[];
   walkInRendahComps: WalkInCompStat[];
   walkInMenengahComps: WalkInCompStat[];
   walkInBeliaComps: WalkInCompStat[];
@@ -127,6 +133,7 @@ function classifyLevel(targetGroups: { targetGroup: { schoolLevel: string } }[])
   const levels = targetGroups.map(tg => tg.targetGroup.schoolLevel.toUpperCase());
   if (levels.some(l => l.includes("PRIMARY"))) return "RENDAH";
   if (levels.some(l => l.includes("SECONDARY"))) return "MENENGAH";
+  if (levels.some(l => l.includes("KINDERGARTEN"))) return "PRASEKOLAH";
   return "BELIA";
 }
 
@@ -313,10 +320,12 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     })),
   }));
 
+  const prasekolahTDs = tds.filter(t => t.level === "PRASEKOLAH");
   const rendahTDs  = tds.filter(t => t.level === "RENDAH");
   const menengahTDs = tds.filter(t => t.level === "MENENGAH");
   const beliaTDs   = tds.filter(t => t.level === "BELIA");
-  const schoolTDs  = [...rendahTDs, ...menengahTDs];
+  // Pelajar = pra-sekolah + sekolah rendah + sekolah menengah.
+  const schoolTDs  = [...prasekolahTDs, ...rendahTDs, ...menengahTDs];
 
   // unique trainers of the teams that attended
   const trainerCount = new Set(teams.flatMap(t => t.trainers.map(tr => tr.trainerId))).size;
@@ -327,9 +336,10 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
 
   // summary
   const regSummary = {
+    prasekolahContingents: new Set(prasekolahTDs.map(t => t.contingentId)).size,
     rendahContingents:  new Set(rendahTDs.map(t => t.contingentId)).size,
     menengahContingents: new Set(menengahTDs.map(t => t.contingentId)).size,
-    schoolContingents:  new Set([...rendahTDs, ...menengahTDs].map(t => t.contingentId)).size,
+    schoolContingents:  new Set(schoolTDs.map(t => t.contingentId)).size,
     beliaContingents:   new Set(beliaTDs.map(t => t.contingentId)).size,
     schoolTeams:        schoolTDs.length,
     beliaTeams:         beliaTDs.length,
@@ -461,19 +471,20 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
 
   // state stats
   const stateMap = new Map<string, {
-    rCIds: Set<string>; mCIds: Set<string>; bCIds: Set<string>;
-    rTeams: number; mTeams: number; bTeams: number;
+    pCIds: Set<string>; rCIds: Set<string>; mCIds: Set<string>; bCIds: Set<string>;
+    pTeams: number; rTeams: number; mTeams: number; bTeams: number;
     pids: Set<string>; malePids: Set<string>; femalePids: Set<string>;
   }>();
   for (const t of tds) {
     if (!stateMap.has(t.stateName))
       stateMap.set(t.stateName, {
-        rCIds: new Set(), mCIds: new Set(), bCIds: new Set(),
-        rTeams: 0, mTeams: 0, bTeams: 0,
+        pCIds: new Set(), rCIds: new Set(), mCIds: new Set(), bCIds: new Set(),
+        pTeams: 0, rTeams: 0, mTeams: 0, bTeams: 0,
         pids: new Set(), malePids: new Set(), femalePids: new Set(),
       });
     const s = stateMap.get(t.stateName)!;
-    if (t.level === "RENDAH")    { s.rCIds.add(t.contingentId); s.rTeams++; }
+    if (t.level === "PRASEKOLAH") { s.pCIds.add(t.contingentId); s.pTeams++; }
+    else if (t.level === "RENDAH")    { s.rCIds.add(t.contingentId); s.rTeams++; }
     else if (t.level === "MENENGAH") { s.mCIds.add(t.contingentId); s.mTeams++; }
     else                         { s.bCIds.add(t.contingentId); s.bTeams++; }
     t.members.forEach(m => {
@@ -485,14 +496,15 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   const stateStats: StateStat[] = [...stateMap.entries()]
     .map(([stateName, s]) => ({
       stateName,
-      schoolC:   new Set([...s.rCIds, ...s.mCIds]).size,
+      schoolC:   new Set([...s.pCIds, ...s.rCIds, ...s.mCIds]).size,
+      prasekolahC: s.pCIds.size,
       rendahC:   s.rCIds.size,
       menengahC: s.mCIds.size,
       beliaC:    s.bCIds.size,
       rTeams:    s.rTeams,
       mTeams:    s.mTeams,
       bTeams:    s.bTeams,
-      totalTeams: s.rTeams + s.mTeams + s.bTeams,
+      totalTeams: s.pTeams + s.rTeams + s.mTeams + s.bTeams,
       participants: s.pids.size,
       male:  s.malePids.size,
       female: s.femalePids.size,
@@ -532,12 +544,15 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     schoolMale, schoolFemale, beliaMale, beliaFemale,
     ethnicityStats,
     stateStats,
+    prasekolahComps: allComps.filter(c => c.level === "PRASEKOLAH"),
     rendahComps:   allComps.filter(c => c.level === "RENDAH"),
     menengahComps: allComps.filter(c => c.level === "MENENGAH"),
     beliaComps:    allComps.filter(c => c.level === "BELIA"),
+    prasekolahParticipants: uniquePids(prasekolahTDs).size,
     rendahParticipants:   uniquePids(rendahTDs).size,
     menengahParticipants: uniquePids(menengahTDs).size,
     stateCompStats,
+    walkInPrasekolahComps: allWiComps.filter(c => c.level === "PRASEKOLAH"),
     walkInRendahComps:   allWiComps.filter(c => c.level === "RENDAH"),
     walkInMenengahComps: allWiComps.filter(c => c.level === "MENENGAH"),
     walkInBeliaComps:    allWiComps.filter(c => c.level === "BELIA"),

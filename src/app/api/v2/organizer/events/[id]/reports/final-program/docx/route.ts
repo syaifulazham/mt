@@ -22,6 +22,8 @@ const SLATE_50   = "F8FAFC";   // alternate light row
 const WHITE      = "FFFFFF";
 const TEXT_DARK  = "0F172A";   // body text
 
+const ROSE_800   = "9F1239";   // Prasekolah label
+const ROSE_100   = "FFE4E6";   // Prasekolah sub-total
 const INDIGO_800 = "3730A3";   // Sekolah Rendah label
 const INDIGO_50  = "EEF2FF";   // Rendah data rows / Lelaki
 const INDIGO_100 = "E0E7FF";   // Rendah sub-total
@@ -276,6 +278,12 @@ export async function GET(
         dCell(nv(d.regSummary.beliaContingents),  SLATE_100, AlignmentType.RIGHT, true),
         dCell(nv(d.regSummary.schoolContingents + d.regSummary.beliaContingents), SLATE_100, AlignmentType.RIGHT, true),
       ]}),
+      ...(d.regSummary.prasekolahContingents ? [new TableRow({ children: [
+        dCell("  ↳ Prasekolah", ROSE_50),
+        dCell(nv(d.regSummary.prasekolahContingents), ROSE_50, AlignmentType.RIGHT),
+        dCell("—", ROSE_50, AlignmentType.CENTER),
+        dCell(nv(d.regSummary.prasekolahContingents), ROSE_50, AlignmentType.RIGHT),
+      ]})] : []),
       new TableRow({ children: [
         dCell("  ↳ Sekolah Rendah", INDIGO_50),
         dCell(nv(d.regSummary.rendahContingents), INDIGO_50, AlignmentType.RIGHT),
@@ -449,6 +457,7 @@ export async function GET(
     new TableRow({ children: [hCell("Tahap Pendidikan"), hCell("Kod"), hCell("Pertandingan"), hCell("Pasukan"), hCell("Peserta")] }),
   ];
   const levelGroups = [
+    { label: "Prasekolah",       comps: d.prasekolahComps, hBg: ROSE_800, rBg: ROSE_50,    tBg: ROSE_100,   levelPax: d.prasekolahParticipants },
     { label: "Sekolah Rendah",   comps: d.rendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100, levelPax: d.rendahParticipants },
     { label: "Sekolah Menengah", comps: d.menengahComps, hBg: AMBER_800,  rBg: AMBER_50,   tBg: AMBER_100,  levelPax: d.menengahParticipants },
     { label: "Belia",            comps: d.beliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100,   levelPax: d.regSummary.beliaParticipants },
@@ -568,7 +577,7 @@ export async function GET(
         levelTable,
         GAP,
 
-        ...(d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0 ? [
+        ...(d.walkInPrasekolahComps.length > 0 || d.walkInRendahComps.length > 0 || d.walkInMenengahComps.length > 0 || d.walkInBeliaComps.length > 0 ? [
           sectionMasthead("Walk-In", "Penyertaan Pertandingan Walk-In Mengikut Tahap Pendidikan"),
           SMALL_GAP,
           (() => {
@@ -576,6 +585,7 @@ export async function GET(
               new TableRow({ children: [hCell("Tahap Pendidikan"), hCell("Kod"), hCell("Pertandingan"), hCell("Pasukan"), hCell("Peserta")] }),
             ];
             const wiLevelGrps3 = [
+              { label: "Prasekolah",       comps: d.walkInPrasekolahComps, hBg: ROSE_800, rBg: ROSE_50,    tBg: ROSE_100 },
               { label: "Sekolah Rendah",   comps: d.walkInRendahComps,   hBg: INDIGO_800, rBg: INDIGO_50,  tBg: INDIGO_100 },
               { label: "Sekolah Menengah", comps: d.walkInMenengahComps, hBg: AMBER_800,  rBg: AMBER_50,   tBg: AMBER_100 },
               { label: "Belia",            comps: d.walkInBeliaComps,    hBg: TEAL_800,   rBg: TEAL_50,    tBg: TEAL_100 },
