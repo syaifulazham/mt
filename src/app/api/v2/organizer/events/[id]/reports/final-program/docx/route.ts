@@ -314,6 +314,17 @@ export async function GET(
         dCell(nv(d.regSummary.beliaParticipants),  SLATE_50, AlignmentType.RIGHT),
         dCell(nv(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants), SLATE_50, AlignmentType.RIGHT, true),
       ]}),
+      ...([
+        ["Peserta Prasekolah", d.regSummary.prasekolahPax, true],
+        ["Peserta Sekolah Rendah", d.regSummary.rendahPax, true],
+        ["Peserta Sekolah Menengah", d.regSummary.menengahPax, true],
+        ["Peserta Belia", d.regSummary.beliaParticipants, false],
+      ] as const).filter(([, v]) => v > 0).map(([label, v, school]) => new TableRow({ children: [
+        dCell(`  ↳ ${label}`, WHITE),
+        dCell(school ? nv(v) : "—", WHITE, school ? AlignmentType.RIGHT : AlignmentType.CENTER),
+        dCell(school ? "—" : nv(v), WHITE, school ? AlignmentType.CENTER : AlignmentType.RIGHT),
+        dCell(nv(v), WHITE, AlignmentType.RIGHT),
+      ]})),
       new TableRow({ children: [
         dCell("Jumlah Pasukan (Walk-In, berpasukan)", SLATE_50),
         dCell(nv(d.walkInSummary.schoolTeams), SLATE_50, AlignmentType.RIGHT),

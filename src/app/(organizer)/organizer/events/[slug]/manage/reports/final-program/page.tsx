@@ -276,6 +276,19 @@ export default async function FinalProgramReportPage({
                     {n(d.regSummary.schoolParticipants + d.regSummary.beliaParticipants)}
                   </td>
                 </tr>
+                {([
+                  ["Peserta Prasekolah", d.regSummary.prasekolahPax, true],
+                  ["Peserta Sekolah Rendah", d.regSummary.rendahPax, true],
+                  ["Peserta Sekolah Menengah", d.regSummary.menengahPax, true],
+                  ["Peserta Belia", d.regSummary.beliaParticipants, false],
+                ] as const).filter(([, v]) => v > 0).map(([label, v, school]) => (
+                  <tr key={label} className={TR_ODD}>
+                    <td className={`${TD} pl-6`}>↳ {label}</td>
+                    <td className={school ? TD_NUM : `${TD} text-center text-slate-400`}>{school ? n(v) : "—"}</td>
+                    <td className={school ? `${TD} text-center text-slate-400` : TD_NUM}>{school ? "—" : n(v)}</td>
+                    <td className={TD_NUM}>{n(v)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
 

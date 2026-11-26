@@ -75,6 +75,10 @@ export interface FinalProgramData {
     beliaTeams: number;
     schoolParticipants: number;
     beliaParticipants: number;
+    /** Participants by their own level — the Pelajar breakdown (Laporan Kehadiran Akhir's target groups). */
+    prasekolahPax: number;
+    rendahPax: number;
+    menengahPax: number;
   };
   walkInSummary: {
     schoolParticipants: number;
@@ -128,6 +132,24 @@ export interface FinalProgramData {
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+type TgInfo = { targetGroup: { schoolLevel: string; classGrades: string[]; ppki: boolean } };
+const LEVEL_OF: Record<string, Level> = { KINDERGARTEN: "PRASEKOLAH", PRIMARY: "RENDAH", SECONDARY: "MENENGAH" };
+
+/**
+ * The participant's own level, as Laporan Kehadiran Akhir counts them: the
+ * competition's target group that fits the participant (PPKI, then class
+ * grade), else its first. A competition open to several levels (e.g. 6.6O
+ * Innovatech PPKI — Rendah, Menengah and Belia) thus splits by participant.
+ */
+function participantLevel(tgs: TgInfo[], p: { classGrade: string | null; ppki: boolean }): Level {
+  if (!tgs.length) return "BELIA";
+  const grade = (p.classGrade ?? "").trim().toLowerCase();
+  const tg = tgs.find(t => t.targetGroup.ppki === p.ppki && t.targetGroup.classGrades.some(g => g.toLowerCase() === grade))
+    ?? tgs.find(t => t.targetGroup.ppki === p.ppki)
+    ?? tgs[0];
+  return LEVEL_OF[tg.targetGroup.schoolLevel.toUpperCase()] ?? "BELIA";
+}
 
 function classifyLevel(targetGroups: { targetGroup: { schoolLevel: string } }[]): Level {
   const levels = targetGroups.map(tg => tg.targetGroup.schoolLevel.toUpperCase());
@@ -205,7 +227,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
       competition: {
         select: {
           id: true, code: true, name: true,
-          targetGroups: { include: { targetGroup: { select: { schoolLevel: true } } } },
+          targetGroups: { include: { targetGroup: { select: { schoolLevel: true, classGrades: true, ppki: true } } } },
         },
       },
       contingent: {
@@ -220,7 +242,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
       },
       members: {
         select: {
-          participant: { select: { id: true, gender: true, ethnicity: true } },
+          participant: { select: { id: true, gender: true, ethnicity: true, classGrade: true, ppki: true } },
         },
       },
       trainers: {
@@ -266,18 +288,18 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     select: {
       id: true,
       walkInCompetitionId: true,
-      team: { select: { id: true, members: { select: { participant: { select: { id: true, gender: true, ethnicity: true } } } } } },
+      team: { select: { id: true, members: { select: { participant: { select: { id: true, gender: true, ethnicity: true, classGrade: true, ppki: true } } } } } },
       walkInCompetition: {
         select: {
           competition: {
             select: {
               id: true, code: true, name: true,
-              targetGroups: { include: { targetGroup: { select: { schoolLevel: true } } } },
+              targetGroups: { include: { targetGroup: { select: { schoolLevel: true, classGrades: true, ppki: true } } } },
             },
           },
         },
       },
-      participant: { select: { id: true, gender: true, ethnicity: true } },
+      participant: { select: { id: true, gender: true, ethnicity: true, classGrade: true, ppki: true } },
       contingent: {
         select: {
           state: { select: { name: true } },
@@ -303,7 +325,8 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   type TD = {
     compId: string; compCode: string; compName: string; level: Level;
     contingentId: string; stateName: string;
-    members: { id: string; gender: string; ethnicity: string | null }[];
+    /** level: the participant's own (participantLevel) — participant counts and gender use it. */
+    members: { id: string; gender: string; ethnicity: string | null; level: Level }[];
   };
 
   const tds: TD[] = teams.map(t => ({
@@ -317,6 +340,7 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
       id: m.participant.id,
       gender: m.participant.gender as string,
       ethnicity: m.participant.ethnicity as string | null,
+      level: participantLevel(t.competition.targetGroups, m.participant),
     })),
   }));
 
@@ -331,8 +355,12 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   const trainerCount = new Set(teams.flatMap(t => t.trainers.map(tr => tr.trainerId))).size;
 
   const uniquePids = (list: TD[]) => new Set(list.flatMap(t => t.members.map(m => m.id)));
-  const genderStat = (list: TD[], g: string) =>
-    new Set(list.flatMap(t => t.members.filter(m => m.gender === g).map(m => m.id))).size;
+  // Participants by their own level (Pelajar = every level but Belia).
+  const allMembers = tds.flatMap(t => t.members);
+  const paxAt = (pred: (l: Level) => boolean, g?: string) =>
+    new Set(allMembers.filter(m => pred(m.level) && (!g || m.gender === g)).map(m => m.id)).size;
+  const isSchool = (l: Level) => l !== "BELIA";
+  const isBelia = (l: Level) => l === "BELIA";
 
   // summary
   const regSummary = {
@@ -343,15 +371,18 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
     beliaContingents:   new Set(beliaTDs.map(t => t.contingentId)).size,
     schoolTeams:        schoolTDs.length,
     beliaTeams:         beliaTDs.length,
-    schoolParticipants: uniquePids(schoolTDs).size,
-    beliaParticipants:  uniquePids(beliaTDs).size,
+    schoolParticipants: paxAt(isSchool),
+    beliaParticipants:  paxAt(isBelia),
+    prasekolahPax:      paxAt(l => l === "PRASEKOLAH"),
+    rendahPax:          paxAt(l => l === "RENDAH"),
+    menengahPax:        paxAt(l => l === "MENENGAH"),
   };
 
   // gender
-  const schoolMale   = genderStat(schoolTDs, "MALE");
-  const schoolFemale = genderStat(schoolTDs, "FEMALE");
-  const beliaMale    = genderStat(beliaTDs, "MALE");
-  const beliaFemale  = genderStat(beliaTDs, "FEMALE");
+  const schoolMale   = paxAt(isSchool, "MALE");
+  const schoolFemale = paxAt(isSchool, "FEMALE");
+  const beliaMale    = paxAt(isBelia, "MALE");
+  const beliaFemale  = paxAt(isBelia, "FEMALE");
 
   // ethnicity
   const ethn = new Map<string, Set<string>>();
@@ -372,8 +403,9 @@ export async function computeFinalProgramData(eventId: string, mode: ProgramMode
   };
 
   // walk-in
-  const wiSchool = walkIns.filter(w => classifyLevel(w.walkInCompetition.competition.targetGroups) !== "BELIA");
-  const wiBelia  = walkIns.filter(w => classifyLevel(w.walkInCompetition.competition.targetGroups) === "BELIA");
+  const wiLevel = (w: (typeof walkIns)[number]) => participantLevel(w.walkInCompetition.competition.targetGroups, w.participant);
+  const wiSchool = walkIns.filter(w => wiLevel(w) !== "BELIA");
+  const wiBelia  = walkIns.filter(w => wiLevel(w) === "BELIA");
   const walkInSummary = {
     schoolParticipants: new Set(wiSchool.map(w => w.participant.id)).size,
     beliaParticipants:  new Set(wiBelia.map(w => w.participant.id)).size,
