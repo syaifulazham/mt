@@ -1911,9 +1911,10 @@ model Season {
   archivedAt   DateTime? // operational data absent/purged: render + lookup only, no issuing
   createdAt    DateTime  @default(now())
 
-  templates      CertTemplate[]
-  certificates   Certificate[]
-  serialCounters CertSerialCounter[]
+  templates         CertTemplate[]
+  certificates      Certificate[]
+  serialCounters    CertSerialCounter[]
+  pajskCertificates PajskCertificate[]
 
   @@index([year])
   @@map("seasons")
@@ -2020,6 +2021,45 @@ model Certificate {
   @@index([templateVersionId])
   @@index([eventId, teamId])
   @@map("certificates")
+}
+
+/// PAJSK (co-curricular marks) certificate — one per participant per
+/// competition code per season, derived only from that participant's issued
+/// `certificates` rows and the season's PAJSK rules (app_settings
+/// `pajsk_rules_<year>`; see src/lib/pajsk/). Same archival contract as
+/// `certificates`: a foreign key to `seasons` and nothing else; participantId is
+/// an opaque string. `code` is the 10-character public verification code —
+/// printed, never changed once issued. The snapshot is refreshed when the
+/// participant's certificates change; `status` WITHDRAWN = no longer derivable.
+model PajskCertificate {
+  id              String @id @default(cuid())
+  seasonId        String
+  code            String @unique // 10 chars, Crockford base32 — printed
+  status          String @default("VALID") // VALID | WITHDRAWN
+  participantId   String // opaque, no relation (archival contract)
+  competitionCode String
+
+  // Snapshot — everything the PDF and the verification page need
+  recipientName   String
+  schoolName      String?
+  stateName       String?
+  competitionName String?
+  stage           String // KEBANGSAAN | NEGERI | SEKOLAH (highest reached)
+  placing         Int? // best place 1..placesShown, at any stage
+  placingStage    String?
+  pelibatanMarks  Int
+  pencapaianMarks Int?
+  rulesYear       Int
+  sourceCertIds   String[] @default([]) // certificates.id, opaque
+
+  issuedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  season Season @relation(fields: [seasonId], references: [id])
+
+  @@unique([seasonId, participantId, competitionCode])
+  @@index([participantId])
+  @@map("pajsk_certificates")
 }
 
 /// Certificates → Generator: a job that issues certificate rows from a template

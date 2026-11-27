@@ -5,6 +5,8 @@ import { getParticipantSession } from "@/lib/auth/participant-session";
 import { getCertDistribution } from "@/lib/certificates/distribution";
 import { participantCertificatesAllSeasons } from "@/lib/certificates/portal";
 import { SeasonCertList } from "@/components/certificates/SeasonCertList";
+import { participantMaySee } from "@/lib/pajsk/access";
+import { SijilTabs } from "@/components/participant/SijilTabs";
 
 export const metadata: Metadata = { title: "Sijil" };
 export const dynamic = "force-dynamic";
@@ -17,13 +19,14 @@ export default async function CertificatesPage() {
   const session = await getParticipantSession();
   if (!session) redirect("/participant/sign-in");
 
-  const distribution = await getCertDistribution();
+  const [distribution, pajsk] = await Promise.all([getCertDistribution(), participantMaySee(session.contingentId)]);
   const certs = distribution.participant
     ? await participantCertificatesAllSeasons({ id: session.participantId, ic: session.ic })
     : [];
 
   return (
     <div className="max-w-3xl space-y-5">
+      {pajsk && <SijilTabs active="sijil" />}
       <div>
         <h1 className="text-xl font-bold dark:text-zinc-100">Sijil</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">

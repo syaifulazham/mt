@@ -14,9 +14,15 @@ const NAV = [
   { href: "/participant/chat",         icon: MessageCircle,   label: "AI Rimau" },
 ];
 
-type Props = { name: string; contingentName: string };
+// Sub-items under Sijil, shown when PAJSK (Beta) is open to this participant.
+const SIJIL_SUB = [
+  { href: "/participant/certificates",       label: "Sijil", beta: false },
+  { href: "/participant/certificates/pajsk", label: "PAJSK", beta: true },
+];
 
-export function ParticipantSidebar({ name, contingentName }: Props) {
+type Props = { name: string; contingentName: string; pajsk?: boolean };
+
+export function ParticipantSidebar({ name, contingentName, pajsk = false }: Props) {
   const pathname = usePathname();
   const router   = useRouter();
 
@@ -36,9 +42,10 @@ export function ParticipantSidebar({ name, contingentName }: Props) {
       <nav className="flex-1 space-y-0.5 px-3 py-4">
         {NAV.map(({ href, icon: Icon, label }) => {
           const active = pathname.startsWith(href);
+          const sub = pajsk && href === "/participant/certificates";
           return (
+            <div key={href}>
             <Link
-              key={href}
               href={href}
               className={`pt-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 active
@@ -63,6 +70,31 @@ export function ParticipantSidebar({ name, contingentName }: Props) {
               />
               {label}
             </Link>
+            {sub && (
+              <div className="ml-7 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderLeftColor: "var(--pt-border-color, #e4e4e7)" }}>
+                {SIJIL_SUB.map(s => {
+                  const on = s.beta ? pathname.startsWith(s.href) : active && !pathname.startsWith("/participant/certificates/pajsk");
+                  return (
+                    <Link
+                      key={s.href}
+                      href={s.href}
+                      className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
+                        on ? "font-semibold" : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                      }`}
+                      style={on ? { color: "var(--pt-active-text, #085782)" } : {}}
+                    >
+                      {s.label}
+                      {s.beta && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                          Beta
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+            </div>
           );
         })}
       </nav>

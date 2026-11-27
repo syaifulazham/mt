@@ -6,6 +6,7 @@ import { ParticipantMobileNav } from "@/components/participant/ParticipantMobile
 import { ParticipantThemeProvider } from "@/components/participant/ParticipantThemeProvider";
 import { ParticipantThemePicker } from "@/components/participant/ParticipantThemePicker";
 import { db } from "@/lib/db";
+import { participantMaySee } from "@/lib/pajsk/access";
 
 export default async function ParticipantPortalLayout({
   children,
@@ -15,10 +16,13 @@ export default async function ParticipantPortalLayout({
   const session = await getParticipantSession();
   if (!session) redirect("/participant/sign-in");
 
-  const participant = await db.participant.findUnique({
-    where: { id: session.participantId },
-    include: { contingent: { select: { name: true } } },
-  });
+  const [participant, pajsk] = await Promise.all([
+    db.participant.findUnique({
+      where: { id: session.participantId },
+      include: { contingent: { select: { name: true } } },
+    }),
+    participantMaySee(session.contingentId),
+  ]);
 
   const contingentName = participant?.contingent?.name ?? "—";
 
@@ -53,7 +57,7 @@ export default async function ParticipantPortalLayout({
 
       {/* ── Body ───────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <ParticipantSidebar name={session.name} contingentName={contingentName} />
+        <ParticipantSidebar name={session.name} contingentName={contingentName} pajsk={pajsk} />
         <main
           className="pt-main flex-1 overflow-y-auto p-6 pb-24 lg:pb-6"
           style={{ background: "var(--pt-main-bg, #f9fafb)" }}

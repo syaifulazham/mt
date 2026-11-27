@@ -39,6 +39,21 @@ async function main() {
     SELECT COUNT(*) count FROM pg_constraint
     WHERE conrelid = 'certificates'::regclass AND contype = 'f'`;
   console.log(`archival contract ok — certificates has ${count} foreign keys, all into seasons / cert_template_versions`);
+
+  // pajsk_certificates (PAJSK Beta) follows the same contract: seasons only.
+  const pajsk = await db.$queryRaw<Violation[]>`
+    SELECT conname, confrelid::regclass::text AS references
+    FROM pg_constraint
+    WHERE conrelid = to_regclass('pajsk_certificates')
+      AND contype  = 'f'
+      AND confrelid::regclass::text <> 'seasons'`;
+  if (pajsk.length) {
+    console.error("ARCHIVAL CONTRACT VIOLATED — pajsk_certificates has foreign keys into purgeable tables:");
+    for (const v of pajsk) console.error(`  ${v.conname} → ${v.references}`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log("archival contract ok — pajsk_certificates references seasons only");
 }
 
 main()

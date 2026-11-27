@@ -1,0 +1,19 @@
+{
+  "year": 2026,
+  "programme": "Malaysia Techlympics 2026",
+  "reference": "Surat BSKK KPM.600-4/1/1 Jld.69 (84), Lampiran A",
+  "pelibatan": { "label": "Pelibatan I", "level": "Kebangsaan", "marks": 17 },
+  "pencapaian": {
+    "level": "Kebangsaan",
+    "marksByPlace": { "1": 17, "2": 16, "3": 15, "4": 14, "5": 13 }
+  },
+  "placesShown": 5,
+  "medals": { "1": "Emas", "2": "Perak", "3": "Gangsa" },
+  "stages": {
+    "KEBANGSAAN": { "label": "Peringkat Kebangsaan", "colour": "#9A7B1F" },
+    "NEGERI":     { "label": "Peringkat Negeri / Zon", "colour": "#1F5FA8" },
+    "SEKOLAH":    { "label": "Peringkat Sekolah", "colour": "#2E7D4F" }
+  },
+  "distLevelStages": { "NATIONAL": "KEBANGSAAN", "STATE": "NEGERI", "SCHOOL": "SEKOLAH" },
+  "eventStages": {}
+}

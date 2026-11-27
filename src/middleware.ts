@@ -28,6 +28,7 @@ const isWalkInRoute       = createRouteMatcher(["/walkin(.*)"]);
 const isBorangRoute       = createRouteMatcher(["/borang(.*)"]);
 const isMediaRoute        = createRouteMatcher(["/media(.*)"]);
 const isAttendanceRoute   = createRouteMatcher(["/attendance(.*)"]);
+const isPajskVerifyRoute  = createRouteMatcher(["/sahkan-pajsk"]);
 const isDuelRoute         = createRouteMatcher(["/duel(.*)", "/vote/(.*)", "/scorecard(.*)", "/intl/(.*)", "/live/(.*)"]);
 // Auth.js uses /api/auth/* internally — must be fully public
 const isAuthJsInternalRoute = createRouteMatcher(["/api/auth(.*)"]);
@@ -134,6 +135,7 @@ export default clerkMiddleware(async (clerkAuth, req: NextRequest) => {
   if (isMediaRoute(req))      return NextResponse.next();
   if (isAttendanceRoute(req)) return NextResponse.next();
   if (isDuelRoute(req))       return NextResponse.next();
+  if (isPajskVerifyRoute(req)) return NextResponse.next();
 
   // Run next-intl locale routing (handles locale prefix redirects + detection)
   return handleI18nRouting(req);
