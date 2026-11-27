@@ -1,6 +1,6 @@
 // PAJSK entries as cards — shared by the participant and manager portals.
 // Server-renderable (no hooks); downloads are plain links to the PDF route.
-import { Download, Medal } from "lucide-react";
+import { Download, Eye, Medal } from "lucide-react";
 import { formatCode } from "@/lib/pajsk/code";
 import { placeLabel, type PajskRules } from "@/lib/pajsk/rules";
 import type { PajskEntry } from "@/lib/pajsk/entries";
@@ -41,12 +41,22 @@ export function PajskEntryList({ entries, rules }: { entries: PajskEntry[]; rule
                 )}
               </div>
             </div>
-            <a
-              href={`/api/v2/pajsk/certificates/${e.id}/pdf`}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              <Download className="h-3.5 w-3.5" /> Sijil PDF
-            </a>
+            <div className="flex shrink-0 items-center gap-2">
+              <a
+                href={`/api/v2/pajsk/certificates/${e.id}/pdf?inline=1`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                <Eye className="h-3.5 w-3.5" /> Lihat
+              </a>
+              <a
+                href={`/api/v2/pajsk/certificates/${e.id}/pdf`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                <Download className="h-3.5 w-3.5" /> Sijil PDF
+              </a>
+            </div>
           </div>
           <dl className="grid grid-cols-2 border-t border-zinc-100 text-sm dark:border-zinc-800 sm:grid-cols-3">
             <div className="px-4 py-2.5">
